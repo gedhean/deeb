@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.aws.amazon.com)",
+      "Bash(mkdir:*)"
+    ],
+    "deny": []
+  }
+}

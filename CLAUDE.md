@@ -1,0 +1,54 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Deeb is a secure database change management tool that enables developers to manage database changes without requiring direct database access. The system provides:
+
+- **Issue-based change workflow**: Database changes are created as issues with multi-approval and review processes
+- **Automated policy validation**: Built-in rules for SQL syntax, security, performance, backwards compatibility, and best practices
+- **Multi-environment support**: Changes can be applied across Dev -> Staging -> Production environments
+- **Schema drift detection**: Automatic detection and notification of out-of-band schema changes
+- **Full audit logging**: Complete tracking of all database operations for compliance
+
+### Supported Databases
+- MySQL
+- PostgreSQL
+
+### Security Features
+- OAuth 2.0 SSO (Google, GitHub)
+- RBAC with users, groups, and permissions
+- Two-factor authentication (2FA) with optional organization-level enforcement
+- RDS IAM authentication for database connections
+- SSL-enforced database connections
+- Data encryption at rest and in transit
+
+## Architecture
+
+The system follows a centralized architecture:
+
+- **Web UI**: Interface for engineers to create and manage database change requests
+- **REST API**: Central service that manages change lifecycle and database operations
+- **Database Access Layer**: Connects to MySQL/Postgres using RDS IAM Auth with SSL enforcement
+
+Refer to [docs/architecture.png](docs/architecture.png) for visual representation.
+
+## Database Change Lifecycle
+
+1. **Planning**: Define change type (DDL/DML), target database(s), and change details
+2. **Review**:
+   - Automatic validation (syntax, security, performance, backwards compatibility, best practices)
+   - Manual human review
+3. **Approval**: Multi-step approval process with risk-based workflows (e.g., production changes require senior engineer approval)
+4. **Application**: Changes applied in controlled manner with rollback capability, supports immediate or scheduled execution
+5. **Monitoring**: Continuous schema drift detection
+
+## Development Status
+
+**IMPORTANT**: This repository currently contains planning documentation only. No implementation code exists yet. When implementing:
+
+- Follow the architecture described in [docs/project.md](docs/project.md)
+- Ensure all security features are properly implemented
+- Maintain full audit trail capabilities
+- Design for multi-database support from the start

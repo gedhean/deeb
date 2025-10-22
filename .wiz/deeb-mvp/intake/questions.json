@@ -1,0 +1,97 @@
+[
+  {
+    "index": 1,
+    "question": "What are the primary language(s) for this project? (Go, TypeScript, Python, C#, Java, or other)",
+    "rationale": "Determines which design guidelines to generate and which language expert subagents to use during implementation"
+  },
+  {
+    "index": 2,
+    "question": "What is the benchmarking policy? (hot spots only, comprehensive, or skip)",
+    "rationale": "Defines performance measurement requirements for critical code paths and optimization validation"
+  },
+  {
+    "index": 3,
+    "question": "What is the fuzzing policy? (core areas only, comprehensive, or skip)",
+    "rationale": "Determines fuzz testing scope for input validation and security-critical components"
+  },
+  {
+    "index": 4,
+    "question": "Who are the primary users of the Deeb MVP? (e.g., backend engineers, DBAs, DevOps engineers, or all developers)",
+    "rationale": "Defines user personas to guide UI/UX design and feature prioritization"
+  },
+  {
+    "index": 5,
+    "question": "What are the top 3 pain points this MVP must solve? (e.g., unsafe direct DB access, lack of change history, slow approval processes)",
+    "rationale": "Ensures MVP focuses on highest-value problems and validates success criteria"
+  },
+  {
+    "index": 6,
+    "question": "What does success look like for the MVP launch? (e.g., X teams onboarded, Y changes processed per week, Z% reduction in incidents)",
+    "rationale": "Establishes measurable goals for MVP validation and post-launch assessment"
+  },
+  {
+    "index": 7,
+    "question": "Which database change types should the MVP support? (DDL only, DML only, both DDL and DML, or include DCL for permissions)",
+    "rationale": "Defines scope of SQL operations the system must handle, affecting parser and validator complexity"
+  },
+  {
+    "index": 8,
+    "question": "Which approval workflow features are must-haves for MVP? (simple single-approval, multi-stage sequential, risk-based routing, or parallel approvals)",
+    "rationale": "Determines workflow engine complexity and approval process implementation scope"
+  },
+  {
+    "index": 9,
+    "question": "Which environments should the MVP support? (Dev only, Dev and Staging, or full Dev to Staging to Production pipeline)",
+    "rationale": "Defines environment management requirements and promotion workflow complexity"
+  },
+  {
+    "index": 10,
+    "question": "What policy validations are essential for MVP? (syntax only, or include security checks, performance analysis, backwards compatibility validation, and best practices)",
+    "rationale": "Determines automated validation system scope and integration with SQL parsers/analyzers"
+  },
+  {
+    "index": 11,
+    "question": "Should schema drift detection be included in MVP or deferred to post-MVP? If included, what detection frequency is needed? (real-time, hourly, daily)",
+    "rationale": "Impacts system architecture for background jobs, monitoring, and alerting infrastructure"
+  },
+  {
+    "index": 12,
+    "question": "What cloud platform(s) should be targeted? (AWS only with RDS focus, multi-cloud AWS and GCP, or cloud-agnostic design)",
+    "rationale": "Determines infrastructure dependencies, authentication methods, and deployment strategies"
+  },
+  {
+    "index": 13,
+    "question": "Are there specific frameworks/libraries preferred for the Web UI and API? (e.g., React/Next.js for UI, Gin/Chi for Go API, FastAPI for Python)",
+    "rationale": "Guides technology stack selection and ensures alignment with organizational standards"
+  },
+  {
+    "index": 14,
+    "question": "What database connection method should be prioritized for MVP? (RDS IAM Auth only, traditional username/password credentials, connection pooling, or support multiple methods)",
+    "rationale": "Affects database access layer design, credential management, and security implementation"
+  },
+  {
+    "index": 15,
+    "question": "What are the expected concurrent users and database operations for MVP? (e.g., 50 users with 100 changes per day, or 200 users with 500 changes per day)",
+    "rationale": "Establishes performance requirements, infrastructure sizing, and scalability considerations"
+  },
+  {
+    "index": 16,
+    "question": "Which authentication methods must be supported in MVP? (OAuth 2.0 with Google/GitHub only, include email/password, include 2FA, or require organization-level 2FA enforcement)",
+    "rationale": "Defines authentication system scope, user management complexity, and security posture"
+  },
+  {
+    "index": 17,
+    "question": "What level of audit logging detail is required for MVP compliance needs? (basic change tracking, detailed field-level changes, include rollback history, or comprehensive with user actions)",
+    "rationale": "Determines audit system design, storage requirements, and compliance reporting capabilities"
+  },
+  {
+    "index": 18,
+    "question": "What testing strategy should be prioritized for MVP? (unit tests only, include integration tests, include e2e tests, or comprehensive with load testing)",
+    "rationale": "Establishes quality assurance scope, testing infrastructure needs, and CI/CD pipeline requirements"
+  },
+  {
+    "index": 19,
+    "question": "What deployment model is expected for MVP? (SaaS hosted by you, self-hosted by customers, containerized deployment, or support multiple models)",
+    "rationale": "Impacts architecture decisions, multi-tenancy design, deployment automation, and operational support"
+  }
+]

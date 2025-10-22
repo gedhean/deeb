@@ -1,0 +1,78 @@
+[
+  {
+    "index": 1,
+    "answer": "JavaScript for the frontend and Go for the backend"
+  },
+  {
+    "index": 2,
+    "answer": "Skip"
+  },
+  {
+    "index": 3,
+    "answer": "Core areas only"
+  },
+  {
+    "index": 4,
+    "answer": "Backend engineers (Developers) and SREs"
+  },
+  {
+    "index": 5,
+    "answer": "Unsafe direct DB access, lack of change history, slow approval processes"
+  },
+  {
+    "index": 6,
+    "answer": "No manual apply of database changes with direct access to databases"
+  },
+  {
+    "index": 7,
+    "answer": "DDL and DML"
+  },
+  {
+    "index": 8,
+    "answer": "Simple single-approval and multi-stage apply"
+  },
+  {
+    "index": 9,
+    "answer": "Production and Staging"
+  },
+  {
+    "index": 10,
+    "answer": "Syntax, security checks, backwards compatibility, performance analysis, best practices"
+  },
+  {
+    "index": 11,
+    "answer": "Post-MVP"
+  },
+  {
+    "index": 12,
+    "answer": "AWS only with RDS focus"
+  },
+  {
+    "index": 13,
+    "answer": "Frontend: React, Vite for dev, Shadcn for component libs (https://ui.shadcn.com). Backend: Go with net/http for API, spf13/cobra for server commands (https://github.com/spf13/cobra)"
+  },
+  {
+    "index": 14,
+    "answer": "RDS IAM auth and traditional username/password credentials"
+  },
+  {
+    "index": 15,
+    "answer": "100 users with 50 changes per day"
+  },
+  {
+    "index": 16,
+    "answer": "User email and password, OAuth 2.0 with Google only"
+  },
+  {
+    "index": 17,
+    "answer": "Comprehensive with user actions"
+  },
+  {
+    "index": 18,
+    "answer": "Most integration and e2e tests"
+  },
+  {
+    "index": 19,
+    "answer": "Self-hosted in containerized deployment"
+  }
+]
