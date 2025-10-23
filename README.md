@@ -66,7 +66,77 @@ deeb/
 
 ### Development Setup
 
-(Coming soon - see Phase 1 milestones in `.wiz/deeb-mvp/phases/phase1.md`)
+#### 1. Clone the repository
+
+```bash
+git clone https://github.com/nsxbet/deeb.git
+cd deeb
+```
+
+#### 2. Set up the metadata database
+
+Create a PostgreSQL database for Deeb's metadata:
+
+```bash
+createdb deeb_metadata
+```
+
+Set the database connection string:
+
+```bash
+export DATABASE_URL="postgres://username:password@localhost:5432/deeb_metadata?sslmode=disable"
+```
+
+#### 3. Run database migrations
+
+Navigate to the backend directory and run migrations:
+
+```bash
+cd backend
+go run cmd/migrate/main.go -command up
+```
+
+**Migration Commands:**
+
+- `up` - Apply all pending migrations
+- `down` - Rollback all migrations
+- `version` - Show current migration version
+- `force <version>` - Force database to specific version (use with caution)
+
+**Examples:**
+
+```bash
+# Apply migrations
+go run cmd/migrate/main.go -command up
+
+# Check current version
+go run cmd/migrate/main.go -command version
+
+# Rollback all migrations
+go run cmd/migrate/main.go -command down
+
+# Force to specific version (recovery)
+go run cmd/migrate/main.go -command force 1
+```
+
+#### 4. Install frontend dependencies
+
+```bash
+cd frontend
+pnpm install
+```
+
+#### 5. Start development servers
+
+```bash
+# Terminal 1: Frontend
+cd frontend
+pnpm run dev
+
+# Terminal 2: Backend (coming soon)
+cd backend
+go run cmd/server/main.go
+```
 
 ## Documentation
 

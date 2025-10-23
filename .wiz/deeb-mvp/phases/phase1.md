@@ -80,38 +80,38 @@ Install and configure Shadcn/ui component library with Tailwind CSS for consiste
 
 ### P01M04: Design database schema for metadata database
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M04
 
 **Goal**
 Design comprehensive database schema for storing users, issues, approvals, audit logs, and environment configurations.
 
 **Acceptance Criteria**
-- [ ] Users table schema defined (id, email, password_hash, role, status, created_at, updated_at)
-- [ ] Issues table schema defined (id, title, description, sql_content, status, author_id, target_database_id)
-- [ ] Approvals table schema defined (id, issue_id, approver_id, status, comments, approved_at)
-- [ ] Audit_logs table schema defined (id, user_id, action, resource_type, resource_id, details, timestamp)
-- [ ] Environments table schema defined (id, name, database_type, connection_details_encrypted)
-- [ ] Entity-relationship diagram created
-- [ ] All tables use proper indexes on foreign keys and query filters
+- [x] Users table schema defined (id, email, password_hash, role, status, created_at, updated_at)
+- [x] Issues table schema defined (id, title, description, sql_content, status, author_id, target_database_id)
+- [x] Approvals table schema defined (id, issue_id, approver_id, status, comments, approved_at)
+- [x] Audit_logs table schema defined (id, user_id, action, resource_type, resource_id, details, timestamp)
+- [x] Environments table schema defined (id, name, database_type, connection_details_encrypted)
+- [x] Entity-relationship diagram created
+- [x] All tables use proper indexes on foreign keys and query filters
 
 ---
 
 ### P01M05: Implement database migration system
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M05
 
 **Goal**
 Set up database migration system using golang-migrate or similar tool for versioned schema changes.
 
 **Acceptance Criteria**
-- [ ] Migration tool dependency added to go.mod
-- [ ] Migrations directory created: migrations/
-- [ ] Initial migration files created (up and down)
-- [ ] Migration command implemented in cmd/migrate/
-- [ ] Documentation for running migrations added to README
-- [ ] Migrations run successfully on local database
+- [x] Migration tool dependency added to go.mod
+- [x] Migrations directory created: migrations/
+- [x] Initial migration files created (up and down)
+- [x] Migration command implemented in cmd/migrate/
+- [x] Documentation for running migrations added to README
+- [x] Migrations run successfully on local database
 
 ---
 
