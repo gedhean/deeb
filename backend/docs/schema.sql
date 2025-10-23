@@ -10,7 +10,7 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255), -- NULL for OAuth-only users
     display_name VARCHAR(255),
-    role VARCHAR(50) NOT NULL DEFAULT 'Developer', -- Developer, Approver, Admin
+    organization_role VARCHAR(50) NOT NULL DEFAULT 'OrganizationDeveloper', -- OrganizationAdmin, OrganizationDBA, OrganizationDeveloper
     status VARCHAR(50) NOT NULL DEFAULT 'Active', -- Active, Inactive, Suspended
     oauth_provider VARCHAR(50), -- NULL, 'google', 'github'
     oauth_id VARCHAR(255), -- Provider's user ID
@@ -21,18 +21,62 @@ CREATE TABLE users (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT check_email_format CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'),
-    CONSTRAINT check_role CHECK (role IN ('Developer', 'Approver', 'Admin')),
+    CONSTRAINT check_organization_role CHECK (organization_role IN ('OrganizationAdmin', 'OrganizationDBA', 'OrganizationDeveloper')),
     CONSTRAINT check_status CHECK (status IN ('Active', 'Inactive', 'Suspended'))
 );
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_oauth ON users(oauth_provider, oauth_id) WHERE oauth_provider IS NOT NULL;
 CREATE INDEX idx_users_status ON users(status);
-CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_organization_role ON users(organization_role);
+
+-- ============================================
+-- PROJECTS TABLE
+-- Stores projects for organizing database change requests
+-- ============================================
+CREATE TABLE projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'Active', -- Active, Archived
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by_id UUID NOT NULL,
+
+    CONSTRAINT check_project_status CHECK (status IN ('Active', 'Archived')),
+    CONSTRAINT fk_projects_created_by FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_projects_status ON projects(status);
+CREATE INDEX idx_projects_name ON projects(name);
+CREATE INDEX idx_projects_created_by ON projects(created_by_id);
+
+-- ============================================
+-- PROJECT_MEMBERS TABLE
+-- Stores project-level role assignments for users
+-- ============================================
+CREATE TABLE project_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    project_role VARCHAR(50) NOT NULL, -- ProjectOwner, ProjectDeveloper, ProjectApprover, ProjectViewer
+    added_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    added_by_id UUID NOT NULL,
+
+    CONSTRAINT check_project_role CHECK (project_role IN ('ProjectOwner', 'ProjectDeveloper', 'ProjectApprover', 'ProjectViewer')),
+    CONSTRAINT fk_project_members_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_members_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_members_added_by FOREIGN KEY (added_by_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT unique_project_user UNIQUE (project_id, user_id)
+);
+
+CREATE INDEX idx_project_members_project ON project_members(project_id);
+CREATE INDEX idx_project_members_user ON project_members(user_id);
+CREATE INDEX idx_project_members_role ON project_members(project_role);
 
 -- ============================================
 -- ENVIRONMENTS TABLE
--- Stores database environment configurations
+-- Stores database environment configurations (organization-level)
 -- ============================================
 CREATE TABLE environments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -66,6 +110,7 @@ CREATE INDEX idx_environments_created_by ON environments(created_by_id);
 -- ============================================
 CREATE TABLE issues (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     change_type VARCHAR(50) NOT NULL, -- DDL, DML
@@ -87,11 +132,13 @@ CREATE TABLE issues (
     CONSTRAINT check_change_type CHECK (change_type IN ('DDL', 'DML')),
     CONSTRAINT check_issue_status CHECK (status IN ('Draft', 'PendingReview', 'PendingApproval', 'Approved', 'Scheduled', 'InProgress', 'Completed', 'Failed', 'Cancelled')),
     CONSTRAINT check_risk_level CHECK (risk_level IN ('Low', 'Medium', 'High', 'Critical')),
+    CONSTRAINT fk_issues_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     CONSTRAINT fk_issues_environment FOREIGN KEY (target_environment_id) REFERENCES environments(id) ON DELETE RESTRICT,
     CONSTRAINT fk_issues_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE RESTRICT,
     CONSTRAINT fk_issues_reviewer FOREIGN KEY (assigned_reviewer_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
+CREATE INDEX idx_issues_project ON issues(project_id);
 CREATE INDEX idx_issues_status ON issues(status);
 CREATE INDEX idx_issues_author ON issues(author_id);
 CREATE INDEX idx_issues_environment ON issues(target_environment_id);
@@ -322,6 +369,9 @@ $$ language 'plpgsql';
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_environments_updated_at BEFORE UPDATE ON environments
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -335,26 +385,28 @@ CREATE TRIGGER update_groups_updated_at BEFORE UPDATE ON groups
 -- SEED DATA FOR PERMISSIONS
 -- ============================================
 INSERT INTO permissions (name, description, resource_type, action) VALUES
+    -- Project permissions
+    ('project.create', 'Create new projects', 'project', 'create'),
+    ('project.read', 'View project information', 'project', 'read'),
+    ('project.update', 'Modify project information', 'project', 'update'),
+    ('project.delete', 'Delete projects', 'project', 'delete'),
+    ('project.manage_members', 'Add/remove project members', 'project', 'manage_members'),
+    -- Issue permissions
     ('issue.create', 'Create new database change issues', 'issue', 'create'),
     ('issue.read', 'View database change issues', 'issue', 'read'),
     ('issue.update', 'Modify database change issues', 'issue', 'update'),
     ('issue.delete', 'Delete database change issues', 'issue', 'delete'),
     ('issue.approve', 'Approve database change issues', 'issue', 'approve'),
     ('issue.execute', 'Execute approved database changes', 'issue', 'execute'),
+    -- User permissions
     ('user.create', 'Create new users', 'user', 'create'),
     ('user.read', 'View user information', 'user', 'read'),
     ('user.update', 'Modify user information', 'user', 'update'),
     ('user.delete', 'Deactivate users', 'user', 'delete'),
+    -- Environment permissions (organization-level)
     ('environment.create', 'Create new environments', 'environment', 'create'),
     ('environment.read', 'View environment configurations', 'environment', 'read'),
     ('environment.update', 'Modify environment configurations', 'environment', 'update'),
     ('environment.delete', 'Delete environment configurations', 'environment', 'delete'),
+    -- Audit log permissions
     ('audit_log.read', 'View audit logs', 'audit_log', 'read');
-
--- ============================================
--- SEED DATA FOR GROUPS
--- ============================================
-INSERT INTO groups (name, description) VALUES
-    ('Developers', 'Engineers who create database change requests'),
-    ('Approvers', 'Senior engineers who review and approve changes'),
-    ('Administrators', 'System administrators with full access');

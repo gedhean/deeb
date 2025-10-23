@@ -8,6 +8,8 @@ This document describes the database schema for the Deeb metadata database, whic
 
 ```mermaid
 erDiagram
+    users ||--o{ projects : "creates"
+    users ||--o{ project_members : "has"
     users ||--o{ issues : "creates"
     users ||--o{ issues : "reviews"
     users ||--o{ approvals : "approves"
@@ -16,6 +18,9 @@ erDiagram
     users ||--o{ notifications : "receives"
     users ||--o{ user_groups : "belongs_to"
     users ||--o{ schema_drift_events : "acknowledges"
+
+    projects ||--o{ project_members : "contains"
+    projects ||--o{ issues : "has"
 
     environments ||--o{ issues : "targets"
     environments ||--o{ schema_snapshots : "has"
@@ -37,7 +42,7 @@ erDiagram
         varchar email UK
         varchar password_hash
         varchar display_name
-        varchar role
+        varchar organization_role
         varchar status
         varchar oauth_provider
         varchar oauth_id
@@ -46,6 +51,25 @@ erDiagram
         timestamp last_login_at
         timestamp created_at
         timestamp updated_at
+    }
+
+    projects {
+        uuid id PK
+        varchar name
+        text description
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+        uuid created_by_id FK
+    }
+
+    project_members {
+        uuid id PK
+        uuid project_id PK,FK
+        uuid user_id PK,FK
+        varchar project_role
+        timestamp added_at
+        uuid added_by_id FK
     }
 
     environments {
@@ -68,6 +92,7 @@ erDiagram
 
     issues {
         uuid id PK
+        uuid project_id FK
         varchar title
         text description
         varchar change_type
@@ -190,17 +215,41 @@ erDiagram
 ### Core Tables
 
 #### users
-Stores user accounts with authentication details and role information.
+Stores user accounts with authentication details and organization-level role information.
 - **Primary Key**: `id` (UUID)
 - **Unique Constraints**: `email`
+- **Organization Roles**: OrganizationAdmin, OrganizationDBA, OrganizationDeveloper
 - **Key Features**:
-  - Supports both password-based and OAuth authentication
+  - Supports both password-based and OAuth authentication (Google, GitHub)
   - Built-in 2FA support with TOTP secrets
-  - Role-based access control (Developer, Approver, Admin)
+  - Organization-level role-based access control
   - Soft delete capability via status field
 
+#### projects
+Stores projects for organizing database change requests.
+- **Primary Key**: `id` (UUID)
+- **Foreign Keys**: `created_by_id` → users(id)
+- **Key Features**:
+  - Groups related database changes together
+  - Status tracking (Active, Archived)
+  - Project-level access control through project_members
+
+#### project_members
+Stores project-level role assignments for users.
+- **Primary Key**: `id` (UUID)
+- **Foreign Keys**:
+  - `project_id` → projects(id)
+  - `user_id` → users(id)
+  - `added_by_id` → users(id)
+- **Unique Constraints**: `(project_id, user_id)` - one role per user per project
+- **Project Roles**: ProjectOwner, ProjectDeveloper, ProjectApprover, ProjectViewer
+- **Key Features**:
+  - Project-level permissions separate from organization roles
+  - Audit trail (who added user to project)
+  - Users can have different roles in different projects
+
 #### environments
-Stores database environment configurations (Dev, Staging, Production).
+Stores database environment configurations (Dev, Staging, Production) - organization-level resources.
 - **Primary Key**: `id` (UUID)
 - **Foreign Keys**: `created_by_id` → users(id)
 - **Key Features**:
@@ -208,18 +257,21 @@ Stores database environment configurations (Dev, Staging, Production).
   - Encrypted connection details storage
   - RDS IAM authentication support
   - SSL enforcement capability
+  - Organization-wide resource (not project-specific)
 
 #### issues
 Stores database change requests with full lifecycle tracking.
 - **Primary Key**: `id` (UUID)
 - **Foreign Keys**:
+  - `project_id` → projects(id)
   - `target_environment_id` → environments(id)
   - `author_id` → users(id)
   - `assigned_reviewer_id` → users(id)
 - **Key Features**:
+  - Belongs to a specific project
   - DDL and DML change support
   - Optional rollback scripts
-  - Risk level classification
+  - Risk level classification (Low, Medium, High, Critical)
   - Scheduled execution support
   - Execution metrics tracking
 

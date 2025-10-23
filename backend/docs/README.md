@@ -33,12 +33,14 @@ Entity-Relationship Diagram and comprehensive documentation including:
 
 ## Database Schema Summary
 
-The Deeb metadata database consists of 14 tables organized into four main categories:
+The Deeb metadata database consists of 16 tables organized into four main categories:
 
 ### 1. Core Tables
-- **users**: User accounts with authentication details
-- **environments**: Database environment configurations (Dev/Staging/Prod)
-- **issues**: Database change requests with full lifecycle tracking
+- **users**: User accounts with authentication details and organization-level roles
+- **projects**: Projects for organizing database change requests
+- **project_members**: Project-level role assignments for users
+- **environments**: Database environment configurations (Dev/Staging/Prod) - organization-level
+- **issues**: Database change requests with full lifecycle tracking (belongs to project)
 
 ### 2. Compliance & Audit Tables
 - **approvals**: Multi-step approval workflow tracking
@@ -50,7 +52,7 @@ The Deeb metadata database consists of 14 tables organized into four main catego
 - **schema_drift_events**: Detected schema drift incidents
 
 ### 4. RBAC (Role-Based Access Control) Tables
-- **groups**: User groups (Developers, Approvers, Administrators)
+- **groups**: User groups for additional access control
 - **user_groups**: Many-to-many relationship between users and groups
 - **permissions**: System-level permissions for resources and actions
 - **group_permissions**: Permissions assigned to groups
@@ -81,9 +83,22 @@ Periodic snapshots of target database schemas enable detection of out-of-band ch
 - Resolution notes for incident management
 
 ### Role-Based Access Control
-Flexible RBAC system with groups and permissions:
-- Pre-defined groups (Developers, Approvers, Administrators)
+Two-level RBAC system combining organization and project roles:
+
+**Organization Roles** (user-level):
+- OrganizationAdmin: Full system access, manages databases and users
+- OrganizationDBA: Administer databases across the organization
+- OrganizationDeveloper: Member of the organization (default role)
+
+**Project Roles** (project_members table):
+- ProjectOwner: Full control over project resources
+- ProjectDeveloper: Create and manage change requests
+- ProjectApprover: Approve and reject change requests
+- ProjectViewer: View-only access to project resources
+
+Additional features:
 - Granular permissions (resource.action format)
+- Groups for additional access control
 - Many-to-many relationships between users, groups, and permissions
 - Complete audit trail of permission grants
 
