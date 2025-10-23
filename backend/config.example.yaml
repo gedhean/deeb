@@ -1,0 +1,46 @@
+# Deeb Configuration Example
+# Copy this file to config.yaml and customize for your environment
+
+server:
+  host: "0.0.0.0"                    # Server bind address
+  port: 8080                          # Server port
+  read_timeout: 10s                   # HTTP read timeout
+  write_timeout: 10s                  # HTTP write timeout
+  shutdown_timeout: 30s               # Graceful shutdown timeout
+  cors_origins:                       # Allowed CORS origins
+    - "http://localhost:3000"
+    - "https://deeb.yourdomain.com"
+
+database:
+  host: "localhost"                   # PostgreSQL host
+  port: 5432                          # PostgreSQL port
+  user: "deeb"                        # Database user
+  password: ""                        # Database password (or use DB_PASSWORD env var)
+  database: "deeb_metadata"           # Database name
+  ssl_mode: "disable"                 # SSL mode: disable, require, verify-ca, verify-full
+  max_open_conns: 25                  # Maximum open connections
+  max_idle_conns: 5                   # Maximum idle connections
+  conn_max_lifetime: 5m               # Connection maximum lifetime
+
+auth:
+  jwt_secret: ""                      # JWT secret key (REQUIRED, use JWT_SECRET env var, min 32 chars)
+  jwt_expiration: 24h                 # JWT token expiration
+  google_client_id: ""                # Google OAuth client ID
+  google_client_secret: ""            # Google OAuth client secret
+  github_client_id: ""                # GitHub OAuth client ID
+  github_client_secret: ""            # GitHub OAuth client secret
+  callback_url: "http://localhost:8080/api/v1/auth/callback"  # OAuth callback URL
+  require_2fa: false                  # Require 2FA for all users
+
+security:
+  bcrypt_cost: 12                     # Bcrypt hashing cost (10-31, higher is more secure but slower)
+  rate_limit_enabled: true            # Enable rate limiting
+  rate_limit_requests: 100            # Number of requests allowed
+  rate_limit_window: 1m               # Rate limit time window
+  encryption_key: ""                  # Encryption key for sensitive data (REQUIRED, exactly 32 bytes)
+
+logging:
+  level: "info"                       # Log level: debug, info, warn, error
+  format: "json"                      # Log format: json, console
+  output: "stdout"                    # Log output: stdout, stderr, file
+  file_path: ""                       # Log file path (if output is file)
