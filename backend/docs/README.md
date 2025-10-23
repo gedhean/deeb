@@ -33,14 +33,16 @@ Entity-Relationship Diagram and comprehensive documentation including:
 
 ## Database Schema Summary
 
-The Deeb metadata database consists of 16 tables organized into four main categories:
+The Deeb metadata database consists of 18 tables organized into four main categories:
 
 ### 1. Core Tables
 - **users**: User accounts with authentication details and organization-level roles
 - **projects**: Projects for organizing database change requests
 - **project_members**: Project-level role assignments for users
-- **environments**: Database environment configurations (Dev/Staging/Prod) - organization-level
-- **issues**: Database change requests with full lifecycle tracking (belongs to project)
+- **environments**: Environment stages (Dev/Staging/Prod) - organization-level labels
+- **database_instances**: Database server/cluster connection details - organization-level
+- **databases**: Individual databases within instances, belonging to projects
+- **issues**: Database change requests with full lifecycle tracking (targets specific database)
 
 ### 2. Compliance & Audit Tables
 - **approvals**: Multi-step approval workflow tracking
@@ -60,12 +62,30 @@ The Deeb metadata database consists of 16 tables organized into four main catego
 
 ## Key Features
 
-### Multi-Environment Support
-The schema supports multiple database environments (Development, Staging, Production) with separate configurations for each:
-- Database type (MySQL/PostgreSQL)
-- Connection details (encrypted)
+### Core Concepts: Organization Resources
+
+The schema properly reflects the core concepts from the project documentation:
+
+**Environments** - Simple stages in deployment pipeline:
+- Dev, Staging, Production labels
+- Organization-level resources
+- Used to categorize databases by stage
+- Can have environment-specific policies
+
+**Database Instances** - Actual database servers:
+- MySQL/PostgreSQL servers or clusters
+- Connection details (host, port, credentials)
+- Encrypted connection details storage
 - RDS IAM authentication support
 - SSL enforcement
+- Managed by Organization Admins and DBAs
+- Can host multiple databases
+
+**Databases** - Individual databases within instances:
+- **Each database belongs to exactly one project**
+- Links project + instance + environment
+- Clear ownership and access boundaries
+- What developers primarily interact with
 
 ### Complete Audit Trail
 All user actions are logged in the `audit_logs` table:
@@ -76,9 +96,10 @@ All user actions are logged in the `audit_logs` table:
 - Additional metadata in JSONB format
 
 ### Schema Drift Detection
-Periodic snapshots of target database schemas enable detection of out-of-band changes:
+Periodic snapshots of individual databases enable detection of out-of-band changes:
 - SHA256 hash for quick comparison
 - Detailed JSONB schema definition
+- Per-database snapshots (not per environment)
 - Drift event tracking with acknowledgment workflow
 - Resolution notes for incident management
 

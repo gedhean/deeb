@@ -76,16 +76,36 @@ CREATE INDEX idx_project_members_role ON project_members(project_role);
 
 -- ============================================
 -- ENVIRONMENTS TABLE
--- Stores database environment configurations (organization-level)
+-- Stores environment stages (Dev, Staging, Production) - organization-level
 -- ============================================
 CREATE TABLE environments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL, -- Dev, Staging, Production
     description TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'Active', -- Active, Inactive
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by_id UUID NOT NULL,
+
+    CONSTRAINT check_environment_status CHECK (status IN ('Active', 'Inactive')),
+    CONSTRAINT fk_environments_created_by FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_environments_status ON environments(status);
+CREATE INDEX idx_environments_name ON environments(name);
+CREATE INDEX idx_environments_created_by ON environments(created_by_id);
+
+-- ============================================
+-- DATABASE_INSTANCES TABLE
+-- Stores database server/cluster connection details (organization-level)
+-- ============================================
+CREATE TABLE database_instances (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
     database_type VARCHAR(50) NOT NULL, -- mysql, postgresql
     host VARCHAR(255) NOT NULL,
     port INTEGER NOT NULL,
-    database_name VARCHAR(255) NOT NULL,
     username VARCHAR(255) NOT NULL,
     connection_details_encrypted TEXT, -- Encrypted JSON with connection params
     use_rds_iam_auth BOOLEAN DEFAULT false,
@@ -96,13 +116,44 @@ CREATE TABLE environments (
     created_by_id UUID NOT NULL,
 
     CONSTRAINT check_database_type CHECK (database_type IN ('mysql', 'postgresql')),
-    CONSTRAINT check_environment_status CHECK (status IN ('Active', 'Inactive', 'Maintenance')),
-    CONSTRAINT fk_environments_created_by FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE RESTRICT
+    CONSTRAINT check_instance_status CHECK (status IN ('Active', 'Inactive', 'Maintenance')),
+    CONSTRAINT fk_instances_created_by FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE RESTRICT
 );
 
-CREATE INDEX idx_environments_status ON environments(status);
-CREATE INDEX idx_environments_name ON environments(name);
-CREATE INDEX idx_environments_created_by ON environments(created_by_id);
+CREATE INDEX idx_instances_status ON database_instances(status);
+CREATE INDEX idx_instances_name ON database_instances(name);
+CREATE INDEX idx_instances_type ON database_instances(database_type);
+CREATE INDEX idx_instances_created_by ON database_instances(created_by_id);
+
+-- ============================================
+-- DATABASES TABLE
+-- Individual databases within instances, belonging to projects
+-- ============================================
+CREATE TABLE databases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL,
+    database_instance_id UUID NOT NULL,
+    environment_id UUID NOT NULL,
+    database_name VARCHAR(255) NOT NULL, -- Actual database name on the instance
+    description TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'Active', -- Active, Inactive
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by_id UUID NOT NULL,
+
+    CONSTRAINT check_database_status CHECK (status IN ('Active', 'Inactive')),
+    CONSTRAINT fk_databases_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_databases_instance FOREIGN KEY (database_instance_id) REFERENCES database_instances(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_databases_environment FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_databases_created_by FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT unique_database_per_instance UNIQUE (database_instance_id, database_name)
+);
+
+CREATE INDEX idx_databases_project ON databases(project_id);
+CREATE INDEX idx_databases_instance ON databases(database_instance_id);
+CREATE INDEX idx_databases_environment ON databases(environment_id);
+CREATE INDEX idx_databases_status ON databases(status);
+CREATE INDEX idx_databases_created_by ON databases(created_by_id);
 
 -- ============================================
 -- ISSUES TABLE
@@ -111,6 +162,7 @@ CREATE INDEX idx_environments_created_by ON environments(created_by_id);
 CREATE TABLE issues (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL,
+    target_database_id UUID NOT NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     change_type VARCHAR(50) NOT NULL, -- DDL, DML
@@ -118,7 +170,6 @@ CREATE TABLE issues (
     rollback_sql TEXT, -- Optional rollback script
     status VARCHAR(50) NOT NULL DEFAULT 'Draft', -- Draft, PendingReview, PendingApproval, Approved, Scheduled, InProgress, Completed, Failed, Cancelled
     risk_level VARCHAR(50) NOT NULL DEFAULT 'Medium', -- Low, Medium, High, Critical
-    target_environment_id UUID NOT NULL,
     author_id UUID NOT NULL,
     assigned_reviewer_id UUID,
     scheduled_for TIMESTAMP WITH TIME ZONE, -- NULL for immediate execution
@@ -133,15 +184,15 @@ CREATE TABLE issues (
     CONSTRAINT check_issue_status CHECK (status IN ('Draft', 'PendingReview', 'PendingApproval', 'Approved', 'Scheduled', 'InProgress', 'Completed', 'Failed', 'Cancelled')),
     CONSTRAINT check_risk_level CHECK (risk_level IN ('Low', 'Medium', 'High', 'Critical')),
     CONSTRAINT fk_issues_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    CONSTRAINT fk_issues_environment FOREIGN KEY (target_environment_id) REFERENCES environments(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_issues_database FOREIGN KEY (target_database_id) REFERENCES databases(id) ON DELETE RESTRICT,
     CONSTRAINT fk_issues_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE RESTRICT,
     CONSTRAINT fk_issues_reviewer FOREIGN KEY (assigned_reviewer_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_issues_project ON issues(project_id);
+CREATE INDEX idx_issues_database ON issues(target_database_id);
 CREATE INDEX idx_issues_status ON issues(status);
 CREATE INDEX idx_issues_author ON issues(author_id);
-CREATE INDEX idx_issues_environment ON issues(target_environment_id);
 CREATE INDEX idx_issues_reviewer ON issues(assigned_reviewer_id) WHERE assigned_reviewer_id IS NOT NULL;
 CREATE INDEX idx_issues_scheduled ON issues(scheduled_for) WHERE scheduled_for IS NOT NULL;
 CREATE INDEX idx_issues_created_at ON issues(created_at DESC);
@@ -223,15 +274,15 @@ CREATE INDEX idx_audit_logs_details ON audit_logs USING GIN (details); -- For JS
 -- ============================================
 CREATE TABLE schema_snapshots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    environment_id UUID NOT NULL,
+    database_id UUID NOT NULL,
     schema_hash VARCHAR(64) NOT NULL, -- SHA256 hash of schema definition
     schema_definition JSONB NOT NULL, -- JSON representation of tables, columns, indexes
     captured_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT fk_snapshots_environment FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE
+    CONSTRAINT fk_snapshots_database FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_snapshots_environment ON schema_snapshots(environment_id);
+CREATE INDEX idx_snapshots_database ON schema_snapshots(database_id);
 CREATE INDEX idx_snapshots_captured_at ON schema_snapshots(captured_at DESC);
 CREATE INDEX idx_snapshots_hash ON schema_snapshots(schema_hash);
 
@@ -241,7 +292,7 @@ CREATE INDEX idx_snapshots_hash ON schema_snapshots(schema_hash);
 -- ============================================
 CREATE TABLE schema_drift_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    environment_id UUID NOT NULL,
+    database_id UUID NOT NULL,
     snapshot_id UUID NOT NULL,
     drift_type VARCHAR(100) NOT NULL, -- table_added, table_removed, column_modified, index_changed
     affected_object VARCHAR(255) NOT NULL, -- Table or column name
@@ -252,12 +303,12 @@ CREATE TABLE schema_drift_events (
     resolution_notes TEXT,
 
     CONSTRAINT check_drift_type CHECK (drift_type IN ('table_added', 'table_removed', 'column_added', 'column_removed', 'column_modified', 'index_added', 'index_removed', 'constraint_changed')),
-    CONSTRAINT fk_drift_environment FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_drift_database FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE,
     CONSTRAINT fk_drift_snapshot FOREIGN KEY (snapshot_id) REFERENCES schema_snapshots(id) ON DELETE CASCADE,
     CONSTRAINT fk_drift_acknowledged_by FOREIGN KEY (acknowledged_by_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
-CREATE INDEX idx_drift_environment ON schema_drift_events(environment_id);
+CREATE INDEX idx_drift_database ON schema_drift_events(database_id);
 CREATE INDEX idx_drift_snapshot ON schema_drift_events(snapshot_id);
 CREATE INDEX idx_drift_detected_at ON schema_drift_events(detected_at DESC);
 CREATE INDEX idx_drift_acknowledged ON schema_drift_events(acknowledged_at) WHERE acknowledged_at IS NOT NULL;
@@ -373,6 +424,12 @@ CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_environments_updated_at BEFORE UPDATE ON environments
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_database_instances_updated_at BEFORE UPDATE ON database_instances
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_databases_updated_at BEFORE UPDATE ON databases
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_issues_updated_at BEFORE UPDATE ON issues

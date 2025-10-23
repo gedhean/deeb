@@ -15,16 +15,23 @@ erDiagram
     users ||--o{ approvals : "approves"
     users ||--o{ audit_logs : "performs"
     users ||--o{ environments : "creates"
+    users ||--o{ database_instances : "creates"
+    users ||--o{ databases : "creates"
     users ||--o{ notifications : "receives"
     users ||--o{ user_groups : "belongs_to"
     users ||--o{ schema_drift_events : "acknowledges"
 
     projects ||--o{ project_members : "contains"
+    projects ||--o{ databases : "owns"
     projects ||--o{ issues : "has"
 
-    environments ||--o{ issues : "targets"
-    environments ||--o{ schema_snapshots : "has"
-    environments ||--o{ schema_drift_events : "experiences"
+    environments ||--o{ databases : "categorizes"
+
+    database_instances ||--o{ databases : "hosts"
+
+    databases ||--o{ issues : "targeted_by"
+    databases ||--o{ schema_snapshots : "has"
+    databases ||--o{ schema_drift_events : "experiences"
 
     issues ||--o{ approvals : "requires"
     issues ||--o{ policy_violations : "has"
@@ -76,10 +83,19 @@ erDiagram
         uuid id PK
         varchar name
         text description
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+        uuid created_by_id FK
+    }
+
+    database_instances {
+        uuid id PK
+        varchar name
+        text description
         varchar database_type
         varchar host
         int port
-        varchar database_name
         varchar username
         text connection_details_encrypted
         boolean use_rds_iam_auth
@@ -90,9 +106,23 @@ erDiagram
         uuid created_by_id FK
     }
 
+    databases {
+        uuid id PK
+        uuid project_id FK
+        uuid database_instance_id FK
+        uuid environment_id FK
+        varchar database_name
+        text description
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+        uuid created_by_id FK
+    }
+
     issues {
         uuid id PK
         uuid project_id FK
+        uuid target_database_id FK
         varchar title
         text description
         varchar change_type
@@ -100,7 +130,6 @@ erDiagram
         text rollback_sql
         varchar status
         varchar risk_level
-        uuid target_environment_id FK
         uuid author_id FK
         uuid assigned_reviewer_id FK
         timestamp scheduled_for
@@ -147,7 +176,7 @@ erDiagram
 
     schema_snapshots {
         uuid id PK
-        uuid environment_id FK
+        uuid database_id FK
         varchar schema_hash
         jsonb schema_definition
         timestamp captured_at
@@ -155,7 +184,7 @@ erDiagram
 
     schema_drift_events {
         uuid id PK
-        uuid environment_id FK
+        uuid database_id FK
         uuid snapshot_id FK
         varchar drift_type
         varchar affected_object
@@ -249,26 +278,56 @@ Stores project-level role assignments for users.
   - Users can have different roles in different projects
 
 #### environments
-Stores database environment configurations (Dev, Staging, Production) - organization-level resources.
+Stores environment stages (Dev, Staging, Production) - organization-level labels.
 - **Primary Key**: `id` (UUID)
 - **Foreign Keys**: `created_by_id` → users(id)
 - **Key Features**:
+  - Simple environment labels/stages
+  - Organization-wide resource (not project-specific)
+  - Used to categorize databases by deployment stage
+  - Can have environment-specific policies attached
+
+#### database_instances
+Stores database server/cluster connection details - organization-level resources.
+- **Primary Key**: `id` (UUID)
+- **Foreign Keys**: `created_by_id` → users(id)
+- **Key Features**:
+  - Represents actual MySQL/PostgreSQL servers or clusters
+  - Connection details (host, port, credentials)
   - Supports MySQL and PostgreSQL
   - Encrypted connection details storage
   - RDS IAM authentication support
   - SSL enforcement capability
-  - Organization-wide resource (not project-specific)
+  - Can host multiple databases
+  - Managed by Organization Admins and DBAs
+
+#### databases
+Individual databases within instances, belonging to projects.
+- **Primary Key**: `id` (UUID)
+- **Foreign Keys**:
+  - `project_id` → projects(id)
+  - `database_instance_id` → database_instances(id)
+  - `environment_id` → environments(id)
+  - `created_by_id` → users(id)
+- **Unique Constraints**: `(database_instance_id, database_name)` - unique database name per instance
+- **Key Features**:
+  - **Each database belongs to exactly one project**
+  - Links a project to a specific database on an instance
+  - Categorized by environment (Dev/Staging/Prod)
+  - What developers primarily interact with
+  - Clear ownership and access boundaries
 
 #### issues
 Stores database change requests with full lifecycle tracking.
 - **Primary Key**: `id` (UUID)
 - **Foreign Keys**:
   - `project_id` → projects(id)
-  - `target_environment_id` → environments(id)
+  - `target_database_id` → databases(id)
   - `author_id` → users(id)
   - `assigned_reviewer_id` → users(id)
 - **Key Features**:
   - Belongs to a specific project
+  - Targets a specific database (not just an environment)
   - DDL and DML change support
   - Optional rollback scripts
   - Risk level classification (Low, Medium, High, Critical)
@@ -311,19 +370,20 @@ Automated policy validation results for issues.
 ### Schema Drift Detection Tables
 
 #### schema_snapshots
-Periodic snapshots of target database schemas.
+Periodic snapshots of database schemas for drift detection.
 - **Primary Key**: `id` (UUID)
-- **Foreign Keys**: `environment_id` → environments(id)
+- **Foreign Keys**: `database_id` → databases(id)
 - **Key Features**:
   - SHA256 hash for quick comparison
   - JSONB schema definition for detailed structure
   - Time-series data for historical tracking
+  - Per-database snapshots (not per environment)
 
 #### schema_drift_events
 Records detected schema drift incidents.
 - **Primary Key**: `id` (UUID)
 - **Foreign Keys**:
-  - `environment_id` → environments(id)
+  - `database_id` → databases(id)
   - `snapshot_id` → schema_snapshots(id)
   - `acknowledged_by_id` → users(id)
 - **Key Features**:
@@ -331,6 +391,7 @@ Records detected schema drift incidents.
   - JSONB diff details
   - Acknowledgment workflow
   - Resolution notes
+  - Tracks drift for specific databases
 
 ### RBAC Tables
 
