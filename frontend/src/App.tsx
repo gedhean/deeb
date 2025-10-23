@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { ModeToggle } from '@/components/mode-toggle'
 import './App.css'
 
 function App() {
@@ -11,6 +12,9 @@ function App() {
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto space-y-8">
+        <div className="flex justify-end">
+          <ModeToggle />
+        </div>
         <header className="text-center space-y-2">
           <h1 className="text-4xl font-bold text-foreground">Deeb</h1>
           <p className="text-xl text-muted-foreground">
