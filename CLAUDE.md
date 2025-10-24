@@ -52,3 +52,4 @@ Refer to [docs/architecture.png](docs/architecture.png) for visual representatio
 - Ensure all security features are properly implemented
 - Maintain full audit trail capabilities
 - Design for multi-database support from the start
+- Let's use the github.com/labstack/echo backend server routing and middleware.
