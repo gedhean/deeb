@@ -1,0 +1,30 @@
+# vim: set ft=make:
+.PHONY: all clean test
+
+.PHONY: lint
+lint: format-setup lint-golang lint-yaml
+
+.PHONY: lint-golang
+lint-golang: lint-setup
+	@echo "Linting `echo $(GOLANG_SOURCES) | tr ' ' '\n' | wc -l` .go files..."
+	@golangci-lint run --timeout 10m
+	@echo "✅ No golang lint errors found."
+
+.PHONY: lint-yaml
+lint-yaml: lint-setup
+	@echo "Linting `echo $(YAML_SOURCES) | tr ' ' '\n' | wc -l` .yaml files..."
+	@yamllint $(YAML_SOURCES)
+	@echo "✅ No yaml lint errors found."
+
+.PHONY: lint-setup
+lint-setup:
+	@./scripts/ci/setup-linting.sh
+
+.PHONY: lint-breaking
+lint-breaking: lint-breaking-protos
+
+.PHONY: lint-breaking-protos
+lint-breaking-protos:
+	@echo "Checking for breaking changes..."
+	@cd protos && buf breaking . --against "../.git#branch=main,subdir=protos"
+	@echo "✅ No breaking protobuf changes found."

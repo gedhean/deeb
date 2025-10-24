@@ -1,0 +1,21 @@
+# vim: set ft=make:
+
+.PHONY: all clean test
+
+.PHONY: ensure-build-dir
+ensure-build-dir:
+	@mkdir -p ${TARGET_BIN_DIR}
+
+.PHONY: build
+build: ensure-build-dir
+	@go build -o ${TARGET_BIN_DIR}/${PROJECT_NAME} main.go
+
+.PHONY: docker-build
+docker-build: build-linux
+	@docker build . --build-arg PROJECT_NAME=${PROJECT_NAME} -t ${PROJECT_NAME}:latest -f docker/Dockerfile
+
+#build-linux: export GOARCH := $(shell uname -m)
+build-linux: export GOOS := linux
+build-linux: export TARGET_BIN_DIR := target/${GOOS}/bin
+build-linux:
+	@go build -o ${TARGET_BIN_DIR}/${PROJECT_NAME} main.go

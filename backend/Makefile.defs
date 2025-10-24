@@ -1,0 +1,24 @@
+# vim: set ft=make:
+
+.PHONY: all clean test
+
+GHROOT := github.com
+GHUSER := NSXBet
+PROJECT_NAME := deeb
+TARGET_BIN_DIR := target/${GOOS}/bin
+
+# Golang source and packages
+# To ignore some files from formatting, try:
+# GOLANG_SOURCES := $(shell find . -type f -name '*.go' | grep -v /vendor/)
+# To ignore entire directories, try:
+GOLANG_SOURCES := $(shell find . -type f -name '*.go' -not -path "./scripts/*" -not -path "./gen/*")
+
+# To ignore some packages, try:
+# GOLANG_PACKAGES := $(shell go list ./... | grep -v /vendor/ | sed...)
+GOLANG_PACKAGES := $(shell /bin/bash -c 'go list ./... | grep -v "/test" | grep -v "/gen/" | sed -e "s|${GHROOT}/${GHUSER}/${PROJECT_NAME}||g" | sed -e "s@^/@@g" | xargs -I {} echo "./{}"')
+
+# Yaml Sources
+YAML_SOURCES := $(shell find . -type f -name '*.yaml' | grep -v kubernetes/ | grep -v docker/ | grep -v ./.golangci.yaml)
+
+# Yaml Sources
+YAML_SOURCES := $(shell find . -type f -name '*.yaml' | grep -v kubernetes/)

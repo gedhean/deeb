@@ -1,0 +1,13 @@
+# vim: set ft=make:
+
+.PHONY: all clean test
+
+docker-stop:
+	@echo
+	@echo "Stopping docker containers..."
+	@PROJECT_NAME=${PROJECT_NAME} docker compose -p ${PROJECT_NAME} -f docker/docker-compose.yaml stop
+
+.PHONY: run
+run: docker-build
+	@PROJECT_NAME=${PROJECT_NAME} docker compose -p ${PROJECT_NAME} -f docker/docker-compose.yaml \
+		up --build --remove-orphans
