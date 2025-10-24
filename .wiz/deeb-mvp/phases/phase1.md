@@ -368,21 +368,21 @@ Implement DatabaseInstance model and repository for managing database servers (M
 
 ### P01M20: Create database instance management endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M20
 
 **Goal**
 Implement REST API endpoints for database instance CRUD operations (Admin/DBA only).
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/database-instances - create instance (Admin/DBA only)
-- [ ] GET /api/v1/database-instances - list instances (Admin/DBA/Developer read)
-- [ ] GET /api/v1/database-instances/:id - get instance by ID
-- [ ] PUT /api/v1/database-instances/:id - update instance (Admin/DBA only)
-- [ ] DELETE /api/v1/database-instances/:id - delete instance (Admin only)
-- [ ] Authorization middleware applied
-- [ ] Input validation and error handling
-- [ ] Connection test endpoint included
+- [x] POST /api/v1/database-instances - create instance (Admin/DBA only)
+- [x] GET /api/v1/database-instances - list instances (Admin/DBA/Developer read)
+- [x] GET /api/v1/database-instances/:id - get instance by ID
+- [x] PUT /api/v1/database-instances/:id - update instance (Admin/DBA only)
+- [x] DELETE /api/v1/database-instances/:id - delete instance (Admin only)
+- [x] Authorization middleware applied
+- [x] Input validation and error handling
+- [x] Connection test endpoint included
 
 ---
 
