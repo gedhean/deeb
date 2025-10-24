@@ -221,19 +221,19 @@ Implement HTTP middleware for JWT authentication on protected routes.
 
 ### P01M12: Implement email/password registration endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M12
 
 **Goal**
 Create POST /api/v1/auth/register endpoint for user registration with email and password.
 
 **Acceptance Criteria**
-- [ ] Endpoint defined: POST /api/v1/auth/register
-- [ ] Request validation (email format, password strength)
-- [ ] Password hashing before storage
-- [ ] User created in database
-- [ ] 201 Created response with user data (excluding password)
-- [ ] Error handling for duplicate email addresses
+- [x] Endpoint defined: POST /api/v1/auth/register
+- [x] Request validation (email format, password strength)
+- [x] Password hashing before storage
+- [x] User created in database
+- [x] 201 Created response with user data (excluding password)
+- [x] Error handling for duplicate email addresses
 
 ---
 
