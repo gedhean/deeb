@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -159,7 +161,15 @@ func (c *Config) loadFromEnv() {
 		}
 	}
 
-	// Database
+	// Database - check DATABASE_URL first, then individual env vars
+	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
+		if err := c.parseDatabaseURL(databaseURL); err != nil {
+			// Log error but continue - individual env vars might override
+			fmt.Fprintf(os.Stderr, "Warning: failed to parse DATABASE_URL: %v\n", err)
+		}
+	}
+
+	// Individual database env vars override DATABASE_URL
 	if v := os.Getenv("DB_HOST"); v != "" {
 		c.Database.Host = v
 	}
@@ -221,6 +231,57 @@ func (c *Config) loadFromEnv() {
 	if v := os.Getenv("LOG_FORMAT"); v != "" {
 		c.Logging.Format = v
 	}
+}
+
+// parseDatabaseURL parses a PostgreSQL connection URL and populates the database config
+// Supports formats:
+//   - postgresql://user:password@host:port/database?sslmode=disable
+//   - postgres://user:password@host:port/database?sslmode=disable
+func (c *Config) parseDatabaseURL(databaseURL string) error {
+	// Parse the URL
+	u, err := url.Parse(databaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid database URL: %w", err)
+	}
+
+	// Check scheme
+	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
+		return fmt.Errorf("invalid database URL scheme: %s (expected postgres or postgresql)", u.Scheme)
+	}
+
+	// Extract host and port
+	host := u.Hostname()
+	if host != "" {
+		c.Database.Host = host
+	}
+
+	port := u.Port()
+	if port != "" {
+		if p, err := strconv.Atoi(port); err == nil {
+			c.Database.Port = p
+		}
+	}
+
+	// Extract username
+	if u.User != nil {
+		c.Database.User = u.User.Username()
+		if password, ok := u.User.Password(); ok {
+			c.Database.Password = password
+		}
+	}
+
+	// Extract database name (remove leading slash)
+	if u.Path != "" {
+		c.Database.Database = strings.TrimPrefix(u.Path, "/")
+	}
+
+	// Extract query parameters
+	query := u.Query()
+	if sslmode := query.Get("sslmode"); sslmode != "" {
+		c.Database.SSLMode = sslmode
+	}
+
+	return nil
 }
 
 // Validate validates the configuration
