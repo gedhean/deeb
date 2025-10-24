@@ -93,6 +93,10 @@ Automatic schema drift detection and notification. Changes that are made outside
 
 Users are the entities that can access and perform actions in Deeb. Groups are collections of users that can share access to resources for easy permission management.
 
+### Projects
+
+A `Project` groups databases, team members, and workflows together. It's a logical grouping of resources that are related to a specific application or project.
+
 ### Roles and Permissions
 
 RBAC (Role-Based Access Control) is used to manage permissions. Each user has a role and a set of permissions. Role can be assigned to a group of users as well.
@@ -121,3 +125,21 @@ All actions are logged and audited. The logs are stored in a secure and complian
 ### Data Encryption
 
 All data is encrypted at rest and in transit.
+
+
+## Core Concepts: Organization Resources
+
+### Projects
+
+A `Project` groups databases, team members, and workflows together. It's a logical grouping of resources that are related to a specific application or project.
+
+### Environments
+
+An `Environment` represents a specific stage in your development and deployment pipeline shech as Development, Staging, Production. These typically correspond directly to your actual deployment environments. Organization administrators can attach organizational policies to environments, enabling different rules and approval workflows for each stage.
+
+### Database Instance
+A `Database Instance` represents a database server or cluster that you connect to using a host address and port. This includes MySQL servers, PostgreSQL clusters, AWS RDS instances, and similar database systems. A single instance can host multiple individual databases. Organization administrators and DBAs are typically responsible for managing database instances.
+
+### Databases
+
+A `Database` is an individual database residing within a database instance. Each database belongs to exactly one project, establishing clear ownership and access boundaries. Project developers primarily interact with databases in their day-to-day work.
