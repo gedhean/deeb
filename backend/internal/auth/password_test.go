@@ -187,10 +187,35 @@ func TestHashPassword_ExceedsBcryptLimit(t *testing.T) {
 
 	hash, err := HashPassword(tooLongPassword)
 
-	// bcrypt should return an error for passwords > 72 bytes
+	// Should return ErrPasswordTooLong for passwords > 72 bytes
 	assert.Error(t, err)
+	assert.Equal(t, ErrPasswordTooLong, err)
 	assert.Empty(t, hash)
-	assert.Contains(t, err.Error(), "failed to hash password")
+}
+
+func TestHashPassword_MaximumLength(t *testing.T) {
+	// Test with a password at exactly 72 bytes (maximum allowed)
+	maxPassword := strings.Repeat("a", MaxPasswordLength)
+
+	hash, err := HashPassword(maxPassword)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, hash)
+
+	// Should verify successfully
+	err = VerifyPassword(hash, maxPassword)
+	assert.NoError(t, err)
+}
+
+func TestHashPassword_ExceedsMaximumByOne(t *testing.T) {
+	// Test with a password one character over the limit
+	tooLongPassword := strings.Repeat("a", MaxPasswordLength+1)
+
+	hash, err := HashPassword(tooLongPassword)
+
+	assert.Error(t, err)
+	assert.Equal(t, ErrPasswordTooLong, err)
+	assert.Empty(t, hash)
 }
 
 func BenchmarkHashPassword(b *testing.B) {

@@ -11,6 +11,9 @@ const (
 	// MinPasswordLength is the minimum required password length
 	MinPasswordLength = 8
 
+	// MaxPasswordLength is the maximum password length (bcrypt has a 72-byte limit)
+	MaxPasswordLength = 72
+
 	// BcryptCost is the work factor for bcrypt (12 = ~250ms on modern hardware)
 	BcryptCost = 12
 )
@@ -18,6 +21,9 @@ const (
 var (
 	// ErrPasswordTooShort is returned when password is below minimum length
 	ErrPasswordTooShort = errors.New("password must be at least 8 characters long")
+
+	// ErrPasswordTooLong is returned when password exceeds maximum length
+	ErrPasswordTooLong = errors.New("password must not exceed 72 characters")
 
 	// ErrEmptyPassword is returned when password is empty
 	ErrEmptyPassword = errors.New("password cannot be empty")
@@ -35,6 +41,10 @@ func HashPassword(password string) (string, error) {
 
 	if len(password) < MinPasswordLength {
 		return "", ErrPasswordTooShort
+	}
+
+	if len(password) > MaxPasswordLength {
+		return "", ErrPasswordTooLong
 	}
 
 	// Generate bcrypt hash
