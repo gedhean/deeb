@@ -280,14 +280,16 @@ Add OAuth 2.0 authentication with Google including redirect and callback handlin
 **ID:** P01M15
 
 **Goal**
-Create RBAC system with roles (Developer, Approver, Admin) and permission checking.
+Create two-level RBAC system with Organization and Project roles, plus permission checking.
 
 **Acceptance Criteria**
-- [ ] Role enum defined (Developer, Approver, Admin)
-- [ ] Permission constants defined for actions
-- [ ] Role-to-permissions mapping implemented
-- [ ] HasPermission function checks user role against required permission
-- [ ] Authorization middleware created for protected routes
+- [ ] Organization role constants defined (OrganizationAdmin, OrganizationDBA, OrganizationDeveloper)
+- [ ] Project role constants defined (ProjectOwner, ProjectDeveloper, ProjectApprover, ProjectViewer)
+- [ ] Permission constants defined for organization-level and project-level actions
+- [ ] Role-to-permissions mapping implemented for both levels
+- [ ] HasOrganizationPermission function checks user's organization role
+- [ ] HasProjectPermission function checks user's project role
+- [ ] Authorization middleware created for protected routes (org and project level)
 - [ ] Unit tests for permission checking passing
 
 ---
