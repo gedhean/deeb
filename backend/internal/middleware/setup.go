@@ -11,15 +11,8 @@ func Setup(e *echo.Echo, cfg *config.Config) {
 	// Recovery middleware - recovers from panics
 	e.Use(middleware.Recover())
 
-	// Logger middleware - logs HTTP requests
-	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-		Format: `{"time":"${time_rfc3339}","method":"${method}","uri":"${uri}",` +
-			`"status":${status},"latency":"${latency_human}","bytes_in":${bytes_in},` +
-			`"bytes_out":${bytes_out},"error":"${error}"}` + "\n",
-	}))
-
-	// Request ID middleware - adds correlation ID to each request
-	e.Use(middleware.RequestID())
+	// Custom request logger with Zap integration and correlation IDs
+	e.Use(RequestLogger())
 
 	// CORS middleware - configure cross-origin requests
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{

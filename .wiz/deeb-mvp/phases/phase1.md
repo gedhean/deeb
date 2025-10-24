@@ -464,19 +464,19 @@ Configure HTTP server using Go standard library net/http with graceful shutdown.
 
 ### P01M25: Implement request logging middleware
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M25
 
 **Goal**
 Create middleware that logs all HTTP requests with correlation IDs for tracing.
 
 **Acceptance Criteria**
-- [ ] Correlation ID generated for each request
-- [ ] Request method, path, status code logged
-- [ ] Request duration logged
-- [ ] Correlation ID added to response headers
-- [ ] Logs in structured JSON format
-- [ ] Integration with Zap logger
+- [x] Correlation ID generated for each request
+- [x] Request method, path, status code logged
+- [x] Request duration logged
+- [x] Correlation ID added to response headers
+- [x] Logs in structured JSON format
+- [x] Integration with Zap logger
 
 ---
 
