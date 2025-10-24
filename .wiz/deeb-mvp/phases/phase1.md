@@ -406,22 +406,22 @@ Implement Database model and repository for individual databases within instance
 
 ### P01M22: Create database management endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M22
 
 **Goal**
 Implement REST API endpoints for database CRUD operations.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/databases - create database (Admin/DBA only)
-- [ ] GET /api/v1/databases - list databases (filter by project)
-- [ ] GET /api/v1/databases/:id - get database by ID
-- [ ] GET /api/v1/projects/:project_id/databases - list databases for project
-- [ ] PUT /api/v1/databases/:id - update database (Admin/DBA only)
-- [ ] DELETE /api/v1/databases/:id - delete database (Admin only)
-- [ ] Authorization middleware applied
-- [ ] Project membership check for project-scoped endpoints
-- [ ] Input validation and error handling
+- [x] POST /api/v1/databases - create database (Admin/DBA only)
+- [x] GET /api/v1/databases - list databases (filter by project)
+- [x] GET /api/v1/databases/:id - get database by ID
+- [x] GET /api/v1/projects/:project_id/databases - list databases for project
+- [x] PUT /api/v1/databases/:id - update database (Admin/DBA only)
+- [x] DELETE /api/v1/databases/:id - delete database (Admin only)
+- [x] Authorization middleware applied
+- [x] Project membership check for project-scoped endpoints
+- [x] Input validation and error handling
 
 ---
 

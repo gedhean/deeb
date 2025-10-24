@@ -1,9 +1,9 @@
 {
   "slug": "deeb-mvp",
-  "milestone_id": "P01M21",
+  "milestone_id": "P01M22",
   "phase_number": "1",
   "phase_file": ".wiz/deeb-mvp/phases/phase1.md",
   "status": "completed",
-  "started_at": "2025-10-24T05:00:00Z",
-  "completed_at": "2025-10-24T05:15:00Z"
+  "started_at": "2025-10-24T05:30:00Z",
+  "completed_at": "2025-10-24T05:45:00Z"
 }
