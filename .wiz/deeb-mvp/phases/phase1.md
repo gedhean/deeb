@@ -296,19 +296,19 @@ Create two-level RBAC system with Organization and Project roles, plus permissio
 
 ### P01M16: Create user management endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M16
 
 **Goal**
 Implement REST API endpoints for user CRUD operations (Admin only).
 
 **Acceptance Criteria**
-- [ ] GET /api/v1/users - list all users
-- [ ] GET /api/v1/users/:id - get user by ID
-- [ ] PUT /api/v1/users/:id - update user
-- [ ] DELETE /api/v1/users/:id - deactivate user (soft delete)
-- [ ] Admin permission required for all endpoints
-- [ ] Input validation and error handling
+- [x] GET /api/v1/users - list all users
+- [x] GET /api/v1/users/:id - get user by ID
+- [x] PUT /api/v1/users/:id - update user
+- [x] DELETE /api/v1/users/:id - deactivate user (soft delete)
+- [x] Admin permission required for all endpoints
+- [x] Input validation and error handling
 
 ---
 
