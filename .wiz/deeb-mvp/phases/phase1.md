@@ -388,19 +388,19 @@ Implement REST API endpoints for database instance CRUD operations (Admin/DBA on
 
 ### P01M21: Create database model and repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M21
 
 **Goal**
 Implement Database model and repository for individual databases within instances.
 
 **Acceptance Criteria**
-- [ ] Database model created with fields: id, name, database_instance_id, project_id, environment_id, created_at, updated_at
-- [ ] DatabaseRepository interface defined
-- [ ] PostgreSQL implementation of DatabaseRepository
-- [ ] Foreign key constraints to instances and projects
-- [ ] Database validation logic
-- [ ] Unit tests for repository methods passing
+- [x] Database model created with fields: id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+- [x] DatabaseRepository interface defined
+- [x] PostgreSQL implementation of DatabaseRepository
+- [x] Foreign key constraints to instances and projects
+- [x] Database validation logic
+- [x] Unit tests for repository methods passing
 
 ---
 

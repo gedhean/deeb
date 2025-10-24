@@ -1,0 +1,188 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/repository"
+)
+
+// DatabaseRepository is the PostgreSQL implementation of repository.DatabaseRepository
+type DatabaseRepository struct {
+	db *sqlx.DB
+}
+
+// NewDatabaseRepository creates a new PostgreSQL database repository
+func NewDatabaseRepository(db *sqlx.DB) *DatabaseRepository {
+	return &DatabaseRepository{db: db}
+}
+
+// Create creates a new database in the database
+func (r *DatabaseRepository) Create(ctx context.Context, database *models.Database) error {
+	// Validate database
+	if err := database.Validate(); err != nil {
+		return err
+	}
+
+	// Set timestamps
+	now := time.Now()
+	if database.ID == uuid.Nil {
+		database.ID = uuid.New()
+	}
+	database.CreatedAt = now
+	database.UpdatedAt = now
+
+	query := `
+		INSERT INTO databases (id, name, database_instance_id, project_id, environment_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+
+	_, err := r.db.ExecContext(ctx, query,
+		database.ID,
+		database.Name,
+		database.DatabaseInstanceID,
+		database.ProjectID,
+		database.EnvironmentID,
+		database.CreatedAt,
+		database.UpdatedAt,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetByID retrieves a database by its ID
+func (r *DatabaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Database, error) {
+	query := `
+		SELECT id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+		FROM databases
+		WHERE id = $1
+	`
+
+	var database models.Database
+	err := r.db.GetContext(ctx, &database, query, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, repository.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return &database, nil
+}
+
+// List retrieves all databases with pagination
+func (r *DatabaseRepository) List(ctx context.Context, limit, offset int) ([]*models.Database, error) {
+	query := `
+		SELECT id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+		FROM databases
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	var databases []*models.Database
+	err := r.db.SelectContext(ctx, &databases, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return empty slice instead of nil if no databases found
+	if databases == nil {
+		databases = []*models.Database{}
+	}
+
+	return databases, nil
+}
+
+// ListByProject retrieves databases for a specific project
+func (r *DatabaseRepository) ListByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+	query := `
+		SELECT id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+		FROM databases
+		WHERE project_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	var databases []*models.Database
+	err := r.db.SelectContext(ctx, &databases, query, projectID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return empty slice instead of nil if no databases found
+	if databases == nil {
+		databases = []*models.Database{}
+	}
+
+	return databases, nil
+}
+
+// Update updates an existing database's information
+func (r *DatabaseRepository) Update(ctx context.Context, database *models.Database) error {
+	// Validate database
+	if err := database.Validate(); err != nil {
+		return err
+	}
+
+	// Update timestamp
+	database.UpdatedAt = time.Now()
+
+	query := `
+		UPDATE databases
+		SET name = $2, database_instance_id = $3, project_id = $4, environment_id = $5, updated_at = $6
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query,
+		database.ID,
+		database.Name,
+		database.DatabaseInstanceID,
+		database.ProjectID,
+		database.EnvironmentID,
+		database.UpdatedAt,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return repository.ErrNotFound
+	}
+
+	return nil
+}
+
+// Delete deletes a database by its ID
+func (r *DatabaseRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	query := `DELETE FROM databases WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return repository.ErrNotFound
+	}
+
+	return nil
+}
