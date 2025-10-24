@@ -126,22 +126,47 @@ cd frontend
 pnpm install
 ```
 
-#### 5. Start development servers
+#### 5. Configure environment variables
+
+Set the required environment variables:
+
+```bash
+export JWT_SECRET="dev-secret-key-minimum-32-characters-long-for-testing"
+export ENCRYPTION_KEY="12345678901234567890123456789012"
+export DB_USER="deeb"
+export DB_PASSWORD="your-database-password"
+export DB_NAME="deeb_metadata"
+export LOG_LEVEL="debug"      # debug, info, warn, error
+export LOG_FORMAT="console"    # console, json
+```
+
+For a complete list of configuration options, see [Configuration Guide](backend/docs/CONFIGURATION.md).
+
+#### 6. Start development servers
 
 ```bash
 # Terminal 1: Frontend
 cd frontend
 pnpm run dev
 
-# Terminal 2: Backend (coming soon)
+# Terminal 2: Backend
 cd backend
 go run cmd/server/main.go
+```
+
+The backend server will start on `http://0.0.0.0:8080` by default. You can verify it's running by accessing the health endpoint:
+
+```bash
+curl http://localhost:8080/health
+# Expected response: {"status":"ok","version":"0.1.0"}
 ```
 
 ## Documentation
 
 - [Architecture Overview](docs/architecture.png)
 - [Project Documentation](docs/project.md)
+- [Configuration Guide](backend/docs/CONFIGURATION.md)
+- [Database Schema](backend/docs/schema-erd.md)
 - [PRD - Product Requirements](/.wiz/deeb-mvp/prd.md)
 - [Implementation Guide](/.wiz/deeb-mvp/IMPLEMENTATION_GUIDE.md)
 
