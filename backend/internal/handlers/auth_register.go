@@ -2,16 +2,15 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
 	"strings"
 
+	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
-
 	"go.uber.org/zap"
 )
 
@@ -32,28 +31,20 @@ func NewRegisterHandler(userRepo repository.UserRepository, logger *zap.Logger) 
 	}
 }
 
-// ServeHTTP handles POST /api/v1/auth/register
-func (h *RegisterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	// Only accept POST requests
-	if r.Method != http.MethodPost {
-		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
+// Register handles POST /api/v1/auth/register
+func (h *RegisterHandler) Register(c echo.Context) error {
+	ctx := c.Request().Context()
 
 	// Parse request body
 	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := c.Bind(&req); err != nil {
 		h.logger.Debug("Failed to decode registration request", zap.Error(err))
-		h.respondError(w, http.StatusBadRequest, "invalid request body")
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 	}
 
 	// Validate email format
 	if !h.isValidEmail(req.Email) {
-		h.respondError(w, http.StatusBadRequest, "invalid email format")
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid email format"})
 	}
 
 	// Normalize email (lowercase)
@@ -61,8 +52,7 @@ func (h *RegisterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Validate password (HashPassword will do length validation)
 	if req.Password == "" {
-		h.respondError(w, http.StatusBadRequest, "password is required")
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "password is required"})
 	}
 
 	// Hash password
@@ -70,28 +60,23 @@ func (h *RegisterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Debug("Password validation failed", zap.Error(err))
 		if errors.Is(err, auth.ErrPasswordTooShort) {
-			h.respondError(w, http.StatusBadRequest, "password must be at least 8 characters")
-			return
+			return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "password must be at least 8 characters"})
 		}
 		if errors.Is(err, auth.ErrPasswordTooLong) {
-			h.respondError(w, http.StatusBadRequest, "password must not exceed 72 characters")
-			return
+			return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "password must not exceed 72 characters"})
 		}
-		h.respondError(w, http.StatusBadRequest, "invalid password")
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid password"})
 	}
 
 	// Check for duplicate email
 	existingUser, err := h.userRepo.GetByEmail(ctx, req.Email)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		h.logger.Error("Failed to check for existing user", zap.Error(err), zap.String("email", req.Email))
-		h.respondError(w, http.StatusInternalServerError, "internal server error")
-		return
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 	}
 	if existingUser != nil {
 		h.logger.Debug("Registration attempt with existing email", zap.String("email", req.Email))
-		h.respondError(w, http.StatusConflict, "email already registered")
-		return
+		return c.JSON(http.StatusConflict, ErrorResponse{Error: "email already registered"})
 	}
 
 	// Set default organization role if not provided
@@ -112,8 +97,7 @@ func (h *RegisterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	err = h.userRepo.Create(ctx, user)
 	if err != nil {
 		h.logger.Error("Failed to create user", zap.Error(err), zap.String("email", req.Email))
-		h.respondError(w, http.StatusInternalServerError, "failed to create user")
-		return
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "failed to create user"})
 	}
 
 	h.logger.Info("User registered successfully",
@@ -121,7 +105,7 @@ func (h *RegisterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		zap.String("user_id", user.ID.String()))
 
 	// Return success response
-	h.respondJSON(w, http.StatusCreated, RegisterResponse{
+	return c.JSON(http.StatusCreated, RegisterResponse{
 		User: user.ToResponse(),
 	})
 }
@@ -133,18 +117,4 @@ func (h *RegisterHandler) isValidEmail(email string) bool {
 		return false
 	}
 	return emailRegex.MatchString(email)
-}
-
-// respondJSON writes a JSON response
-func (h *RegisterHandler) respondJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		h.logger.Error("Failed to encode JSON response", zap.Error(err))
-	}
-}
-
-// respondError writes an error response
-func (h *RegisterHandler) respondError(w http.ResponseWriter, status int, message string) {
-	h.respondJSON(w, status, ErrorResponse{Error: message})
 }

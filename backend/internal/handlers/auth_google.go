@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
-
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -64,19 +64,13 @@ type GoogleUserInfo struct {
 	EmailVerified bool   `json:"email_verified"`
 }
 
-// ServeHTTP handles the initial OAuth redirect to Google
-func (h *GoogleOAuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
+// InitiateGoogleAuth handles GET /api/v1/auth/google - initiates OAuth flow
+func (h *GoogleOAuthHandler) InitiateGoogleAuth(c echo.Context) error {
 	// Generate CSRF state token
 	state, err := h.generateStateToken()
 	if err != nil {
 		h.logger.Error("Failed to generate state token", zap.Error(err))
-		h.respondError(w, http.StatusInternalServerError, "internal server error")
-		return
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 	}
 
 	// Store state with timestamp for validation
@@ -85,79 +79,66 @@ func (h *GoogleOAuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Redirect to Google OAuth
 	url := h.oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	h.logger.Debug("Redirecting to Google OAuth", zap.String("state", state))
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	return c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-// HandleCallback handles the OAuth callback from Google
-func (h *GoogleOAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	ctx := r.Context()
+// GoogleCallback handles GET /api/v1/auth/google/callback - OAuth callback
+func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
+	ctx := c.Request().Context()
 
 	// Validate state parameter (CSRF protection)
-	state := r.URL.Query().Get("state")
+	state := c.QueryParam("state")
 	if state == "" {
 		h.logger.Warn("OAuth callback missing state parameter")
-		h.respondError(w, http.StatusBadRequest, "missing state parameter")
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "missing state parameter"})
 	}
 
 	timestamp, exists := h.states[state]
 	if !exists {
 		h.logger.Warn("OAuth callback with invalid state", zap.String("state", state))
-		h.respondError(w, http.StatusBadRequest, "invalid state parameter")
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid state parameter"})
 	}
 
 	// State should expire after 10 minutes
 	if time.Since(timestamp) > 10*time.Minute {
 		delete(h.states, state)
 		h.logger.Warn("OAuth callback with expired state", zap.String("state", state))
-		h.respondError(w, http.StatusBadRequest, "expired state parameter")
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "expired state parameter"})
 	}
 
 	// Remove used state
 	delete(h.states, state)
 
 	// Check for error from Google
-	if errMsg := r.URL.Query().Get("error"); errMsg != "" {
+	if errMsg := c.QueryParam("error"); errMsg != "" {
 		h.logger.Warn("OAuth error from Google", zap.String("error", errMsg))
-		h.respondError(w, http.StatusBadRequest, fmt.Sprintf("oauth error: %s", errMsg))
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("oauth error: %s", errMsg)})
 	}
 
 	// Exchange authorization code for token
-	code := r.URL.Query().Get("code")
+	code := c.QueryParam("code")
 	if code == "" {
 		h.logger.Warn("OAuth callback missing code parameter")
-		h.respondError(w, http.StatusBadRequest, "missing code parameter")
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "missing code parameter"})
 	}
 
 	token, err := h.oauthConfig.Exchange(ctx, code)
 	if err != nil {
 		h.logger.Error("Failed to exchange code for token", zap.Error(err))
-		h.respondError(w, http.StatusInternalServerError, "failed to exchange authorization code")
-		return
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "failed to exchange authorization code"})
 	}
 
 	// Fetch user info from Google
 	userInfo, err := h.fetchGoogleUserInfo(ctx, token)
 	if err != nil {
 		h.logger.Error("Failed to fetch user info from Google", zap.Error(err))
-		h.respondError(w, http.StatusInternalServerError, "failed to fetch user information")
-		return
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "failed to fetch user information"})
 	}
 
 	// Validate email is verified
 	if !userInfo.EmailVerified {
 		h.logger.Warn("Google OAuth with unverified email", zap.String("email", userInfo.Email))
-		h.respondError(w, http.StatusBadRequest, "email not verified with Google")
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "email not verified with Google"})
 	}
 
 	// Normalize email
@@ -167,8 +148,7 @@ func (h *GoogleOAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 	user, err := h.userRepo.GetByEmail(ctx, email)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		h.logger.Error("Database error during Google OAuth", zap.Error(err), zap.String("email", email))
-		h.respondError(w, http.StatusInternalServerError, "internal server error")
-		return
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 	}
 
 	// Create new user if doesn't exist
@@ -184,8 +164,7 @@ func (h *GoogleOAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 			h.logger.Error("Failed to create user from Google OAuth",
 				zap.Error(err),
 				zap.String("email", email))
-			h.respondError(w, http.StatusInternalServerError, "failed to create user")
-			return
+			return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "failed to create user"})
 		}
 
 		h.logger.Info("Created new user from Google OAuth",
@@ -202,8 +181,7 @@ func (h *GoogleOAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 		h.logger.Info("Google OAuth attempt by inactive user",
 			zap.String("email", email),
 			zap.String("user_id", user.ID.String()))
-		h.respondError(w, http.StatusUnauthorized, "account is inactive")
-		return
+		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "account is inactive"})
 	}
 
 	// Generate JWT token
@@ -212,18 +190,13 @@ func (h *GoogleOAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 		h.logger.Error("Failed to generate token",
 			zap.Error(err),
 			zap.String("user_id", user.ID.String()))
-		h.respondError(w, http.StatusInternalServerError, "internal server error")
-		return
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 	}
 
-	response := LoginResponse{
+	return c.JSON(http.StatusOK, LoginResponse{
 		Token: jwtToken,
 		User:  user.ToResponse(),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	})
 }
 
 // fetchGoogleUserInfo fetches user information from Google using the access token
@@ -254,12 +227,6 @@ func (h *GoogleOAuthHandler) generateStateToken() (string, error) {
 		return "", err
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
-}
-
-func (h *GoogleOAuthHandler) respondError(w http.ResponseWriter, statusCode int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(ErrorResponse{Error: message})
 }
 
 // normalizeEmail normalizes an email address (lowercase and trim whitespace)

@@ -1,8 +1,6 @@
 package routes
 
 import (
-	"net/http"
-
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
@@ -67,11 +65,11 @@ func setupAuthRoutes(
 		logger.Get(),
 	)
 
-	// Register routes - wrap standard HTTP handlers for Echo
-	authGroup.POST("/register", echo.WrapHandler(registerHandler))
-	authGroup.POST("/login", echo.WrapHandler(loginHandler))
-	authGroup.GET("/google", echo.WrapHandler(googleHandler))
-	authGroup.GET("/google/callback", echo.WrapHandler(http.HandlerFunc(googleHandler.HandleCallback)))
+	// Register routes - use Echo handlers directly
+	authGroup.POST("/register", registerHandler.Register)
+	authGroup.POST("/login", loginHandler.Login)
+	authGroup.GET("/google", googleHandler.InitiateGoogleAuth)
+	authGroup.GET("/google/callback", googleHandler.GoogleCallback)
 }
 
 // setupUserRoutes registers user management routes

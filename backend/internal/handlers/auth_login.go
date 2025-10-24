@@ -2,13 +2,12 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 
+	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/repository"
-
 	"go.uber.org/zap"
 )
 
@@ -33,34 +32,27 @@ func NewLoginHandler(
 	}
 }
 
-func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.sendError(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+// Login handles POST /api/v1/auth/login
+func (h *LoginHandler) Login(c echo.Context) error {
 	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := c.Bind(&req); err != nil {
 		h.logger.Debug("Invalid JSON in login request", zap.Error(err))
-		h.sendError(w, "invalid request body", http.StatusBadRequest)
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 	}
 
 	// Validate input
 	if req.Email == "" || req.Password == "" {
-		h.sendError(w, "email and password are required", http.StatusBadRequest)
-		return
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "email and password are required"})
 	}
 
 	// Check rate limit BEFORE database lookup to prevent enumeration
 	if !h.rateLimiter.Allow(req.Email) {
 		h.logger.Warn("Rate limit exceeded for login attempt",
 			zap.String("email", req.Email))
-		h.sendError(w, "too many login attempts, please try again later", http.StatusTooManyRequests)
-		return
+		return c.JSON(http.StatusTooManyRequests, ErrorResponse{Error: "too many login attempts, please try again later"})
 	}
 
-	ctx := r.Context()
+	ctx := c.Request().Context()
 
 	// Look up user by email
 	user, err := h.userRepo.GetByEmail(ctx, req.Email)
@@ -74,8 +66,7 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.logger.Info("Failed login attempt - user not found",
 				zap.String("email", req.Email))
 		}
-		h.sendError(w, "invalid email or password", http.StatusUnauthorized)
-		return
+		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "invalid email or password"})
 	}
 
 	// Verify password
@@ -84,8 +75,7 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.logger.Info("Failed login attempt - invalid password",
 			zap.String("email", req.Email),
 			zap.String("user_id", user.ID.String()))
-		h.sendError(w, "invalid email or password", http.StatusUnauthorized)
-		return
+		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "invalid email or password"})
 	}
 
 	// Check if user is active
@@ -93,8 +83,7 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.logger.Info("Login attempt by inactive user",
 			zap.String("email", req.Email),
 			zap.String("user_id", user.ID.String()))
-		h.sendError(w, "account is inactive", http.StatusUnauthorized)
-		return
+		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "account is inactive"})
 	}
 
 	// Generate JWT token
@@ -103,8 +92,7 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("Failed to generate token",
 			zap.Error(err),
 			zap.String("user_id", user.ID.String()))
-		h.sendError(w, "internal server error", http.StatusInternalServerError)
-		return
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 	}
 
 	// Reset rate limit on successful login
@@ -114,18 +102,8 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		zap.String("user_id", user.ID.String()),
 		zap.String("email", user.Email))
 
-	response := LoginResponse{
+	return c.JSON(http.StatusOK, LoginResponse{
 		Token: token,
 		User:  user.ToResponse(),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
-}
-
-func (h *LoginHandler) sendError(w http.ResponseWriter, message string, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(ErrorResponse{Error: message})
+	})
 }
