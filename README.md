@@ -163,6 +163,7 @@ curl http://localhost:8080/health
 
 ## Documentation
 
+- [Development Guide](docs/dev-guide.md) - Docker development environment setup
 - [Architecture Overview](docs/architecture.png)
 - [Project Documentation](docs/project.md)
 - [Configuration Guide](backend/docs/CONFIGURATION.md)
