@@ -443,22 +443,22 @@ Create GET /health endpoint that returns application and database health status.
 
 ---
 
-### P01M24: Set up HTTP server with net/http
+### P01M24: Set up HTTP server with Echo
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M24
 
 **Goal**
 Configure HTTP server using Go standard library net/http with graceful shutdown.
 
 **Acceptance Criteria**
-- [ ] Server initialized in cmd/server/main.go
-- [ ] Port configurable via environment variable
-- [ ] Graceful shutdown on SIGINT/SIGTERM signals
-- [ ] Use github.com/labstack/echo for http server and middleware
-- [ ] Request logging middleware applied
-- [ ] CORS headers configured for frontend origin
-- [ ] Server starts and responds to requests
+- [x] Server initialized in cmd/server/main.go
+- [x] Port configurable via environment variable
+- [x] Graceful shutdown on SIGINT/SIGTERM signals
+- [x] Use github.com/labstack/echo for http server and middleware
+- [x] Configure middleware (CORS, logging, etc.)
+- [x] CORS headers configured for frontend origin
+- [x] Server starts and responds to requests
 
 ---
 
