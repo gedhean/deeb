@@ -26,10 +26,12 @@ var (
 )
 
 // Claims represents the JWT claims for a user session
+// Note: Only organization-level role is stored in JWT for authentication.
+// Project-specific roles are fetched from the database when accessing project resources.
 type Claims struct {
 	UserID           uuid.UUID `json:"user_id"`
 	Email            string    `json:"email"`
-	OrganizationRole string    `json:"organization_role"`
+	OrganizationRole string    `json:"organization_role"` // OrganizationAdmin, OrganizationDBA, OrganizationDeveloper
 	jwt.RegisteredClaims
 }
 
@@ -53,7 +55,9 @@ func NewTokenManager(jwtSecret string) (*TokenManager, error) {
 	}, nil
 }
 
-// GenerateToken creates a new JWT token for the given user
+// GenerateToken creates a new JWT token for the given user with their organization role.
+// Project-specific roles are not included in the token and should be fetched from the
+// database when the user accesses project resources.
 func (tm *TokenManager) GenerateToken(userID uuid.UUID, email, organizationRole string) (string, error) {
 	// Validate inputs
 	if userID == uuid.Nil {
