@@ -34,6 +34,14 @@ The system follows a centralized architecture:
 
 Refer to [docs/architecture.png](docs/architecture.png) for visual representation.
 
+## Development
+
+- **Start the Frontend**: `cd frontend && pnpm run dev`
+- **Start the Backend**: `cd backend && make run`
+- **Run backend tests**: `cd backend && make test`
+- **Run backend linting**: `cd backend && make lint`
+- **Run backend formatting**: `cd backend && make format`
+
 ## Database Change Lifecycle
 
 1. **Planning**: Define change type (DDL/DML), target database(s), and change details

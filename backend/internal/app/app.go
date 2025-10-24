@@ -28,9 +28,9 @@ type App struct {
 }
 
 // New creates and initializes a new application instance
-func New(version string) (*App, error) {
+func New(version string, configPath string) (*App, error) {
 	// Load configuration
-	cfg, err := config.Load("")
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}

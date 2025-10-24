@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+
+# Testing
+*.test
+coverage.out
+coverage.html
+*.out
+*.xml
+
+# Documentation
+README.md
+docs
+
+# Development files
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+server
+migrate
+bin/
+
+# Makefiles (not needed in container)
+Makefile*
+
+# Docker files
+Dockerfile
+.dockerignore
+docker
