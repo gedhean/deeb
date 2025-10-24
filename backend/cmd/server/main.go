@@ -7,6 +7,8 @@ import (
 	"syscall"
 
 	"github.com/nsxbet/deeb/internal/app"
+	"github.com/nsxbet/deeb/internal/logger"
+	"go.uber.org/zap"
 )
 
 const version = "0.1.0"
@@ -22,7 +24,8 @@ func main() {
 	// Start server in goroutine
 	go func() {
 		if err := application.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+			logger.Error("Server error", zap.Error(err))
+			os.Exit(1)
 		}
 	}()
 
