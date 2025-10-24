@@ -33,6 +33,10 @@ func NewRegisterHandler(userRepo repository.UserRepository, logger *zap.Logger) 
 
 // Register handles POST /api/v1/auth/register
 func (h *RegisterHandler) Register(c echo.Context) error {
+	if c.Request().Method != http.MethodPost {
+		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+	}
+
 	ctx := c.Request().Context()
 
 	// Parse request body

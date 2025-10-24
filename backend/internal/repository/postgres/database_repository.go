@@ -51,7 +51,6 @@ func (r *DatabaseRepository) Create(ctx context.Context, database *models.Databa
 		database.CreatedAt,
 		database.UpdatedAt,
 	)
-
 	if err != nil {
 		return err
 	}
@@ -103,7 +102,11 @@ func (r *DatabaseRepository) List(ctx context.Context, limit, offset int) ([]*mo
 }
 
 // ListByProject retrieves databases for a specific project
-func (r *DatabaseRepository) ListByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (r *DatabaseRepository) ListByProject(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	query := `
 		SELECT id, name, database_instance_id, project_id, environment_id, created_at, updated_at
 		FROM databases

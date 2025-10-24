@@ -10,26 +10,26 @@ import (
 
 // Database represents an individual database within a database instance
 type Database struct {
-	ID                 uuid.UUID `json:"id" db:"id"`
-	Name               string    `json:"name" db:"name"`
+	ID                 uuid.UUID `json:"id"                   db:"id"`
+	Name               string    `json:"name"                 db:"name"`
 	DatabaseInstanceID uuid.UUID `json:"database_instance_id" db:"database_instance_id"`
-	ProjectID          uuid.UUID `json:"project_id" db:"project_id"`
-	EnvironmentID      uuid.UUID `json:"environment_id" db:"environment_id"`
-	CreatedAt          time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
+	ProjectID          uuid.UUID `json:"project_id"           db:"project_id"`
+	EnvironmentID      uuid.UUID `json:"environment_id"       db:"environment_id"`
+	CreatedAt          time.Time `json:"created_at"           db:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"           db:"updated_at"`
 }
 
 // CreateDatabaseRequest represents the request to create a new database
 type CreateDatabaseRequest struct {
-	Name               string    `json:"name" validate:"required,max=100"`
+	Name               string    `json:"name"                 validate:"required,max=100"`
 	DatabaseInstanceID uuid.UUID `json:"database_instance_id" validate:"required"`
-	ProjectID          uuid.UUID `json:"project_id" validate:"required"`
-	EnvironmentID      uuid.UUID `json:"environment_id" validate:"required"`
+	ProjectID          uuid.UUID `json:"project_id"           validate:"required"`
+	EnvironmentID      uuid.UUID `json:"environment_id"       validate:"required"`
 }
 
 // UpdateDatabaseRequest represents the request to update a database
 type UpdateDatabaseRequest struct {
-	Name               *string    `json:"name,omitempty" validate:"omitempty,max=100"`
+	Name               *string    `json:"name,omitempty"                 validate:"omitempty,max=100"`
 	DatabaseInstanceID *uuid.UUID `json:"database_instance_id,omitempty"`
 	ProjectID          *uuid.UUID `json:"project_id,omitempty"`
 	EnvironmentID      *uuid.UUID `json:"environment_id,omitempty"`
@@ -61,11 +61,11 @@ func (d *Database) ToResponse() *DatabaseResponse {
 
 // Validation errors
 var (
-	ErrDatabaseNameRequired             = errors.New("database name is required")
-	ErrDatabaseNameTooLong              = errors.New("database name must not exceed 100 characters")
-	ErrDatabaseInstanceIDRequired       = errors.New("database instance ID is required")
-	ErrDatabaseProjectIDRequired        = errors.New("project ID is required")
-	ErrDatabaseEnvironmentIDRequired    = errors.New("environment ID is required")
+	ErrDatabaseNameRequired          = errors.New("database name is required")
+	ErrDatabaseNameTooLong           = errors.New("database name must not exceed 100 characters")
+	ErrDatabaseInstanceIDRequired    = errors.New("database instance ID is required")
+	ErrDatabaseProjectIDRequired     = errors.New("project ID is required")
+	ErrDatabaseEnvironmentIDRequired = errors.New("environment ID is required")
 )
 
 // Validate validates the database model

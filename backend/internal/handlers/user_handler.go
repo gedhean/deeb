@@ -123,7 +123,7 @@ func (h *UserHandler) UpdateUser(c echo.Context) error {
 	// Validate request
 	if err := c.Validate(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Validation failed",
+			"error":   "Validation failed",
 			"details": err.Error(),
 		})
 	}

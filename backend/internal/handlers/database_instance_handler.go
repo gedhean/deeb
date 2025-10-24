@@ -19,7 +19,10 @@ type DatabaseInstanceHandler struct {
 }
 
 // NewDatabaseInstanceHandler creates a new database instance handler
-func NewDatabaseInstanceHandler(dbInstanceRepo repository.DatabaseInstanceRepository, logger *zap.Logger) *DatabaseInstanceHandler {
+func NewDatabaseInstanceHandler(
+	dbInstanceRepo repository.DatabaseInstanceRepository,
+	logger *zap.Logger,
+) *DatabaseInstanceHandler {
 	return &DatabaseInstanceHandler{
 		dbInstanceRepo: dbInstanceRepo,
 		logger:         logger,

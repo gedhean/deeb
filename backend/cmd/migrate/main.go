@@ -36,7 +36,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize migrator: %v", err)
 	}
-	defer migrator.Close()
+	defer func() {
+		if err := migrator.Close(); err != nil {
+			log.Printf("Warning: Failed to close migrator: %v", err)
+		}
+	}()
 
 	// Execute command
 	if err := executeCommand(migrator, command, commandArgs); err != nil {
@@ -133,6 +137,5 @@ Examples:
   migrate force 5                  # Force to version 5
   migrate steps 2                  # Apply next 2 migrations
   migrate steps -1                 # Rollback last migration
-  migrate -database "postgres://..." up
-`)
+  migrate -database "postgres://..." up`)
 }

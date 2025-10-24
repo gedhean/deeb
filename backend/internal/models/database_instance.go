@@ -18,31 +18,31 @@ const (
 
 // DatabaseInstance represents a database server or cluster
 type DatabaseInstance struct {
-	ID            uuid.UUID      `json:"id" db:"id"`
-	Name          string         `json:"name" db:"name"`
-	Host          string         `json:"host" db:"host"`
-	Port          int            `json:"port" db:"port"`
-	Engine        DatabaseEngine `json:"engine" db:"engine"`
+	ID            uuid.UUID      `json:"id"             db:"id"`
+	Name          string         `json:"name"           db:"name"`
+	Host          string         `json:"host"           db:"host"`
+	Port          int            `json:"port"           db:"port"`
+	Engine        DatabaseEngine `json:"engine"         db:"engine"`
 	EnvironmentID uuid.UUID      `json:"environment_id" db:"environment_id"`
-	CreatedAt     time.Time      `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at" db:"updated_at"`
+	CreatedAt     time.Time      `json:"created_at"     db:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"     db:"updated_at"`
 }
 
 // CreateDatabaseInstanceRequest represents the request to create a new database instance
 type CreateDatabaseInstanceRequest struct {
-	Name          string         `json:"name" validate:"required,max=100"`
-	Host          string         `json:"host" validate:"required,max=255"`
-	Port          int            `json:"port" validate:"required,min=1,max=65535"`
-	Engine        DatabaseEngine `json:"engine" validate:"required,oneof=mysql postgresql"`
+	Name          string         `json:"name"           validate:"required,max=100"`
+	Host          string         `json:"host"           validate:"required,max=255"`
+	Port          int            `json:"port"           validate:"required,min=1,max=65535"`
+	Engine        DatabaseEngine `json:"engine"         validate:"required,oneof=mysql postgresql"`
 	EnvironmentID uuid.UUID      `json:"environment_id" validate:"required"`
 }
 
 // UpdateDatabaseInstanceRequest represents the request to update a database instance
 type UpdateDatabaseInstanceRequest struct {
-	Name          *string         `json:"name,omitempty" validate:"omitempty,max=100"`
-	Host          *string         `json:"host,omitempty" validate:"omitempty,max=255"`
-	Port          *int            `json:"port,omitempty" validate:"omitempty,min=1,max=65535"`
-	Engine        *DatabaseEngine `json:"engine,omitempty" validate:"omitempty,oneof=mysql postgresql"`
+	Name          *string         `json:"name,omitempty"           validate:"omitempty,max=100"`
+	Host          *string         `json:"host,omitempty"           validate:"omitempty,max=255"`
+	Port          *int            `json:"port,omitempty"           validate:"omitempty,min=1,max=65535"`
+	Engine        *DatabaseEngine `json:"engine,omitempty"         validate:"omitempty,oneof=mysql postgresql"`
 	EnvironmentID *uuid.UUID      `json:"environment_id,omitempty"`
 }
 

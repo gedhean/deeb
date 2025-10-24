@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -93,16 +94,18 @@ func TestRegisterHandler_ServeHTTP_Success(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, http.StatusCreated, rec.Code)
 
 	var resp RegisterResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp.User)
 	assert.NotEqual(t, uuid.Nil, resp.User.ID)
@@ -136,16 +139,18 @@ func TestRegisterHandler_ServeHTTP_CustomOrganizationRole(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, http.StatusCreated, rec.Code)
 
 	var resp RegisterResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "OrganizationAdmin", resp.User.OrganizationRole)
 
@@ -180,16 +185,18 @@ func TestRegisterHandler_ServeHTTP_InvalidEmailFormat(t *testing.T) {
 			body, _ := json.Marshal(reqBody)
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
 
 			// Execute
-			handler.ServeHTTP(w, req)
+			_ = handler.Register(c)
 
 			// Assert
-			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 			var resp ErrorResponse
-			err := json.NewDecoder(w.Body).Decode(&resp)
+			err := json.NewDecoder(rec.Body).Decode(&resp)
 			assert.NoError(t, err)
 			assert.Equal(t, "invalid email format", resp.Error)
 		})
@@ -210,16 +217,18 @@ func TestRegisterHandler_ServeHTTP_PasswordTooShort(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "password must be at least 8 characters", resp.Error)
 }
@@ -243,16 +252,18 @@ func TestRegisterHandler_ServeHTTP_PasswordTooLong(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "password must not exceed 72 characters", resp.Error)
 }
@@ -271,16 +282,18 @@ func TestRegisterHandler_ServeHTTP_EmptyPassword(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "password is required", resp.Error)
 }
@@ -310,16 +323,18 @@ func TestRegisterHandler_ServeHTTP_DuplicateEmail(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Equal(t, http.StatusConflict, rec.Code)
 
 	var resp ErrorResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "email already registered", resp.Error)
 
@@ -335,16 +350,18 @@ func TestRegisterHandler_ServeHTTP_MalformedJSON(t *testing.T) {
 	// Create request with malformed JSON
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader([]byte("{invalid json")))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "invalid request body", resp.Error)
 }
@@ -366,16 +383,18 @@ func TestRegisterHandler_ServeHTTP_DatabaseErrorOnGetByEmail(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	var resp ErrorResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "internal server error", resp.Error)
 
@@ -400,16 +419,18 @@ func TestRegisterHandler_ServeHTTP_DatabaseErrorOnCreate(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	var resp ErrorResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "failed to create user", resp.Error)
 
@@ -424,16 +445,18 @@ func TestRegisterHandler_ServeHTTP_MethodNotAllowed(t *testing.T) {
 
 	// Create GET request (should only accept POST)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/register", nil)
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 
 	var resp ErrorResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "method not allowed", resp.Error)
 }
@@ -458,12 +481,14 @@ func TestRegisterHandler_ServeHTTP_EmailNormalization(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute
-	handler.ServeHTTP(w, req)
+	_ = handler.Register(c)
 
 	// Assert
-	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, http.StatusCreated, rec.Code)
 	mockRepo.AssertExpectations(t)
 }

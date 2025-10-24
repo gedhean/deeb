@@ -16,13 +16,13 @@ import (
 )
 
 type mockDatabaseRepository struct {
-	databases         []*models.Database
-	getErr            error
-	listErr           error
-	listByProjectErr  error
-	createErr         error
-	updateErr         error
-	deleteErr         error
+	databases        []*models.Database
+	getErr           error
+	listErr          error
+	listByProjectErr error
+	createErr        error
+	updateErr        error
+	deleteErr        error
 }
 
 func (m *mockDatabaseRepository) Create(ctx context.Context, database *models.Database) error {
@@ -53,7 +53,11 @@ func (m *mockDatabaseRepository) List(ctx context.Context, limit, offset int) ([
 	return m.databases, nil
 }
 
-func (m *mockDatabaseRepository) ListByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (m *mockDatabaseRepository) ListByProject(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	if m.listByProjectErr != nil {
 		return nil, m.listByProjectErr
 	}

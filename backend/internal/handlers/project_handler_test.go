@@ -214,8 +214,10 @@ func TestListProjects(t *testing.T) {
 			expectedCount:  2,
 		},
 		{
-			name:           "list projects with pagination",
-			mockProjects:   []*models.Project{createTestProject("550e8400-e29b-41d4-a716-446655440001", "Project 1", "Description 1")},
+			name: "list projects with pagination",
+			mockProjects: []*models.Project{
+				createTestProject("550e8400-e29b-41d4-a716-446655440001", "Project 1", "Description 1"),
+			},
 			queryParams:    map[string]string{"limit": "1", "offset": "0"},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,

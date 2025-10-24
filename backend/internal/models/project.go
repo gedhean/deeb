@@ -10,22 +10,22 @@ import (
 
 // Project represents a logical grouping of databases and team members
 type Project struct {
-	ID          uuid.UUID `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
+	ID          uuid.UUID `json:"id"          db:"id"`
+	Name        string    `json:"name"        db:"name"`
 	Description string    `json:"description" db:"description"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+	CreatedAt   time.Time `json:"created_at"  db:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"  db:"updated_at"`
 }
 
 // CreateProjectRequest represents the request to create a new project
 type CreateProjectRequest struct {
-	Name        string `json:"name" validate:"required,max=100"`
+	Name        string `json:"name"        validate:"required,max=100"`
 	Description string `json:"description" validate:"max=500"`
 }
 
 // UpdateProjectRequest represents the request to update a project
 type UpdateProjectRequest struct {
-	Name        *string `json:"name,omitempty" validate:"omitempty,max=100"`
+	Name        *string `json:"name,omitempty"        validate:"omitempty,max=100"`
 	Description *string `json:"description,omitempty" validate:"omitempty,max=500"`
 }
 

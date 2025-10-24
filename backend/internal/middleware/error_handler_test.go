@@ -23,12 +23,12 @@ func init() {
 
 func TestCustomErrorHandler_EchoHTTPError(t *testing.T) {
 	tests := []struct {
-		name           string
-		err            error
-		expectedCode   int
-		expectedError  string
-		checkMessage   bool
-		expectedMsg    string
+		name          string
+		err           error
+		expectedCode  int
+		expectedError string
+		checkMessage  bool
+		expectedMsg   string
 	}{
 		{
 			name:          "404 Not Found",

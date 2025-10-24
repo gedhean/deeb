@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -30,14 +31,17 @@ func TestGoogleOAuthRedirect(t *testing.T) {
 		logger,
 	)
 
+	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/auth/google", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	handler.ServeHTTP(w, req)
+	err = handler.InitiateGoogleAuth(c)
 
-	assert.Equal(t, http.StatusTemporaryRedirect, w.Code)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
 
-	location := w.Header().Get("Location")
+	location := rec.Header().Get("Location")
 	assert.NotEmpty(t, location)
 	assert.Contains(t, location, "accounts.google.com")
 	assert.Contains(t, location, "client_id=test-client-id")
@@ -71,11 +75,13 @@ func TestGoogleOAuthRedirect_WrongMethod(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/google", nil)
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	handler.ServeHTTP(w, req)
+	err = handler.InitiateGoogleAuth(c)
 
-	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 }
 
 // TestGoogleOAuthCallback_MissingState tests callback without state
@@ -95,14 +101,16 @@ func TestGoogleOAuthCallback_MissingState(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/google/callback?code=test-code", nil)
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	handler.HandleCallback(w, req)
+	err = handler.GoogleCallback(c)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	err = json.NewDecoder(w.Body).Decode(&resp)
+	err = json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "missing state parameter", resp.Error)
 }
@@ -124,14 +132,16 @@ func TestGoogleOAuthCallback_InvalidState(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/google/callback?state=invalid-state&code=test-code", nil)
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	handler.HandleCallback(w, req)
+	err = handler.GoogleCallback(c)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	err = json.NewDecoder(w.Body).Decode(&resp)
+	err = json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "invalid state parameter", resp.Error)
 }
@@ -157,14 +167,16 @@ func TestGoogleOAuthCallback_ExpiredState(t *testing.T) {
 	handler.states[expiredState] = time.Now().Add(-11 * time.Minute)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/google/callback?state="+expiredState+"&code=test-code", nil)
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	handler.HandleCallback(w, req)
+	err = handler.GoogleCallback(c)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	err = json.NewDecoder(w.Body).Decode(&resp)
+	err = json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "expired state parameter", resp.Error)
 
@@ -194,14 +206,16 @@ func TestGoogleOAuthCallback_ErrorFromGoogle(t *testing.T) {
 	handler.states[validState] = time.Now()
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/google/callback?state="+validState+"&error=access_denied", nil)
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	handler.HandleCallback(w, req)
+	err = handler.GoogleCallback(c)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	err = json.NewDecoder(w.Body).Decode(&resp)
+	err = json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Contains(t, resp.Error, "oauth error")
 }
@@ -227,14 +241,16 @@ func TestGoogleOAuthCallback_MissingCode(t *testing.T) {
 	handler.states[validState] = time.Now()
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/google/callback?state="+validState, nil)
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	handler.HandleCallback(w, req)
+	err = handler.GoogleCallback(c)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	err = json.NewDecoder(w.Body).Decode(&resp)
+	err = json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "missing code parameter", resp.Error)
 }
@@ -256,11 +272,13 @@ func TestGoogleOAuthCallback_WrongMethod(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/google/callback", nil)
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	handler.HandleCallback(w, req)
+	err = handler.GoogleCallback(c)
 
-	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 }
 
 // TestGoogleOAuthCallback_DatabaseError tests callback with database error
@@ -335,9 +353,11 @@ func TestStateCleanup(t *testing.T) {
 
 	// Make callback request (will fail due to missing code, but should clean up state)
 	req := httptest.NewRequest(http.MethodGet, "/auth/google/callback?state="+validState, nil)
-	w := httptest.NewRecorder()
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	handler.HandleCallback(w, req)
+	err = handler.GoogleCallback(c)
 
 	// Verify state was removed
 	_, exists = handler.states[validState]

@@ -66,6 +66,10 @@ type GoogleUserInfo struct {
 
 // InitiateGoogleAuth handles GET /api/v1/auth/google - initiates OAuth flow
 func (h *GoogleOAuthHandler) InitiateGoogleAuth(c echo.Context) error {
+	if c.Request().Method != http.MethodGet {
+		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+	}
+
 	// Generate CSRF state token
 	state, err := h.generateStateToken()
 	if err != nil {
@@ -84,6 +88,10 @@ func (h *GoogleOAuthHandler) InitiateGoogleAuth(c echo.Context) error {
 
 // GoogleCallback handles GET /api/v1/auth/google/callback - OAuth callback
 func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
+	if c.Request().Method != http.MethodGet {
+		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+	}
+
 	ctx := c.Request().Context()
 
 	// Validate state parameter (CSRF protection)
@@ -206,7 +214,11 @@ func (h *GoogleOAuthHandler) fetchGoogleUserInfo(ctx context.Context, token *oau
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch user info: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			h.logger.Warn("Failed to close response body", zap.Error(err))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code from Google: %d", resp.StatusCode)

@@ -52,7 +52,6 @@ func (r *DatabaseInstanceRepository) Create(ctx context.Context, instance *model
 		instance.CreatedAt,
 		instance.UpdatedAt,
 	)
-
 	if err != nil {
 		return err
 	}

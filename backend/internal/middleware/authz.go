@@ -39,7 +39,7 @@ func (m *AuthzMiddleware) RequireOrganizationPermission(permission rbac.Permissi
 					"error": "Insufficient permissions",
 					"details": map[string]interface{}{
 						"required_permission": permission,
-						"user_role":          organizationRole,
+						"user_role":           organizationRole,
 					},
 				})
 			}

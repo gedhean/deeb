@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/stretchr/testify/assert"
@@ -53,17 +54,21 @@ func TestLoginHandler_SuccessfulLogin(t *testing.T) {
 	}
 	body, _ := json.Marshal(loginReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
 	// Execute request
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	_ = handler.Login(c)
 
 	// Verify response
-	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var response LoginResponse
-	err = json.NewDecoder(rr.Body).Decode(&response)
+	err = json.NewDecoder(rec.Body).Decode(&response)
 	assert.NoError(t, err)
 
 	assert.NotEmpty(t, response.Token)
@@ -99,14 +104,18 @@ func TestLoginHandler_InvalidPassword(t *testing.T) {
 	}
 	body, _ := json.Marshal(loginReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	_ = handler.Login(c)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	var response ErrorResponse
-	json.NewDecoder(rr.Body).Decode(&response)
+	json.NewDecoder(rec.Body).Decode(&response)
 	assert.Equal(t, "invalid email or password", response.Error)
 
 	mockRepo.AssertExpectations(t)
@@ -129,14 +138,18 @@ func TestLoginHandler_UserNotFound(t *testing.T) {
 	}
 	body, _ := json.Marshal(loginReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	_ = handler.Login(c)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	var response ErrorResponse
-	json.NewDecoder(rr.Body).Decode(&response)
+	json.NewDecoder(rec.Body).Decode(&response)
 	assert.Equal(t, "invalid email or password", response.Error)
 
 	mockRepo.AssertExpectations(t)
@@ -171,21 +184,32 @@ func TestLoginHandler_RateLimitExceeded(t *testing.T) {
 	// Make 10 failed attempts (which should succeed up to the limit)
 	for i := 0; i < 10; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
-		rr := httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-		assert.Equal(t, http.StatusUnauthorized, rr.Code, "Attempt %d should return 401", i+1)
+		e := echo.New()
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		_ = handler.Login(c)
+
+		assert.Equal(t, http.StatusUnauthorized, rec.Code, "Attempt %d should return 401", i+1)
 	}
 
 	// 11th attempt should be rate limited
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-	assert.Equal(t, http.StatusTooManyRequests, rr.Code)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	_ = handler.Login(c)
+
+	assert.Equal(t, http.StatusTooManyRequests, rec.Code)
 
 	var response ErrorResponse
-	json.NewDecoder(rr.Body).Decode(&response)
+	err := json.NewDecoder(rec.Body).Decode(&response)
+	assert.NoError(t, err)
 	assert.Equal(t, "too many login attempts, please try again later", response.Error)
 }
 
@@ -200,13 +224,18 @@ func TestLoginHandler_MalformedJSON(t *testing.T) {
 
 	// Send invalid JSON
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader([]byte("{invalid json")))
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	_ = handler.Login(c)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var response ErrorResponse
-	json.NewDecoder(rr.Body).Decode(&response)
+	json.NewDecoder(rec.Body).Decode(&response)
 	assert.Equal(t, "invalid request body", response.Error)
 }
 
@@ -237,14 +266,18 @@ func TestLoginHandler_MissingCredentials(t *testing.T) {
 			}
 			body, _ := json.Marshal(loginReq)
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-			rr := httptest.NewRecorder()
-			handler.ServeHTTP(rr, req)
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
 
-			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			_ = handler.Login(c)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 			var response ErrorResponse
-			json.NewDecoder(rr.Body).Decode(&response)
+			json.NewDecoder(rec.Body).Decode(&response)
 			assert.Equal(t, "email and password are required", response.Error)
 		})
 	}
@@ -276,14 +309,18 @@ func TestLoginHandler_InactiveUser(t *testing.T) {
 	}
 	body, _ := json.Marshal(loginReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	_ = handler.Login(c)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	var response ErrorResponse
-	json.NewDecoder(rr.Body).Decode(&response)
+	json.NewDecoder(rec.Body).Decode(&response)
 	assert.Equal(t, "account is inactive", response.Error)
 
 	mockRepo.AssertExpectations(t)
@@ -306,15 +343,20 @@ func TestLoginHandler_DatabaseError(t *testing.T) {
 	}
 	body, _ := json.Marshal(loginReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	_ = handler.Login(c)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	// Should return generic error to prevent enumeration
 	var response ErrorResponse
-	json.NewDecoder(rr.Body).Decode(&response)
+	err := json.NewDecoder(rec.Body).Decode(&response)
+	assert.NoError(t, err)
 	assert.Equal(t, "invalid email or password", response.Error)
 
 	mockRepo.AssertExpectations(t)
@@ -331,13 +373,16 @@ func TestLoginHandler_MethodNotAllowed(t *testing.T) {
 
 	// Test GET request (should be POST only)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/login", nil)
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)
+	_ = handler.Login(c)
+
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 
 	var response ErrorResponse
-	json.NewDecoder(rr.Body).Decode(&response)
+	json.NewDecoder(rec.Body).Decode(&response)
 	assert.Equal(t, "method not allowed", response.Error)
 }
 
@@ -372,8 +417,12 @@ func TestLoginHandler_SuccessfulLoginResetsRateLimit(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(wrongBody))
-		rr := httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		e := echo.New()
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		_ = handler.Login(c)
 	}
 
 	// Now make a successful login
@@ -383,18 +432,26 @@ func TestLoginHandler_SuccessfulLoginResetsRateLimit(t *testing.T) {
 	}
 	correctBody, _ := json.Marshal(correctLoginReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(correctBody))
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
-	assert.Equal(t, http.StatusOK, rr.Code)
+	_ = handler.Login(c)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Rate limit should be reset, so we should be able to make more attempts
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(wrongBody))
-	rr2 := httptest.NewRecorder()
-	handler.ServeHTTP(rr2, req2)
+	req2.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	e2 := echo.New()
+	rec2 := httptest.NewRecorder()
+	c2 := e2.NewContext(req2, rec2)
+
+	_ = handler.Login(c2)
 
 	// Should get Unauthorized, not TooManyRequests
-	assert.Equal(t, http.StatusUnauthorized, rr2.Code)
+	assert.Equal(t, http.StatusUnauthorized, rec2.Code)
 
 	mockRepo.AssertExpectations(t)
 }

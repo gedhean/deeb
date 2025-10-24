@@ -56,7 +56,6 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 		user.CreatedAt,
 		user.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}
@@ -138,7 +137,6 @@ func (r *userRepository) Update(ctx context.Context, user *models.User) error {
 		user.IsActive,
 		user.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}

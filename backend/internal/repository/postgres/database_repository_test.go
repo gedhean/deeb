@@ -211,7 +211,9 @@ func TestDatabaseList(t *testing.T) {
 	})
 
 	t.Run("empty list", func(t *testing.T) {
-		rows := sqlmock.NewRows([]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"})
+		rows := sqlmock.NewRows(
+			[]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"},
+		)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).
@@ -275,7 +277,9 @@ func TestDatabaseListByProject(t *testing.T) {
 
 	t.Run("empty list by project", func(t *testing.T) {
 		projectID := uuid.New()
-		rows := sqlmock.NewRows([]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"})
+		rows := sqlmock.NewRows(
+			[]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"},
+		)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases WHERE project_id = (.+) ORDER BY created_at DESC LIMIT").
 			WithArgs(projectID, 10, 0).

@@ -131,8 +131,10 @@ func TestListUsers(t *testing.T) {
 			expectedCount:  2,
 		},
 		{
-			name:           "list users with pagination",
-			mockUsers:      []*models.User{createTestUser("550e8400-e29b-41d4-a716-446655440001", "user1@example.com", "organization_admin")},
+			name: "list users with pagination",
+			mockUsers: []*models.User{
+				createTestUser("550e8400-e29b-41d4-a716-446655440001", "user1@example.com", "organization_admin"),
+			},
 			queryParams:    map[string]string{"limit": "1", "offset": "0"},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,

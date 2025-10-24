@@ -34,6 +34,10 @@ func NewLoginHandler(
 
 // Login handles POST /api/v1/auth/login
 func (h *LoginHandler) Login(c echo.Context) error {
+	if c.Request().Method != http.MethodPost {
+		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+	}
+
 	var req LoginRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Debug("Invalid JSON in login request", zap.Error(err))

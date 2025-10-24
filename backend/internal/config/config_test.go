@@ -118,24 +118,24 @@ func TestLoadFromEnv_DatabaseURL(t *testing.T) {
 	defer func() {
 		for k, v := range originalVars {
 			if v == "" {
-				os.Unsetenv(k)
+				_ = os.Unsetenv(k)
 			} else {
-				os.Setenv(k, v)
+				_ = os.Setenv(k, v)
 			}
 		}
 	}()
 
 	t.Run("DATABASE_URL sets all database config", func(t *testing.T) {
 		// Clear individual env vars
-		os.Unsetenv("DB_HOST")
-		os.Unsetenv("DB_PORT")
-		os.Unsetenv("DB_USER")
-		os.Unsetenv("DB_PASSWORD")
-		os.Unsetenv("DB_NAME")
-		os.Unsetenv("DB_SSLMODE")
+		_ = os.Unsetenv("DB_HOST")
+		_ = os.Unsetenv("DB_PORT")
+		_ = os.Unsetenv("DB_USER")
+		_ = os.Unsetenv("DB_PASSWORD")
+		_ = os.Unsetenv("DB_NAME")
+		_ = os.Unsetenv("DB_SSLMODE")
 
 		// Set DATABASE_URL
-		os.Setenv("DATABASE_URL", "postgresql://deeb:deeb_dev_password@localhost:5432/deeb?sslmode=disable")
+		_ = os.Setenv("DATABASE_URL", "postgresql://deeb:deeb_dev_password@localhost:5432/deeb?sslmode=disable")
 
 		cfg := &Config{}
 		cfg.setDefaults()
@@ -151,11 +151,11 @@ func TestLoadFromEnv_DatabaseURL(t *testing.T) {
 
 	t.Run("individual env vars override DATABASE_URL", func(t *testing.T) {
 		// Set DATABASE_URL
-		os.Setenv("DATABASE_URL", "postgresql://deeb:deeb_dev_password@localhost:5432/deeb?sslmode=disable")
+		_ = os.Setenv("DATABASE_URL", "postgresql://deeb:deeb_dev_password@localhost:5432/deeb?sslmode=disable")
 
 		// Set individual override
-		os.Setenv("DB_HOST", "overridden-host")
-		os.Setenv("DB_PORT", "9999")
+		_ = os.Setenv("DB_HOST", "overridden-host")
+		_ = os.Setenv("DB_PORT", "9999")
 
 		cfg := &Config{}
 		cfg.setDefaults()

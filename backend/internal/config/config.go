@@ -33,44 +33,44 @@ type ServerConfig struct {
 
 // DatabaseConfig holds database connection configuration
 type DatabaseConfig struct {
-	Host            string `yaml:"host"`
-	Port            int    `yaml:"port"`
-	User            string `yaml:"user"`
-	Password        string `yaml:"password"`
-	Database        string `yaml:"database"`
-	SSLMode         string `yaml:"ssl_mode"`
-	MaxOpenConns    int    `yaml:"max_open_conns"`
-	MaxIdleConns    int    `yaml:"max_idle_conns"`
+	Host            string        `yaml:"host"`
+	Port            int           `yaml:"port"`
+	User            string        `yaml:"user"`
+	Password        string        `yaml:"password"`
+	Database        string        `yaml:"database"`
+	SSLMode         string        `yaml:"ssl_mode"`
+	MaxOpenConns    int           `yaml:"max_open_conns"`
+	MaxIdleConns    int           `yaml:"max_idle_conns"`
 	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
 }
 
 // AuthConfig holds authentication configuration
 type AuthConfig struct {
-	JWTSecret           string        `yaml:"jwt_secret"`
-	JWTExpiration       time.Duration `yaml:"jwt_expiration"`
-	GoogleClientID      string        `yaml:"google_client_id"`
-	GoogleClientSecret  string        `yaml:"google_client_secret"`
-	GitHubClientID      string        `yaml:"github_client_id"`
-	GitHubClientSecret  string        `yaml:"github_client_secret"`
-	CallbackURL         string        `yaml:"callback_url"`
-	Require2FA          bool          `yaml:"require_2fa"`
+	JWTSecret          string        `yaml:"jwt_secret"`
+	JWTExpiration      time.Duration `yaml:"jwt_expiration"`
+	GoogleClientID     string        `yaml:"google_client_id"`
+	GoogleClientSecret string        `yaml:"google_client_secret"`
+	GitHubClientID     string        `yaml:"github_client_id"`
+	GitHubClientSecret string        `yaml:"github_client_secret"`
+	CallbackURL        string        `yaml:"callback_url"`
+	Require2FA         bool          `yaml:"require_2fa"`
 }
 
 // SecurityConfig holds security-related configuration
 type SecurityConfig struct {
-	BcryptCost          int  `yaml:"bcrypt_cost"`
-	RateLimitEnabled    bool `yaml:"rate_limit_enabled"`
-	RateLimitRequests   int  `yaml:"rate_limit_requests"`
-	RateLimitWindow     time.Duration `yaml:"rate_limit_window"`
-	EncryptionKey       string `yaml:"encryption_key"`
+	BcryptCost        int           `yaml:"bcrypt_cost"`
+	RateLimitEnabled  bool          `yaml:"rate_limit_enabled"`
+	RateLimitRequests int           `yaml:"rate_limit_requests"`
+	RateLimitWindow   time.Duration `yaml:"rate_limit_window"`
+	EncryptionKey     string        `yaml:"encryption_key"`
 }
 
 // LoggingConfig holds logging configuration
 type LoggingConfig struct {
-	Level      string `yaml:"level"`       // debug, info, warn, error
-	Format     string `yaml:"format"`      // json, console
-	Output     string `yaml:"output"`      // stdout, stderr, file
-	FilePath   string `yaml:"file_path"`   // if output is file
+	Level    string `yaml:"level"`     // debug, info, warn, error
+	Format   string `yaml:"format"`    // json, console
+	Output   string `yaml:"output"`    // stdout, stderr, file
+	FilePath string `yaml:"file_path"` // if output is file
 }
 
 // Load loads configuration from environment variables and optionally a YAML file
@@ -304,7 +304,8 @@ func (c *Config) Validate() error {
 	if c.Database.Database == "" {
 		return fmt.Errorf("database.database is required")
 	}
-	if c.Database.SSLMode != "disable" && c.Database.SSLMode != "require" && c.Database.SSLMode != "verify-ca" && c.Database.SSLMode != "verify-full" {
+	if c.Database.SSLMode != "disable" && c.Database.SSLMode != "require" && c.Database.SSLMode != "verify-ca" &&
+		c.Database.SSLMode != "verify-full" {
 		return fmt.Errorf("database.ssl_mode must be one of: disable, require, verify-ca, verify-full")
 	}
 

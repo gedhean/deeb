@@ -111,7 +111,6 @@ func (tm *TokenManager) ValidateToken(tokenString string) (*Claims, error) {
 		}
 		return tm.jwtSecret, nil
 	})
-
 	if err != nil {
 		// Check if error is due to expiration
 		if errors.Is(err, jwt.ErrTokenExpired) {

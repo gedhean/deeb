@@ -49,7 +49,6 @@ func (r *ProjectRepository) Create(ctx context.Context, project *models.Project)
 		project.CreatedAt,
 		project.UpdatedAt,
 	)
-
 	if err != nil {
 		return err
 	}
