@@ -239,19 +239,19 @@ Create POST /api/v1/auth/register endpoint for user registration with email and 
 
 ### P01M13: Implement email/password login endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M13
 
 **Goal**
 Create POST /api/v1/auth/login endpoint that validates credentials and returns JWT token.
 
 **Acceptance Criteria**
-- [ ] Endpoint defined: POST /api/v1/auth/login
-- [ ] Credentials validated against database
-- [ ] JWT token generated on successful authentication
-- [ ] Token returned in response body
-- [ ] 401 Unauthorized for invalid credentials
-- [ ] Rate limiting applied (10 attempts per 5 minutes)
+- [x] Endpoint defined: POST /api/v1/auth/login
+- [x] Credentials validated against database
+- [x] JWT token generated on successful authentication
+- [x] Token returned in response body
+- [x] 401 Unauthorized for invalid credentials
+- [x] Rate limiting applied (10 attempts per 5 minutes)
 
 ---
 
