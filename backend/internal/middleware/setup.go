@@ -8,6 +8,9 @@ import (
 
 // Setup configures all Echo middleware
 func Setup(e *echo.Echo, cfg *config.Config) {
+	// Set custom error handler for consistent JSON error responses
+	e.HTTPErrorHandler = CustomErrorHandler
+
 	// Recovery middleware - recovers from panics
 	e.Use(middleware.Recover())
 
