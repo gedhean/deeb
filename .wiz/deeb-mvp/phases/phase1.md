@@ -312,10 +312,123 @@ Implement REST API endpoints for user CRUD operations (Admin only).
 
 ---
 
-### P01M17: Implement health check endpoint
+### P01M17: Create project model and repository
 
 **Status:** 🚧 TODO
 **ID:** P01M17
+
+**Goal**
+Implement Project model and repository for managing logical groupings of databases and team members.
+
+**Acceptance Criteria**
+- [ ] Project model created with fields: id, name, description, created_at, updated_at
+- [ ] ProjectRepository interface defined (Create, GetByID, List, Update, Delete)
+- [ ] PostgreSQL implementation of ProjectRepository
+- [ ] Project validation logic (name required, max length)
+- [ ] Unit tests for repository methods passing
+
+---
+
+### P01M18: Create project management endpoints
+
+**Status:** 🚧 TODO
+**ID:** P01M18
+
+**Goal**
+Implement REST API endpoints for project CRUD operations.
+
+**Acceptance Criteria**
+- [ ] POST /api/v1/projects - create project (Admin/DBA only)
+- [ ] GET /api/v1/projects - list projects (all authenticated users)
+- [ ] GET /api/v1/projects/:id - get project by ID (project members only)
+- [ ] PUT /api/v1/projects/:id - update project (project owner/admin only)
+- [ ] DELETE /api/v1/projects/:id - delete project (admin only)
+- [ ] Authorization middleware applied
+- [ ] Input validation and error handling
+- [ ] Returns 404 for non-existent projects
+
+---
+
+### P01M19: Create database instance model and repository
+
+**Status:** 🚧 TODO
+**ID:** P01M19
+
+**Goal**
+Implement DatabaseInstance model and repository for managing database servers (MySQL/PostgreSQL).
+
+**Acceptance Criteria**
+- [ ] DatabaseInstance model created with fields: id, name, host, port, engine (mysql/postgresql), environment_id, created_at, updated_at
+- [ ] DatabaseInstanceRepository interface defined
+- [ ] PostgreSQL implementation of DatabaseInstanceRepository
+- [ ] Database instance validation logic
+- [ ] Unit tests for repository methods passing
+
+---
+
+### P01M20: Create database instance management endpoints
+
+**Status:** 🚧 TODO
+**ID:** P01M20
+
+**Goal**
+Implement REST API endpoints for database instance CRUD operations (Admin/DBA only).
+
+**Acceptance Criteria**
+- [ ] POST /api/v1/database-instances - create instance (Admin/DBA only)
+- [ ] GET /api/v1/database-instances - list instances (Admin/DBA/Developer read)
+- [ ] GET /api/v1/database-instances/:id - get instance by ID
+- [ ] PUT /api/v1/database-instances/:id - update instance (Admin/DBA only)
+- [ ] DELETE /api/v1/database-instances/:id - delete instance (Admin only)
+- [ ] Authorization middleware applied
+- [ ] Input validation and error handling
+- [ ] Connection test endpoint included
+
+---
+
+### P01M21: Create database model and repository
+
+**Status:** 🚧 TODO
+**ID:** P01M21
+
+**Goal**
+Implement Database model and repository for individual databases within instances.
+
+**Acceptance Criteria**
+- [ ] Database model created with fields: id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+- [ ] DatabaseRepository interface defined
+- [ ] PostgreSQL implementation of DatabaseRepository
+- [ ] Foreign key constraints to instances and projects
+- [ ] Database validation logic
+- [ ] Unit tests for repository methods passing
+
+---
+
+### P01M22: Create database management endpoints
+
+**Status:** 🚧 TODO
+**ID:** P01M22
+
+**Goal**
+Implement REST API endpoints for database CRUD operations.
+
+**Acceptance Criteria**
+- [ ] POST /api/v1/databases - create database (Admin/DBA only)
+- [ ] GET /api/v1/databases - list databases (filter by project)
+- [ ] GET /api/v1/databases/:id - get database by ID
+- [ ] GET /api/v1/projects/:project_id/databases - list databases for project
+- [ ] PUT /api/v1/databases/:id - update database (Admin/DBA only)
+- [ ] DELETE /api/v1/databases/:id - delete database (Admin only)
+- [ ] Authorization middleware applied
+- [ ] Project membership check for project-scoped endpoints
+- [ ] Input validation and error handling
+
+---
+
+### P01M23: Implement health check endpoint
+
+**Status:** 🚧 TODO
+**ID:** P01M23
 
 **Goal**
 Create GET /health endpoint that returns application and database health status.
@@ -330,10 +443,10 @@ Create GET /health endpoint that returns application and database health status.
 
 ---
 
-### P01M18: Set up HTTP server with net/http
+### P01M24: Set up HTTP server with net/http
 
 **Status:** 🚧 TODO
-**ID:** P01M18
+**ID:** P01M24
 
 **Goal**
 Configure HTTP server using Go standard library net/http with graceful shutdown.
@@ -348,10 +461,10 @@ Configure HTTP server using Go standard library net/http with graceful shutdown.
 
 ---
 
-### P01M19: Implement request logging middleware
+### P01M25: Implement request logging middleware
 
 **Status:** 🚧 TODO
-**ID:** P01M19
+**ID:** P01M25
 
 **Goal**
 Create middleware that logs all HTTP requests with correlation IDs for tracing.
@@ -366,10 +479,10 @@ Create middleware that logs all HTTP requests with correlation IDs for tracing.
 
 ---
 
-### P01M20: Implement error handling middleware
+### P01M26: Implement error handling middleware
 
 **Status:** 🚧 TODO
-**ID:** P01M20
+**ID:** P01M26
 
 **Goal**
 Create centralized error handling middleware that catches panics and formats error responses.
@@ -384,10 +497,10 @@ Create centralized error handling middleware that catches panics and formats err
 
 ---
 
-### P01M21: Create Docker development environment
+### P01M27: Create Docker development environment
 
 **Status:** 🚧 TODO
-**ID:** P01M21
+**ID:** P01M27
 
 **Goal**
 Set up Docker Compose for local development with PostgreSQL database.
@@ -402,10 +515,10 @@ Set up Docker Compose for local development with PostgreSQL database.
 
 ---
 
-### P01M22: Set up frontend API client
+### P01M28: Set up frontend API client
 
 **Status:** 🚧 TODO
-**ID:** P01M22
+**ID:** P01M28
 
 **Goal**
 Create API client module in frontend for making HTTP requests to backend.
@@ -420,10 +533,10 @@ Create API client module in frontend for making HTTP requests to backend.
 
 ---
 
-### P01M23: Implement frontend authentication context
+### P01M29: Implement frontend authentication context
 
 **Status:** 🚧 TODO
-**ID:** P01M23
+**ID:** P01M29
 
 **Goal**
 Create React context for managing authentication state and user session.
@@ -438,10 +551,10 @@ Create React context for managing authentication state and user session.
 
 ---
 
-### P01M24: Create login page UI
+### P01M30: Create login page UI
 
 **Status:** 🚧 TODO
-**ID:** P01M24
+**ID:** P01M30
 
 **Goal**
 Build login page with email/password form and Google OAuth button using Shadcn components.
@@ -456,10 +569,10 @@ Build login page with email/password form and Google OAuth button using Shadcn c
 
 ---
 
-### P01M25: Create registration page UI
+### P01M31: Create registration page UI
 
 **Status:** 🚧 TODO
-**ID:** P01M25
+**ID:** P01M31
 
 **Goal**
 Build registration page with email/password form and validation.
@@ -474,10 +587,10 @@ Build registration page with email/password form and validation.
 
 ---
 
-### P01M26: Implement session management on frontend
+### P01M32: Implement session management on frontend
 
 **Status:** 🚧 TODO
-**ID:** P01M26
+**ID:** P01M32
 
 **Goal**
 Add session persistence and automatic token refresh on frontend.
@@ -492,10 +605,10 @@ Add session persistence and automatic token refresh on frontend.
 
 ---
 
-### P01M27: Create navigation bar component
+### P01M33: Create navigation bar component
 
 **Status:** 🚧 TODO
-**ID:** P01M27
+**ID:** P01M33
 
 **Goal**
 Build navigation bar with logo, menu items, and user profile dropdown.
@@ -510,10 +623,10 @@ Build navigation bar with logo, menu items, and user profile dropdown.
 
 ---
 
-### P01M28: Set up React Router for navigation
+### P01M34: Set up React Router for navigation
 
 **Status:** 🚧 TODO
-**ID:** P01M28
+**ID:** P01M34
 
 **Goal**
 Configure React Router for client-side routing with protected routes.
@@ -528,10 +641,10 @@ Configure React Router for client-side routing with protected routes.
 
 ---
 
-### P01M29: Implement CI/CD pipeline skeleton
+### P01M35: Implement CI/CD pipeline skeleton
 
 **Status:** 🚧 TODO
-**ID:** P01M29
+**ID:** P01M35
 
 **Goal**
 Create GitHub Actions workflow for automated testing and linting.
@@ -546,10 +659,10 @@ Create GitHub Actions workflow for automated testing and linting.
 
 ---
 
-### P01M30: Write unit tests for configuration loading
+### P01M36: Write unit tests for configuration loading
 
 **Status:** 🚧 TODO
-**ID:** P01M30
+**ID:** P01M36
 
 **Goal**
 Create comprehensive unit tests for configuration management system.
@@ -564,10 +677,10 @@ Create comprehensive unit tests for configuration management system.
 
 ---
 
-### P01M31: Write unit tests for password hashing
+### P01M37: Write unit tests for password hashing
 
 **Status:** 🚧 TODO
-**ID:** P01M31
+**ID:** P01M37
 
 **Goal**
 Create unit tests for password hashing and verification functions.
@@ -582,10 +695,10 @@ Create unit tests for password hashing and verification functions.
 
 ---
 
-### P01M32: Write unit tests for JWT operations
+### P01M38: Write unit tests for JWT operations
 
 **Status:** 🚧 TODO
-**ID:** P01M32
+**ID:** P01M38
 
 **Goal**
 Create unit tests for JWT token generation and validation.
@@ -600,10 +713,10 @@ Create unit tests for JWT token generation and validation.
 
 ---
 
-### P01M33: Write unit tests for RBAC permission checking
+### P01M39: Write unit tests for RBAC permission checking
 
 **Status:** 🚧 TODO
-**ID:** P01M33
+**ID:** P01M39
 
 **Goal**
 Create unit tests for role-based access control logic.
@@ -618,10 +731,10 @@ Create unit tests for role-based access control logic.
 
 ---
 
-### P01M34: Write integration tests for authentication endpoints
+### P01M40: Write integration tests for authentication endpoints
 
 **Status:** 🚧 TODO
-**ID:** P01M34
+**ID:** P01M40
 
 **Goal**
 Create integration tests for registration and login API endpoints.
@@ -636,10 +749,10 @@ Create integration tests for registration and login API endpoints.
 
 ---
 
-### P01M35: Document API endpoints with OpenAPI/Swagger
+### P01M41: Document API endpoints with OpenAPI/Swagger
 
 **Status:** 🚧 TODO
-**ID:** P01M35
+**ID:** P01M41
 
 **Goal**
 Create OpenAPI 3.0 specification for authentication and user management endpoints.
@@ -654,10 +767,10 @@ Create OpenAPI 3.0 specification for authentication and user management endpoint
 
 ---
 
-### P01M36: Write setup and configuration documentation
+### P01M42: Write setup and configuration documentation
 
 **Status:** 🚧 TODO
-**ID:** P01M36
+**ID:** P01M42
 
 **Goal**
 Create comprehensive documentation for project setup and configuration.
@@ -672,10 +785,10 @@ Create comprehensive documentation for project setup and configuration.
 
 ---
 
-### P01M37: Create godoc comments for public packages
+### P01M43: Create godoc comments for public packages
 
 **Status:** 🚧 TODO
-**ID:** P01M37
+**ID:** P01M43
 
 **Goal**
 Add godoc comments to all public functions, types, and packages in Go code.
@@ -690,10 +803,10 @@ Add godoc comments to all public functions, types, and packages in Go code.
 
 ---
 
-### P01M38: Configure code formatting and linting
+### P01M44: Configure code formatting and linting
 
 **Status:** 🚧 TODO
-**ID:** P01M38
+**ID:** P01M44
 
 **Goal**
 Set up automated code formatting and linting for Go and JavaScript code.
@@ -708,10 +821,10 @@ Set up automated code formatting and linting for Go and JavaScript code.
 
 ---
 
-### P01M39: Write troubleshooting guide
+### P01M45: Write troubleshooting guide
 
 **Status:** 🚧 TODO
-**ID:** P01M39
+**ID:** P01M45
 
 **Goal**
 Create troubleshooting guide for common development issues.
@@ -726,10 +839,10 @@ Create troubleshooting guide for common development issues.
 
 ---
 
-### P01M40: Verify Phase 1 Completion
+### P01M46: Verify Phase 1 Completion
 
 **Status:** 🚧 TODO
-**ID:** P01M40
+**ID:** P01M46
 
 **Goal**
 Verify that all Phase 1 requirements are met, tests pass, and the phase is ready for sign-off before proceeding to Phase 2.
