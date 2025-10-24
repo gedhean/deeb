@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -73,6 +74,9 @@ type LoggingConfig struct {
 // Load loads configuration from environment variables and optionally a YAML file
 func Load(configPath string) (*Config, error) {
 	cfg := &Config{}
+
+	// Load .env file if it exists (ignore error if file doesn't exist)
+	_ = godotenv.Load()
 
 	// Load defaults
 	cfg.setDefaults()

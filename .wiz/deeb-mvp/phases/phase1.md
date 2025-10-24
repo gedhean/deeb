@@ -257,19 +257,20 @@ Create POST /api/v1/auth/login endpoint that validates credentials and returns J
 
 ### P01M14: Implement OAuth 2.0 Google authentication flow
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M14
 
 **Goal**
 Add OAuth 2.0 authentication with Google including redirect and callback handling.
 
 **Acceptance Criteria**
-- [ ] Google OAuth client ID and secret configured
-- [ ] GET /api/v1/auth/google endpoint redirects to Google
-- [ ] GET /api/v1/auth/google/callback handles OAuth response
-- [ ] User created or updated from Google profile
-- [ ] JWT token generated for authenticated user
-- [ ] Error handling for failed OAuth flow
+- [x] Google OAuth client ID and secret configured
+- [x] GET /api/v1/auth/google endpoint redirects to Google
+- [x] GET /api/v1/auth/google/callback handles OAuth response
+- [x] User created or updated from Google profile
+- [x] JWT token generated for authenticated user
+- [x] Scopes: https://www.googleapis.com/auth/userinfo.email, https://www.googleapis.com/auth/userinfo.profile
+- [x] Error handling for failed OAuth flow
 
 ---
 
