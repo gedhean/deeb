@@ -5,5 +5,9 @@
       "Bash(mkdir:*)"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "playwright"
+  ],
+  "enableAllProjectMcpServers": true
 }
