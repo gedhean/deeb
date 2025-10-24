@@ -518,19 +518,19 @@ Set up Docker Compose for local development with PostgreSQL database.
 
 ### P01M28: Set up frontend API client
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETED
 **ID:** P01M28
 
 **Goal**
 Create API client module in frontend for making HTTP requests to backend.
 
 **Acceptance Criteria**
-- [ ] API client class/module created
-- [ ] Base URL configurable via environment variable
-- [ ] Request interceptor adds JWT token to headers
-- [ ] Response interceptor handles errors
-- [ ] TypeScript interfaces for API requests/responses
-- [ ] Sample API call working (e.g., health check)
+- [x] API client class/module created
+- [x] Base URL configurable via environment variable
+- [x] Request interceptor adds JWT token to headers
+- [x] Response interceptor handles errors
+- [x] TypeScript interfaces for API requests/responses
+- [x] Sample API call working (e.g., health check)
 
 ---
 
