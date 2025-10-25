@@ -13,3 +13,7 @@
 # Output of the go coverage tool
 *.out
 unit.xml
+
+# Build output
+backend/target/
+frontend/build/
