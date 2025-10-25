@@ -6,6 +6,7 @@ import { HealthCheckPage } from '@/pages/HealthCheckPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { NotFoundPage } from '@/pages/NotFoundPage';
 import './App.css';
 
 function App() {
@@ -27,6 +28,8 @@ function App() {
               </ProtectedRoute>
             }
           />
+          {/* 404 Not Found - must be last */}
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
