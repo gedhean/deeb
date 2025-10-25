@@ -698,19 +698,19 @@ Create unit tests for password hashing and verification functions.
 
 ### P01M38: Write unit tests for JWT operations
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M38
 
 **Goal**
 Create unit tests for JWT token generation and validation.
 
 **Acceptance Criteria**
-- [ ] Test token generation includes correct claims
-- [ ] Test valid token passes validation
-- [ ] Test expired token fails validation
-- [ ] Test tampered token fails validation
-- [ ] All tests passing
-- [ ] Code coverage for JWT package >90%
+- [x] Test token generation includes correct claims
+- [x] Test valid token passes validation
+- [x] Test expired token fails validation
+- [x] Test tampered token fails validation
+- [x] All tests passing
+- [x] Code coverage for JWT package >90%
 
 ---
 
