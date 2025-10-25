@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { ProtectedRoute } from '@/components/protected-route';
 import { Home } from '@/pages/Home';
 import { HealthCheckPage } from '@/pages/HealthCheckPage';
 import { LoginPage } from '@/pages/LoginPage';
