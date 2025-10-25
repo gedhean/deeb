@@ -17,6 +17,8 @@ function App() {
           <Route path="/health" element={<HealthCheckPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          {/* For testing - dashboard without auth */}
+          <Route path="/dash" element={<DashboardPage />} />
           <Route
             path="/dashboard"
             element={
