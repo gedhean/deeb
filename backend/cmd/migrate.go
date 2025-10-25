@@ -76,7 +76,8 @@ func init() {
 
 	// Persistent flags for all migrate commands
 	migrateCmd.PersistentFlags().StringVarP(&migrationsPath, "path", "p", "migrations", "Path to migrations directory")
-	migrateCmd.PersistentFlags().StringVarP(&databaseURL, "database", "d", os.Getenv("DATABASE_URL"), "Database connection string")
+	migrateCmd.PersistentFlags().
+		StringVarP(&databaseURL, "database", "d", os.Getenv("DATABASE_URL"), "Database connection string")
 }
 
 // createMigrator creates a new migrator instance
@@ -101,7 +102,11 @@ func runMigrateUp(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer migrator.Close()
+	defer func() {
+		if closeErr := migrator.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close migrator: %v\n", closeErr)
+		}
+	}()
 
 	if err := migrator.Up(); err != nil {
 		return fmt.Errorf("migration failed: %w", err)
@@ -116,7 +121,11 @@ func runMigrateDown(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer migrator.Close()
+	defer func() {
+		if closeErr := migrator.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close migrator: %v\n", closeErr)
+		}
+	}()
 
 	if err := migrator.Down(); err != nil {
 		return fmt.Errorf("migration rollback failed: %w", err)
@@ -131,7 +140,11 @@ func runMigrateVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer migrator.Close()
+	defer func() {
+		if closeErr := migrator.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close migrator: %v\n", closeErr)
+		}
+	}()
 
 	version, dirty, err := migrator.Version()
 	if err != nil {
@@ -153,7 +166,11 @@ func runMigrateForce(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer migrator.Close()
+	defer func() {
+		if closeErr := migrator.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close migrator: %v\n", closeErr)
+		}
+	}()
 
 	if err := migrator.Force(version); err != nil {
 		return fmt.Errorf("force migration failed: %w", err)
@@ -173,7 +190,11 @@ func runMigrateSteps(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer migrator.Close()
+	defer func() {
+		if closeErr := migrator.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close migrator: %v\n", closeErr)
+		}
+	}()
 
 	if err := migrator.Steps(n); err != nil {
 		return fmt.Errorf("migration steps failed: %w", err)
