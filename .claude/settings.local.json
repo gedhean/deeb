@@ -2,12 +2,13 @@
   "permissions": {
     "allow": [
       "WebFetch(domain:docs.aws.amazon.com)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "WebFetch(domain:ui.shadcn.com)"
     ],
     "deny": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "playwright"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
