@@ -95,7 +95,7 @@ func (h *RegisterHandler) Register(c echo.Context) error {
 		PasswordHash:     passwordHash,
 		OrganizationRole: orgRole,
 		TwoFactorEnabled: false,
-		Status:           "Active",
+		IsActive:         true,
 	}
 
 	err = h.userRepo.Create(ctx, user)

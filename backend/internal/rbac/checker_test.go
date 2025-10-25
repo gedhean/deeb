@@ -465,12 +465,12 @@ func TestGetProjectPermissions(t *testing.T) {
 
 func TestGetUserFromContext(t *testing.T) {
 	tests := []struct {
-		name                 string
-		setupContext         func() context.Context
-		expectOK             bool
-		expectedUserID       string
-		expectedOrgID        string
-		expectedOrgRole      OrganizationRole
+		name            string
+		setupContext    func() context.Context
+		expectOK        bool
+		expectedUserID  string
+		expectedOrgID   string
+		expectedOrgRole OrganizationRole
 	}{
 		{
 			name: "valid context with all fields",
@@ -481,10 +481,10 @@ func TestGetUserFromContext(t *testing.T) {
 				ctx = context.WithValue(ctx, ContextKeyOrganizationRole, OrganizationDeveloper)
 				return ctx
 			},
-			expectOK:             true,
-			expectedUserID:       "user-123",
-			expectedOrgID:        "org-456",
-			expectedOrgRole:      OrganizationDeveloper,
+			expectOK:        true,
+			expectedUserID:  "user-123",
+			expectedOrgID:   "org-456",
+			expectedOrgRole: OrganizationDeveloper,
 		},
 		{
 			name: "missing user ID",

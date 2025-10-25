@@ -49,7 +49,7 @@ func (h *MeHandler) GetCurrentUser(c echo.Context) error {
 	}
 
 	// Check if user is still active
-	if !user.IsActive() {
+	if !user.IsActive {
 		h.logger.Info("Inactive user attempted to access /me endpoint",
 			zap.String("user_id", user.ID.String()))
 		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "account is inactive"})

@@ -36,7 +36,7 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 	query := `
 		INSERT INTO users (
 			id, email, password_hash, organization_role,
-			two_factor_enabled, two_factor_secret, status,
+			two_factor_enabled, two_factor_secret, is_active,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9
@@ -52,7 +52,7 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 		user.OrganizationRole,
 		user.TwoFactorEnabled,
 		user.TwoFactorSecret,
-		user.Status,
+		user.IsActive,
 		user.CreatedAt,
 		user.UpdatedAt,
 	)
@@ -69,7 +69,7 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Use
 
 	query := `
 		SELECT id, email, password_hash, display_name, organization_role,
-			   status, oauth_provider, oauth_id,
+			   is_active, oauth_provider, oauth_id,
 			   two_factor_enabled, two_factor_secret,
 			   last_login_at, created_at, updated_at
 		FROM users
@@ -93,7 +93,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.
 
 	query := `
 		SELECT id, email, password_hash, display_name, organization_role,
-			   status, oauth_provider, oauth_id,
+			   is_active, oauth_provider, oauth_id,
 			   two_factor_enabled, two_factor_secret,
 			   last_login_at, created_at, updated_at
 		FROM users
@@ -181,9 +181,10 @@ func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*models
 	users := []*models.User{}
 
 	query := `
-		SELECT id, email, password_hash, organization_role,
-			   two_factor_enabled, two_factor_secret, is_active,
-			   last_login, created_at, updated_at
+		SELECT id, email, password_hash, display_name, organization_role,
+			   is_active, oauth_provider, oauth_id,
+			   two_factor_enabled, two_factor_secret,
+			   last_login_at, created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -203,7 +204,7 @@ func (r *userRepository) UpdateLastLogin(ctx context.Context, id uuid.UUID) erro
 
 	query := `
 		UPDATE users
-		SET last_login = $2,
+		SET last_login_at = $2,
 			updated_at = $2
 		WHERE id = $1
 	`

@@ -149,8 +149,8 @@ func (h *UserHandler) UpdateUser(c echo.Context) error {
 	if req.TwoFactorEnabled != nil {
 		user.TwoFactorEnabled = *req.TwoFactorEnabled
 	}
-	if req.Status != nil {
-		user.Status = *req.Status
+	if req.IsActive != nil {
+		user.IsActive = *req.IsActive
 	}
 
 	// Update user in repository
@@ -192,8 +192,8 @@ func (h *UserHandler) DeleteUser(c echo.Context) error {
 		})
 	}
 
-	// Soft delete: set status to Inactive
-	user.Status = "Inactive"
+	// Soft delete: set is_active to false
+	user.IsActive = false
 
 	// Update user in repository
 	if err := h.userRepo.Update(ctx, user); err != nil {

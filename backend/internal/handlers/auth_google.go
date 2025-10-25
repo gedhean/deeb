@@ -164,7 +164,7 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 		user = &models.User{
 			Email:            email,
 			PasswordHash:     "", // No password for OAuth users
-			Status:           "Active",
+			IsActive:         true,
 			OrganizationRole: "OrganizationDeveloper",
 		}
 
@@ -185,7 +185,7 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 	}
 
 	// Check if user is active
-	if !user.IsActive() {
+	if !user.IsActive {
 		h.logger.Info("Google OAuth attempt by inactive user",
 			zap.String("email", email),
 			zap.String("user_id", user.ID.String()))

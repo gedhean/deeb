@@ -35,7 +35,7 @@ func TestUserRepository_Create(t *testing.T) {
 		OrganizationRole: "OrganizationDeveloper",
 		TwoFactorEnabled: false,
 		TwoFactorSecret:  "",
-		Status:           "Active",
+		IsActive:         true,
 	}
 
 	mock.ExpectExec("INSERT INTO users").
@@ -46,7 +46,7 @@ func TestUserRepository_Create(t *testing.T) {
 			user.OrganizationRole,
 			user.TwoFactorEnabled,
 			user.TwoFactorSecret,
-			user.Status,
+			user.IsActive,
 			sqlmock.AnyArg(), // created_at
 			sqlmock.AnyArg(), // updated_at
 		).
@@ -72,12 +72,15 @@ func TestUserRepository_GetByID(t *testing.T) {
 	now := time.Now()
 
 	rows := sqlmock.NewRows([]string{
-		"id", "email", "password_hash", "organization_role",
-		"two_factor_enabled", "two_factor_secret", "is_active",
-		"last_login", "created_at", "updated_at",
+		"id", "email", "password_hash", "display_name", "organization_role",
+		"is_active", "oauth_provider", "oauth_id",
+		"two_factor_enabled", "two_factor_secret",
+		"last_login_at", "created_at", "updated_at",
 	}).AddRow(
-		userID, "test@example.com", "hashedpassword", "OrganizationDeveloper",
-		false, "", true, nil, now, now,
+		userID, "test@example.com", "hashedpassword", "", "OrganizationDeveloper",
+		true, "", "",
+		false, "",
+		nil, now, now,
 	)
 
 	mock.ExpectQuery("SELECT (.+) FROM users WHERE id").
@@ -127,12 +130,15 @@ func TestUserRepository_GetByEmail(t *testing.T) {
 	now := time.Now()
 
 	rows := sqlmock.NewRows([]string{
-		"id", "email", "password_hash", "organization_role",
-		"two_factor_enabled", "two_factor_secret", "is_active",
-		"last_login", "created_at", "updated_at",
+		"id", "email", "password_hash", "display_name", "organization_role",
+		"is_active", "oauth_provider", "oauth_id",
+		"two_factor_enabled", "two_factor_secret",
+		"last_login_at", "created_at", "updated_at",
 	}).AddRow(
-		userID, email, "hashedpassword", "OrganizationDeveloper",
-		false, "", true, nil, now, now,
+		userID, email, "hashedpassword", "", "OrganizationDeveloper",
+		true, "", "",
+		false, "",
+		nil, now, now,
 	)
 
 	mock.ExpectQuery("SELECT (.+) FROM users WHERE email").
@@ -161,7 +167,7 @@ func TestUserRepository_Update(t *testing.T) {
 		OrganizationRole: "OrganizationAdmin",
 		TwoFactorEnabled: true,
 		TwoFactorSecret:  "secret",
-		Status:           "Active",
+		IsActive:         true,
 		CreatedAt:        time.Now(),
 	}
 
@@ -173,7 +179,7 @@ func TestUserRepository_Update(t *testing.T) {
 			user.OrganizationRole,
 			user.TwoFactorEnabled,
 			user.TwoFactorSecret,
-			user.Status,
+			user.IsActive,
 			sqlmock.AnyArg(), // updated_at
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -207,7 +213,7 @@ func TestUserRepository_Update_NotFound(t *testing.T) {
 			user.OrganizationRole,
 			user.TwoFactorEnabled,
 			user.TwoFactorSecret,
-			user.Status,
+			user.IsActive,
 			sqlmock.AnyArg(),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -270,12 +276,13 @@ func TestUserRepository_List(t *testing.T) {
 	user2ID := uuid.New()
 
 	rows := sqlmock.NewRows([]string{
-		"id", "email", "password_hash", "organization_role",
-		"two_factor_enabled", "two_factor_secret", "is_active",
-		"last_login", "created_at", "updated_at",
+		"id", "email", "password_hash", "display_name", "organization_role",
+		"is_active", "oauth_provider", "oauth_id",
+		"two_factor_enabled", "two_factor_secret",
+		"last_login_at", "created_at", "updated_at",
 	}).
-		AddRow(user1ID, "user1@example.com", "hash1", "OrganizationDeveloper", false, "", true, nil, now, now).
-		AddRow(user2ID, "user2@example.com", "hash2", "OrganizationAdmin", false, "", true, nil, now, now)
+		AddRow(user1ID, "user1@example.com", "hash1", "", "OrganizationDeveloper", true, "", "", false, "", nil, now, now).
+		AddRow(user2ID, "user2@example.com", "hash2", "", "OrganizationAdmin", true, "", "", false, "", nil, now, now)
 
 	mock.ExpectQuery("SELECT (.+) FROM users ORDER BY created_at DESC").
 		WithArgs(10, 0).
@@ -299,7 +306,7 @@ func TestUserRepository_UpdateLastLogin(t *testing.T) {
 
 	userID := uuid.New()
 
-	mock.ExpectExec("UPDATE users SET last_login").
+	mock.ExpectExec("UPDATE users SET last_login_at").
 		WithArgs(userID, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 

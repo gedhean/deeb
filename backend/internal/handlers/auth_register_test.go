@@ -83,7 +83,7 @@ func TestRegisterHandler_ServeHTTP_Success(t *testing.T) {
 		return u.Email == "test@example.com" &&
 			u.PasswordHash != "" &&
 			u.OrganizationRole == "OrganizationDeveloper" &&
-			u.Status == "Active"
+			u.IsActive == true
 	})).Return(nil)
 
 	// Create request
@@ -310,7 +310,7 @@ func TestRegisterHandler_ServeHTTP_DuplicateEmail(t *testing.T) {
 		Email:            "existing@example.com",
 		PasswordHash:     "$2a$10$...",
 		OrganizationRole: "OrganizationDeveloper",
-		Status:           "Active",
+		IsActive:         true,
 	}
 
 	mockRepo.On("GetByEmail", mock.Anything, "existing@example.com").Return(existingUser, nil)

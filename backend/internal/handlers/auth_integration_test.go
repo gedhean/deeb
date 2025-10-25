@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package handlers_test
@@ -103,7 +104,6 @@ func TestIntegration_RegisterAndLogin_Success(t *testing.T) {
 	assert.Equal(t, email, registerResp.User.Email)
 	assert.Equal(t, "OrganizationDeveloper", registerResp.User.OrganizationRole)
 	assert.True(t, registerResp.User.IsActive)
-	assert.Equal(t, "Active", registerResp.User.Status)
 
 	// Test Login
 	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing")
@@ -128,10 +128,6 @@ func TestIntegration_RegisterAndLogin_Success(t *testing.T) {
 
 	err = loginHandler.Login(c2)
 	require.NoError(t, err)
-
-	if loginRec.Code != http.StatusOK {
-		t.Logf("Login failed with status %d, body: %s", loginRec.Code, loginRec.Body.String())
-	}
 	require.Equal(t, http.StatusOK, loginRec.Code, "login should succeed")
 
 	var loginResp handlers.LoginResponse
@@ -413,7 +409,7 @@ func TestIntegration_Login_InactiveUser(t *testing.T) {
 
 	// Deactivate the user
 	ctx := context.Background()
-	_, err = db.ExecContext(ctx, "UPDATE users SET status = 'Inactive' WHERE email = $1", email)
+	_, err = db.ExecContext(ctx, "UPDATE users SET is_active = false WHERE email = $1", email)
 	require.NoError(t, err)
 
 	// Try to login with inactive account
