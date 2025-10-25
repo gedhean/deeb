@@ -106,8 +106,19 @@ func (h *LoginHandler) Login(c echo.Context) error {
 		zap.String("user_id", user.ID.String()),
 		zap.String("email", user.Email))
 
+	// Set JWT token in HttpOnly cookie
+	cookie := &http.Cookie{
+		Name:     "deeb_auth_token",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.Request().URL.Scheme == "https", // HTTPS only in production
+		SameSite: http.SameSiteStrictMode,            // Strict for production
+		MaxAge:   86400,                               // 24 hours (matches token expiration)
+	}
+	c.SetCookie(cookie)
+
 	return c.JSON(http.StatusOK, LoginResponse{
-		Token: token,
-		User:  user.ToResponse(),
+		User: user.ToResponse(),
 	})
 }

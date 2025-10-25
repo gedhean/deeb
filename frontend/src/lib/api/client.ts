@@ -1,21 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import axios, { type AxiosInstance, AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, { type AxiosInstance, AxiosError } from 'axios';
 import { APIError, type ErrorResponse } from './types';
-
-// Token management
-const TOKEN_KEY = 'deeb_auth_token';
-
-export const getToken = (): string | null => {
-  return sessionStorage.getItem(TOKEN_KEY);
-};
-
-export const setToken = (token: string): void => {
-  sessionStorage.setItem(TOKEN_KEY, token);
-};
-
-export const clearToken = (): void => {
-  sessionStorage.removeItem(TOKEN_KEY);
-};
 
 // API Client Configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -30,33 +15,19 @@ class APIClient {
       headers: {
         'Content-Type': 'application/json',
       },
+      withCredentials: true, // Enable sending cookies with requests
     });
 
     this.setupInterceptors();
   }
 
   private setupInterceptors(): void {
-    // Request Interceptor - Add JWT token to headers
-    this.client.interceptors.request.use(
-      (config: InternalAxiosRequestConfig) => {
-        const token = getToken();
-        if (token && config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error: AxiosError) => {
-        return Promise.reject(error);
-      },
-    );
-
     // Response Interceptor - Handle errors consistently
     this.client.interceptors.response.use(
       (response) => response,
       (error: AxiosError) => {
-        // Handle 401 Unauthorized - clear token and redirect to login
+        // Handle 401 Unauthorized - dispatch event for auth context
         if (error.response?.status === 401) {
-          clearToken();
           // Dispatch custom event for auth context to handle
           window.dispatchEvent(new CustomEvent('auth:unauthorized'));
         }

@@ -201,10 +201,20 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 	}
 
-	return c.JSON(http.StatusOK, LoginResponse{
-		Token: jwtToken,
-		User:  user.ToResponse(),
-	})
+	// Set JWT token in HttpOnly cookie
+	cookie := &http.Cookie{
+		Name:     "deeb_auth_token",
+		Value:    jwtToken,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.Request().URL.Scheme == "https", // HTTPS only in production
+		SameSite: http.SameSiteStrictMode,            // Strict for production
+		MaxAge:   86400,                               // 24 hours (matches token expiration)
+	}
+	c.SetCookie(cookie)
+
+	// Redirect to frontend dashboard after successful OAuth
+	return c.Redirect(http.StatusFound, "/dashboard")
 }
 
 // fetchGoogleUserInfo fetches user information from Google using the access token

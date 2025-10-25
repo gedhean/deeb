@@ -24,7 +24,7 @@ type LoginRequest struct {
 
 // LoginResponse represents the response body for successful login
 type LoginResponse struct {
-	Token string               `json:"token"`
+	Token string               `json:"token,omitempty"` // Deprecated: token is now sent via HttpOnly cookie
 	User  *models.UserResponse `json:"user"`
 }
 

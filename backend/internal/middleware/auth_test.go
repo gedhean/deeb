@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,26 +43,27 @@ func TestAuthenticate_Success(t *testing.T) {
 
 	// Create test handler that verifies context
 	var capturedClaims *auth.Claims
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		claims, ok := GetUserFromContext(r.Context())
+	testHandler := func(c echo.Context) error {
+		claims, ok := c.Get("user").(*auth.Claims)
 		require.True(t, ok)
 		capturedClaims = claims
-		w.WriteHeader(http.StatusOK)
-	})
+		return c.NoContent(http.StatusOK)
+	}
 
-	// Create request with valid Authorization header
+	// Create Echo instance and request
+	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-
-	// Record response
-	rr := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute middleware
 	handler := middleware.Authenticate(testHandler)
-	handler.ServeHTTP(rr, req)
+	err = handler(c)
 
 	// Verify response
-	assert.Equal(t, http.StatusOK, rr.Code)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify claims were stored correctly
 	require.NotNil(t, capturedClaims)
@@ -77,21 +79,27 @@ func TestAuthenticate_MissingAuthorizationHeader(t *testing.T) {
 	middleware := NewAuthMiddleware(tm)
 
 	// Create test handler (should not be called)
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	testHandler := func(c echo.Context) error {
 		t.Fatal("handler should not be called")
-	})
+		return nil
+	}
 
-	// Create request without Authorization header
+	// Create Echo instance and request
+	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-	rr := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute middleware
 	handler := middleware.Authenticate(testHandler)
-	handler.ServeHTTP(rr, req)
+	err = handler(c)
 
 	// Verify response
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	assert.Contains(t, rr.Body.String(), "missing authorization header")
+	require.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	require.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+	assert.Contains(t, httpErr.Message, "missing authentication")
 }
 
 func TestAuthenticate_InvalidAuthorizationHeaderFormat(t *testing.T) {
@@ -121,22 +129,28 @@ func TestAuthenticate_InvalidAuthorizationHeaderFormat(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create test handler (should not be called)
-			testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			testHandler := func(c echo.Context) error {
 				t.Fatal("handler should not be called")
-			})
+				return nil
+			}
 
-			// Create request with invalid Authorization header
+			// Create Echo instance and request
+			e := echo.New()
 			req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 			req.Header.Set("Authorization", tc.header)
-			rr := httptest.NewRecorder()
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
 
 			// Execute middleware
 			handler := middleware.Authenticate(testHandler)
-			handler.ServeHTTP(rr, req)
+			err := handler(c)
 
 			// Verify response
-			assert.Equal(t, http.StatusUnauthorized, rr.Code)
-			assert.Contains(t, rr.Body.String(), "invalid authorization header format")
+			require.Error(t, err)
+			httpErr, ok := err.(*echo.HTTPError)
+			require.True(t, ok)
+			assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+			assert.Contains(t, httpErr.Message, "invalid authorization header format")
 		})
 	}
 }
@@ -148,22 +162,28 @@ func TestAuthenticate_EmptyToken(t *testing.T) {
 	middleware := NewAuthMiddleware(tm)
 
 	// Create test handler (should not be called)
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	testHandler := func(c echo.Context) error {
 		t.Fatal("handler should not be called")
-	})
+		return nil
+	}
 
-	// Create request with empty token
+	// Create Echo instance and request
+	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer ")
-	rr := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute middleware
 	handler := middleware.Authenticate(testHandler)
-	handler.ServeHTTP(rr, req)
+	err = handler(c)
 
 	// Verify response
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	assert.Contains(t, rr.Body.String(), "missing token")
+	require.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	require.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+	assert.Contains(t, httpErr.Message, "missing token")
 }
 
 func TestAuthenticate_InvalidToken(t *testing.T) {
@@ -173,22 +193,28 @@ func TestAuthenticate_InvalidToken(t *testing.T) {
 	middleware := NewAuthMiddleware(tm)
 
 	// Create test handler (should not be called)
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	testHandler := func(c echo.Context) error {
 		t.Fatal("handler should not be called")
-	})
+		return nil
+	}
 
-	// Create request with invalid token
+	// Create Echo instance and request
+	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer invalid.token.string")
-	rr := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute middleware
 	handler := middleware.Authenticate(testHandler)
-	handler.ServeHTTP(rr, req)
+	err = handler(c)
 
 	// Verify response
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	assert.Contains(t, rr.Body.String(), "invalid token")
+	require.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	require.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+	assert.Contains(t, httpErr.Message, "invalid token")
 }
 
 func TestAuthenticate_ExpiredToken(t *testing.T) {
@@ -216,22 +242,28 @@ func TestAuthenticate_ExpiredToken(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create test handler (should not be called)
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	testHandler := func(c echo.Context) error {
 		t.Fatal("handler should not be called")
-	})
+		return nil
+	}
 
-	// Create request with expired token
+	// Create Echo instance and request
+	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenString)
-	rr := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute middleware
 	handler := middleware.Authenticate(testHandler)
-	handler.ServeHTTP(rr, req)
+	err = handler(c)
 
 	// Verify response
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	assert.Contains(t, rr.Body.String(), "token expired")
+	require.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	require.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+	assert.Contains(t, httpErr.Message, "token expired")
 }
 
 func TestAuthenticate_WrongSecret(t *testing.T) {
@@ -249,22 +281,28 @@ func TestAuthenticate_WrongSecret(t *testing.T) {
 	middleware := NewAuthMiddleware(tm2)
 
 	// Create test handler (should not be called)
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	testHandler := func(c echo.Context) error {
 		t.Fatal("handler should not be called")
-	})
+		return nil
+	}
 
-	// Create request with token signed by different secret
+	// Create Echo instance and request
+	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	rr := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	// Execute middleware
 	handler := middleware.Authenticate(testHandler)
-	handler.ServeHTTP(rr, req)
+	err = handler(c)
 
 	// Verify response
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	assert.Contains(t, rr.Body.String(), "invalid token")
+	require.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	require.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+	assert.Contains(t, httpErr.Message, "invalid token")
 }
 
 func TestGetUserFromContext_Success(t *testing.T) {
@@ -317,28 +355,35 @@ func TestAuthenticate_MultipleRequests(t *testing.T) {
 
 	// Create test handler that captures user ID
 	var capturedUserIDs []uuid.UUID
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		claims, ok := GetUserFromContext(r.Context())
+	testHandler := func(c echo.Context) error {
+		claims, ok := c.Get("user").(*auth.Claims)
 		require.True(t, ok)
 		capturedUserIDs = append(capturedUserIDs, claims.UserID)
-		w.WriteHeader(http.StatusOK)
-	})
+		return c.NoContent(http.StatusOK)
+	}
 
 	handler := middleware.Authenticate(testHandler)
+
+	// Create Echo instance
+	e := echo.New()
 
 	// First request
 	req1 := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req1.Header.Set("Authorization", "Bearer "+token1)
-	rr1 := httptest.NewRecorder()
-	handler.ServeHTTP(rr1, req1)
-	assert.Equal(t, http.StatusOK, rr1.Code)
+	rec1 := httptest.NewRecorder()
+	c1 := e.NewContext(req1, rec1)
+	err = handler(c1)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec1.Code)
 
 	// Second request
 	req2 := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req2.Header.Set("Authorization", "Bearer "+token2)
-	rr2 := httptest.NewRecorder()
-	handler.ServeHTTP(rr2, req2)
-	assert.Equal(t, http.StatusOK, rr2.Code)
+	rec2 := httptest.NewRecorder()
+	c2 := e.NewContext(req2, rec2)
+	err = handler(c2)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec2.Code)
 
 	// Verify both requests were handled correctly
 	require.Len(t, capturedUserIDs, 2)
@@ -352,18 +397,20 @@ func BenchmarkAuthenticate(b *testing.B) {
 
 	token, _ := tm.GenerateToken(uuid.New(), "test@example.com", "OrganizationDeveloper")
 
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
+	testHandler := func(c echo.Context) error {
+		return c.NoContent(http.StatusOK)
+	}
 
 	handler := middleware.Authenticate(testHandler)
 
+	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rr := httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		handler(c)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 )
 
@@ -28,27 +29,32 @@ func NewAuthMiddleware(tokenManager *auth.TokenManager) *AuthMiddleware {
 	}
 }
 
-// Authenticate is the middleware handler that validates JWT tokens
-func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract token from Authorization header
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, `{"error":"missing authorization header"}`, http.StatusUnauthorized)
-			return
+// Authenticate is the Echo middleware handler that validates JWT tokens
+func (m *AuthMiddleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// Try to extract token from HttpOnly cookie first
+		var tokenString string
+		cookie, err := c.Cookie("deeb_auth_token")
+		if err == nil && cookie.Value != "" {
+			tokenString = cookie.Value
+		} else {
+			// Fallback to Authorization header for backwards compatibility
+			authHeader := c.Request().Header.Get("Authorization")
+			if authHeader == "" {
+				return echo.NewHTTPError(http.StatusUnauthorized, "missing authentication")
+			}
+
+			// Check Bearer scheme
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				return echo.NewHTTPError(http.StatusUnauthorized, "invalid authorization header format")
+			}
+
+			tokenString = parts[1]
 		}
 
-		// Check Bearer scheme
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, `{"error":"invalid authorization header format"}`, http.StatusUnauthorized)
-			return
-		}
-
-		tokenString := parts[1]
 		if tokenString == "" {
-			http.Error(w, `{"error":"missing token"}`, http.StatusUnauthorized)
-			return
+			return echo.NewHTTPError(http.StatusUnauthorized, "missing token")
 		}
 
 		// Validate token
@@ -56,20 +62,17 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		if err != nil {
 			// Return appropriate error based on validation failure
 			if err == auth.ErrExpiredToken {
-				http.Error(w, `{"error":"token expired"}`, http.StatusUnauthorized)
-				return
+				return echo.NewHTTPError(http.StatusUnauthorized, "token expired")
 			}
-			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
-			return
+			return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
 		}
 
-		// Store claims in request context
-		ctx := context.WithValue(r.Context(), UserContextKey, claims)
-		r = r.WithContext(ctx)
+		// Store claims in Echo context
+		c.Set("user", claims)
 
 		// Call next handler
-		next.ServeHTTP(w, r)
-	})
+		return next(c)
+	}
 }
 
 // GetUserFromContext extracts user claims from request context

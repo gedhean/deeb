@@ -7,6 +7,7 @@ import (
 	"github.com/nsxbet/deeb/internal/config"
 	"github.com/nsxbet/deeb/internal/handlers"
 	"github.com/nsxbet/deeb/internal/logger"
+	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 )
@@ -56,6 +57,8 @@ func setupAuthRoutes(
 	// Initialize handlers
 	registerHandler := handlers.NewRegisterHandler(userRepo, logger.Get())
 	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, loginRateLimiter, logger.Get())
+	logoutHandler := handlers.NewLogoutHandler(logger.Get())
+	meHandler := handlers.NewMeHandler(userRepo, logger.Get())
 	googleHandler := handlers.NewGoogleOAuthHandler(
 		userRepo,
 		tokenManager,
@@ -68,8 +71,13 @@ func setupAuthRoutes(
 	// Register routes - use Echo handlers directly
 	authGroup.POST("/register", registerHandler.Register)
 	authGroup.POST("/login", loginHandler.Login)
+	authGroup.POST("/logout", logoutHandler.Logout)
 	authGroup.GET("/google", googleHandler.InitiateGoogleAuth)
 	authGroup.GET("/google/callback", googleHandler.GoogleCallback)
+
+	// Protected routes - require authentication
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	authGroup.GET("/me", meHandler.GetCurrentUser, authMiddleware.Authenticate)
 }
 
 // setupUserRoutes registers user management routes

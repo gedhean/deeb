@@ -71,7 +71,15 @@ func TestLoginHandler_SuccessfulLogin(t *testing.T) {
 	err = json.NewDecoder(rec.Body).Decode(&response)
 	assert.NoError(t, err)
 
-	assert.NotEmpty(t, response.Token)
+	// Verify cookie is set with token
+	cookies := rec.Result().Cookies()
+	assert.Len(t, cookies, 1)
+	assert.Equal(t, "deeb_auth_token", cookies[0].Name)
+	assert.NotEmpty(t, cookies[0].Value)
+	assert.True(t, cookies[0].HttpOnly)
+	assert.Equal(t, 86400, cookies[0].MaxAge)
+
+	// Verify user info in response
 	assert.Equal(t, testUser.ID, response.User.ID)
 	assert.Equal(t, testUser.Email, response.User.Email)
 

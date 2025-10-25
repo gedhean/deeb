@@ -1,5 +1,5 @@
 // Export API client
-export { apiClient, getToken, setToken, clearToken } from './client';
+export { apiClient } from './client';
 
 // Export types
 export * from './types';
