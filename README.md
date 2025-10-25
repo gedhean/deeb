@@ -1,5 +1,7 @@
 # Deeb: Secure Database Change Management System
 
+[![CI](https://github.com/NSXBet/deeb/actions/workflows/ci.yml/badge.svg)](https://github.com/NSXBet/deeb/actions/workflows/ci.yml)
+
 Deeb is a secure database change management tool that enables developers to manage database changes without requiring direct database access. The system provides an issue-based workflow with multi-approval processes, automated policy validation, and comprehensive audit logging.
 
 ## Features

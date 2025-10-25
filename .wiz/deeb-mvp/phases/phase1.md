@@ -644,19 +644,19 @@ Configure React Router for client-side routing with protected routes.
 
 ### P01M35: Implement CI/CD pipeline skeleton
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M35
 
 **Goal**
 Create GitHub Actions workflow for automated testing and linting.
 
 **Acceptance Criteria**
-- [ ] .github/workflows/ci.yml created
-- [ ] Go tests run on push and PR
-- [ ] Go linting with golangci-lint
-- [ ] Frontend tests run on push and PR
-- [ ] Frontend linting with ESLint
-- [ ] Workflow badge in README
+- [x] .github/workflows/ci.yml created
+- [x] Go tests run on push and PR
+- [x] Go linting with golangci-lint
+- [x] Frontend tests run on push and PR
+- [x] Frontend linting with ESLint
+- [x] Workflow badge in README
 
 ---
 
