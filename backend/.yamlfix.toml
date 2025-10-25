@@ -1,0 +1,3 @@
+explicit_start = false
+sequence_sytle = "keep_style"
+line_length = 100
