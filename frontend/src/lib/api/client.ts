@@ -6,15 +6,15 @@ import { APIError, type ErrorResponse } from './types';
 const TOKEN_KEY = 'deeb_auth_token';
 
 export const getToken = (): string | null => {
-  return localStorage.getItem(TOKEN_KEY);
+  return sessionStorage.getItem(TOKEN_KEY);
 };
 
 export const setToken = (token: string): void => {
-  localStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.setItem(TOKEN_KEY, token);
 };
 
 export const clearToken = (): void => {
-  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
 };
 
 // API Client Configuration

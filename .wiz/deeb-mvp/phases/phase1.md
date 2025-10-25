@@ -590,19 +590,19 @@ Build registration page with email/password form and validation.
 
 ### P01M32: Implement session management on frontend
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M32
 
 **Goal**
 Add session persistence and automatic token refresh on frontend.
 
 **Acceptance Criteria**
-- [ ] JWT token persisted in session storage
-- [ ] Token loaded on app initialization
-- [ ] Expired token detected and user logged out
-- [ ] Token refresh before expiration
-- [ ] Logout clears session data
-- [ ] Unauthorized requests redirect to login
+- [x] JWT token persisted in session storage
+- [x] Token loaded on app initialization
+- [x] Expired token detected and user logged out
+- [x] Token refresh before expiration
+- [x] Logout clears session data
+- [x] Unauthorized requests redirect to login
 
 ---
 
