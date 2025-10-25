@@ -716,19 +716,19 @@ Create unit tests for JWT token generation and validation.
 
 ### P01M39: Write unit tests for RBAC permission checking
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M39
 
 **Goal**
 Create unit tests for role-based access control logic.
 
 **Acceptance Criteria**
-- [ ] Test Developer role has correct permissions
-- [ ] Test Approver role has correct permissions
-- [ ] Test Admin role has all permissions
-- [ ] Test HasPermission function for various scenarios
-- [ ] All tests passing
-- [ ] Code coverage for RBAC package >85%
+- [x] Test Developer role has correct permissions
+- [x] Test Approver role has correct permissions
+- [x] Test Admin role has all permissions
+- [x] Test HasPermission function for various scenarios
+- [x] All tests passing
+- [x] Code coverage for RBAC package >85%
 
 ---
 

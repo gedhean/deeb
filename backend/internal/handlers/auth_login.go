@@ -113,8 +113,8 @@ func (h *LoginHandler) Login(c echo.Context) error {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   c.Request().URL.Scheme == "https", // HTTPS only in production
-		SameSite: http.SameSiteStrictMode,            // Strict for production
-		MaxAge:   86400,                               // 24 hours (matches token expiration)
+		SameSite: http.SameSiteStrictMode,           // Strict for production
+		MaxAge:   86400,                             // 24 hours (matches token expiration)
 	}
 	c.SetCookie(cookie)
 
