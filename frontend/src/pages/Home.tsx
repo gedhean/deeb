@@ -1,13 +1,20 @@
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { ModeToggle } from '@/components/mode-toggle'
-import { Link } from 'react-router-dom'
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { ModeToggle } from '@/components/mode-toggle';
+import { Link } from 'react-router-dom';
 
 export function Home() {
-  const [count, setCount] = useState(0)
-  const [name, setName] = useState('')
+  const [count, setCount] = useState(0);
+  const [name, setName] = useState('');
 
   return (
     <div className="min-h-screen bg-background p-8">
@@ -17,9 +24,7 @@ export function Home() {
         </div>
         <header className="text-center space-y-2">
           <h1 className="text-4xl font-bold text-foreground">Deeb</h1>
-          <p className="text-xl text-muted-foreground">
-            Database Change Management System
-          </p>
+          <p className="text-xl text-muted-foreground">Database Change Management System</p>
         </header>
 
         <div className="grid gap-6 md:grid-cols-2">
@@ -42,18 +47,14 @@ export function Home() {
               </ul>
             </CardContent>
             <CardFooter>
-              <p className="text-xs text-muted-foreground">
-                Frontend setup complete ✅
-              </p>
+              <p className="text-xs text-muted-foreground">Frontend setup complete ✅</p>
             </CardFooter>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle>Component Demo</CardTitle>
-              <CardDescription>
-                Shadcn/ui components with Tailwind CSS
-              </CardDescription>
+              <CardDescription>Shadcn/ui components with Tailwind CSS</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -67,23 +68,14 @@ export function Home() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
-                {name && (
-                  <p className="text-sm text-muted-foreground">
-                    Hello, {name}!
-                  </p>
-                )}
+                {name && <p className="text-sm text-muted-foreground">Hello, {name}!</p>}
               </div>
 
               <div className="space-y-2">
                 <p className="text-sm font-medium">Button counter</p>
                 <div className="flex gap-2">
-                  <Button onClick={() => setCount(count + 1)}>
-                    Count: {count}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setCount(0)}
-                  >
+                  <Button onClick={() => setCount(count + 1)}>Count: {count}</Button>
+                  <Button variant="outline" onClick={() => setCount(0)}>
                     Reset
                   </Button>
                 </div>
@@ -106,14 +98,12 @@ export function Home() {
         <Card>
           <CardHeader>
             <CardTitle>API Client Setup</CardTitle>
-            <CardDescription>
-              Test the API client integration
-            </CardDescription>
+            <CardDescription>Test the API client integration</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              The API client has been configured with JWT token management, request/response interceptors,
-              and TypeScript type definitions. Visit the health check page to test it.
+              The API client has been configured with JWT token management, request/response
+              interceptors, and TypeScript type definitions. Visit the health check page to test it.
             </p>
             <Link to="/health">
               <Button>View Health Check</Button>
@@ -122,5 +112,5 @@ export function Home() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

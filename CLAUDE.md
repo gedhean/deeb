@@ -34,13 +34,28 @@ The system follows a centralized architecture:
 
 Refer to [docs/architecture.png](docs/architecture.png) for visual representation.
 
-## Development
+## Development Workflow
 
-- **Start the Frontend**: `cd frontend && pnpm run dev`
-- **Start the Backend**: `cd backend && make run`
-- **Run backend tests**: `cd backend && make test`
+**ALWAYS follow these steps after making code changes**:
+
+#### After Go Code Changes
+
+- **Run backend tests**: Run relevant tests before committing
 - **Run backend linting**: `cd backend && make lint`
+- **Run backend autofix**: `cd backend && make lint-fix`
 - **Run backend formatting**: `cd backend && make format`
+
+#### After Frontend Code Changes
+
+- **Run frontend tests**: Run relevant tests before committing with `pnpm --dir frontend run test`
+- **Run frontend linting**: `pnpm --dir frontend run lint`
+- **Run frontend autofix**: `pnpm --dir frontend run lint-fix`
+- **Run frontend formatting**: `pnpm --dir frontend run format`
+
+#### Start the Development Servers
+
+- **Start the Frontend**: `pnpm --dir frontend run dev`
+- **Start the Backend**: `cd backend && make run`
 
 ## Database Change Lifecycle
 

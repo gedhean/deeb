@@ -125,7 +125,7 @@ export class APIError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public response?: ErrorResponse
+    public response?: ErrorResponse,
   ) {
     super(message);
     this.name = 'APIError';

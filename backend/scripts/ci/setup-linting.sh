@@ -11,3 +11,9 @@ if ! command -v yamllint &>/dev/null; then
 
     pip install --user yamllint
 fi
+
+fi ! command -v yamlfmt &>/dev/null; then
+    echo "yamlfmt could not be found! Installing..."
+
+   pip install --user yamlfix
+fi

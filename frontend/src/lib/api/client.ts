@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import axios, { type AxiosInstance, AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { APIError, type ErrorResponse } from './types';
 
@@ -46,7 +47,7 @@ class APIClient {
       },
       (error: AxiosError) => {
         return Promise.reject(error);
-      }
+      },
     );
 
     // Response Interceptor - Handle errors consistently
@@ -63,15 +64,10 @@ class APIClient {
         // Transform error into APIError
         const statusCode = error.response?.status || 500;
         const errorResponse = error.response?.data as ErrorResponse;
-        const message =
-          errorResponse?.error ||
-          error.message ||
-          'An unexpected error occurred';
+        const message = errorResponse?.error || error.message || 'An unexpected error occurred';
 
-        return Promise.reject(
-          new APIError(message, statusCode, errorResponse)
-        );
-      }
+        return Promise.reject(new APIError(message, statusCode, errorResponse));
+      },
     );
   }
 

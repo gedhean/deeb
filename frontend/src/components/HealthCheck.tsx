@@ -36,12 +36,7 @@ export function HealthCheck() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">API Health Check</h2>
-          <Button
-            onClick={checkHealth}
-            disabled={loading}
-            variant="outline"
-            size="sm"
-          >
+          <Button onClick={checkHealth} disabled={loading} variant="outline" size="sm">
             {loading ? 'Checking...' : 'Refresh'}
           </Button>
         </div>
@@ -81,9 +76,7 @@ export function HealthCheck() {
         )}
 
         {!health && !error && !loading && (
-          <div className="text-center text-gray-500 py-8">
-            Click refresh to check API health
-          </div>
+          <div className="text-center text-gray-500 py-8">Click refresh to check API health</div>
         )}
       </div>
     </Card>

@@ -1,20 +1,12 @@
 import { apiClient, setToken, clearToken } from '../client';
-import type {
-  LoginRequest,
-  LoginResponse,
-  RegisterRequest,
-  RegisterResponse,
-} from '../types';
+import type { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse } from '../types';
 
 export const authService = {
   /**
    * Login with email and password
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const response = await apiClient.post<LoginResponse>(
-      '/api/v1/auth/login',
-      credentials
-    );
+    const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', credentials);
 
     // Store the JWT token
     if (response.token) {
@@ -28,10 +20,7 @@ export const authService = {
    * Register a new user
    */
   async register(data: RegisterRequest): Promise<RegisterResponse> {
-    const response = await apiClient.post<RegisterResponse>(
-      '/api/v1/auth/register',
-      data
-    );
+    const response = await apiClient.post<RegisterResponse>('/api/v1/auth/register', data);
 
     return response;
   },

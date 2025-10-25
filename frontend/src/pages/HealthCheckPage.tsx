@@ -1,7 +1,7 @@
-import { HealthCheck } from '@/components/HealthCheck'
-import { ModeToggle } from '@/components/mode-toggle'
-import { Button } from '@/components/ui/button'
-import { Link } from 'react-router-dom'
+import { HealthCheck } from '@/components/HealthCheck';
+import { ModeToggle } from '@/components/mode-toggle';
+import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 
 export function HealthCheckPage() {
   return (
@@ -19,5 +19,5 @@ export function HealthCheckPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,7 +1,7 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Home } from '@/pages/Home'
-import { HealthCheckPage } from '@/pages/HealthCheckPage'
-import './App.css'
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Home } from '@/pages/Home';
+import { HealthCheckPage } from '@/pages/HealthCheckPage';
+import './App.css';
 
 function App() {
   return (
@@ -11,7 +11,7 @@ function App() {
         <Route path="/health" element={<HealthCheckPage />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
 
-export default App
+export default App;
