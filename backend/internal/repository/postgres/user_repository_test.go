@@ -35,7 +35,7 @@ func TestUserRepository_Create(t *testing.T) {
 		OrganizationRole: "OrganizationDeveloper",
 		TwoFactorEnabled: false,
 		TwoFactorSecret:  "",
-		IsActive:         true,
+		Status:           "Active",
 	}
 
 	mock.ExpectExec("INSERT INTO users").
@@ -46,7 +46,7 @@ func TestUserRepository_Create(t *testing.T) {
 			user.OrganizationRole,
 			user.TwoFactorEnabled,
 			user.TwoFactorSecret,
-			user.IsActive,
+			user.Status,
 			sqlmock.AnyArg(), // created_at
 			sqlmock.AnyArg(), // updated_at
 		).
@@ -161,7 +161,7 @@ func TestUserRepository_Update(t *testing.T) {
 		OrganizationRole: "OrganizationAdmin",
 		TwoFactorEnabled: true,
 		TwoFactorSecret:  "secret",
-		IsActive:         true,
+		Status:           "Active",
 		CreatedAt:        time.Now(),
 	}
 
@@ -173,7 +173,7 @@ func TestUserRepository_Update(t *testing.T) {
 			user.OrganizationRole,
 			user.TwoFactorEnabled,
 			user.TwoFactorSecret,
-			user.IsActive,
+			user.Status,
 			sqlmock.AnyArg(), // updated_at
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -207,7 +207,7 @@ func TestUserRepository_Update_NotFound(t *testing.T) {
 			user.OrganizationRole,
 			user.TwoFactorEnabled,
 			user.TwoFactorSecret,
-			user.IsActive,
+			user.Status,
 			sqlmock.AnyArg(),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 0))

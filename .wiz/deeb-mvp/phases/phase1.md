@@ -734,19 +734,19 @@ Create unit tests for role-based access control logic.
 
 ### P01M40: Write integration tests for authentication endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M40
 
 **Goal**
 Create integration tests for registration and login API endpoints.
 
 **Acceptance Criteria**
-- [ ] Test POST /api/v1/auth/register creates user
-- [ ] Test POST /api/v1/auth/login returns JWT token
-- [ ] Test login with invalid credentials fails
-- [ ] Test registration with duplicate email fails
-- [ ] Test rate limiting on login endpoint
-- [ ] All tests passing with test database
+- [x] Test POST /api/v1/auth/register creates user
+- [x] Test POST /api/v1/auth/login returns JWT token
+- [x] Test login with invalid credentials fails
+- [x] Test registration with duplicate email fails
+- [x] Test rate limiting on login endpoint
+- [x] All tests passing with test database
 
 ---
 

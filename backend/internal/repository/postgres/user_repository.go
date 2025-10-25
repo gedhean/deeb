@@ -36,7 +36,7 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 	query := `
 		INSERT INTO users (
 			id, email, password_hash, organization_role,
-			two_factor_enabled, two_factor_secret, is_active,
+			two_factor_enabled, two_factor_secret, status,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9
@@ -52,7 +52,7 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 		user.OrganizationRole,
 		user.TwoFactorEnabled,
 		user.TwoFactorSecret,
-		user.IsActive,
+		user.Status,
 		user.CreatedAt,
 		user.UpdatedAt,
 	)
@@ -68,9 +68,10 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Use
 	var user models.User
 
 	query := `
-		SELECT id, email, password_hash, organization_role,
-			   two_factor_enabled, two_factor_secret, is_active,
-			   last_login, created_at, updated_at
+		SELECT id, email, password_hash, display_name, organization_role,
+			   status, oauth_provider, oauth_id,
+			   two_factor_enabled, two_factor_secret,
+			   last_login_at, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
@@ -91,9 +92,10 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.
 	var user models.User
 
 	query := `
-		SELECT id, email, password_hash, organization_role,
-			   two_factor_enabled, two_factor_secret, is_active,
-			   last_login, created_at, updated_at
+		SELECT id, email, password_hash, display_name, organization_role,
+			   status, oauth_provider, oauth_id,
+			   two_factor_enabled, two_factor_secret,
+			   last_login_at, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`

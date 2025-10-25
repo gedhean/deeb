@@ -30,7 +30,7 @@ func TestLoginHandler_SuccessfulLogin(t *testing.T) {
 		Email:            "test@example.com",
 		PasswordHash:     hashedPassword,
 		OrganizationRole: "OrganizationDeveloper",
-		IsActive:         true,
+		Status:           "Active",
 		CreatedAt:        time.Now(),
 	}
 
@@ -93,7 +93,7 @@ func TestLoginHandler_InvalidPassword(t *testing.T) {
 		Email:            "test@example.com",
 		PasswordHash:     hashedPassword,
 		OrganizationRole: "OrganizationDeveloper",
-		IsActive:         true,
+		Status:           "Active",
 	}
 
 	mockRepo := new(MockUserRepository)
@@ -170,7 +170,7 @@ func TestLoginHandler_RateLimitExceeded(t *testing.T) {
 		Email:            "test@example.com",
 		PasswordHash:     hashedPassword,
 		OrganizationRole: "OrganizationDeveloper",
-		IsActive:         true,
+		Status:           "Active",
 	}
 
 	mockRepo := new(MockUserRepository)
@@ -298,7 +298,7 @@ func TestLoginHandler_InactiveUser(t *testing.T) {
 		Email:            "test@example.com",
 		PasswordHash:     hashedPassword,
 		OrganizationRole: "OrganizationDeveloper",
-		IsActive:         false, // User is inactive
+		Status:           "Inactive", // User is inactive
 	}
 
 	mockRepo := new(MockUserRepository)
@@ -403,7 +403,7 @@ func TestLoginHandler_SuccessfulLoginResetsRateLimit(t *testing.T) {
 		Email:            "test@example.com",
 		PasswordHash:     hashedPassword,
 		OrganizationRole: "OrganizationDeveloper",
-		IsActive:         true,
+		Status:           "Active",
 	}
 
 	mockRepo := new(MockUserRepository)

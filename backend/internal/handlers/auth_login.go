@@ -83,7 +83,7 @@ func (h *LoginHandler) Login(c echo.Context) error {
 	}
 
 	// Check if user is active
-	if !user.IsActive {
+	if !user.IsActive() {
 		h.logger.Info("Login attempt by inactive user",
 			zap.String("email", req.Email),
 			zap.String("user_id", user.ID.String()))
