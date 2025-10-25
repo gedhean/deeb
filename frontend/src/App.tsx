@@ -4,6 +4,7 @@ import { ProtectedRoute } from '@/components/protected-route';
 import { Home } from '@/pages/Home';
 import { HealthCheckPage } from '@/pages/HealthCheckPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { RegisterPage } from '@/pages/RegisterPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import './App.css';
 
@@ -15,6 +16,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/health" element={<HealthCheckPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           <Route
             path="/dashboard"
             element={
