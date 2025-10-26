@@ -79,6 +79,7 @@ func TestRegisterHandler_ServeHTTP_Success(t *testing.T) {
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
+	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil) // Existing user
 	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
 		return u.Email == "test@example.com" &&
 			u.PasswordHash != "" &&
@@ -125,6 +126,7 @@ func TestRegisterHandler_ServeHTTP_CustomOrganizationRole(t *testing.T) {
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "admin@example.com").Return(nil, sql.ErrNoRows)
+	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil) // Existing user
 	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
 		return u.Email == "admin@example.com" &&
 			u.OrganizationRole == "OrganizationAdmin"
@@ -409,6 +411,7 @@ func TestRegisterHandler_ServeHTTP_DatabaseErrorOnCreate(t *testing.T) {
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
+	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil)
 	mockRepo.On("Create", mock.Anything, mock.Anything).Return(errors.New("database insert failed"))
 
 	// Create request
@@ -469,6 +472,7 @@ func TestRegisterHandler_ServeHTTP_EmailNormalization(t *testing.T) {
 
 	// Mock expectations - email should be lowercased and trimmed
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
+	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil)
 	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
 		return u.Email == "test@example.com" // Should be normalized
 	})).Return(nil)
@@ -490,5 +494,136 @@ func TestRegisterHandler_ServeHTTP_EmailNormalization(t *testing.T) {
 
 	// Assert
 	assert.Equal(t, http.StatusCreated, rec.Code)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestRegisterHandler_ServeHTTP_FirstUserBecomesAdmin(t *testing.T) {
+	// Setup
+	mockRepo := new(MockUserRepository)
+	logger := zap.NewNop()
+	handler := NewRegisterHandler(mockRepo, logger)
+
+	// Mock expectations for first user (no existing users)
+	mockRepo.On("GetByEmail", mock.Anything, "first@example.com").Return(nil, sql.ErrNoRows)
+	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{}, nil) // No users exist
+	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
+		return u.Email == "first@example.com" &&
+			u.PasswordHash != "" &&
+			u.OrganizationRole == "OrganizationAdmin" && // Should be admin for first user
+			u.IsActive == true
+	})).Return(nil)
+
+	// Create request for first user
+	reqBody := RegisterRequest{
+		Email:    "first@example.com",
+		Password: "FirstUserPass123!",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Execute
+	_ = handler.Register(c)
+
+	// Assert
+	assert.Equal(t, http.StatusCreated, rec.Code)
+
+	var resp RegisterResponse
+	err := json.NewDecoder(rec.Body).Decode(&resp)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp.User)
+	assert.Equal(t, "first@example.com", resp.User.Email)
+	assert.Equal(t, "OrganizationAdmin", resp.User.OrganizationRole)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestRegisterHandler_ServeHTTP_SecondUserGetsDeveloperRole(t *testing.T) {
+	// Setup
+	mockRepo := new(MockUserRepository)
+	logger := zap.NewNop()
+	handler := NewRegisterHandler(mockRepo, logger)
+
+	// Mock expectations for second user (one user already exists)
+	existingUser := &models.User{
+		ID:               uuid.New(),
+		Email:            "first@example.com",
+		OrganizationRole: "OrganizationAdmin",
+		IsActive:         true,
+	}
+
+	mockRepo.On("GetByEmail", mock.Anything, "second@example.com").Return(nil, sql.ErrNoRows)
+	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{existingUser}, nil) // One user exists
+	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
+		return u.Email == "second@example.com" &&
+			u.PasswordHash != "" &&
+			u.OrganizationRole == "OrganizationDeveloper" && // Should be developer for subsequent users
+			u.IsActive == true
+	})).Return(nil)
+
+	// Create request for second user
+	reqBody := RegisterRequest{
+		Email:    "second@example.com",
+		Password: "SecondUserPass123!",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Execute
+	_ = handler.Register(c)
+
+	// Assert
+	assert.Equal(t, http.StatusCreated, rec.Code)
+
+	var resp RegisterResponse
+	err := json.NewDecoder(rec.Body).Decode(&resp)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp.User)
+	assert.Equal(t, "second@example.com", resp.User.Email)
+	assert.Equal(t, "OrganizationDeveloper", resp.User.OrganizationRole)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestRegisterHandler_ServeHTTP_FirstUserSetup_DatabaseError(t *testing.T) {
+	// Setup
+	mockRepo := new(MockUserRepository)
+	logger := zap.NewNop()
+	handler := NewRegisterHandler(mockRepo, logger)
+
+	// Mock expectations - List() returns an error
+	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
+	mockRepo.On("List", mock.Anything, 1, 0).Return(nil, errors.New("database connection failed"))
+
+	// Create request
+	reqBody := RegisterRequest{
+		Email:    "test@example.com",
+		Password: "ValidPass123!",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Execute
+	_ = handler.Register(c)
+
+	// Assert
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	var resp ErrorResponse
+	err := json.NewDecoder(rec.Body).Decode(&resp)
+	assert.NoError(t, err)
+	assert.Equal(t, "internal server error", resp.Error)
+
 	mockRepo.AssertExpectations(t)
 }

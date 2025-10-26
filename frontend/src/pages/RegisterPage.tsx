@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,11 @@ import { APIError } from '@/lib/api/types';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { register } = useAuth();
+
+  // Check if this is first user setup (from SetupCheck redirect)
+  const isFirstUser = location.state?.isFirstUser || false;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -142,13 +146,23 @@ export const RegisterPage: React.FC = () => {
     <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Create an account</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">
+            {isFirstUser ? 'Initial Setup' : 'Create an account'}
+          </CardTitle>
           <CardDescription className="text-center">
-            Enter your details to create your Deeb account
+            {isFirstUser
+              ? 'Create the first administrator account to get started'
+              : 'Enter your details to create your Deeb account'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {isFirstUser && (
+              <div className="p-3 text-sm text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400 rounded-md">
+                You will be granted <strong>OrganizationAdmin</strong> privileges as the first user.
+              </div>
+            )}
+
             {error && (
               <div className="p-3 text-sm text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 rounded-md">
                 {error}
@@ -261,14 +275,16 @@ export const RegisterPage: React.FC = () => {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Already have an account?{' '}
-            <a href="/login" className="text-blue-600 dark:text-blue-400 hover:underline">
-              Sign in
-            </a>
-          </p>
-        </CardFooter>
+        {!isFirstUser && (
+          <CardFooter className="flex justify-center">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Already have an account?{' '}
+              <a href="/login" className="text-blue-600 dark:text-blue-400 hover:underline">
+                Sign in
+              </a>
+            </p>
+          </CardFooter>
+        )}
       </Card>
     </div>
   );
