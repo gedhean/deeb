@@ -10,7 +10,11 @@
       "Bash(make format:*)",
       "Bash(make lint:*)",
       "mcp__playwright__browser_navigate",
-      "mcp__playwright__browser_console_messages"
+      "mcp__playwright__browser_console_messages",
+      "Bash(go doc:*)",
+      "Bash(cat:*)",
+      "Bash(pnpm run lint)",
+      "Bash(make format-go:*)"
     ],
     "deny": []
   },

@@ -4,6 +4,14 @@ import { DefaultLayout } from '@/components/layouts';
 export const DashboardPage: React.FC = () => {
   return (
     <DefaultLayout
+      projects={[
+        { id: '1', name: 'Project Alpha' },
+        { id: '2', name: 'Project Beta' },
+      ]}
+      currentProjectId="1"
+      onProjectChange={(projectId) => {
+        console.log('Project changed to:', projectId);
+      }}
       breadcrumbs={[
         {
           label: 'Building Your Application',

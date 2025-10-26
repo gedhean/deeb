@@ -3,17 +3,19 @@
 import * as React from 'react';
 import {
   AudioWaveform,
-  BookOpen,
   Database,
   FileCheck,
+  CircleCheckBig,
   GalleryVerticalEnd,
   History,
   LayoutDashboard,
   Settings2,
+  Users,
 } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { NavMain } from '@/components/nav-main';
+import { NavOrg } from '@/components/nav-org';
 import { NavProjects } from '@/components/nav-projects';
 import { NavUser } from '@/components/nav-user';
 import { OrgSwitcher } from '@/components/org-switcher';
@@ -64,7 +66,7 @@ const navMainItems = [
   {
     title: 'Approvals',
     url: '/approvals',
-    icon: FileCheck,
+    icon: CircleCheckBig,
     items: [
       {
         title: 'Pending Approval',
@@ -95,29 +97,14 @@ const navMainItems = [
       },
     ],
   },
+];
+
+// Organization-level navigation items
+const navOrgItems = [
   {
     title: 'Audit Logs',
     url: '/audit',
     icon: History,
-  },
-  {
-    title: 'Documentation',
-    url: '#',
-    icon: BookOpen,
-    items: [
-      {
-        title: 'Getting Started',
-        url: '#',
-      },
-      {
-        title: 'User Guide',
-        url: '#',
-      },
-      {
-        title: 'API Reference',
-        url: '#',
-      },
-    ],
   },
   {
     title: 'Settings',
@@ -125,16 +112,13 @@ const navMainItems = [
     icon: Settings2,
     items: [
       {
-        title: 'Profile',
-        url: '/settings/profile',
+        title: 'Policies',
+        url: '/settings/policies',
       },
       {
-        title: 'Security',
-        url: '/settings/security',
-      },
-      {
-        title: 'Notifications',
-        url: '/settings/notifications',
+        title: 'Users & Groups',
+        url: '/settings/users-groups',
+        icon: Users,
       },
     ],
   },
@@ -186,6 +170,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <NavMain items={navMainItems} />
         <NavProjects projects={placeholderProjects} />
+        <NavOrg items={navOrgItems} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={userData} />
