@@ -16,7 +16,7 @@ Deeb is a secure database change management tool that enables developers to mana
 ## Supported Databases
 
 - MySQL 8.0+
-- PostgreSQL 13+
+- PostgreSQL 16+
 
 ## Security Features
 
@@ -58,120 +58,91 @@ deeb/
 
 ## Getting Started
 
+### Quick Start
+
+Get up and running in 5 minutes:
+
+```bash
+# 1. Clone and navigate to backend
+git clone https://github.com/nsxbet/deeb.git
+cd deeb/backend
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env and set JWT_SECRET and ENCRYPTION_KEY
+
+# 3. Start development environment with live reload
+make run-air
+
+# 4. Access the application
+# Backend API: http://localhost:8080
+# API Documentation: http://localhost:8080/api/docs
+```
+
+### Full Setup Guide
+
+For comprehensive setup instructions including:
+- Detailed prerequisites and installation steps
+- Environment variable configuration
+- Database setup and migrations
+- Frontend setup
+- Docker development workflow
+- Troubleshooting common issues
+
+**See [docs/SETUP.md](docs/SETUP.md) for complete setup documentation.**
+
 ### Prerequisites
 
-- Go 1.21 or higher
-- Node.js 18+ with pnpm
-- PostgreSQL 13+ (for metadata database)
-- Docker (for containerized development)
-- AWS Account with RDS instances
+- **Go 1.25.3+** - Backend development
+- **Node.js 20+ with pnpm** - Frontend development
+- **PostgreSQL 16+** - Metadata database
+- **Docker & Docker Compose** - Containerized development (recommended)
 
-### Development Setup
+### Development Workflow
 
-#### 1. Clone the repository
-
-```bash
-git clone https://github.com/nsxbet/deeb.git
-cd deeb
-```
-
-#### 2. Set up the metadata database
-
-Create a PostgreSQL database for Deeb's metadata:
-
-```bash
-createdb deeb_metadata
-```
-
-Set the database connection string:
-
-```bash
-export DATABASE_URL="postgres://username:password@localhost:5432/deeb_metadata?sslmode=disable"
-```
-
-#### 3. Run database migrations
-
-Navigate to the backend directory and run migrations:
-
+**Development mode with live reload:**
 ```bash
 cd backend
-go run cmd/migrate/main.go -command up
+make run-air
 ```
 
-**Migration Commands:**
-
-- `up` - Apply all pending migrations
-- `down` - Rollback all migrations
-- `version` - Show current migration version
-- `force <version>` - Force database to specific version (use with caution)
-
-**Examples:**
-
+**Run tests:**
 ```bash
-# Apply migrations
-go run cmd/migrate/main.go -command up
-
-# Check current version
-go run cmd/migrate/main.go -command version
-
-# Rollback all migrations
-go run cmd/migrate/main.go -command down
-
-# Force to specific version (recovery)
-go run cmd/migrate/main.go -command force 1
+make test              # Unit tests
+make test-integration  # Integration tests
+make test-coverage     # Coverage report
 ```
 
-#### 4. Install frontend dependencies
-
+**Code quality:**
 ```bash
-cd frontend
-pnpm install
+make lint              # Run linters
+make lint-fix          # Auto-fix issues
+make format            # Format code
 ```
 
-#### 5. Configure environment variables
-
-Set the required environment variables:
-
+**Other commands:**
 ```bash
-export JWT_SECRET="dev-secret-key-minimum-32-characters-long-for-testing"
-export ENCRYPTION_KEY="12345678901234567890123456789012"
-export DB_USER="deeb"
-export DB_PASSWORD="your-database-password"
-export DB_NAME="deeb_metadata"
-export LOG_LEVEL="debug"      # debug, info, warn, error
-export LOG_FORMAT="console"    # console, json
-```
-
-For a complete list of configuration options, see [Configuration Guide](backend/docs/CONFIGURATION.md).
-
-#### 6. Start development servers
-
-```bash
-# Terminal 1: Frontend
-cd frontend
-pnpm run dev
-
-# Terminal 2: Backend
-cd backend
-go run cmd/server/main.go
-```
-
-The backend server will start on `http://0.0.0.0:8080` by default. You can verify it's running by accessing the health endpoint:
-
-```bash
-curl http://localhost:8080/health
-# Expected response: {"status":"ok","version":"0.1.0"}
+make help              # Show all available commands
 ```
 
 ## Documentation
 
-- [Development Guide](docs/dev-guide.md) - Docker development environment setup
-- [Architecture Overview](docs/architecture.png)
-- [Project Documentation](docs/project.md)
-- [Configuration Guide](backend/docs/CONFIGURATION.md)
-- [Database Schema](backend/docs/schema-erd.md)
-- [PRD - Product Requirements](/.wiz/deeb-mvp/prd.md)
-- [Implementation Guide](/.wiz/deeb-mvp/IMPLEMENTATION_GUIDE.md)
+### Setup & Configuration
+- **[Setup Guide](docs/SETUP.md)** - Complete setup and configuration guide
+- [Environment Variables](backend/.env.example) - All configuration options
+
+### Development
+- [Development Guide](docs/dev-guide.md) - Docker development environment
+- [API Documentation](http://localhost:8080/api/docs) - OpenAPI/Swagger (when running)
+
+### Architecture & Design
+- [Architecture Overview](docs/architecture.png) - System architecture diagram
+- [Project Documentation](docs/project.md) - Technical design and decisions
+- [Database Schema](backend/docs/schema-erd.md) - Database structure and ERD
+
+### Planning & Implementation
+- [PRD - Product Requirements](/.wiz/deeb-mvp/prd.md) - Product requirements document
+- [Implementation Guide](/.wiz/deeb-mvp/IMPLEMENTATION_GUIDE.md) - Phase and milestone breakdown
 
 ## Development Status
 

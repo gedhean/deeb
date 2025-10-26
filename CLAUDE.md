@@ -76,3 +76,4 @@ Refer to [docs/architecture.png](docs/architecture.png) for visual representatio
 - Maintain full audit trail capabilities
 - Design for multi-database support from the start
 - Let's use the github.com/labstack/echo backend server routing and middleware.
+- Save general docs at docs/ folder and specific docs at frontend/docs/ or backend/docs/.
