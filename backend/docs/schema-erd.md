@@ -50,7 +50,7 @@ erDiagram
         varchar password_hash
         varchar display_name
         varchar organization_role
-        varchar status
+        varchar is_active
         varchar oauth_provider
         varchar oauth_id
         boolean two_factor_enabled

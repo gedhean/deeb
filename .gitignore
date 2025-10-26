@@ -17,3 +17,6 @@ unit.xml
 # Build output
 backend/target/
 frontend/build/
+
+# temporary files
+tmp/

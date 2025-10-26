@@ -8,7 +8,9 @@
       "Bash(go test:*)",
       "Bash(go tool cover:*)",
       "Bash(make format:*)",
-      "Bash(make lint:*)"
+      "Bash(make lint:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_console_messages"
     ],
     "deny": []
   },
