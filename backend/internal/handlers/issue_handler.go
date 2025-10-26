@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -159,4 +160,148 @@ func (h *IssueHandler) CreateIssue(c echo.Context) error {
 
 	// Return 201 Created with issue data
 	return c.JSON(http.StatusCreated, issue)
+}
+
+// GetIssue handles GET /api/v1/issues/:id
+func (h *IssueHandler) GetIssue(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user ID from context
+	userIDStr, ok := c.Get("user_id").(string)
+	if !ok || userIDStr == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "User not authenticated",
+		})
+	}
+
+	authorID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		h.logger.Error("Failed to parse user_id", zap.String("user_id", userIDStr), zap.Error(err))
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Parse issue ID from URL
+	issueIDStr := c.Param("id")
+	issueID, err := uuid.Parse(issueIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid issue ID format",
+		})
+	}
+
+	// Retrieve issue from database
+	issue, err := h.issueRepo.GetByID(ctx, issueID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Issue not found",
+			})
+		}
+		h.logger.Error("Failed to retrieve issue", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve issue",
+		})
+	}
+
+	// Authorization check: users can only see their own issues
+	if issue.AuthorID != authorID {
+		return c.JSON(http.StatusForbidden, map[string]interface{}{
+			"error": "Access denied",
+		})
+	}
+
+	return c.JSON(http.StatusOK, issue)
+}
+
+// ListIssuesResponse represents the response for listing issues
+type ListIssuesResponse struct {
+	Issues []*models.Issue `json:"issues"`
+	Total  int             `json:"total"`
+	Limit  int             `json:"limit"`
+	Offset int             `json:"offset"`
+}
+
+// ListIssues handles GET /api/v1/issues
+func (h *IssueHandler) ListIssues(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user ID from context
+	userIDStr, ok := c.Get("user_id").(string)
+	if !ok || userIDStr == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "User not authenticated",
+		})
+	}
+
+	authorID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		h.logger.Error("Failed to parse user_id", zap.String("user_id", userIDStr), zap.Error(err))
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Parse pagination parameters
+	limit := 50 // default
+	if limitStr := c.QueryParam("limit"); limitStr != "" {
+		var parsedLimit int
+		if _, err := fmt.Sscanf(limitStr, "%d", &parsedLimit); err != nil || parsedLimit < 1 {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid limit parameter",
+			})
+		}
+		if parsedLimit > 100 {
+			parsedLimit = 100 // max limit
+		}
+		limit = parsedLimit
+	}
+
+	offset := 0 // default
+	if offsetStr := c.QueryParam("offset"); offsetStr != "" {
+		var parsedOffset int
+		if _, err := fmt.Sscanf(offsetStr, "%d", &parsedOffset); err != nil || parsedOffset < 0 {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid offset parameter",
+			})
+		}
+		offset = parsedOffset
+	}
+
+	// Build filter - users can only see their own issues
+	filters := repository.ListFilters{
+		AuthorID: authorID,
+		Limit:    limit,
+		Offset:   offset,
+	}
+
+	// Retrieve issues from database
+	issues, err := h.issueRepo.List(ctx, filters)
+	if err != nil {
+		h.logger.Error("Failed to list issues", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to list issues",
+		})
+	}
+
+	// Get total count
+	countFilters := repository.ListFilters{
+		AuthorID: authorID,
+	}
+	total, err := h.issueRepo.Count(ctx, countFilters)
+	if err != nil {
+		h.logger.Error("Failed to count issues", zap.Error(err))
+		// Don't fail the request, just use the current page count
+		total = int64(len(issues))
+	}
+
+	response := ListIssuesResponse{
+		Issues: issues,
+		Total:  int(total),
+		Limit:  limit,
+		Offset: offset,
+	}
+
+	return c.JSON(http.StatusOK, response)
 }

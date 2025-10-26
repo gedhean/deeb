@@ -67,19 +67,19 @@ Create POST /api/v1/issues endpoint for creating database change issues.
 
 ### P02M03: Implement issue retrieval endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M03
 
 **Goal**
 Create GET endpoints for retrieving individual issues and listing issues.
 
 **Acceptance Criteria**
-- [ ] GET /api/v1/issues/:id endpoint implemented
-- [ ] GET /api/v1/issues endpoint with pagination implemented
-- [ ] 404 Not Found for nonexistent issues
-- [ ] Authorization check (users can only see their own issues or public ones)
-- [ ] Response includes issue details and related data
-- [ ] Integration tests passing
+- [x] GET /api/v1/issues/:id endpoint implemented
+- [x] GET /api/v1/issues endpoint with pagination implemented
+- [x] 404 Not Found for nonexistent issues
+- [x] Authorization check (users can only see their own issues or public ones)
+- [x] Response includes issue details and related data
+- [x] Integration tests passing
 
 ---
 

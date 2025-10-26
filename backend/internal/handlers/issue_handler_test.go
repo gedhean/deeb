@@ -554,3 +554,330 @@ func TestCreateIssue_InvalidTargetDatabaseIDFormat(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, response["error"], "invalid target_database_id format")
 }
+
+func TestGetIssue_Success(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	issueID := uuid.New()
+
+	// Mock issue
+	mockIssue := &models.Issue{
+		ID:          issueID,
+		Title:       "Test Issue",
+		Description: "Test Description",
+		AuthorID:    userID,
+		Status:      models.IssueStatusDraft,
+	}
+	mockRepo.issues = []*models.Issue{mockIssue}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues/"+issueID.String(), nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(issueID.String())
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.GetIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var responseIssue models.Issue
+	err = json.Unmarshal(rec.Body.Bytes(), &responseIssue)
+	assert.NoError(t, err)
+	assert.Equal(t, issueID, responseIssue.ID)
+	assert.Equal(t, "Test Issue", responseIssue.Title)
+}
+
+func TestGetIssue_NotFound(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	issueID := uuid.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues/"+issueID.String(), nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(issueID.String())
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.GetIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Issue not found")
+}
+
+func TestGetIssue_Forbidden(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	differentUserID := uuid.New()
+	issueID := uuid.New()
+
+	// Mock issue owned by different user
+	mockIssue := &models.Issue{
+		ID:          issueID,
+		Title:       "Test Issue",
+		Description: "Test Description",
+		AuthorID:    differentUserID, // Different user
+		Status:      models.IssueStatusDraft,
+	}
+	mockRepo.issues = []*models.Issue{mockIssue}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues/"+issueID.String(), nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(issueID.String())
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.GetIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Access denied")
+}
+
+func TestGetIssue_InvalidID(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues/invalid-uuid", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("invalid-uuid")
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.GetIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Invalid issue ID format")
+}
+
+func TestListIssues_Success(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	// Mock issues
+	mockIssues := []*models.Issue{
+		{ID: uuid.New(), Title: "Issue 1", AuthorID: userID},
+		{ID: uuid.New(), Title: "Issue 2", AuthorID: userID},
+	}
+	mockRepo.issues = mockIssues
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response ListIssuesResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Len(t, response.Issues, 2)
+	assert.Equal(t, 2, response.Total)
+	assert.Equal(t, 50, response.Limit)
+	assert.Equal(t, 0, response.Offset)
+}
+
+func TestListIssues_WithPagination(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	// Mock single issue (simulating pagination)
+	mockIssues := []*models.Issue{
+		{ID: uuid.New(), Title: "Issue 21", AuthorID: userID},
+	}
+	mockRepo.issues = mockIssues
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?limit=10&offset=20", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response ListIssuesResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, 10, response.Limit)
+	assert.Equal(t, 20, response.Offset)
+}
+
+func TestListIssues_LimitExceedsMaximum(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	mockRepo.issues = []*models.Issue{}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?limit=200", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response ListIssuesResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, 100, response.Limit) // Should be capped at 100
+}
+
+func TestListIssues_InvalidLimit(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?limit=invalid", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Invalid limit parameter")
+}
+
+func TestListIssues_InvalidOffset(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?offset=invalid", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Invalid offset parameter")
+}
+
+func TestListIssues_EmptyResult(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	mockRepo.issues = []*models.Issue{}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user_id", userID.String())
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response ListIssuesResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Len(t, response.Issues, 0)
+	assert.Equal(t, 0, response.Total)
+}
