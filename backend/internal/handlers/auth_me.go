@@ -27,8 +27,8 @@ func NewMeHandler(userRepo repository.UserRepository, logger *zap.Logger) *MeHan
 // Returns the current authenticated user's information extracted from the JWT token claims.
 func (h *MeHandler) GetCurrentUser(c echo.Context) error {
 	// Extract user claims from context (set by auth middleware)
-	claims, ok := c.Get("user").(*auth.Claims)
-	if !ok {
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
 		h.logger.Error("Failed to extract user claims from context")
 		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 	}

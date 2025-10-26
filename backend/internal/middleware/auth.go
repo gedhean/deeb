@@ -11,14 +11,6 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 )
 
-// ContextKey is a custom type for context keys to avoid collisions
-type ContextKey string
-
-const (
-	// UserContextKey is the key used to store user claims in request context
-	UserContextKey ContextKey = "user"
-)
-
 // AuthMiddleware creates an HTTP middleware that validates JWT tokens.
 // It extracts tokens from HttpOnly cookies or Authorization headers.
 type AuthMiddleware struct {
@@ -83,6 +75,6 @@ func (m *AuthMiddleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 // GetUserFromContext extracts user claims from request context.
 // Returns the claims and a boolean indicating if the extraction was successful.
 func GetUserFromContext(ctx context.Context) (*auth.Claims, bool) {
-	claims, ok := ctx.Value(UserContextKey).(*auth.Claims)
+	claims, ok := ctx.Value(auth.UserContextKey).(*auth.Claims)
 	return claims, ok
 }

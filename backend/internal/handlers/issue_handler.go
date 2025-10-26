@@ -162,7 +162,7 @@ func (h *IssueHandler) GetIssue(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get authenticated user from context
-	claims, ok := c.Get("user").(*auth.Claims)
+	claims, ok := auth.GetUserFromEchoContext(c)
 	if !ok || claims == nil {
 		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
 			"error": "User not authenticated",
@@ -217,8 +217,10 @@ func (h *IssueHandler) ListIssues(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get authenticated user from context
-	claims, ok := c.Get("user").(*auth.Claims)
+	claims, ok := auth.GetUserFromEchoContext(c)
 	if !ok || claims == nil {
+		// Log error and claims
+		h.logger.Error("User not authenticated", zap.Bool("ok", ok), zap.Any("claims", claims))
 		return c.JSON(http.StatusUnauthorized, map[string]any{
 			"error": "User not authenticated",
 		})

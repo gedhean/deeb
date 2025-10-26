@@ -9,11 +9,17 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 )
+
+// ContextKey is a custom type for context keys to avoid collisions
+type ContextKey string
 
 const (
 	// TokenExpiration is the default token expiration duration (24 hours)
 	TokenExpiration = 24 * time.Hour
+	// UserContextKey is the key used to store user claims in request context
+	UserContextKey ContextKey = "user"
 )
 
 var (
@@ -143,4 +149,13 @@ func (tm *TokenManager) ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	return claims, nil
+}
+
+// GetUserFromEchoContext extracts user claims from the Echo context.
+// Returns the claims and a boolean indicating if the extraction was successful.
+func GetUserFromEchoContext(c echo.Context) (*Claims, bool) {
+	if claims, ok := c.Get(string(UserContextKey)).(*Claims); ok {
+		return claims, true
+	}
+	return nil, false
 }

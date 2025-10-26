@@ -312,7 +312,7 @@ func TestGetUserFromContext_Success(t *testing.T) {
 		OrganizationRole: "OrganizationAdmin",
 	}
 
-	ctx := context.WithValue(context.Background(), UserContextKey, expectedClaims)
+	ctx := context.WithValue(context.Background(), auth.UserContextKey, expectedClaims)
 
 	claims, ok := GetUserFromContext(ctx)
 
@@ -331,7 +331,7 @@ func TestGetUserFromContext_NotFound(t *testing.T) {
 
 func TestGetUserFromContext_WrongType(t *testing.T) {
 	// Store wrong type in context
-	ctx := context.WithValue(context.Background(), UserContextKey, "not-a-claims-object")
+	ctx := context.WithValue(context.Background(), auth.UserContextKey, "not-a-claims-object")
 
 	claims, ok := GetUserFromContext(ctx)
 
