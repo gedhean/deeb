@@ -28,6 +28,7 @@ func Setup(
 	projectRepo := postgres.NewProjectRepository(db)
 	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db)
 	dbRepo := postgres.NewDatabaseRepository(db)
+	issueRepo := postgres.NewIssueRepository(db.DB)
 
 	// Setup API routes
 	setupHealthRoute(e, db, version)
@@ -37,6 +38,7 @@ func Setup(
 	setupProjectRoutes(e, projectRepo)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo)
 	setupDatabaseRoutes(e, dbRepo)
+	setupIssueRoutes(e, issueRepo)
 
 	// Setup Swagger documentation
 	SetupSwaggerRoutes(e)
@@ -146,4 +148,13 @@ func setupDatabaseRoutes(e *echo.Echo, dbRepo repository.DatabaseRepository) {
 
 	// Project-scoped database routes
 	e.GET("/api/v1/projects/:project_id/databases", dbHandler.ListProjectDatabases)
+}
+
+// setupIssueRoutes registers issue management routes
+func setupIssueRoutes(e *echo.Echo, issueRepo repository.IssueRepository) {
+	issueHandler := handlers.NewIssueHandler(issueRepo, logger.Get())
+	issuesGroup := e.Group("/api/v1/issues")
+
+	// TODO: Add authentication middleware for protected routes
+	issuesGroup.POST("", issueHandler.CreateIssue)
 }
