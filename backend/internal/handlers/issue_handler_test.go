@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/stretchr/testify/assert"
@@ -126,7 +127,7 @@ func TestCreateIssue_Success(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -172,7 +173,7 @@ func TestCreateIssue_MissingTitle(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -209,7 +210,7 @@ func TestCreateIssue_MissingDescription(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -246,7 +247,7 @@ func TestCreateIssue_MissingSQLContent(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -282,7 +283,7 @@ func TestCreateIssue_MissingTargetDatabaseID(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -318,7 +319,7 @@ func TestCreateIssue_MissingProjectID(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -359,7 +360,7 @@ func TestCreateIssue_SQLContentTooLarge(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -436,7 +437,7 @@ func TestCreateIssue_RepositoryError(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -466,7 +467,7 @@ func TestCreateIssue_InvalidJSON(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -503,7 +504,7 @@ func TestCreateIssue_InvalidProjectIDFormat(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -540,7 +541,7 @@ func TestCreateIssue_InvalidTargetDatabaseIDFormat(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.CreateIssue(c)
@@ -581,7 +582,7 @@ func TestGetIssue_Success(t *testing.T) {
 	c.SetPath("/api/v1/issues/:id")
 	c.SetParamNames("id")
 	c.SetParamValues(issueID.String())
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.GetIssue(c)
@@ -613,7 +614,7 @@ func TestGetIssue_NotFound(t *testing.T) {
 	c.SetPath("/api/v1/issues/:id")
 	c.SetParamNames("id")
 	c.SetParamValues(issueID.String())
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.GetIssue(c)
@@ -655,7 +656,7 @@ func TestGetIssue_Forbidden(t *testing.T) {
 	c.SetPath("/api/v1/issues/:id")
 	c.SetParamNames("id")
 	c.SetParamValues(issueID.String())
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.GetIssue(c)
@@ -685,7 +686,7 @@ func TestGetIssue_InvalidID(t *testing.T) {
 	c.SetPath("/api/v1/issues/:id")
 	c.SetParamNames("id")
 	c.SetParamValues("invalid-uuid")
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.GetIssue(c)
@@ -719,7 +720,7 @@ func TestListIssues_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.ListIssues(c)
@@ -755,7 +756,7 @@ func TestListIssues_WithPagination(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?limit=10&offset=20", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.ListIssues(c)
@@ -784,7 +785,7 @@ func TestListIssues_LimitExceedsMaximum(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?limit=200", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.ListIssues(c)
@@ -811,7 +812,7 @@ func TestListIssues_InvalidLimit(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?limit=invalid", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.ListIssues(c)
@@ -838,7 +839,7 @@ func TestListIssues_InvalidOffset(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?offset=invalid", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.ListIssues(c)
@@ -866,7 +867,7 @@ func TestListIssues_EmptyResult(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user_id", userID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
 
 	// Execute
 	err := handler.ListIssues(c)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
@@ -104,21 +105,15 @@ func (h *IssueHandler) CreateIssue(c echo.Context) error {
 		})
 	}
 
-	// Get authenticated user ID from context
-	userIDStr, ok := c.Get("user_id").(string)
-	if !ok || userIDStr == "" {
+	// Get authenticated user from context
+	claims, ok := c.Get("user").(*auth.Claims)
+	if !ok || claims == nil {
 		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
 			"error": "User not authenticated",
 		})
 	}
 
-	authorID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		h.logger.Error("Failed to parse user_id", zap.String("user_id", userIDStr), zap.Error(err))
-		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
-			"error": "Invalid user ID",
-		})
-	}
+	authorID := claims.UserID
 
 	// Set default risk level if not provided
 	riskLevel := models.RiskLevelMedium
@@ -166,21 +161,15 @@ func (h *IssueHandler) CreateIssue(c echo.Context) error {
 func (h *IssueHandler) GetIssue(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	// Get authenticated user ID from context
-	userIDStr, ok := c.Get("user_id").(string)
-	if !ok || userIDStr == "" {
+	// Get authenticated user from context
+	claims, ok := c.Get("user").(*auth.Claims)
+	if !ok || claims == nil {
 		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
 			"error": "User not authenticated",
 		})
 	}
 
-	authorID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		h.logger.Error("Failed to parse user_id", zap.String("user_id", userIDStr), zap.Error(err))
-		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
-			"error": "Invalid user ID",
-		})
-	}
+	authorID := claims.UserID
 
 	// Parse issue ID from URL
 	issueIDStr := c.Param("id")
@@ -227,21 +216,15 @@ type ListIssuesResponse struct {
 func (h *IssueHandler) ListIssues(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	// Get authenticated user ID from context
-	userIDStr, ok := c.Get("user_id").(string)
-	if !ok || userIDStr == "" {
-		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+	// Get authenticated user from context
+	claims, ok := c.Get("user").(*auth.Claims)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]any{
 			"error": "User not authenticated",
 		})
 	}
 
-	authorID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		h.logger.Error("Failed to parse user_id", zap.String("user_id", userIDStr), zap.Error(err))
-		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
-			"error": "Invalid user ID",
-		})
-	}
+	authorID := claims.UserID
 
 	// Parse pagination parameters
 	limit := 50 // default
