@@ -11,13 +11,13 @@ type User struct {
 	ID               uuid.UUID  `json:"id"                   db:"id"`
 	Email            string     `json:"email"                db:"email"`
 	PasswordHash     string     `json:"-"                    db:"password_hash"`
-	DisplayName      string     `json:"display_name"         db:"display_name"`
+	DisplayName      *string    `json:"display_name"         db:"display_name"`
 	OrganizationRole string     `json:"organization_role"    db:"organization_role"`
 	IsActive         bool       `json:"is_active"            db:"is_active"`
-	OAuthProvider    string     `json:"oauth_provider"       db:"oauth_provider"`
-	OAuthID          string     `json:"oauth_id"             db:"oauth_id"`
+	OAuthProvider    *string    `json:"oauth_provider"       db:"oauth_provider"`
+	OAuthID          *string    `json:"oauth_id"             db:"oauth_id"`
 	TwoFactorEnabled bool       `json:"two_factor_enabled"   db:"two_factor_enabled"`
-	TwoFactorSecret  string     `json:"-"                    db:"two_factor_secret"`
+	TwoFactorSecret  *string    `json:"-"                    db:"two_factor_secret"`
 	LastLogin        *time.Time `json:"last_login,omitempty" db:"last_login_at"`
 	CreatedAt        time.Time  `json:"created_at"           db:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"           db:"updated_at"`

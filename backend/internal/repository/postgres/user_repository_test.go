@@ -34,7 +34,7 @@ func TestUserRepository_Create(t *testing.T) {
 		PasswordHash:     "hashedpassword",
 		OrganizationRole: "OrganizationDeveloper",
 		TwoFactorEnabled: false,
-		TwoFactorSecret:  "",
+		TwoFactorSecret:  nil,
 		IsActive:         true,
 	}
 
@@ -160,13 +160,14 @@ func TestUserRepository_Update(t *testing.T) {
 	repo := NewUserRepository(db)
 	ctx := context.Background()
 
+	secret := "secret"
 	user := &models.User{
 		ID:               uuid.New(),
 		Email:            "updated@example.com",
 		PasswordHash:     "newhashedpassword",
 		OrganizationRole: "OrganizationAdmin",
 		TwoFactorEnabled: true,
-		TwoFactorSecret:  "secret",
+		TwoFactorSecret:  &secret,
 		IsActive:         true,
 		CreatedAt:        time.Now(),
 	}
