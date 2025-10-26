@@ -20,6 +20,8 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { ChevronDown, FolderGit2, Check } from 'lucide-react';
+import { useCurrentProject, useSetCurrentProject } from '@/store';
+import type { Project } from '@/lib/api/types';
 
 /**
  * Breadcrumb item configuration
@@ -34,16 +36,6 @@ export interface BreadcrumbItemConfig {
 }
 
 /**
- * Project configuration for the project selector
- */
-export interface ProjectConfig {
-  /** Unique identifier for the project */
-  id: string;
-  /** Project display name */
-  name: string;
-}
-
-/**
  * Default layout component props
  */
 export interface DefaultLayoutProps {
@@ -52,31 +44,37 @@ export interface DefaultLayoutProps {
   /** Breadcrumb items to display in the header */
   breadcrumbs?: BreadcrumbItemConfig[];
   /** List of available projects for the dropdown */
-  projects?: ProjectConfig[];
-  /** Currently selected project ID */
-  currentProjectId?: string;
-  /** Callback when a project is selected */
-  onProjectChange?: (projectId: string) => void;
+  projects?: Project[];
 }
 
 /**
  * Default application layout with sidebar and breadcrumb navigation.
  * Provides a consistent layout structure across authenticated pages.
  *
+ * The layout uses Zustand store for managing the currently selected project.
+ * Pass the list of available projects via the `projects` prop, and the component
+ * will handle selection automatically using the global store.
+ *
  * @param children - The main page content
  * @param breadcrumbs - Optional breadcrumb navigation items
  * @param projects - Optional list of projects for the dropdown selector
- * @param currentProjectId - Currently selected project ID
- * @param onProjectChange - Callback when a project is selected
  */
 export const DefaultLayout: React.FC<DefaultLayoutProps> = ({
   children,
   breadcrumbs = [],
   projects = [],
-  currentProjectId,
-  onProjectChange,
 }) => {
-  const currentProject = projects.find((p) => p.id === currentProjectId);
+  // Get current project from Zustand store
+  const currentProject = useCurrentProject();
+  const setCurrentProject = useSetCurrentProject();
+
+  // Handler for project selection
+  const handleProjectChange = (projectId: string) => {
+    const selectedProject = projects.find((p) => p.id === projectId);
+    if (selectedProject) {
+      setCurrentProject(selectedProject);
+    }
+  };
 
   return (
     <SidebarProvider>
@@ -92,12 +90,12 @@ export const DefaultLayout: React.FC<DefaultLayoutProps> = ({
               <>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 gap-2 px-2">
+                    <Button variant="ghost" className="h-8 gap-2 px-2 justify-start">
                       <FolderGit2 className="size-4" />
                       <span className="hidden md:inline-block text-muted-foreground text-xs">
                         {currentProject?.name || 'Select Project'}
                       </span>
-                      <ChevronDown className="size-4 opacity-50" />
+                      <ChevronDown className="size-4 opacity-50 ml-auto" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-56">
@@ -108,14 +106,14 @@ export const DefaultLayout: React.FC<DefaultLayoutProps> = ({
                     {projects.map((project) => (
                       <DropdownMenuItem
                         key={project.id}
-                        onClick={() => onProjectChange?.(project.id)}
+                        onClick={() => handleProjectChange(project.id)}
                         className="flex items-center justify-between cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
                           <FolderGit2 className="size-4" />
                           <span>{project.name}</span>
                         </div>
-                        {project.id === currentProjectId && <Check className="size-4" />}
+                        {project.id === currentProject?.id && <Check className="size-4" />}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>

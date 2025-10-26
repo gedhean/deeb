@@ -1,17 +1,42 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { DefaultLayout } from '@/components/layouts';
+import { useCurrentProject, useSetCurrentProject } from '@/store';
 
 export const DashboardPage: React.FC = () => {
+  const currentProject = useCurrentProject();
+  const setCurrentProject = useSetCurrentProject();
+
+  // Mock projects data - replace with actual API call
+  const projects = useMemo(
+    () => [
+      {
+        id: '1',
+        name: 'Project Alpha',
+        description: 'Alpha project',
+        created_at: '',
+        updated_at: '',
+      },
+      {
+        id: '2',
+        name: 'Project Beta',
+        description: 'Beta project',
+        created_at: '',
+        updated_at: '',
+      },
+    ],
+    [],
+  );
+
+  // Set default project if none is selected
+  useEffect(() => {
+    if (!currentProject && projects.length > 0) {
+      setCurrentProject(projects[0]);
+    }
+  }, [currentProject, setCurrentProject, projects]);
+
   return (
     <DefaultLayout
-      projects={[
-        { id: '1', name: 'Project Alpha' },
-        { id: '2', name: 'Project Beta' },
-      ]}
-      currentProjectId="1"
-      onProjectChange={(projectId) => {
-        console.log('Project changed to:', projectId);
-      }}
+      projects={projects}
       breadcrumbs={[
         {
           label: 'Building Your Application',
