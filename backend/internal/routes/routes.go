@@ -70,6 +70,7 @@ func setupAuthRoutes(
 		cfg.Auth.GoogleClientID,
 		cfg.Auth.GoogleClientSecret,
 		cfg.Auth.CallbackURL,
+		cfg.Server.FrontendURL,
 		logger.Get(),
 	)
 

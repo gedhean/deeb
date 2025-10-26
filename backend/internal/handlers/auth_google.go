@@ -28,6 +28,7 @@ type GoogleOAuthHandler struct {
 	oauthConfig  *oauth2.Config
 	logger       *zap.Logger
 	states       map[string]time.Time // In-memory state tracking for CSRF protection
+	redirectURL  string               // Frontend URL for OAuth redirects
 }
 
 // NewGoogleOAuthHandler creates a new Google OAuth handler
@@ -37,6 +38,7 @@ func NewGoogleOAuthHandler(
 	clientID string,
 	clientSecret string,
 	callbackURL string,
+	redirectURL string,
 	logger *zap.Logger,
 ) *GoogleOAuthHandler {
 	return &GoogleOAuthHandler{
@@ -52,8 +54,9 @@ func NewGoogleOAuthHandler(
 			},
 			Endpoint: google.Endpoint,
 		},
-		logger: logger,
-		states: make(map[string]time.Time),
+		logger:      logger,
+		states:      make(map[string]time.Time),
+		redirectURL: redirectURL,
 	}
 }
 
@@ -61,7 +64,7 @@ func NewGoogleOAuthHandler(
 type GoogleUserInfo struct {
 	Email         string `json:"email"`
 	Name          string `json:"name"`
-	EmailVerified bool   `json:"email_verified"`
+	VerifiedEmail bool   `json:"verified_email"`
 }
 
 // InitiateGoogleAuth handles GET /api/v1/auth/google.
@@ -148,7 +151,7 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 	}
 
 	// Validate email is verified
-	if !userInfo.EmailVerified {
+	if !userInfo.VerifiedEmail {
 		h.logger.Warn("Google OAuth with unverified email", zap.String("email", userInfo.Email))
 		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "email not verified with Google"})
 	}
@@ -218,7 +221,7 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 	c.SetCookie(cookie)
 
 	// Redirect to frontend dashboard after successful OAuth
-	return c.Redirect(http.StatusFound, "/dashboard")
+	return c.Redirect(http.StatusFound, h.redirectURL+"/dashboard")
 }
 
 // fetchGoogleUserInfo fetches user information from Google using the access token

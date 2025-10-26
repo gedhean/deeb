@@ -28,6 +28,7 @@ func TestGoogleOAuthRedirect(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -71,6 +72,7 @@ func TestGoogleOAuthRedirect_WrongMethod(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -97,6 +99,7 @@ func TestGoogleOAuthCallback_MissingState(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -128,6 +131,7 @@ func TestGoogleOAuthCallback_InvalidState(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -159,6 +163,7 @@ func TestGoogleOAuthCallback_ExpiredState(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -198,6 +203,7 @@ func TestGoogleOAuthCallback_ErrorFromGoogle(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -233,6 +239,7 @@ func TestGoogleOAuthCallback_MissingCode(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -268,6 +275,7 @@ func TestGoogleOAuthCallback_WrongMethod(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -308,6 +316,7 @@ func TestGenerateStateToken(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -340,6 +349,7 @@ func TestStateCleanup(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 
@@ -377,6 +387,7 @@ func TestOAuthConfig(t *testing.T) {
 		"test-client-id",
 		"test-client-secret",
 		"http://localhost:8080/callback",
+		"http://localhost:3000",
 		logger,
 	)
 

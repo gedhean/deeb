@@ -32,6 +32,7 @@ type ServerConfig struct {
 	WriteTimeout    time.Duration `yaml:"write_timeout"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
 	CORSOrigins     []string      `yaml:"cors_origins"`
+	FrontendURL     string        `yaml:"frontend_url"`
 }
 
 // DatabaseConfig holds database connection configuration
@@ -45,8 +46,8 @@ type DatabaseConfig struct {
 	MaxOpenConns    int           `yaml:"max_open_conns"`
 	MaxIdleConns    int           `yaml:"max_idle_conns"`
 	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
-	AutoMigrate     bool          `yaml:"auto_migrate"`      // Run migrations automatically at startup
-	MigrationsPath  string        `yaml:"migrations_path"`   // Path to migration files
+	AutoMigrate     bool          `yaml:"auto_migrate"`    // Run migrations automatically at startup
+	MigrationsPath  string        `yaml:"migrations_path"` // Path to migration files
 }
 
 // AuthConfig holds authentication configuration
@@ -115,6 +116,7 @@ func (c *Config) setDefaults() {
 	c.Server.WriteTimeout = 10 * time.Second
 	c.Server.ShutdownTimeout = 30 * time.Second
 	c.Server.CORSOrigins = []string{"http://localhost:3000"}
+	c.Server.FrontendURL = "http://localhost:3000"
 
 	// Database defaults
 	c.Database.Host = "localhost"
@@ -166,6 +168,9 @@ func (c *Config) loadFromEnv() {
 		if port, err := strconv.Atoi(v); err == nil {
 			c.Server.Port = port
 		}
+	}
+	if v := os.Getenv("FRONTEND_URL"); v != "" {
+		c.Server.FrontendURL = v
 	}
 
 	// Database - check DATABASE_URL first, then individual env vars
