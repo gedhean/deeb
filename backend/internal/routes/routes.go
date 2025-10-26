@@ -38,7 +38,7 @@ func Setup(
 	setupProjectRoutes(e, projectRepo)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo)
 	setupDatabaseRoutes(e, dbRepo)
-	setupIssueRoutes(e, issueRepo)
+	setupIssueRoutes(e, issueRepo, tokenManager)
 
 	// Setup Swagger documentation
 	SetupSwaggerRoutes(e)
@@ -151,10 +151,13 @@ func setupDatabaseRoutes(e *echo.Echo, dbRepo repository.DatabaseRepository) {
 }
 
 // setupIssueRoutes registers issue management routes
-func setupIssueRoutes(e *echo.Echo, issueRepo repository.IssueRepository) {
+func setupIssueRoutes(e *echo.Echo, issueRepo repository.IssueRepository, tokenManager *auth.TokenManager) {
 	issueHandler := handlers.NewIssueHandler(issueRepo, logger.Get())
 	issuesGroup := e.Group("/api/v1/issues")
 
-	// TODO: Add authentication middleware for protected routes
-	issuesGroup.POST("", issueHandler.CreateIssue)
+	// Authentication middleware for protected routes
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+
+	// All issue routes require authentication
+	issuesGroup.POST("", issueHandler.CreateIssue, authMiddleware.Authenticate)
 }
