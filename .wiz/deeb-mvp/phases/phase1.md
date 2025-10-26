@@ -759,12 +759,12 @@ Create integration tests for registration and login API endpoints.
 Create OpenAPI 3.0 specification for authentication and user management endpoints.
 
 **Acceptance Criteria**
-- [ ] openapi.yaml created in api/ directory
-- [ ] Authentication endpoints documented
-- [ ] User management endpoints documented
-- [ ] Request/response schemas defined
-- [ ] Error responses documented
-- [ ] Swagger UI accessible at /api/docs
+- [x] openapi.yaml created in api/ directory
+- [x] Authentication endpoints documented (6 endpoints: register, login, logout, google, google/callback, me)
+- [x] User management endpoints documented (2 endpoints: users, users/{id})
+- [x] Request/response schemas defined (15 schemas total)
+- [x] Error responses documented (BadRequest, Unauthorized, Forbidden, NotFound, InternalServerError)
+- [x] Swagger UI accessible at /api/docs
 
 ---
 

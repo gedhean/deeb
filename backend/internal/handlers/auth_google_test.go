@@ -276,7 +276,7 @@ func TestGoogleOAuthCallback_WrongMethod(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	err = handler.GoogleCallback(c)
+	_ = handler.GoogleCallback(c)
 
 	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 }

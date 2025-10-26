@@ -6,13 +6,11 @@ info:
     without requiring direct database access.
 
     ## Authentication
-
     Most endpoints require authentication via JWT tokens. After successful login, a JWT token
     is set as an HttpOnly cookie named `token`. This cookie is automatically included in
     subsequent requests.
 
     ## Error Responses
-
     All endpoints may return standard error responses:
     - 400 Bad Request - Invalid request parameters
     - 401 Unauthorized - Authentication required or token invalid
@@ -24,13 +22,11 @@ info:
     name: Deeb API Support
   license:
     name: MIT
-
 servers:
   - url: http://localhost:8080
     description: Local development server
   - url: https://api.deeb.example.com
     description: Production server
-
 tags:
   - name: Health
     description: Health check endpoints
@@ -38,12 +34,10 @@ tags:
     description: User authentication and registration
   - name: Users
     description: User management operations
-
 paths:
   /health:
     get:
-      tags:
-        - Health
+      tags: [Health]
       summary: Health check
       description: Check if the API server is healthy and responding
       operationId: healthCheck
@@ -56,12 +50,10 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
               example:
                 status: ok
-                timestamp: "2025-01-26T12:00:00Z"
-
+                timestamp: '2025-01-26T12:00:00Z'
   /api/v1/auth/register:
     post:
-      tags:
-        - Authentication
+      tags: [Authentication]
       summary: Register new user
       description: |
         Create a new user account. The first user registered automatically becomes
@@ -90,16 +82,14 @@ paths:
                   email: user@example.com
                   organization_role: developer
                   is_active: true
-                  created_at: "2025-01-26T12:00:00Z"
+                  created_at: '2025-01-26T12:00:00Z'
         '400':
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalServerError'
-
   /api/v1/auth/login:
     post:
-      tags:
-        - Authentication
+      tags: [Authentication]
       summary: Login user
       description: |
         Authenticate a user with email and password. On success, sets an HttpOnly
@@ -139,11 +129,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
-
   /api/v1/auth/logout:
     post:
-      tags:
-        - Authentication
+      tags: [Authentication]
       summary: Logout user
       description: |
         Logout the current user by clearing the authentication cookie.
@@ -167,11 +155,9 @@ paths:
                 message: Logged out successfully
         '401':
           $ref: '#/components/responses/Unauthorized'
-
   /api/v1/auth/google:
     get:
-      tags:
-        - Authentication
+      tags: [Authentication]
       summary: Initiate Google OAuth
       description: |
         Redirect to Google OAuth consent screen to initiate authentication flow.
@@ -185,11 +171,9 @@ paths:
               schema:
                 type: string
                 example: https://accounts.google.com/o/oauth2/v2/auth?client_id=...
-
   /api/v1/auth/google/callback:
     get:
-      tags:
-        - Authentication
+      tags: [Authentication]
       summary: Google OAuth callback
       description: |
         Handle the callback from Google OAuth. On success, sets an HttpOnly cookie
@@ -227,11 +211,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
-
   /api/v1/auth/me:
     get:
-      tags:
-        - Authentication
+      tags: [Authentication]
       summary: Get current user
       description: |
         Retrieve the profile information of the currently authenticated user.
@@ -250,16 +232,14 @@ paths:
                 email: user@example.com
                 organization_role: developer
                 is_active: true
-                created_at: "2025-01-26T12:00:00Z"
+                created_at: '2025-01-26T12:00:00Z'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
-
   /api/v1/users:
     get:
-      tags:
-        - Users
+      tags: [Users]
       summary: List all users
       description: |
         Retrieve a list of all users in the organization. Requires authentication.
@@ -295,12 +275,12 @@ paths:
                     email: user1@example.com
                     organization_role: admin
                     is_active: true
-                    created_at: "2025-01-26T12:00:00Z"
+                    created_at: '2025-01-26T12:00:00Z'
                   - id: 223e4567-e89b-12d3-a456-426614174001
                     email: user2@example.com
                     organization_role: developer
                     is_active: true
-                    created_at: "2025-01-26T12:00:00Z"
+                    created_at: '2025-01-26T12:00:00Z'
                 total: 2
                 page: 1
                 limit: 20
@@ -308,11 +288,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
-
   /api/v1/users/{id}:
     get:
-      tags:
-        - Users
+      tags: [Users]
       summary: Get user by ID
       description: |
         Retrieve detailed information about a specific user.
@@ -340,7 +318,7 @@ paths:
                 email: user@example.com
                 organization_role: developer
                 is_active: true
-                created_at: "2025-01-26T12:00:00Z"
+                created_at: '2025-01-26T12:00:00Z'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -349,10 +327,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-
     put:
-      tags:
-        - Users
+      tags: [Users]
       summary: Update user
       description: |
         Update user information. Users can update their own profile, or admins
@@ -391,7 +367,7 @@ paths:
                 email: newemail@example.com
                 organization_role: senior_developer
                 is_active: true
-                updated_at: "2025-01-26T12:30:00Z"
+                updated_at: '2025-01-26T12:30:00Z'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -402,10 +378,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-
     delete:
-      tags:
-        - Users
+      tags: [Users]
       summary: Delete user
       description: |
         Soft delete a user by setting is_active to false. Requires admin permissions.
@@ -434,7 +408,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-
 components:
   securitySchemes:
     cookieAuth:
@@ -442,13 +415,10 @@ components:
       in: cookie
       name: token
       description: JWT token stored in HttpOnly cookie
-
   schemas:
     HealthResponse:
       type: object
-      required:
-        - status
-        - timestamp
+      required: [status, timestamp]
       properties:
         status:
           type: string
@@ -456,13 +426,10 @@ components:
         timestamp:
           type: string
           format: date-time
-          example: "2025-01-26T12:00:00Z"
-
+          example: '2025-01-26T12:00:00Z'
     RegisterRequest:
       type: object
-      required:
-        - email
-        - password
+      required: [email, password]
       properties:
         email:
           type: string
@@ -477,28 +444,19 @@ components:
           example: SecureP@ssw0rd
         organization_role:
           type: string
-          enum:
-            - admin
-            - senior_developer
-            - developer
-            - read_only
+          enum: [admin, senior_developer, developer, read_only]
           description: |
             Role within the organization. First registered user becomes admin automatically.
           example: developer
-
     RegisterResponse:
       type: object
-      required:
-        - user
+      required: [user]
       properties:
         user:
           $ref: '#/components/schemas/UserResponse'
-
     LoginRequest:
       type: object
-      required:
-        - email
-        - password
+      required: [email, password]
       properties:
         email:
           type: string
@@ -510,11 +468,9 @@ components:
           format: password
           description: User password
           example: SecureP@ssw0rd
-
     LoginResponse:
       type: object
-      required:
-        - user
+      required: [user]
       properties:
         token:
           type: string
@@ -523,15 +479,9 @@ components:
             JWT token (deprecated - token is now set as HttpOnly cookie)
         user:
           $ref: '#/components/schemas/UserResponse'
-
     UserResponse:
       type: object
-      required:
-        - id
-        - email
-        - organization_role
-        - is_active
-        - created_at
+      required: [id, email, organization_role, is_active, created_at]
       properties:
         id:
           type: string
@@ -545,18 +495,14 @@ components:
           example: user@example.com
         organization_role:
           type: string
-          enum:
-            - admin
-            - senior_developer
-            - developer
-            - read_only
+          enum: [admin, senior_developer, developer, read_only]
           description: User's role within the organization
           example: developer
         google_id:
           type: string
           nullable: true
           description: Google OAuth user ID (if authenticated via Google)
-          example: "1234567890"
+          example: '1234567890'
         is_active:
           type: boolean
           description: Whether the user account is active
@@ -565,21 +511,16 @@ components:
           type: string
           format: date-time
           description: Timestamp when user was created
-          example: "2025-01-26T12:00:00Z"
+          example: '2025-01-26T12:00:00Z'
         updated_at:
           type: string
           format: date-time
           nullable: true
           description: Timestamp when user was last updated
-          example: "2025-01-26T12:30:00Z"
-
+          example: '2025-01-26T12:30:00Z'
     UserListResponse:
       type: object
-      required:
-        - users
-        - total
-        - page
-        - limit
+      required: [users, total, page, limit]
       properties:
         users:
           type: array
@@ -597,7 +538,6 @@ components:
           type: integer
           description: Number of items per page
           example: 20
-
     UpdateUserRequest:
       type: object
       properties:
@@ -614,38 +554,29 @@ components:
           example: NewSecureP@ssw0rd
         organization_role:
           type: string
-          enum:
-            - admin
-            - senior_developer
-            - developer
-            - read_only
+          enum: [admin, senior_developer, developer, read_only]
           description: New organization role
           example: senior_developer
         is_active:
           type: boolean
           description: Whether the user account is active
           example: true
-
     MessageResponse:
       type: object
-      required:
-        - message
+      required: [message]
       properties:
         message:
           type: string
           description: Success or informational message
           example: Operation completed successfully
-
     ErrorResponse:
       type: object
-      required:
-        - error
+      required: [error]
       properties:
         error:
           type: string
           description: Error message
           example: Invalid request parameters
-
   responses:
     BadRequest:
       description: Bad Request - Invalid request parameters
@@ -655,7 +586,6 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             error: Invalid request parameters
-
     Unauthorized:
       description: Unauthorized - Authentication required or token invalid
       content:
@@ -664,7 +594,6 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             error: Authentication required
-
     Forbidden:
       description: Forbidden - Insufficient permissions
       content:
@@ -673,7 +602,6 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             error: Insufficient permissions
-
     NotFound:
       description: Not Found - Resource not found
       content:
@@ -682,7 +610,6 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             error: Resource not found
-
     InternalServerError:
       description: Internal Server Error
       content:

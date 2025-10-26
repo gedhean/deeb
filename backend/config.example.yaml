@@ -6,7 +6,7 @@ server:
   read_timeout: 10s  # HTTP read timeout
   write_timeout: 10s  # HTTP write timeout
   shutdown_timeout: 30s  # Graceful shutdown timeout
-  cors_origins: ['http://localhost:3000', 'https://deeb.yourdomain.com']  # Allowed CORS origins
+  cors_origins: [http://localhost:3000, https://deeb.yourdomain.com]  # Allowed CORS origins
 database:
   host: localhost  # PostgreSQL host
   port: 5432  # PostgreSQL port
