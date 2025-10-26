@@ -1,0 +1,66 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: deeb-postgres-dev
+    environment:
+      POSTGRES_USER: deeb
+      POSTGRES_PASSWORD: deeb_dev_password
+      POSTGRES_DB: deeb
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U deeb -d deeb]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - deeb-network-dev
+
+  # Backend API Server with Air (live reload)
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: deeb-backend-dev
+    environment:
+      DATABASE_URL: postgresql://deeb:deeb_dev_password@postgres:5432/deeb?sslmode=disable
+      SERVER_PORT: 8080
+      SERVER_HOST: 0.0.0.0
+      SERVER_SHUTDOWN_TIMEOUT: 30s
+      SERVER_CORS_ORIGINS: http://localhost:3000,http://localhost:3001,http://localhost:5173
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+      JWT_SECRET: fb4303a325037fa21137eda466828030550592f49fea476964bada4e84faadb0
+      JWT_EXPIRATION: 24h
+      ENCRYPTION_KEY: '12345678901234567890123456789012'
+    ports:
+      - '8080:8080'
+    volumes:
+      # Mount source code for live reload
+      - ..:/app
+      # Exclude vendor and tmp directories
+      - /app/vendor
+      - /app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - deeb-network-dev
+    healthcheck:
+      test: [CMD, wget, --no-verbose, --tries=1, --spider, 'http://localhost:8080/health']
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  postgres_data_dev:
+    driver: local
+
+networks:
+  deeb-network-dev:
+    driver: bridge

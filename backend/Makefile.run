@@ -11,3 +11,22 @@ docker-stop:
 run:
 	@PROJECT_NAME=${PROJECT_NAME} docker compose -p ${PROJECT_NAME} -f docker/docker-compose.yaml \
 		up --build --remove-orphans
+
+.PHONY: run-air
+run-air:
+	@echo
+	@echo "Starting development server with Air (live reload)..."
+	@PROJECT_NAME=${PROJECT_NAME}-dev docker compose -p ${PROJECT_NAME}-dev -f docker/docker-compose.dev.yaml \
+		up --build --remove-orphans
+
+.PHONY: docker-stop-dev
+docker-stop-dev:
+	@echo
+	@echo "Stopping development docker containers..."
+	@PROJECT_NAME=${PROJECT_NAME}-dev docker compose -p ${PROJECT_NAME}-dev -f docker/docker-compose.dev.yaml stop
+
+.PHONY: docker-down-dev
+docker-down-dev:
+	@echo
+	@echo "Stopping and removing development docker containers..."
+	@PROJECT_NAME=${PROJECT_NAME}-dev docker compose -p ${PROJECT_NAME}-dev -f docker/docker-compose.dev.yaml down

@@ -1,12 +1,4 @@
-.PHONY: help test test-verbose test-coverage test-integration
-
-# Default target
-help:
-	@echo "Available targets:"
-	@echo "  test             - Run unit tests using gotestsum"
-	@echo "  test-integration - Run integration tests with testcontainers"
-	@echo "  test-verbose     - Run tests with verbose output"
-	@echo "  test-coverage    - Run tests with coverage report"
+.PHONY: test test-verbose test-coverage test-integration
 
 # Install gotestsum if not present
 ensure-gotestsum:
