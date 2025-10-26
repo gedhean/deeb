@@ -17,7 +17,7 @@ format-go: format-setup
 .PHONY: format-yaml
 format-yaml: format-setup
 	@echo "Formatting `echo $(YAML_SOURCES) | tr ' ' '\n' | wc -l` .yaml files..."
-	@yamlfmt -conf yamlfmt.yml .
+	@yamlfmt -conf yamlfmt.yml $(YAML_SOURCES)
 
 .PHONY: format-setup
 format-setup:

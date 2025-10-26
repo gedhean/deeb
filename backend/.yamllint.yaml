@@ -1,5 +1,15 @@
 extends: default
+ignore: |
+  vendor/
+  tmp/
+  .git/
 rules:
   document-start: disable
   line-length: disable
   truthy: disable
+  comments-indentation: disable
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+  hyphens:
+    max-spaces-after: 1

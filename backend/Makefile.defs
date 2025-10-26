@@ -18,7 +18,4 @@ GOLANG_SOURCES := $(shell find . -type f -name '*.go' -not -path "./scripts/*" -
 GOLANG_PACKAGES := $(shell /bin/bash -c 'go list ./... | grep -v "/test" | grep -v "/gen/" | sed -e "s|${GHROOT}/${GHUSER}/${PROJECT_NAME}||g" | sed -e "s@^/@@g" | xargs -I {} echo "./{}"')
 
 # Yaml Sources
-YAML_SOURCES := $(shell find . -type f -name '*.yaml' | grep -v kubernetes/ | grep -v docker/ | grep -v ./.golangci.yaml)
-
-# Yaml Sources
-YAML_SOURCES := $(shell find . -type f -name '*.yaml' | grep -v kubernetes/)
+YAML_SOURCES := $(shell find . -type f -name '*.yaml' -not -path "./vendor/*" -not -path "./tmp/*" -not -path "./kubernetes/*" -not -path "./docker/*" -not -path "./.golangci.yaml")
