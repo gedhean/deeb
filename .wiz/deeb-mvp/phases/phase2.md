@@ -85,19 +85,19 @@ Create GET endpoints for retrieving individual issues and listing issues.
 
 ### P02M04: Implement issue update endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M04
 
 **Goal**
 Create PUT /api/v1/issues/:id endpoint for updating issues in Draft status.
 
 **Acceptance Criteria**
-- [ ] Endpoint defined: PUT /api/v1/issues/:id
-- [ ] Only Draft issues can be updated
-- [ ] Only issue author can update
-- [ ] Validation applied to updated fields
-- [ ] 403 Forbidden if user is not author or issue not in Draft
-- [ ] Integration tests passing
+- [x] Endpoint defined: PUT /api/v1/issues/:id
+- [x] Only Draft issues can be updated
+- [x] Only issue author can update
+- [x] Validation applied to updated fields
+- [x] 403 Forbidden if user is not author or issue not in Draft
+- [x] Integration tests passing
 
 ---
 

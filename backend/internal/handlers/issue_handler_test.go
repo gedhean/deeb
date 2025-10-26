@@ -882,3 +882,309 @@ func TestListIssues_EmptyResult(t *testing.T) {
 	assert.Len(t, response.Issues, 0)
 	assert.Equal(t, 0, response.Total)
 }
+
+func TestUpdateIssue_Success(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	issueID := uuid.New()
+	projectID := uuid.New()
+	targetDatabaseID := uuid.New()
+
+	// Create initial issue in Draft status
+	issue := &models.Issue{
+		ID:               issueID,
+		ProjectID:        projectID,
+		Title:            "Original Title",
+		Description:      "Original Description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE test (id INT);",
+		TargetDatabaseID: targetDatabaseID,
+		AuthorID:         userID,
+		Status:           models.IssueStatusDraft,
+		RiskLevel:        models.RiskLevelMedium,
+	}
+	mockRepo.issues = append(mockRepo.issues, issue)
+
+	// Prepare update request
+	title := "Updated Title"
+	description := "Updated Description"
+	updateReq := UpdateIssueRequest{
+		Title:       &title,
+		Description: &description,
+	}
+	body, _ := json.Marshal(updateReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/issues/"+issueID.String(), strings.NewReader(string(body)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(issueID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.UpdateIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response models.Issue
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Updated Title", response.Title)
+	assert.Equal(t, "Updated Description", response.Description)
+	assert.Equal(t, models.IssueStatusDraft, response.Status)
+}
+
+func TestUpdateIssue_OnlyDraftCanBeUpdated(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	issueID := uuid.New()
+	projectID := uuid.New()
+	targetDatabaseID := uuid.New()
+
+	// Create issue in PendingReview status
+	issue := &models.Issue{
+		ID:               issueID,
+		ProjectID:        projectID,
+		Title:            "Original Title",
+		Description:      "Original Description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE test (id INT);",
+		TargetDatabaseID: targetDatabaseID,
+		AuthorID:         userID,
+		Status:           models.IssueStatusPendingReview,
+		RiskLevel:        models.RiskLevelMedium,
+	}
+	mockRepo.issues = append(mockRepo.issues, issue)
+
+	// Prepare update request
+	title := "Updated Title"
+	updateReq := UpdateIssueRequest{
+		Title: &title,
+	}
+	body, _ := json.Marshal(updateReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/issues/"+issueID.String(), strings.NewReader(string(body)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(issueID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.UpdateIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Only issues in Draft status can be updated")
+}
+
+func TestUpdateIssue_OnlyAuthorCanUpdate(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	authorID := uuid.New()
+	otherUserID := uuid.New()
+	issueID := uuid.New()
+	projectID := uuid.New()
+	targetDatabaseID := uuid.New()
+
+	// Create issue with different author
+	issue := &models.Issue{
+		ID:               issueID,
+		ProjectID:        projectID,
+		Title:            "Original Title",
+		Description:      "Original Description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE test (id INT);",
+		TargetDatabaseID: targetDatabaseID,
+		AuthorID:         authorID,
+		Status:           models.IssueStatusDraft,
+		RiskLevel:        models.RiskLevelMedium,
+	}
+	mockRepo.issues = append(mockRepo.issues, issue)
+
+	// Prepare update request from different user
+	title := "Updated Title"
+	updateReq := UpdateIssueRequest{
+		Title: &title,
+	}
+	body, _ := json.Marshal(updateReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/issues/"+issueID.String(), strings.NewReader(string(body)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(issueID.String())
+	c.Set("user", &auth.Claims{UserID: otherUserID})
+
+	// Execute
+	err := handler.UpdateIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Only the issue author can update the issue")
+}
+
+func TestUpdateIssue_ValidationApplied(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	issueID := uuid.New()
+	projectID := uuid.New()
+	targetDatabaseID := uuid.New()
+
+	// Create initial issue
+	issue := &models.Issue{
+		ID:               issueID,
+		ProjectID:        projectID,
+		Title:            "Original Title",
+		Description:      "Original Description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE test (id INT);",
+		TargetDatabaseID: targetDatabaseID,
+		AuthorID:         userID,
+		Status:           models.IssueStatusDraft,
+		RiskLevel:        models.RiskLevelMedium,
+	}
+	mockRepo.issues = append(mockRepo.issues, issue)
+
+	// Test empty title
+	emptyTitle := ""
+	updateReq := UpdateIssueRequest{
+		Title: &emptyTitle,
+	}
+	body, _ := json.Marshal(updateReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/issues/"+issueID.String(), strings.NewReader(string(body)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(issueID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.UpdateIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "title cannot be empty")
+}
+
+func TestUpdateIssue_NotFound(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	nonExistentID := uuid.New()
+
+	// Prepare update request
+	title := "Updated Title"
+	updateReq := UpdateIssueRequest{
+		Title: &title,
+	}
+	body, _ := json.Marshal(updateReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/issues/"+nonExistentID.String(), strings.NewReader(string(body)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(nonExistentID.String())
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.UpdateIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Issue not found")
+}
+
+func TestUpdateIssue_InvalidID(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	// Prepare update request
+	title := "Updated Title"
+	updateReq := UpdateIssueRequest{
+		Title: &title,
+	}
+	body, _ := json.Marshal(updateReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/issues/invalid-id", strings.NewReader(string(body)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/issues/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("invalid-id")
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.UpdateIssue(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Invalid issue ID format")
+}

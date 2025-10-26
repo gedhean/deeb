@@ -162,4 +162,5 @@ func setupIssueRoutes(e *echo.Echo, issueRepo repository.IssueRepository, tokenM
 	issuesGroup.POST("", issueHandler.CreateIssue, authMiddleware.Authenticate)
 	issuesGroup.GET("/:id", issueHandler.GetIssue, authMiddleware.Authenticate)
 	issuesGroup.GET("", issueHandler.ListIssues, authMiddleware.Authenticate)
+	issuesGroup.PUT("/:id", issueHandler.UpdateIssue, authMiddleware.Authenticate)
 }

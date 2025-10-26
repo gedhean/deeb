@@ -290,3 +290,145 @@ func (h *IssueHandler) ListIssues(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, response)
 }
+
+// UpdateIssueRequest represents the request body for updating an issue
+type UpdateIssueRequest struct {
+	Title            *string            `json:"title,omitempty"`
+	Description      *string            `json:"description,omitempty"`
+	ChangeType       *models.ChangeType `json:"change_type,omitempty"`
+	SQLContent       *string            `json:"sql_content,omitempty"`
+	RollbackSQL      *string            `json:"rollback_sql,omitempty"`
+	TargetDatabaseID *string            `json:"target_database_id,omitempty"`
+	RiskLevel        *models.RiskLevel  `json:"risk_level,omitempty"`
+}
+
+// UpdateIssue handles PUT /api/v1/issues/:id
+func (h *IssueHandler) UpdateIssue(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "User not authenticated",
+		})
+	}
+
+	authorID := claims.UserID
+
+	// Parse issue ID from URL
+	issueIDStr := c.Param("id")
+	issueID, err := uuid.Parse(issueIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid issue ID format",
+		})
+	}
+
+	// Retrieve existing issue from database
+	issue, err := h.issueRepo.GetByID(ctx, issueID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Issue not found",
+			})
+		}
+		h.logger.Error("Failed to retrieve issue", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve issue",
+		})
+	}
+
+	// Authorization check: only the issue author can update
+	if issue.AuthorID != authorID {
+		return c.JSON(http.StatusForbidden, map[string]interface{}{
+			"error": "Only the issue author can update the issue",
+		})
+	}
+
+	// Status check: only Draft issues can be updated
+	if issue.Status != models.IssueStatusDraft {
+		return c.JSON(http.StatusForbidden, map[string]interface{}{
+			"error": "Only issues in Draft status can be updated",
+		})
+	}
+
+	// Parse request body
+	var req UpdateIssueRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error("Failed to bind request", zap.Error(err))
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Update fields if provided
+	if req.Title != nil {
+		if *req.Title == "" {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "title cannot be empty",
+			})
+		}
+		issue.Title = *req.Title
+	}
+
+	if req.Description != nil {
+		if *req.Description == "" {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "description cannot be empty",
+			})
+		}
+		issue.Description = *req.Description
+	}
+
+	if req.ChangeType != nil {
+		issue.ChangeType = *req.ChangeType
+	}
+
+	if req.SQLContent != nil {
+		if *req.SQLContent == "" {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "sql_content cannot be empty",
+			})
+		}
+		// Validate SQL content size limit (10MB max)
+		if len(*req.SQLContent) > MaxSQLContentSize {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "sql_content exceeds maximum size of 10MB",
+			})
+		}
+		issue.SQLContent = *req.SQLContent
+	}
+
+	if req.RollbackSQL != nil {
+		issue.RollbackSQL = req.RollbackSQL
+	}
+
+	if req.TargetDatabaseID != nil {
+		targetDatabaseID, err := uuid.Parse(*req.TargetDatabaseID)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "invalid target_database_id format",
+			})
+		}
+		issue.TargetDatabaseID = targetDatabaseID
+	}
+
+	if req.RiskLevel != nil {
+		issue.RiskLevel = *req.RiskLevel
+	}
+
+	// Update issue in repository
+	if err := h.issueRepo.Update(ctx, issue); err != nil {
+		h.logger.Error("Failed to update issue", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to update issue",
+		})
+	}
+
+	h.logger.Info("Issue updated successfully",
+		zap.String("issue_id", issue.ID.String()),
+		zap.String("author_id", authorID.String()))
+
+	return c.JSON(http.StatusOK, issue)
+}
