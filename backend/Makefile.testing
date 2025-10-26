@@ -1,18 +1,12 @@
-.PHONY: help test test-verbose test-coverage clean build run migrate-up migrate-down lint fmt
+.PHONY: help test test-verbose test-coverage test-integration
 
 # Default target
 help:
 	@echo "Available targets:"
-	@echo "  test           - Run tests using gotestsum"
-	@echo "  test-verbose   - Run tests with verbose output"
-	@echo "  test-coverage  - Run tests with coverage report"
-	@echo "  clean          - Remove build artifacts"
-	@echo "  build          - Build the server binary"
-	@echo "  run            - Run the server"
-	@echo "  migrate-up     - Run database migrations up"
-	@echo "  migrate-down   - Run database migrations down"
-	@echo "  lint           - Run golangci-lint"
-	@echo "  fmt            - Format code with gofmt"
+	@echo "  test             - Run unit tests using gotestsum"
+	@echo "  test-integration - Run integration tests with testcontainers"
+	@echo "  test-verbose     - Run tests with verbose output"
+	@echo "  test-coverage    - Run tests with coverage report"
 
 # Install gotestsum if not present
 ensure-gotestsum:
@@ -21,6 +15,11 @@ ensure-gotestsum:
 # Run tests using gotestsum
 test: ensure-gotestsum
 	@gotestsum --format testname -- -race ./...
+
+# Run integration tests with testcontainers
+test-integration: ensure-gotestsum
+	@echo "Running integration tests with testcontainers..."
+	@TESTCONTAINERS_RYUK_DISABLED=true gotestsum --format testname -- -v -tags=integration -timeout=5m ./internal/handlers/
 
 # Run tests with verbose output
 test-verbose: ensure-gotestsum
