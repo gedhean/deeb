@@ -37,16 +37,7 @@ export const DashboardPage: React.FC = () => {
   return (
     <DefaultLayout
       projects={projects}
-      breadcrumbs={[
-        {
-          label: 'Building Your Application',
-          href: '#',
-        },
-        {
-          label: 'Data Fetching',
-          isCurrentPage: true,
-        },
-      ]}
+      breadcrumbs={[]}
     >
       <div className="grid auto-rows-min gap-4 md:grid-cols-3">
         <div className="bg-muted/50 aspect-video rounded-xl" />

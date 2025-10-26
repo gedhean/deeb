@@ -32,18 +32,18 @@ Implement the core backend services including issue management, SQL validation e
 <!-- Milestones appended by /wiz:milestones -->
 ### P02M01: Create issue model and repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M01
 
 **Goal**
 Implement issue data model and repository interface for database operations.
 
 **Acceptance Criteria**
-- [ ] Issue struct defined with all fields (id, title, description, sql_content, status, author_id, target_database_id, created_at, updated_at)
-- [ ] IssueRepository interface defined (Create, GetByID, Update, Delete, List, Search)
-- [ ] PostgreSQL implementation of IssueRepository
-- [ ] Status enum defined (Draft, PendingReview, Approved, InProgress, Applied, Rejected, Failed)
-- [ ] Unit tests for repository operations passing
+- [x] Issue struct defined with all fields (id, project_id, title, description, change_type, sql_content, rollback_sql, status, risk_level, author_id, target_database_id, assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms, affected_rows, error_message, created_at, updated_at)
+- [x] IssueRepository interface defined (Create, GetByID, Update, Delete, List, Search, Count)
+- [x] PostgreSQL implementation of IssueRepository
+- [x] Status enum defined (Draft, PendingReview, PendingApproval, Approved, Scheduled, InProgress, Completed, Failed, Cancelled)
+- [x] Unit tests for repository operations passing
 
 ---
 
