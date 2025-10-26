@@ -754,6 +754,9 @@ func TestDatabaseURL(t *testing.T) {
 	cfg.Database.Database = "testdb"
 	cfg.Database.SSLMode = "require"
 
-	expected := "host=db.example.com port=5433 user=testuser password=testpass dbname=testdb sslmode=require"
-	assert.Equal(t, expected, cfg.DatabaseURL())
+	expectedDSN := "host=db.example.com port=5433 user=testuser password=testpass dbname=testdb sslmode=require"
+	assert.Equal(t, expectedDSN, cfg.DatabaseDSN())
+
+	expectedURL := "postgres://testuser:testpass@db.example.com:5433/testdb?sslmode=require"
+	assert.Equal(t, expectedURL, cfg.DatabaseURL())
 }

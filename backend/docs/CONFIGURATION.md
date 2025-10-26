@@ -73,6 +73,8 @@ export SERVER_PORT="8080"
 | `database.max_open_conns` | - | `25` | Maximum open connections |
 | `database.max_idle_conns` | - | `5` | Maximum idle connections |
 | `database.conn_max_lifetime` | - | `5m` | Connection maximum lifetime |
+| `database.auto_migrate` | `DB_AUTO_MIGRATE` | `true` | Automatically run migrations at startup |
+| `database.migrations_path` | `DB_MIGRATIONS_PATH` | `migrations` | Path to migration files directory |
 
 **Example:**
 ```bash
@@ -82,6 +84,8 @@ export DB_USER="deeb"
 export DB_PASSWORD="secure-password"
 export DB_NAME="deeb_metadata"
 export DB_SSLMODE="require"  # For production
+export DB_AUTO_MIGRATE="true"  # Run migrations automatically (default)
+export DB_MIGRATIONS_PATH="migrations"  # Path to migration files
 ```
 
 ### Authentication Configuration

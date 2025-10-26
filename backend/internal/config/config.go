@@ -45,6 +45,8 @@ type DatabaseConfig struct {
 	MaxOpenConns    int           `yaml:"max_open_conns"`
 	MaxIdleConns    int           `yaml:"max_idle_conns"`
 	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
+	AutoMigrate     bool          `yaml:"auto_migrate"`      // Run migrations automatically at startup
+	MigrationsPath  string        `yaml:"migrations_path"`   // Path to migration files
 }
 
 // AuthConfig holds authentication configuration
@@ -121,6 +123,8 @@ func (c *Config) setDefaults() {
 	c.Database.MaxOpenConns = 25
 	c.Database.MaxIdleConns = 5
 	c.Database.ConnMaxLifetime = 5 * time.Minute
+	c.Database.AutoMigrate = true
+	c.Database.MigrationsPath = "migrations"
 
 	// Auth defaults
 	c.Auth.JWTExpiration = 24 * time.Hour
@@ -192,6 +196,12 @@ func (c *Config) loadFromEnv() {
 	}
 	if v := os.Getenv("DB_SSLMODE"); v != "" {
 		c.Database.SSLMode = v
+	}
+	if v := os.Getenv("DB_AUTO_MIGRATE"); v != "" {
+		c.Database.AutoMigrate = v == "true"
+	}
+	if v := os.Getenv("DB_MIGRATIONS_PATH"); v != "" {
+		c.Database.MigrationsPath = v
 	}
 
 	// Auth
@@ -343,14 +353,30 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// DatabaseURL returns a PostgreSQL connection string suitable for use with database/sql or pgx.
-func (c *Config) DatabaseURL() string {
+// DatabaseDSN returns a PostgreSQL connection string suitable for use with database/sql or pgx.
+// Format: host=localhost port=5432 user=user password=pass dbname=db sslmode=disable
+func (c *Config) DatabaseDSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		c.Database.Host,
 		c.Database.Port,
 		c.Database.User,
 		c.Database.Password,
+		c.Database.Database,
+		c.Database.SSLMode,
+	)
+}
+
+// DatabaseURL returns the PostgreSQL connection URL in the standard format.
+// Format: postgres://user:password@host:port/database?sslmode=mode
+// This format is used by golang-migrate and other tools.
+func (c *Config) DatabaseURL() string {
+	return fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		url.QueryEscape(c.Database.User),
+		url.QueryEscape(c.Database.Password),
+		c.Database.Host,
+		c.Database.Port,
 		c.Database.Database,
 		c.Database.SSLMode,
 	)

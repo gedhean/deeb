@@ -14,6 +14,7 @@ import (
 	"github.com/nsxbet/deeb/internal/handlers"
 	"github.com/nsxbet/deeb/internal/logger"
 	"github.com/nsxbet/deeb/internal/middleware"
+	"github.com/nsxbet/deeb/internal/migrate"
 	"github.com/nsxbet/deeb/internal/routes"
 	"go.uber.org/zap"
 )
@@ -57,6 +58,34 @@ func New(version string, configPath string) (*App, error) {
 	db, err := database.Connect(cfg, logger.Get())
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	// Run database migrations if auto_migrate is enabled
+	if cfg.Database.AutoMigrate {
+		logger.Info("Running database migrations", zap.String("path", cfg.Database.MigrationsPath))
+
+		migrator, err := migrate.New(migrate.Config{
+			MigrationsPath: cfg.Database.MigrationsPath,
+			DatabaseURL:    cfg.DatabaseURL(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create migrator: %w", err)
+		}
+
+		if err := migrator.Up(); err != nil {
+			// Close migrator before returning error
+			_ = migrator.Close()
+			return nil, fmt.Errorf("failed to run migrations: %w", err)
+		}
+
+		// Close migrator after successful migration
+		if err := migrator.Close(); err != nil {
+			logger.Warn("Failed to close migrator", zap.Error(err))
+		}
+
+		logger.Info("Database migrations completed successfully")
+	} else {
+		logger.Info("Auto-migration disabled, skipping database migrations")
 	}
 
 	// Initialize auth components
