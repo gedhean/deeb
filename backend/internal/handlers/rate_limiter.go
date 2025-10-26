@@ -16,14 +16,16 @@ type attemptRecord struct {
 	firstSeen time.Time
 }
 
-// RateLimiter implements in-memory rate limiting
+// RateLimiter implements in-memory rate limiting with automatic cleanup of old entries.
+// It limits requests per key (e.g., email address) within a time window.
 type RateLimiter struct {
 	mu       sync.RWMutex
 	attempts map[string]*attemptRecord
 	stopChan chan struct{}
 }
 
-// NewRateLimiter creates a new rate limiter with automatic cleanup
+// NewRateLimiter creates a new rate limiter with automatic cleanup.
+// The cleanup goroutine runs periodically to remove expired entries.
 func NewRateLimiter() *RateLimiter {
 	rl := &RateLimiter{
 		attempts: make(map[string]*attemptRecord),
@@ -34,8 +36,9 @@ func NewRateLimiter() *RateLimiter {
 	return rl
 }
 
-// Allow checks if the request from the given key is allowed
-// Returns true if allowed, false if rate limit exceeded
+// Allow checks if the request from the given key is allowed.
+// Returns true if allowed, false if rate limit exceeded.
+// The rate limit is maxAttempts requests per rateLimitWindow.
 func (rl *RateLimiter) Allow(key string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -70,7 +73,8 @@ func (rl *RateLimiter) Allow(key string) bool {
 	return true
 }
 
-// Reset clears the rate limit for a given key (useful after successful login)
+// Reset clears the rate limit for a given key.
+// Useful after successful login to prevent rate limit accumulation on valid accounts.
 func (rl *RateLimiter) Reset(key string) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -105,7 +109,8 @@ func (rl *RateLimiter) cleanup() {
 	}
 }
 
-// Stop stops the cleanup loop (useful for testing and shutdown)
+// Stop stops the cleanup loop.
+// Should be called when the rate limiter is no longer needed to prevent goroutine leaks.
 func (rl *RateLimiter) Stop() {
 	close(rl.stopChan)
 }

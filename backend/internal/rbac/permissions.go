@@ -1,6 +1,7 @@
 package rbac
 
-// Permission represents an action that can be performed on a resource
+// Permission represents an action that can be performed on a resource.
+// Permissions are granted through organization and project roles.
 type Permission string
 
 // Organization-level permissions
@@ -162,7 +163,8 @@ var projectRolePermissions = map[ProjectRole][]Permission{
 	},
 }
 
-// GetOrganizationPermissions returns all permissions for a given organization role
+// GetOrganizationPermissions returns all permissions for a given organization role.
+// Returns an empty slice if the role is not recognized.
 func GetOrganizationPermissions(role OrganizationRole) []Permission {
 	permissions, exists := organizationRolePermissions[role]
 	if !exists {
@@ -171,7 +173,8 @@ func GetOrganizationPermissions(role OrganizationRole) []Permission {
 	return permissions
 }
 
-// GetProjectPermissions returns all permissions for a given project role
+// GetProjectPermissions returns all permissions for a given project role.
+// Returns an empty slice if the role is not recognized.
 func GetProjectPermissions(role ProjectRole) []Permission {
 	permissions, exists := projectRolePermissions[role]
 	if !exists {

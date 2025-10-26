@@ -34,7 +34,9 @@ func NewHealthHandler(db *sqlx.DB, logger *zap.Logger, version string) *HealthHa
 	}
 }
 
-// Health handles GET /health
+// Health handles GET /health.
+// Returns the service health status including database connectivity check.
+// Returns 503 Service Unavailable if the database is not accessible.
 func (h *HealthHandler) Health(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()

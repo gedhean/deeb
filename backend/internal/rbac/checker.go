@@ -5,16 +5,18 @@ import (
 	"fmt"
 )
 
-// CheckerService provides permission checking functionality
+// CheckerService provides permission checking functionality for both
+// organization-level and project-level permissions.
 type CheckerService struct{}
 
-// NewCheckerService creates a new permission checker service
+// NewCheckerService creates a new permission checker service.
 func NewCheckerService() *CheckerService {
 	return &CheckerService{}
 }
 
 // HasOrganizationPermission checks if a user with the given organization role
-// has the specified permission at the organization level
+// has the specified permission at the organization level.
+// Returns false if the role is invalid or lacks the permission.
 func (s *CheckerService) HasOrganizationPermission(role OrganizationRole, permission Permission) bool {
 	if !IsValidOrganizationRole(role) {
 		return false
@@ -25,7 +27,8 @@ func (s *CheckerService) HasOrganizationPermission(role OrganizationRole, permis
 }
 
 // HasProjectPermission checks if a user with the given project role
-// has the specified permission at the project level
+// has the specified permission at the project level.
+// Returns false if the role is invalid or lacks the permission.
 func (s *CheckerService) HasProjectPermission(role ProjectRole, permission Permission) bool {
 	if !IsValidProjectRole(role) {
 		return false
@@ -36,7 +39,8 @@ func (s *CheckerService) HasProjectPermission(role ProjectRole, permission Permi
 }
 
 // RequireOrganizationPermission returns an error if the user does not have
-// the specified organization-level permission
+// the specified organization-level permission.
+// Returns nil if the permission check passes.
 func (s *CheckerService) RequireOrganizationPermission(role OrganizationRole, permission Permission) error {
 	if !s.HasOrganizationPermission(role, permission) {
 		return fmt.Errorf("insufficient permissions: role '%s' does not have permission '%s'", role, permission)
@@ -45,7 +49,8 @@ func (s *CheckerService) RequireOrganizationPermission(role OrganizationRole, pe
 }
 
 // RequireProjectPermission returns an error if the user does not have
-// the specified project-level permission
+// the specified project-level permission.
+// Returns nil if the permission check passes.
 func (s *CheckerService) RequireProjectPermission(role ProjectRole, permission Permission) error {
 	if !s.HasProjectPermission(role, permission) {
 		return fmt.Errorf("insufficient permissions: role '%s' does not have permission '%s'", role, permission)
@@ -73,7 +78,8 @@ const (
 	ContextKeyProjectRole ContextKey = "project_role"
 )
 
-// GetUserFromContext extracts user information from the request context
+// GetUserFromContext extracts user information from the request context.
+// Returns user ID, organization ID, organization role, and a boolean indicating success.
 func GetUserFromContext(ctx context.Context) (userID, organizationID string, organizationRole OrganizationRole, ok bool) {
 	userID, ok = ctx.Value(ContextKeyUserID).(string)
 	if !ok || userID == "" {
@@ -93,7 +99,8 @@ func GetUserFromContext(ctx context.Context) (userID, organizationID string, org
 	return userID, organizationID, organizationRole, true
 }
 
-// GetProjectRoleFromContext extracts project role from the request context
+// GetProjectRoleFromContext extracts project role from the request context.
+// Returns project ID, project role, and a boolean indicating success.
 func GetProjectRoleFromContext(ctx context.Context) (projectID string, projectRole ProjectRole, ok bool) {
 	projectID, ok = ctx.Value(ContextKeyProjectID).(string)
 	if !ok || projectID == "" {

@@ -1,3 +1,5 @@
+// Package models provides data models and request/response types for the Deeb API.
+// It includes models for users, projects, databases, and database instances.
 package models
 
 import (
@@ -6,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// User represents a user in the system
+// User represents a user in the system with authentication and authorization information.
 type User struct {
 	ID               uuid.UUID  `json:"id"                   db:"id"`
 	Email            string     `json:"email"                db:"email"`
@@ -23,21 +25,21 @@ type User struct {
 	UpdatedAt        time.Time  `json:"updated_at"           db:"updated_at"`
 }
 
-// CreateUserRequest represents the request to create a new user
+// CreateUserRequest represents the request to create a new user with validation tags.
 type CreateUserRequest struct {
 	Email            string `json:"email"             validate:"required,email"`
 	Password         string `json:"password"          validate:"required,min=8"`
 	OrganizationRole string `json:"organization_role" validate:"required,oneof=OrganizationAdmin OrganizationDBA OrganizationDeveloper"`
 }
 
-// UpdateUserRequest represents the request to update a user
+// UpdateUserRequest represents the request to update a user with optional fields.
 type UpdateUserRequest struct {
 	OrganizationRole *string `json:"organization_role,omitempty"  validate:"omitempty,oneof=OrganizationAdmin OrganizationDBA OrganizationDeveloper"`
 	TwoFactorEnabled *bool   `json:"two_factor_enabled,omitempty"`
 	IsActive         *bool   `json:"is_active,omitempty"`
 }
 
-// UserResponse represents a user response (without sensitive fields)
+// UserResponse represents a user response without sensitive fields like password hash and 2FA secret.
 type UserResponse struct {
 	ID               uuid.UUID  `json:"id"`
 	Email            string     `json:"email"`
@@ -49,7 +51,7 @@ type UserResponse struct {
 	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
-// ToResponse converts a User to UserResponse
+// ToResponse converts a User to UserResponse, excluding sensitive fields.
 func (u *User) ToResponse() *UserResponse {
 	return &UserResponse{
 		ID:               u.ID,

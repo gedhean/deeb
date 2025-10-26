@@ -1,3 +1,5 @@
+// Package cmd provides the command-line interface for the Deeb application.
+// It includes commands for running the server and managing database migrations.
 package cmd
 
 import (

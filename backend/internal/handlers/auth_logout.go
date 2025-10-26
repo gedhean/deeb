@@ -7,17 +7,20 @@ import (
 	"go.uber.org/zap"
 )
 
+// LogoutHandler handles user logout requests.
 type LogoutHandler struct {
 	logger *zap.Logger
 }
 
+// NewLogoutHandler creates a new LogoutHandler with the provided logger.
 func NewLogoutHandler(logger *zap.Logger) *LogoutHandler {
 	return &LogoutHandler{
 		logger: logger,
 	}
 }
 
-// Logout handles POST /api/v1/auth/logout
+// Logout handles POST /api/v1/auth/logout.
+// Clears the authentication cookie to log the user out.
 func (h *LogoutHandler) Logout(c echo.Context) error {
 	// Clear the authentication cookie
 	cookie := &http.Cookie{

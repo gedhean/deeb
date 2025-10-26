@@ -17,7 +17,9 @@ const (
 	CorrelationIDKey = "correlation_id"
 )
 
-// RequestLogger creates a middleware that logs HTTP requests with Zap logger
+// RequestLogger creates a middleware that logs HTTP requests with Zap logger.
+// Generates or extracts correlation IDs for request tracing and logs request/response details
+// including method, URI, status, latency, and bytes transferred.
 func RequestLogger() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {

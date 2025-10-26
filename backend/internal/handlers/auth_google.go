@@ -57,14 +57,16 @@ func NewGoogleOAuthHandler(
 	}
 }
 
-// GoogleUserInfo represents the user information returned by Google
+// GoogleUserInfo represents the user information returned by Google's OAuth API.
 type GoogleUserInfo struct {
 	Email         string `json:"email"`
 	Name          string `json:"name"`
 	EmailVerified bool   `json:"email_verified"`
 }
 
-// InitiateGoogleAuth handles GET /api/v1/auth/google - initiates OAuth flow
+// InitiateGoogleAuth handles GET /api/v1/auth/google.
+// Initiates the Google OAuth flow by generating a state token for CSRF protection
+// and redirecting the user to Google's authorization page.
 func (h *GoogleOAuthHandler) InitiateGoogleAuth(c echo.Context) error {
 	if c.Request().Method != http.MethodGet {
 		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
@@ -86,7 +88,9 @@ func (h *GoogleOAuthHandler) InitiateGoogleAuth(c echo.Context) error {
 	return c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-// GoogleCallback handles GET /api/v1/auth/google/callback - OAuth callback
+// GoogleCallback handles GET /api/v1/auth/google/callback.
+// Processes the OAuth callback from Google, validates the state token,
+// exchanges the authorization code for user information, and creates or logs in the user.
 func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 	if c.Request().Method != http.MethodGet {
 		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})

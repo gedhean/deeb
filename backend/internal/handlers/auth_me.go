@@ -9,11 +9,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// MeHandler handles requests for the current authenticated user's information.
 type MeHandler struct {
 	userRepo repository.UserRepository
 	logger   *zap.Logger
 }
 
+// NewMeHandler creates a new MeHandler with the provided dependencies.
 func NewMeHandler(userRepo repository.UserRepository, logger *zap.Logger) *MeHandler {
 	return &MeHandler{
 		userRepo: userRepo,
@@ -21,8 +23,8 @@ func NewMeHandler(userRepo repository.UserRepository, logger *zap.Logger) *MeHan
 	}
 }
 
-// GetCurrentUser handles GET /api/v1/auth/me
-// Returns the current authenticated user's information
+// GetCurrentUser handles GET /api/v1/auth/me.
+// Returns the current authenticated user's information extracted from the JWT token claims.
 func (h *MeHandler) GetCurrentUser(c echo.Context) error {
 	// Extract user claims from context (set by auth middleware)
 	claims, ok := c.Get("user").(*auth.Claims)

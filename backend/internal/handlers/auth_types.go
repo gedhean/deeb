@@ -1,3 +1,6 @@
+// Package handlers provides HTTP request handlers for the Deeb API.
+// It includes handlers for authentication, user management, project management,
+// database management, and health checks.
 package handlers
 
 import (

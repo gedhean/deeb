@@ -1,3 +1,6 @@
+// Package config provides configuration management for the Deeb application.
+// It supports loading configuration from YAML files, environment variables,
+// and provides validation for all configuration options.
 package config
 
 import (
@@ -340,7 +343,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// DatabaseURL returns a PostgreSQL connection string
+// DatabaseURL returns a PostgreSQL connection string suitable for use with database/sql or pgx.
 func (c *Config) DatabaseURL() string {
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",

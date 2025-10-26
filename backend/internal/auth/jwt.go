@@ -1,3 +1,5 @@
+// Package auth provides authentication and authorization functionality including
+// JWT token management and password hashing using bcrypt.
 package auth
 
 import (
@@ -57,7 +59,7 @@ func NewTokenManager(jwtSecret string) (*TokenManager, error) {
 
 // GenerateToken creates a new JWT token for the given user with their organization role.
 // Project-specific roles are not included in the token and should be fetched from the
-// database when the user accesses project resources.
+// database when the user accesses project resources. The token expires after TokenExpiration duration.
 func (tm *TokenManager) GenerateToken(userID uuid.UUID, email, organizationRole string) (string, error) {
 	// Validate inputs
 	if userID == uuid.Nil {
@@ -97,7 +99,9 @@ func (tm *TokenManager) GenerateToken(userID uuid.UUID, email, organizationRole 
 	return tokenString, nil
 }
 
-// ValidateToken validates a JWT token and returns the claims
+// ValidateToken validates a JWT token and returns the claims.
+// Returns ErrExpiredToken if the token has expired, ErrInvalidToken for other validation failures,
+// and ErrInvalidTokenClaims if the claims are invalid or missing required fields.
 func (tm *TokenManager) ValidateToken(tokenString string) (*Claims, error) {
 	if tokenString == "" {
 		return nil, fmt.Errorf("token string cannot be empty")

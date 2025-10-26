@@ -31,7 +31,9 @@ func NewRegisterHandler(userRepo repository.UserRepository, logger *zap.Logger) 
 	}
 }
 
-// Register handles POST /api/v1/auth/register
+// Register handles POST /api/v1/auth/register.
+// Creates a new user account with email and password.
+// Validates email format, checks for duplicates, and hashes the password before storing.
 func (h *RegisterHandler) Register(c echo.Context) error {
 	if c.Request().Method != http.MethodPost {
 		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})

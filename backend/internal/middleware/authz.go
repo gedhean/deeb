@@ -8,12 +8,13 @@ import (
 	"github.com/nsxbet/deeb/internal/rbac"
 )
 
-// AuthzMiddleware provides authorization middleware functions
+// AuthzMiddleware provides authorization middleware functions.
+// It checks user permissions at both organization and project levels.
 type AuthzMiddleware struct {
 	checker *rbac.CheckerService
 }
 
-// NewAuthzMiddleware creates a new authorization middleware
+// NewAuthzMiddleware creates a new authorization middleware with an RBAC checker service.
 func NewAuthzMiddleware() *AuthzMiddleware {
 	return &AuthzMiddleware{
 		checker: rbac.NewCheckerService(),
@@ -21,7 +22,8 @@ func NewAuthzMiddleware() *AuthzMiddleware {
 }
 
 // RequireOrganizationPermission returns middleware that checks if the authenticated user
-// has the specified organization-level permission
+// has the specified organization-level permission.
+// Returns 401 Unauthorized if user is not authenticated, 403 Forbidden if lacking permission.
 func (m *AuthzMiddleware) RequireOrganizationPermission(permission rbac.Permission) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -50,7 +52,9 @@ func (m *AuthzMiddleware) RequireOrganizationPermission(permission rbac.Permissi
 }
 
 // RequireProjectPermission returns middleware that checks if the authenticated user
-// has the specified project-level permission for the project in the route
+// has the specified project-level permission for the project in the route.
+// Organization admins bypass project-level checks. Currently returns 501 Not Implemented
+// pending database integration for project role lookup.
 func (m *AuthzMiddleware) RequireProjectPermission(permission rbac.Permission) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -109,7 +113,8 @@ func (m *AuthzMiddleware) RequireProjectPermission(permission rbac.Permission) e
 	}
 }
 
-// RequireOrganizationAdmin is a convenience middleware that requires organization admin role
+// RequireOrganizationAdmin is a convenience middleware that requires organization admin role.
+// Returns 403 Forbidden if the user does not have the OrganizationAdmin role.
 func (m *AuthzMiddleware) RequireOrganizationAdmin() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -134,7 +139,8 @@ func (m *AuthzMiddleware) RequireOrganizationAdmin() echo.MiddlewareFunc {
 	}
 }
 
-// RequireOrganizationDBA is a convenience middleware that requires organization DBA role or higher
+// RequireOrganizationDBA is a convenience middleware that requires organization DBA role or higher.
+// Allows both OrganizationAdmin and OrganizationDBA roles to proceed.
 func (m *AuthzMiddleware) RequireOrganizationDBA() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {

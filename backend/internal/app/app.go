@@ -1,3 +1,4 @@
+// Package app provides application initialization and lifecycle management for the Deeb server.
 package app
 
 import (
@@ -17,7 +18,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// App represents the application with all its dependencies
+// App represents the application with all its dependencies and configuration.
 type App struct {
 	Config           *config.Config
 	DB               *sqlx.DB
@@ -27,7 +28,8 @@ type App struct {
 	Version          string
 }
 
-// New creates and initializes a new application instance
+// New creates and initializes a new application instance.
+// Loads configuration, initializes logger, connects to database, and sets up routes.
 func New(version string, configPath string) (*App, error) {
 	// Load configuration
 	cfg, err := config.Load(configPath)
@@ -88,14 +90,15 @@ func New(version string, configPath string) (*App, error) {
 	return app, nil
 }
 
-// Start starts the HTTP server
+// Start starts the HTTP server on the configured host and port.
 func (a *App) Start() error {
 	addr := fmt.Sprintf("%s:%d", a.Config.Server.Host, a.Config.Server.Port)
 	logger.Info("HTTP server starting", zap.String("addr", addr))
 	return a.Echo.Start(addr)
 }
 
-// Shutdown gracefully shuts down the application
+// Shutdown gracefully shuts down the application.
+// Closes HTTP server, database connections, and flushes logs.
 func (a *App) Shutdown(timeout time.Duration) error {
 	logger.Info("Server shutting down gracefully")
 

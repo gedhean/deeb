@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// LoginHandler handles user login requests with rate limiting and JWT token generation.
 type LoginHandler struct {
 	userRepo     repository.UserRepository
 	tokenManager *auth.TokenManager
@@ -18,6 +19,7 @@ type LoginHandler struct {
 	logger       *zap.Logger
 }
 
+// NewLoginHandler creates a new LoginHandler with the provided dependencies.
 func NewLoginHandler(
 	userRepo repository.UserRepository,
 	tokenManager *auth.TokenManager,
@@ -32,7 +34,9 @@ func NewLoginHandler(
 	}
 }
 
-// Login handles POST /api/v1/auth/login
+// Login handles POST /api/v1/auth/login.
+// Authenticates a user with email and password, checks rate limits,
+// generates a JWT token on success, and sets it in an HttpOnly cookie.
 func (h *LoginHandler) Login(c echo.Context) error {
 	if c.Request().Method != http.MethodPost {
 		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})

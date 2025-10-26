@@ -10,15 +10,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// ErrorResponse represents a standardized error response
+// ErrorResponse represents a standardized JSON error response.
 type ErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message,omitempty"`
 	Code    string `json:"code,omitempty"`
 }
 
-// CustomErrorHandler creates a custom error handler for Echo
-// It formats all errors as JSON and logs appropriately based on severity
+// CustomErrorHandler creates a custom error handler for Echo.
+// It formats all errors as JSON and logs appropriately based on severity.
+// Server errors (5xx) are logged with stack traces, client errors (4xx) at info level.
 func CustomErrorHandler(err error, c echo.Context) {
 	// Don't process if response already started
 	if c.Response().Committed {

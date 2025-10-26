@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Project represents a logical grouping of databases and team members
+// Project represents a logical grouping of databases and team members.
 type Project struct {
 	ID          uuid.UUID `json:"id"          db:"id"`
 	Name        string    `json:"name"        db:"name"`
@@ -17,19 +17,19 @@ type Project struct {
 	UpdatedAt   time.Time `json:"updated_at"  db:"updated_at"`
 }
 
-// CreateProjectRequest represents the request to create a new project
+// CreateProjectRequest represents the request to create a new project with validation tags.
 type CreateProjectRequest struct {
 	Name        string `json:"name"        validate:"required,max=100"`
 	Description string `json:"description" validate:"max=500"`
 }
 
-// UpdateProjectRequest represents the request to update a project
+// UpdateProjectRequest represents the request to update a project with optional fields.
 type UpdateProjectRequest struct {
 	Name        *string `json:"name,omitempty"        validate:"omitempty,max=100"`
 	Description *string `json:"description,omitempty" validate:"omitempty,max=500"`
 }
 
-// ProjectResponse represents a project response
+// ProjectResponse represents a project response for API output.
 type ProjectResponse struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
@@ -38,7 +38,7 @@ type ProjectResponse struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// ToResponse converts a Project to ProjectResponse
+// ToResponse converts a Project to ProjectResponse.
 func (p *Project) ToResponse() *ProjectResponse {
 	return &ProjectResponse{
 		ID:          p.ID,
@@ -56,7 +56,7 @@ var (
 	ErrDescriptionTooLong  = errors.New("description must not exceed 500 characters")
 )
 
-// Validate validates the project model
+// Validate validates the project model, checking name and description constraints.
 func (p *Project) Validate() error {
 	// Trim whitespace
 	p.Name = strings.TrimSpace(p.Name)
@@ -78,7 +78,7 @@ func (p *Project) Validate() error {
 	return nil
 }
 
-// ValidateCreateRequest validates a create request
+// ValidateCreateRequest validates a create request, trimming whitespace and checking constraints.
 func ValidateCreateRequest(req *CreateProjectRequest) error {
 	// Trim whitespace
 	req.Name = strings.TrimSpace(req.Name)
@@ -100,7 +100,7 @@ func ValidateCreateRequest(req *CreateProjectRequest) error {
 	return nil
 }
 
-// ValidateUpdateRequest validates an update request
+// ValidateUpdateRequest validates an update request with optional field validation.
 func ValidateUpdateRequest(req *UpdateProjectRequest) error {
 	// Validate name if provided
 	if req.Name != nil {

@@ -8,7 +8,8 @@ import (
 	"github.com/nsxbet/deeb/internal/config"
 )
 
-// Setup configures all Echo middleware
+// Setup configures all Echo middleware in the correct order.
+// Includes recovery, logging, CORS, rate limiting, compression, and security headers.
 func Setup(e *echo.Echo, cfg *config.Config) {
 	// Set custom error handler for consistent JSON error responses
 	e.HTTPErrorHandler = CustomErrorHandler
@@ -38,7 +39,8 @@ func Setup(e *echo.Echo, cfg *config.Config) {
 	e.Use(ConditionalSecureMiddleware())
 }
 
-// ConditionalSecureMiddleware applies different CSP policies based on the route
+// ConditionalSecureMiddleware applies different CSP policies based on the route.
+// Uses relaxed CSP for Swagger UI endpoints and strict CSP for all other endpoints.
 func ConditionalSecureMiddleware() echo.MiddlewareFunc {
 	// Relaxed CSP for Swagger UI endpoints
 	swaggerCSP := "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' https://cdn.jsdelivr.net"

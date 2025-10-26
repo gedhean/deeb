@@ -1,6 +1,8 @@
+// Package rbac provides role-based access control functionality including
+// role definitions, permissions, and permission checking for the Deeb API.
 package rbac
 
-// OrganizationRole represents a user's role at the organization level
+// OrganizationRole represents a user's role at the organization level.
 type OrganizationRole string
 
 const (
@@ -14,7 +16,7 @@ const (
 	OrganizationDeveloper OrganizationRole = "organization_developer"
 )
 
-// ProjectRole represents a user's role within a specific project
+// ProjectRole represents a user's role within a specific project.
 type ProjectRole string
 
 const (
@@ -31,7 +33,7 @@ const (
 	ProjectViewer ProjectRole = "project_viewer"
 )
 
-// IsValidOrganizationRole checks if the given role is a valid organization role
+// IsValidOrganizationRole checks if the given role is a valid organization role.
 func IsValidOrganizationRole(role OrganizationRole) bool {
 	switch role {
 	case OrganizationAdmin, OrganizationDBA, OrganizationDeveloper:
@@ -41,7 +43,7 @@ func IsValidOrganizationRole(role OrganizationRole) bool {
 	}
 }
 
-// IsValidProjectRole checks if the given role is a valid project role
+// IsValidProjectRole checks if the given role is a valid project role.
 func IsValidProjectRole(role ProjectRole) bool {
 	switch role {
 	case ProjectOwner, ProjectDeveloper, ProjectApprover, ProjectViewer:

@@ -1,3 +1,5 @@
+// Package repository defines repository interfaces for data access operations.
+// Implementations are provided in the postgres subpackage.
 package repository
 
 import (
@@ -7,7 +9,7 @@ import (
 	"github.com/nsxbet/deeb/internal/models"
 )
 
-// UserRepository defines the interface for user data operations
+// UserRepository defines the interface for user data operations.
 type UserRepository interface {
 	// Create creates a new user in the database
 	Create(ctx context.Context, user *models.User) error

@@ -1,3 +1,4 @@
+// Package database provides database connection management for PostgreSQL.
 package database
 
 import (
@@ -11,7 +12,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Connect establishes a connection to PostgreSQL database with configuration
+// Connect establishes a connection to PostgreSQL database with configuration.
+// Configures connection pool settings and verifies connectivity with a ping.
 func Connect(cfg *config.Config, logger *zap.Logger) (*sqlx.DB, error) {
 	// Build DSN - omit password parameter if empty to avoid PostgreSQL parsing issues
 	dsn := buildDSN(cfg.Database)

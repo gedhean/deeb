@@ -1,3 +1,4 @@
+// Package routes provides HTTP route setup and registration for the Deeb API.
 package routes
 
 import (
@@ -12,7 +13,8 @@ import (
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 )
 
-// Setup registers all application routes
+// Setup registers all application routes including health checks, authentication,
+// user management, projects, databases, and database instances.
 func Setup(
 	e *echo.Echo,
 	cfg *config.Config,

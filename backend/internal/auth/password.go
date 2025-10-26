@@ -32,7 +32,8 @@ var (
 	ErrInvalidPassword = errors.New("invalid password")
 )
 
-// HashPassword generates a bcrypt hash of the password with cost factor 12
+// HashPassword generates a bcrypt hash of the password with cost factor 12.
+// Returns ErrPasswordTooShort, ErrPasswordTooLong, or ErrEmptyPassword for validation failures.
 func HashPassword(password string) (string, error) {
 	// Validate password
 	if password == "" {
@@ -56,7 +57,9 @@ func HashPassword(password string) (string, error) {
 	return string(hashedBytes), nil
 }
 
-// VerifyPassword compares a bcrypt hashed password with its possible plaintext equivalent
+// VerifyPassword compares a bcrypt hashed password with its possible plaintext equivalent.
+// Returns nil if the password matches, ErrInvalidPassword if it does not match,
+// or ErrEmptyPassword if the password parameter is empty.
 func VerifyPassword(hashedPassword, password string) error {
 	// Validate inputs
 	if hashedPassword == "" {
