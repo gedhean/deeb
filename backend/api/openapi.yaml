@@ -1,0 +1,693 @@
+openapi: 3.0.3
+info:
+  title: Deeb API
+  description: |
+    Secure database change management tool that enables developers to manage database changes
+    without requiring direct database access.
+
+    ## Authentication
+
+    Most endpoints require authentication via JWT tokens. After successful login, a JWT token
+    is set as an HttpOnly cookie named `token`. This cookie is automatically included in
+    subsequent requests.
+
+    ## Error Responses
+
+    All endpoints may return standard error responses:
+    - 400 Bad Request - Invalid request parameters
+    - 401 Unauthorized - Authentication required or token invalid
+    - 403 Forbidden - Insufficient permissions
+    - 404 Not Found - Resource not found
+    - 500 Internal Server Error - Server error
+  version: 1.0.0
+  contact:
+    name: Deeb API Support
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://api.deeb.example.com
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Authentication
+    description: User authentication and registration
+  - name: Users
+    description: User management operations
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the API server is healthy and responding
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                timestamp: "2025-01-26T12:00:00Z"
+
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: |
+        Create a new user account. The first user registered automatically becomes
+        an organization admin.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: user@example.com
+              password: SecureP@ssw0rd
+              organization_role: developer
+      responses:
+        '201':
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+              example:
+                user:
+                  id: 123e4567-e89b-12d3-a456-426614174000
+                  email: user@example.com
+                  organization_role: developer
+                  is_active: true
+                  created_at: "2025-01-26T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: |
+        Authenticate a user with email and password. On success, sets an HttpOnly
+        cookie containing the JWT token.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: user@example.com
+              password: SecureP@ssw0rd
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: JWT token in HttpOnly cookie
+              schema:
+                type: string
+                example: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; HttpOnly; Secure; SameSite=Strict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                user:
+                  id: 123e4567-e89b-12d3-a456-426614174000
+                  email: user@example.com
+                  organization_role: developer
+                  is_active: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout user
+      description: |
+        Logout the current user by clearing the authentication cookie.
+      operationId: logout
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          headers:
+            Set-Cookie:
+              description: Cleared authentication cookie
+              schema:
+                type: string
+                example: token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Logged out successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/google:
+    get:
+      tags:
+        - Authentication
+      summary: Initiate Google OAuth
+      description: |
+        Redirect to Google OAuth consent screen to initiate authentication flow.
+      operationId: googleOAuth
+      responses:
+        '302':
+          description: Redirect to Google OAuth
+          headers:
+            Location:
+              description: Google OAuth consent URL
+              schema:
+                type: string
+                example: https://accounts.google.com/o/oauth2/v2/auth?client_id=...
+
+  /api/v1/auth/google/callback:
+    get:
+      tags:
+        - Authentication
+      summary: Google OAuth callback
+      description: |
+        Handle the callback from Google OAuth. On success, sets an HttpOnly cookie
+        containing the JWT token and redirects to the application.
+      operationId: googleOAuthCallback
+      parameters:
+        - name: code
+          in: query
+          required: true
+          description: Authorization code from Google
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          description: State parameter for CSRF protection
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to application with authentication cookie set
+          headers:
+            Set-Cookie:
+              description: JWT token in HttpOnly cookie
+              schema:
+                type: string
+            Location:
+              description: Application URL
+              schema:
+                type: string
+                example: http://localhost:3000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      description: |
+        Retrieve the profile information of the currently authenticated user.
+      operationId: getCurrentUser
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                email: user@example.com
+                organization_role: developer
+                is_active: true
+                created_at: "2025-01-26T12:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users:
+    get:
+      tags:
+        - Users
+      summary: List all users
+      description: |
+        Retrieve a list of all users in the organization. Requires authentication.
+      operationId: listUsers
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+              example:
+                users:
+                  - id: 123e4567-e89b-12d3-a456-426614174000
+                    email: user1@example.com
+                    organization_role: admin
+                    is_active: true
+                    created_at: "2025-01-26T12:00:00Z"
+                  - id: 223e4567-e89b-12d3-a456-426614174001
+                    email: user2@example.com
+                    organization_role: developer
+                    is_active: true
+                    created_at: "2025-01-26T12:00:00Z"
+                total: 2
+                page: 1
+                limit: 20
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{id}:
+    get:
+      tags:
+        - Users
+      summary: Get user by ID
+      description: |
+        Retrieve detailed information about a specific user.
+      operationId: getUserById
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User ID (UUID)
+          schema:
+            type: string
+            format: uuid
+            example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                email: user@example.com
+                organization_role: developer
+                is_active: true
+                created_at: "2025-01-26T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Users
+      summary: Update user
+      description: |
+        Update user information. Users can update their own profile, or admins
+        can update any user.
+      operationId: updateUser
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User ID (UUID)
+          schema:
+            type: string
+            format: uuid
+            example: 123e4567-e89b-12d3-a456-426614174000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+            example:
+              email: newemail@example.com
+              organization_role: senior_developer
+              is_active: true
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                email: newemail@example.com
+                organization_role: senior_developer
+                is_active: true
+                updated_at: "2025-01-26T12:30:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Users
+      summary: Delete user
+      description: |
+        Soft delete a user by setting is_active to false. Requires admin permissions.
+      operationId: deleteUser
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User ID (UUID)
+          schema:
+            type: string
+            format: uuid
+            example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '204':
+          description: User deleted successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+      description: JWT token stored in HttpOnly cookie
+
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          example: ok
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-01-26T12:00:00Z"
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: User password (minimum 8 characters)
+          example: SecureP@ssw0rd
+        organization_role:
+          type: string
+          enum:
+            - admin
+            - senior_developer
+            - developer
+            - read_only
+          description: |
+            Role within the organization. First registered user becomes admin automatically.
+          example: developer
+
+    RegisterResponse:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: '#/components/schemas/UserResponse'
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          description: User password
+          example: SecureP@ssw0rd
+
+    LoginResponse:
+      type: object
+      required:
+        - user
+      properties:
+        token:
+          type: string
+          deprecated: true
+          description: |
+            JWT token (deprecated - token is now set as HttpOnly cookie)
+        user:
+          $ref: '#/components/schemas/UserResponse'
+
+    UserResponse:
+      type: object
+      required:
+        - id
+        - email
+        - organization_role
+        - is_active
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+          example: 123e4567-e89b-12d3-a456-426614174000
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: user@example.com
+        organization_role:
+          type: string
+          enum:
+            - admin
+            - senior_developer
+            - developer
+            - read_only
+          description: User's role within the organization
+          example: developer
+        google_id:
+          type: string
+          nullable: true
+          description: Google OAuth user ID (if authenticated via Google)
+          example: "1234567890"
+        is_active:
+          type: boolean
+          description: Whether the user account is active
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when user was created
+          example: "2025-01-26T12:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when user was last updated
+          example: "2025-01-26T12:30:00Z"
+
+    UserListResponse:
+      type: object
+      required:
+        - users
+        - total
+        - page
+        - limit
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserResponse'
+        total:
+          type: integer
+          description: Total number of users
+          example: 42
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        limit:
+          type: integer
+          description: Number of items per page
+          example: 20
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: New email address
+          example: newemail@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: New password (minimum 8 characters)
+          example: NewSecureP@ssw0rd
+        organization_role:
+          type: string
+          enum:
+            - admin
+            - senior_developer
+            - developer
+            - read_only
+          description: New organization role
+          example: senior_developer
+        is_active:
+          type: boolean
+          description: Whether the user account is active
+          example: true
+
+    MessageResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Success or informational message
+          example: Operation completed successfully
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: Invalid request parameters
+
+  responses:
+    BadRequest:
+      description: Bad Request - Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Invalid request parameters
+
+    Unauthorized:
+      description: Unauthorized - Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Authentication required
+
+    Forbidden:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Insufficient permissions
+
+    NotFound:
+      description: Not Found - Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Resource not found
+
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Internal server error

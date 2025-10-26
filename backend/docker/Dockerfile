@@ -38,6 +38,9 @@ COPY --from=builder /app/deeb .
 # Copy migrations directory
 COPY --from=builder /app/migrations ./migrations
 
+# Copy API documentation
+COPY --from=builder /app/api ./api
+
 # Change ownership to non-root user
 RUN chown -R deeb:deeb /app
 

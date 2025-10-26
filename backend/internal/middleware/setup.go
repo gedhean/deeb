@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/nsxbet/deeb/internal/config"
@@ -32,12 +34,35 @@ func Setup(e *echo.Echo, cfg *config.Config) {
 	// Gzip compression middleware
 	e.Use(middleware.Gzip())
 
-	// Secure middleware - adds security headers
-	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
-		XSSProtection:         "1; mode=block",
-		ContentTypeNosniff:    "nosniff",
-		XFrameOptions:         "DENY",
-		HSTSMaxAge:            31536000,
-		ContentSecurityPolicy: "default-src 'self'",
-	}))
+	// Secure middleware with conditional CSP for Swagger UI
+	e.Use(ConditionalSecureMiddleware())
+}
+
+// ConditionalSecureMiddleware applies different CSP policies based on the route
+func ConditionalSecureMiddleware() echo.MiddlewareFunc {
+	// Relaxed CSP for Swagger UI endpoints
+	swaggerCSP := "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' https://cdn.jsdelivr.net"
+
+	// Strict CSP for all other endpoints
+	strictCSP := "default-src 'self'"
+
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// Apply security headers
+			c.Response().Header().Set("X-XSS-Protection", "1; mode=block")
+			c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+			c.Response().Header().Set("X-Frame-Options", "DENY")
+			c.Response().Header().Set("Strict-Transport-Security", "max-age=31536000")
+
+			// Apply CSP based on path
+			path := c.Request().URL.Path
+			if strings.HasPrefix(path, "/api/docs") {
+				c.Response().Header().Set("Content-Security-Policy", swaggerCSP)
+			} else {
+				c.Response().Header().Set("Content-Security-Policy", strictCSP)
+			}
+
+			return next(c)
+		}
+	}
 }

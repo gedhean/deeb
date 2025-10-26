@@ -752,7 +752,7 @@ Create integration tests for registration and login API endpoints.
 
 ### P01M41: Document API endpoints with OpenAPI/Swagger
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M41
 
 **Goal**

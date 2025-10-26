@@ -35,6 +35,9 @@ func Setup(
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo)
 	setupDatabaseRoutes(e, dbRepo)
 
+	// Setup Swagger documentation
+	SetupSwaggerRoutes(e)
+
 	logger.Info("Routes configured successfully")
 }
 
