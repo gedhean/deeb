@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -261,6 +262,55 @@ func (h *IssueHandler) ListIssues(c echo.Context) error {
 		Offset:   offset,
 	}
 
+	// Parse optional status filter
+	if statusStr := c.QueryParam("status"); statusStr != "" {
+		status := models.IssueStatus(statusStr)
+		if !status.IsValid() {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid status parameter. Must be one of: draft, pending_review, approved, rejected, scheduled, in_progress, executed, failed, rolled_back",
+			})
+		}
+		filters.Status = status
+	}
+
+	// Parse optional target_database_id filter
+	if dbIDStr := c.QueryParam("target_database_id"); dbIDStr != "" {
+		dbID, err := uuid.Parse(dbIDStr)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid target_database_id parameter",
+			})
+		}
+		filters.DatabaseID = dbID
+	}
+
+	// Parse optional created_after filter
+	if createdAfterStr := c.QueryParam("created_after"); createdAfterStr != "" {
+		createdAfter, err := time.Parse(time.RFC3339, createdAfterStr)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid created_after parameter. Must be RFC3339 format (e.g., 2025-01-01T00:00:00Z)",
+			})
+		}
+		filters.CreatedAfter = &createdAfter
+	}
+
+	// Parse optional created_before filter
+	if createdBeforeStr := c.QueryParam("created_before"); createdBeforeStr != "" {
+		createdBefore, err := time.Parse(time.RFC3339, createdBeforeStr)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid created_before parameter. Must be RFC3339 format (e.g., 2025-12-31T23:59:59Z)",
+			})
+		}
+		filters.CreatedBefore = &createdBefore
+	}
+
+	// Parse optional search query
+	if search := c.QueryParam("search"); search != "" {
+		filters.SearchQuery = search
+	}
+
 	// Retrieve issues from database
 	issues, err := h.issueRepo.List(ctx, filters)
 	if err != nil {
@@ -270,10 +320,10 @@ func (h *IssueHandler) ListIssues(c echo.Context) error {
 		})
 	}
 
-	// Get total count
-	countFilters := repository.ListFilters{
-		AuthorID: authorID,
-	}
+	// Get total count using same filters (without pagination)
+	countFilters := filters
+	countFilters.Limit = 0
+	countFilters.Offset = 0
 	total, err := h.issueRepo.Count(ctx, countFilters)
 	if err != nil {
 		h.logger.Error("Failed to count issues", zap.Error(err))

@@ -28,6 +28,9 @@ type mockIssueRepository struct {
 	listErr   error
 	searchErr error
 	countErr  error
+	// Function callbacks for custom test behavior
+	listFunc  func(ctx context.Context, filters repository.ListFilters) ([]*models.Issue, error)
+	countFunc func(ctx context.Context, filters repository.ListFilters) (int64, error)
 }
 
 func (m *mockIssueRepository) Create(ctx context.Context, issue *models.Issue) error {
@@ -83,6 +86,9 @@ func (m *mockIssueRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (m *mockIssueRepository) List(ctx context.Context, filters repository.ListFilters) ([]*models.Issue, error) {
+	if m.listFunc != nil {
+		return m.listFunc(ctx, filters)
+	}
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -97,6 +103,9 @@ func (m *mockIssueRepository) Search(ctx context.Context, query string, filters 
 }
 
 func (m *mockIssueRepository) Count(ctx context.Context, filters repository.ListFilters) (int64, error) {
+	if m.countFunc != nil {
+		return m.countFunc(ctx, filters)
+	}
 	if m.countErr != nil {
 		return 0, m.countErr
 	}
@@ -1187,4 +1196,338 @@ func TestUpdateIssue_InvalidID(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Contains(t, response["error"], "Invalid issue ID format")
+}
+
+// Tests for new filter functionality
+
+func TestListIssues_WithStatusFilter(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	issues := []*models.Issue{
+		{
+			ID:          uuid.New(),
+			Title:       "Issue 1",
+			Description: "Description 1",
+			AuthorID:    userID,
+			Status:      models.IssueStatusDraft,
+		},
+	}
+
+	mockRepo.listFunc = func(ctx context.Context, filters repository.ListFilters) ([]*models.Issue, error) {
+		// Verify status filter is passed correctly
+		assert.Equal(t, models.IssueStatusDraft, filters.Status)
+		assert.Equal(t, userID, filters.AuthorID)
+		return issues, nil
+	}
+	mockRepo.countFunc = func(ctx context.Context, filters repository.ListFilters) (int64, error) {
+		return 1, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?status=Draft", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestListIssues_WithInvalidStatus(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?status=InvalidStatus", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Invalid status parameter")
+}
+
+func TestListIssues_WithTargetDatabaseIDFilter(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	dbID := uuid.New()
+	issues := []*models.Issue{
+		{
+			ID:               uuid.New(),
+			Title:            "Issue 1",
+			Description:      "Description 1",
+			AuthorID:         userID,
+			TargetDatabaseID: dbID,
+		},
+	}
+
+	mockRepo.listFunc = func(ctx context.Context, filters repository.ListFilters) ([]*models.Issue, error) {
+		// Verify database ID filter is passed correctly
+		assert.Equal(t, dbID, filters.DatabaseID)
+		assert.Equal(t, userID, filters.AuthorID)
+		return issues, nil
+	}
+	mockRepo.countFunc = func(ctx context.Context, filters repository.ListFilters) (int64, error) {
+		return 1, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?target_database_id="+dbID.String(), nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestListIssues_WithInvalidTargetDatabaseID(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?target_database_id=invalid-uuid", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Invalid target_database_id parameter")
+}
+
+func TestListIssues_WithDateRangeFilter(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	createdAfter := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	createdBefore := time.Date(2025, 12, 31, 23, 59, 59, 0, time.UTC)
+	issues := []*models.Issue{
+		{
+			ID:          uuid.New(),
+			Title:       "Issue 1",
+			Description: "Description 1",
+			AuthorID:    userID,
+			CreatedAt:   time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	mockRepo.listFunc = func(ctx context.Context, filters repository.ListFilters) ([]*models.Issue, error) {
+		// Verify date range filters are passed correctly
+		assert.NotNil(t, filters.CreatedAfter)
+		assert.NotNil(t, filters.CreatedBefore)
+		assert.Equal(t, createdAfter, *filters.CreatedAfter)
+		assert.Equal(t, createdBefore, *filters.CreatedBefore)
+		return issues, nil
+	}
+	mockRepo.countFunc = func(ctx context.Context, filters repository.ListFilters) (int64, error) {
+		return 1, nil
+	}
+
+	url := "/api/v1/issues?created_after=" + createdAfter.Format(
+		time.RFC3339,
+	) + "&created_before=" + createdBefore.Format(
+		time.RFC3339,
+	)
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestListIssues_WithInvalidCreatedAfter(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?created_after=invalid-date", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Invalid created_after parameter")
+}
+
+func TestListIssues_WithInvalidCreatedBefore(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?created_before=2025-01-01", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Invalid created_before parameter")
+}
+
+func TestListIssues_WithSearchQuery(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	searchQuery := "test search"
+	issues := []*models.Issue{
+		{
+			ID:          uuid.New(),
+			Title:       "Issue with test search in title",
+			Description: "Description 1",
+			AuthorID:    userID,
+		},
+	}
+
+	mockRepo.listFunc = func(ctx context.Context, filters repository.ListFilters) ([]*models.Issue, error) {
+		// Verify search query is passed correctly
+		assert.Equal(t, searchQuery, filters.SearchQuery)
+		return issues, nil
+	}
+	mockRepo.countFunc = func(ctx context.Context, filters repository.ListFilters) (int64, error) {
+		return 1, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/issues?search=test+search", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestListIssues_WithMultipleFilters(t *testing.T) {
+	// Setup
+	e := echo.New()
+	mockRepo := &mockIssueRepository{}
+	logger := zap.NewNop()
+	handler := NewIssueHandler(mockRepo, logger)
+
+	userID := uuid.New()
+	dbID := uuid.New()
+	createdAfter := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	searchQuery := "performance"
+	issues := []*models.Issue{
+		{
+			ID:               uuid.New(),
+			Title:            "Performance issue",
+			Description:      "Description with performance keyword",
+			AuthorID:         userID,
+			TargetDatabaseID: dbID,
+			Status:           models.IssueStatusDraft,
+			CreatedAt:        time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	mockRepo.listFunc = func(ctx context.Context, filters repository.ListFilters) ([]*models.Issue, error) {
+		// Verify all filters are passed correctly
+		assert.Equal(t, models.IssueStatusDraft, filters.Status)
+		assert.Equal(t, dbID, filters.DatabaseID)
+		assert.NotNil(t, filters.CreatedAfter)
+		assert.Equal(t, createdAfter, *filters.CreatedAfter)
+		assert.Equal(t, searchQuery, filters.SearchQuery)
+		return issues, nil
+	}
+	mockRepo.countFunc = func(ctx context.Context, filters repository.ListFilters) (int64, error) {
+		return 1, nil
+	}
+
+	url := "/api/v1/issues?status=Draft&target_database_id=" + dbID.String() +
+		"&created_after=" + createdAfter.Format(time.RFC3339) + "&search=" + searchQuery
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &auth.Claims{UserID: userID})
+
+	// Execute
+	err := handler.ListIssues(c)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 }

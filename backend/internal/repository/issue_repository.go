@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
@@ -9,14 +10,17 @@ import (
 
 // ListFilters defines common filtering options for listing issues
 type ListFilters struct {
-	Limit      int                // Maximum number of results to return
-	Offset     int                // Number of results to skip
-	Status     models.IssueStatus // Filter by status (empty for all)
-	AuthorID   uuid.UUID          // Filter by author (Nil for all)
-	DatabaseID uuid.UUID          // Filter by target database (Nil for all)
-	ProjectID  uuid.UUID          // Filter by project (Nil for all)
-	SortBy     string             // Field to sort by (default: created_at)
-	SortOrder  string             // Sort order: "asc" or "desc" (default: desc)
+	Limit         int                // Maximum number of results to return
+	Offset        int                // Number of results to skip
+	Status        models.IssueStatus // Filter by status (empty for all)
+	AuthorID      uuid.UUID          // Filter by author (Nil for all)
+	DatabaseID    uuid.UUID          // Filter by target database (Nil for all)
+	ProjectID     uuid.UUID          // Filter by project (Nil for all)
+	CreatedAfter  *time.Time         // Filter by issues created after this time
+	CreatedBefore *time.Time         // Filter by issues created before this time
+	SearchQuery   string             // Search query for title and description
+	SortBy        string             // Field to sort by (default: created_at)
+	SortOrder     string             // Sort order: "asc" or "desc" (default: desc)
 }
 
 // IssueRepository defines the interface for issue data operations

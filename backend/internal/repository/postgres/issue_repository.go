@@ -326,6 +326,24 @@ func (r *IssueRepository) buildWhereClause(filters repository.ListFilters) (stri
 	if filters.ProjectID != uuid.Nil {
 		conditions = append(conditions, fmt.Sprintf("project_id = $%d", argIndex))
 		args = append(args, filters.ProjectID)
+		argIndex++
+	}
+
+	if filters.CreatedAfter != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", argIndex))
+		args = append(args, *filters.CreatedAfter)
+		argIndex++
+	}
+
+	if filters.CreatedBefore != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", argIndex))
+		args = append(args, *filters.CreatedBefore)
+		argIndex++
+	}
+
+	if filters.SearchQuery != "" {
+		conditions = append(conditions, fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d)", argIndex, argIndex))
+		args = append(args, "%"+filters.SearchQuery+"%")
 	}
 
 	return strings.Join(conditions, " AND "), args
