@@ -100,52 +100,52 @@ Add policies table for storing Policy configurations (SQL_REVIEW type and future
 
 ### P01M05: Create environments table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M05
 
 **Goal**
 Add environments table with name, description, and policy_id (references Policy).
 
 **Acceptance Criteria**
-- [ ] Environments table created with columns: id (UUID), name, description, policy_id (UUID nullable), created_by_id, created_at, updated_at
-- [ ] Foreign key constraint to users table
-- [ ] Foreign key constraint to policies table (nullable)
-- [ ] Unique constraint on name
-- [ ] Migration file updated
+- [x] Environments table created with columns: id (UUID), name, description, policy_id (UUID nullable), created_by_id, created_at, updated_at
+- [x] Foreign key constraint to users table
+- [x] Foreign key constraint to policies table (nullable)
+- [x] Unique constraint on name
+- [x] Migration file updated
 
 ---
 
 ### P01M06: Create database_instances table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M06
 
 **Goal**
 Add database_instances table with connection details and encrypted credential storage.
 
 **Acceptance Criteria**
-- [ ] Database_instances table created with columns: id (UUID), name, description, database_type (MySQL/PostgreSQL), host, port, username, connection_details_encrypted (TEXT), created_by_id, created_at, updated_at
-- [ ] Foreign key constraint to users table
-- [ ] Check constraint for database_type values
-- [ ] Indexes for common queries
-- [ ] Migration file updated
+- [x] Database_instances table created with columns: id (UUID), name, description, database_type (MySQL/PostgreSQL), host, port, username, connection_details_encrypted (TEXT), created_by_id, created_at, updated_at
+- [x] Foreign key constraint to users table
+- [x] Check constraint for database_type values
+- [x] Indexes for common queries
+- [x] Migration file updated
 
 ---
 
 ### P01M07: Create databases table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M07
 
 **Goal**
 Add databases table linking databases to projects and environments with one-to-one constraints.
 
 **Acceptance Criteria**
-- [ ] Databases table created with columns: id (UUID), project_id, database_instance_id, environment_id, database_name, description, created_by_id, created_at, updated_at
-- [ ] Foreign key constraints to projects, database_instances, environments, users
-- [ ] Unique constraint ensuring each database belongs to exactly one project and one environment
-- [ ] Indexes for common queries
-- [ ] Migration file updated
+- [x] Databases table created with columns: id (UUID), project_id, database_instance_id, environment_id, database_name, description, created_by_id, created_at, updated_at
+- [x] Foreign key constraints to projects, database_instances, environments, users
+- [x] Unique constraint ensuring each database belongs to exactly one project and one environment
+- [x] Indexes for common queries
+- [x] Migration file updated
 
 ---
 
