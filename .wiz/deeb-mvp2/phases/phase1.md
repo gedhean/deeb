@@ -373,92 +373,92 @@ Create model structs for Approval, AuditLog, SchemaSnapshot, and PolicyFinding t
 
 ### P01M21: Implement credential encryption utility (AES-256)
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M21
 
 **Goal**
 Create utility functions for encrypting and decrypting database credentials using AES-256 encryption.
 
 **Acceptance Criteria**
-- [ ] Encryption utility created in `backend/internal/utils/encryption.go`
-- [ ] Encrypt function encrypts credentials using AES-256
-- [ ] Decrypt function decrypts credentials
-- [ ] Key management handled securely (from environment/config)
-- [ ] Unit tests for encryption/decryption passing
-- [ ] Error handling for invalid keys or corrupted data
+- [x] Encryption utility created in `backend/internal/utils/encryption.go`
+- [x] Encrypt function encrypts credentials using AES-256
+- [x] Decrypt function decrypts credentials
+- [x] Key management handled securely (from environment/config)
+- [x] Unit tests for encryption/decryption passing
+- [x] Error handling for invalid keys or corrupted data
 
 ---
 
 ### P01M22: Update configuration management system
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M22
 
 **Goal**
 Update configuration system to support all required settings including encryption key, OAuth config, and database settings.
 
 **Acceptance Criteria**
-- [ ] Config struct updated in `backend/internal/config/config.go`
-- [ ] Encryption key configuration added
-- [ ] OAuth 2.0 Google configuration added
-- [ ] Database connection settings configured
-- [ ] Environment variable loading working
-- [ ] Config file YAML loading working
-- [ ] Config validation implemented
+- [x] Config struct updated in `backend/internal/config/config.go`
+- [x] Encryption key configuration added
+- [x] OAuth 2.0 Google configuration added
+- [x] Database connection settings configured
+- [x] Environment variable loading working
+- [x] Config file YAML loading working
+- [x] Config validation implemented
 
 ---
 
 ### P01M23: Update logging infrastructure with structured logging
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M23
 
 **Goal**
 Ensure structured logging with zap is properly configured and functional across the application.
 
 **Acceptance Criteria**
-- [ ] Logger initialized in `backend/internal/logger/logger.go`
-- [ ] Structured logging configured with zap
-- [ ] Log levels configurable (debug, info, warn, error)
-- [ ] Log output format configurable (JSON for production, console for dev)
-- [ ] Logger accessible throughout application
-- [ ] Logging examples in key locations
+- [x] Logger initialized in `backend/internal/logger/logger.go`
+- [x] Structured logging configured with zap
+- [x] Log levels configurable (debug, info, warn, error)
+- [x] Log output format configurable (JSON for production, console for dev)
+- [x] Logger accessible throughout application
+- [x] Logging examples in key locations
 
 ---
 
 ### P01M24: Implement database connection pooling
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M24
 
 **Goal**
 Configure PostgreSQL connection pooling with appropriate settings for the application.
 
 **Acceptance Criteria**
-- [ ] Database connection pool configured in `backend/internal/database/postgres.go`
-- [ ] Max open connections set appropriately
-- [ ] Max idle connections configured
-- [ ] Connection lifetime settings configured
-- [ ] Connection testing on startup
-- [ ] Pool stats logging implemented
+- [x] Database connection pool configured in `backend/internal/database/postgres.go`
+- [x] Max open connections set appropriately
+- [x] Max idle connections configured
+- [x] Connection lifetime settings configured
+- [x] Connection testing on startup
+- [x] Pool stats logging implemented
 
 ---
 
 ### P01M25: Implement password hashing utility (bcrypt)
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M25
 
 **Goal**
 Create password hashing and verification utilities using bcrypt for email/password authentication.
 
 **Acceptance Criteria**
-- [ ] Password hashing function created in `backend/internal/auth/password.go`
-- [ ] HashPassword function hashes passwords using bcrypt
-- [ ] VerifyPassword function verifies passwords against hashes
-- [ ] Cost factor configured appropriately (minimum 10)
-- [ ] Unit tests for hashing/verification passing
-- [ ] Error handling for invalid inputs
+- [x] Password hashing function created in `backend/internal/auth/password.go`
+- [x] HashPassword function hashes passwords using bcrypt
+- [x] VerifyPassword function verifies passwords against hashes
+- [x] Cost factor configured appropriately (minimum 10)
+- [x] Unit tests for hashing/verification passing
+- [x] Error handling for invalid inputs
 
 ---
 

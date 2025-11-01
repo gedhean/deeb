@@ -89,7 +89,7 @@ func New(version string, configPath string) (*App, error) {
 	}
 
 	// Initialize auth components
-	tokenManager, err := auth.NewTokenManager(cfg.Auth.JWTSecret)
+	tokenManager, err := auth.NewTokenManager(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiration)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create token manager: %w", err)
 	}

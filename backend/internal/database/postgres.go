@@ -46,6 +46,22 @@ func Connect(cfg *config.Config, logger *zap.Logger) (*sqlx.DB, error) {
 		zap.String("host", cfg.Database.Host),
 		zap.Int("port", cfg.Database.Port),
 		zap.String("database", cfg.Database.Database),
+		zap.Int("max_open_conns", cfg.Database.MaxOpenConns),
+		zap.Int("max_idle_conns", cfg.Database.MaxIdleConns),
+		zap.Duration("conn_max_lifetime", cfg.Database.ConnMaxLifetime),
+	)
+
+	// Log pool stats
+	stats := db.Stats()
+	logger.Debug("Database connection pool stats",
+		zap.Int("open_connections", stats.OpenConnections),
+		zap.Int("in_use", stats.InUse),
+		zap.Int("idle", stats.Idle),
+		zap.Int64("wait_count", stats.WaitCount),
+		zap.Duration("wait_duration", stats.WaitDuration),
+		zap.Int64("max_idle_closed", stats.MaxIdleClosed),
+		zap.Int64("max_idle_time_closed", stats.MaxIdleTimeClosed),
+		zap.Int64("max_lifetime_closed", stats.MaxLifetimeClosed),
 	)
 
 	return db, nil

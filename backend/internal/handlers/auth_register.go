@@ -80,7 +80,7 @@ func (h *RegisterHandler) Register(c echo.Context) error {
 	}
 
 	// Hash password
-	passwordHash, err := auth.HashPassword(req.Password)
+	passwordHash, err := auth.HashPassword(req.Password, 0) // Use default cost (12)
 	if err != nil {
 		h.logger.Debug("Password validation failed", zap.Error(err))
 		if errors.Is(err, auth.ErrPasswordTooShort) {

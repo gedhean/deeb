@@ -45,11 +45,13 @@ type Claims struct {
 
 // TokenManager handles JWT token generation and validation
 type TokenManager struct {
-	jwtSecret []byte
+	jwtSecret   []byte
+	expiration  time.Duration
 }
 
-// NewTokenManager creates a new TokenManager with the provided JWT secret
-func NewTokenManager(jwtSecret string) (*TokenManager, error) {
+// NewTokenManager creates a new TokenManager with the provided JWT secret and expiration.
+// If expiration is 0, uses default TokenExpiration (24 hours).
+func NewTokenManager(jwtSecret string, expiration time.Duration) (*TokenManager, error) {
 	if jwtSecret == "" {
 		return nil, fmt.Errorf("JWT secret cannot be empty")
 	}
@@ -58,14 +60,19 @@ func NewTokenManager(jwtSecret string) (*TokenManager, error) {
 		return nil, fmt.Errorf("JWT secret must be at least 32 characters")
 	}
 
+	if expiration == 0 {
+		expiration = TokenExpiration
+	}
+
 	return &TokenManager{
-		jwtSecret: []byte(jwtSecret),
+		jwtSecret:  []byte(jwtSecret),
+		expiration: expiration,
 	}, nil
 }
 
 // GenerateToken creates a new JWT token for the given user with their organization role.
 // Project-specific roles are not included in the token and should be fetched from the
-// database when the user accesses project resources. The token expires after TokenExpiration duration.
+// database when the user accesses project resources. The token expires after the configured expiration duration.
 func (tm *TokenManager) GenerateToken(userID uuid.UUID, email, organizationRole string) (string, error) {
 	// Validate inputs
 	if userID == uuid.Nil {
@@ -87,7 +94,7 @@ func (tm *TokenManager) GenerateToken(userID uuid.UUID, email, organizationRole 
 		Email:            email,
 		OrganizationRole: organizationRole,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(TokenExpiration)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(tm.expiration)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},

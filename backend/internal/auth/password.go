@@ -14,8 +14,8 @@ const (
 	// MaxPasswordLength is the maximum password length (bcrypt has a 72-byte limit)
 	MaxPasswordLength = 72
 
-	// BcryptCost is the work factor for bcrypt (12 = ~250ms on modern hardware)
-	BcryptCost = 12
+	// DefaultBcryptCost is the default work factor for bcrypt (12 = ~250ms on modern hardware)
+	DefaultBcryptCost = 12
 )
 
 var (
@@ -32,9 +32,10 @@ var (
 	ErrInvalidPassword = errors.New("invalid password")
 )
 
-// HashPassword generates a bcrypt hash of the password with cost factor 12.
+// HashPassword generates a bcrypt hash of the password with the specified cost factor.
+// If cost is 0, uses DefaultBcryptCost (12).
 // Returns ErrPasswordTooShort, ErrPasswordTooLong, or ErrEmptyPassword for validation failures.
-func HashPassword(password string) (string, error) {
+func HashPassword(password string, cost int) (string, error) {
 	// Validate password
 	if password == "" {
 		return "", ErrEmptyPassword
@@ -48,8 +49,18 @@ func HashPassword(password string) (string, error) {
 		return "", ErrPasswordTooLong
 	}
 
+	// Use default cost if not specified
+	if cost == 0 {
+		cost = DefaultBcryptCost
+	}
+
+	// Validate cost range
+	if cost < 10 || cost > 31 {
+		return "", fmt.Errorf("bcrypt cost must be between 10 and 31, got %d", cost)
+	}
+
 	// Generate bcrypt hash
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	if err != nil {
 		return "", fmt.Errorf("failed to hash password: %w", err)
 	}
