@@ -18,7 +18,13 @@ type DatabaseRepository interface {
 	// List retrieves all databases with pagination
 	List(ctx context.Context, limit, offset int) ([]*models.Database, error)
 
-	// ListByProject retrieves databases for a specific project
+	// Count returns the total number of databases
+	Count(ctx context.Context) (int, error)
+
+	// GetByProjectID retrieves databases for a specific project (with pagination)
+	GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error)
+
+	// ListByProject retrieves databases for a specific project (alias for GetByProjectID)
 	ListByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error)
 
 	// ListByInstanceID retrieves databases for a specific database instance

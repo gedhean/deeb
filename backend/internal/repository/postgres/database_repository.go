@@ -38,16 +38,23 @@ func (r *DatabaseRepository) Create(ctx context.Context, database *models.Databa
 	database.UpdatedAt = now
 
 	query := `
-		INSERT INTO databases (id, name, database_instance_id, project_id, environment_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO databases (
+			id, project_id, database_instance_id, environment_id,
+			database_name, description, status, created_by_id,
+			created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
 		database.ID,
-		database.Name,
-		database.DatabaseInstanceID,
 		database.ProjectID,
+		database.DatabaseInstanceID,
 		database.EnvironmentID,
+		database.DatabaseName,
+		database.Description,
+		database.Status,
+		database.CreatedByID,
 		database.CreatedAt,
 		database.UpdatedAt,
 	)
@@ -61,7 +68,9 @@ func (r *DatabaseRepository) Create(ctx context.Context, database *models.Databa
 // GetByID retrieves a database by its ID
 func (r *DatabaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Database, error) {
 	query := `
-		SELECT id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+		SELECT id, project_id, database_instance_id, environment_id,
+		       database_name, description, status, created_by_id,
+		       created_at, updated_at
 		FROM databases
 		WHERE id = $1
 	`
@@ -81,7 +90,9 @@ func (r *DatabaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*models
 // List retrieves all databases with pagination
 func (r *DatabaseRepository) List(ctx context.Context, limit, offset int) ([]*models.Database, error) {
 	query := `
-		SELECT id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+		SELECT id, project_id, database_instance_id, environment_id,
+		       database_name, description, status, created_by_id,
+		       created_at, updated_at
 		FROM databases
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -101,6 +112,28 @@ func (r *DatabaseRepository) List(ctx context.Context, limit, offset int) ([]*mo
 	return databases, nil
 }
 
+// Count returns the total number of databases
+func (r *DatabaseRepository) Count(ctx context.Context) (int, error) {
+	query := `SELECT COUNT(*) FROM databases`
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
+// GetByProjectID retrieves databases for a specific project (with pagination)
+func (r *DatabaseRepository) GetByProjectID(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
+	return r.ListByProject(ctx, projectID, limit, offset)
+}
+
 // ListByProject retrieves databases for a specific project
 func (r *DatabaseRepository) ListByProject(
 	ctx context.Context,
@@ -108,7 +141,9 @@ func (r *DatabaseRepository) ListByProject(
 	limit, offset int,
 ) ([]*models.Database, error) {
 	query := `
-		SELECT id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+		SELECT id, project_id, database_instance_id, environment_id,
+		       database_name, description, status, created_by_id,
+		       created_at, updated_at
 		FROM databases
 		WHERE project_id = $1
 		ORDER BY created_at DESC
@@ -136,7 +171,9 @@ func (r *DatabaseRepository) ListByInstanceID(
 	limit, offset int,
 ) ([]*models.Database, error) {
 	query := `
-		SELECT id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+		SELECT id, project_id, database_instance_id, environment_id,
+		       database_name, description, status, created_by_id,
+		       created_at, updated_at
 		FROM databases
 		WHERE database_instance_id = $1
 		ORDER BY created_at DESC
@@ -169,16 +206,15 @@ func (r *DatabaseRepository) Update(ctx context.Context, database *models.Databa
 
 	query := `
 		UPDATE databases
-		SET name = $2, database_instance_id = $3, project_id = $4, environment_id = $5, updated_at = $6
+		SET database_name = $2, description = $3, status = $4, updated_at = $5
 		WHERE id = $1
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
 		database.ID,
-		database.Name,
-		database.DatabaseInstanceID,
-		database.ProjectID,
-		database.EnvironmentID,
+		database.DatabaseName,
+		database.Description,
+		database.Status,
 		database.UpdatedAt,
 	)
 	if err != nil {

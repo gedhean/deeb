@@ -33,15 +33,22 @@ func TestDatabaseCreate(t *testing.T) {
 		dbInstanceID := uuid.New()
 		projectID := uuid.New()
 		envID := uuid.New()
+		createdByID := uuid.New()
+		description := "Test database description"
 		database := &models.Database{
-			Name:               "test_database",
+			DatabaseName:        "test_database",
 			DatabaseInstanceID: dbInstanceID,
 			ProjectID:          projectID,
 			EnvironmentID:      envID,
+			Description:        &description,
+			Status:             models.DatabaseStatusActive,
+			CreatedByID:        createdByID,
 		}
 
 		mock.ExpectExec("INSERT INTO databases").
-			WithArgs(sqlmock.AnyArg(), database.Name, database.DatabaseInstanceID, database.ProjectID, database.EnvironmentID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(sqlmock.AnyArg(), database.ProjectID, database.DatabaseInstanceID, database.EnvironmentID,
+				database.DatabaseName, database.Description, database.Status, database.CreatedByID,
+				sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, database)
@@ -67,10 +74,12 @@ func TestDatabaseCreate(t *testing.T) {
 
 	t.Run("validation error - empty name", func(t *testing.T) {
 		database := &models.Database{
-			Name:               "",
+			DatabaseName:        "",
 			DatabaseInstanceID: uuid.New(),
 			ProjectID:          uuid.New(),
 			EnvironmentID:      uuid.New(),
+			Status:             models.DatabaseStatusActive,
+			CreatedByID:        uuid.New(),
 		}
 
 		err := repo.Create(ctx, database)
@@ -81,10 +90,12 @@ func TestDatabaseCreate(t *testing.T) {
 
 	t.Run("validation error - nil database instance ID", func(t *testing.T) {
 		database := &models.Database{
-			Name:               "test_database",
+			DatabaseName:        "test_database",
 			DatabaseInstanceID: uuid.Nil,
 			ProjectID:          uuid.New(),
 			EnvironmentID:      uuid.New(),
+			Status:             models.DatabaseStatusActive,
+			CreatedByID:        uuid.New(),
 		}
 
 		err := repo.Create(ctx, database)
@@ -95,10 +106,12 @@ func TestDatabaseCreate(t *testing.T) {
 
 	t.Run("validation error - nil project ID", func(t *testing.T) {
 		database := &models.Database{
-			Name:               "test_database",
+			DatabaseName:        "test_database",
 			DatabaseInstanceID: uuid.New(),
 			ProjectID:          uuid.Nil,
 			EnvironmentID:      uuid.New(),
+			Status:             models.DatabaseStatusActive,
+			CreatedByID:        uuid.New(),
 		}
 
 		err := repo.Create(ctx, database)
@@ -120,10 +133,13 @@ func TestDatabaseGetByID(t *testing.T) {
 		dbInstanceID := uuid.New()
 		projectID := uuid.New()
 		envID := uuid.New()
+		createdByID := uuid.New()
+		description := "Test database description"
 		now := time.Now()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"}).
-			AddRow(databaseID, "test_database", dbInstanceID, projectID, envID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
+			"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}).
+			AddRow(databaseID, projectID, dbInstanceID, envID, "test_database", description, "Active", createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases WHERE id =").
 			WithArgs(databaseID).
@@ -142,8 +158,8 @@ func TestDatabaseGetByID(t *testing.T) {
 			t.Errorf("Expected ID %s, got %s", databaseID, database.ID)
 		}
 
-		if database.Name != "test_database" {
-			t.Errorf("Expected name 'test_database', got %s", database.Name)
+		if database.DatabaseName != "test_database" {
+			t.Errorf("Expected name 'test_database', got %s", database.DatabaseName)
 		}
 
 		if err := mock.ExpectationsWereMet(); err != nil {
@@ -156,7 +172,8 @@ func TestDatabaseGetByID(t *testing.T) {
 
 		mock.ExpectQuery("SELECT (.+) FROM databases WHERE id =").
 			WithArgs(databaseID).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"}))
+			WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
+				"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}))
 
 		database, err := repo.GetByID(ctx, databaseID)
 		if err != repository.ErrNotFound {
@@ -187,10 +204,12 @@ func TestDatabaseList(t *testing.T) {
 		dbInstanceID := uuid.New()
 		projectID := uuid.New()
 		envID := uuid.New()
+		createdByID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"}).
-			AddRow(databaseID1, "database1", dbInstanceID, projectID, envID, now, now).
-			AddRow(databaseID2, "database2", dbInstanceID, projectID, envID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
+			"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}).
+			AddRow(databaseID1, projectID, dbInstanceID, envID, "database1", nil, "Active", createdByID, now, now).
+			AddRow(databaseID2, projectID, dbInstanceID, envID, "database2", nil, "Active", createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).
@@ -212,7 +231,8 @@ func TestDatabaseList(t *testing.T) {
 
 	t.Run("empty list", func(t *testing.T) {
 		rows := sqlmock.NewRows(
-			[]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"},
+			[]string{"id", "project_id", "database_instance_id", "environment_id",
+				"database_name", "description", "status", "created_by_id", "created_at", "updated_at"},
 		)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases ORDER BY created_at DESC LIMIT").
@@ -238,6 +258,96 @@ func TestDatabaseList(t *testing.T) {
 	})
 }
 
+func TestDatabaseCount(t *testing.T) {
+	db, mock := setupDatabaseMockDB(t)
+	defer db.Close()
+
+	repo := NewDatabaseRepository(db)
+	ctx := context.Background()
+
+	t.Run("successful count", func(t *testing.T) {
+		rows := sqlmock.NewRows([]string{"count"}).
+			AddRow(42)
+
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM databases").
+			WillReturnRows(rows)
+
+		count, err := repo.Count(ctx)
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		if count != 42 {
+			t.Errorf("Expected count 42, got %d", count)
+		}
+
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unfulfilled expectations: %v", err)
+		}
+	})
+
+	t.Run("zero count", func(t *testing.T) {
+		rows := sqlmock.NewRows([]string{"count"}).
+			AddRow(0)
+
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM databases").
+			WillReturnRows(rows)
+
+		count, err := repo.Count(ctx)
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		if count != 0 {
+			t.Errorf("Expected count 0, got %d", count)
+		}
+
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unfulfilled expectations: %v", err)
+		}
+	})
+}
+
+func TestDatabaseGetByProjectID(t *testing.T) {
+	db, mock := setupDatabaseMockDB(t)
+	defer db.Close()
+
+	repo := NewDatabaseRepository(db)
+	ctx := context.Background()
+
+	t.Run("successful get by project ID", func(t *testing.T) {
+		now := time.Now()
+		databaseID1 := uuid.New()
+		databaseID2 := uuid.New()
+		dbInstanceID := uuid.New()
+		projectID := uuid.New()
+		envID := uuid.New()
+		createdByID := uuid.New()
+
+		rows := sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
+			"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}).
+			AddRow(databaseID1, projectID, dbInstanceID, envID, "database1", nil, "Active", createdByID, now, now).
+			AddRow(databaseID2, projectID, dbInstanceID, envID, "database2", nil, "Active", createdByID, now, now)
+
+		mock.ExpectQuery("SELECT (.+) FROM databases WHERE project_id = (.+) ORDER BY created_at DESC LIMIT").
+			WithArgs(projectID, 10, 0).
+			WillReturnRows(rows)
+
+		databases, err := repo.GetByProjectID(ctx, projectID, 10, 0)
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		if len(databases) != 2 {
+			t.Errorf("Expected 2 databases, got %d", len(databases))
+		}
+
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unfulfilled expectations: %v", err)
+		}
+	})
+}
+
 func TestDatabaseListByProject(t *testing.T) {
 	db, mock := setupDatabaseMockDB(t)
 	defer db.Close()
@@ -252,10 +362,12 @@ func TestDatabaseListByProject(t *testing.T) {
 		dbInstanceID := uuid.New()
 		projectID := uuid.New()
 		envID := uuid.New()
+		createdByID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"}).
-			AddRow(databaseID1, "database1", dbInstanceID, projectID, envID, now, now).
-			AddRow(databaseID2, "database2", dbInstanceID, projectID, envID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
+			"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}).
+			AddRow(databaseID1, projectID, dbInstanceID, envID, "database1", nil, "Active", createdByID, now, now).
+			AddRow(databaseID2, projectID, dbInstanceID, envID, "database2", nil, "Active", createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases WHERE project_id = (.+) ORDER BY created_at DESC LIMIT").
 			WithArgs(projectID, 10, 0).
@@ -278,7 +390,8 @@ func TestDatabaseListByProject(t *testing.T) {
 	t.Run("empty list by project", func(t *testing.T) {
 		projectID := uuid.New()
 		rows := sqlmock.NewRows(
-			[]string{"id", "name", "database_instance_id", "project_id", "environment_id", "created_at", "updated_at"},
+			[]string{"id", "project_id", "database_instance_id", "environment_id",
+				"database_name", "description", "status", "created_by_id", "created_at", "updated_at"},
 		)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases WHERE project_id = (.+) ORDER BY created_at DESC LIMIT").
@@ -316,16 +429,20 @@ func TestDatabaseUpdate(t *testing.T) {
 		dbInstanceID := uuid.New()
 		projectID := uuid.New()
 		envID := uuid.New()
+		description := "Updated description"
 		database := &models.Database{
 			ID:                 databaseID,
-			Name:               "updated_database",
+			DatabaseName:       "updated_database",
 			DatabaseInstanceID: dbInstanceID,
 			ProjectID:          projectID,
 			EnvironmentID:      envID,
+			Description:        &description,
+			Status:             models.DatabaseStatusActive,
+			CreatedByID:        uuid.New(),
 		}
 
 		mock.ExpectExec("UPDATE databases").
-			WithArgs(databaseID, database.Name, database.DatabaseInstanceID, database.ProjectID, database.EnvironmentID, sqlmock.AnyArg()).
+			WithArgs(databaseID, database.DatabaseName, database.Description, database.Status, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, database)
@@ -347,14 +464,16 @@ func TestDatabaseUpdate(t *testing.T) {
 		databaseID := uuid.New()
 		database := &models.Database{
 			ID:                 databaseID,
-			Name:               "updated_database",
+			DatabaseName:       "updated_database",
 			DatabaseInstanceID: uuid.New(),
 			ProjectID:          uuid.New(),
 			EnvironmentID:      uuid.New(),
+			Status:             models.DatabaseStatusActive,
+			CreatedByID:        uuid.New(),
 		}
 
 		mock.ExpectExec("UPDATE databases").
-			WithArgs(databaseID, database.Name, database.DatabaseInstanceID, database.ProjectID, database.EnvironmentID, sqlmock.AnyArg()).
+			WithArgs(databaseID, database.DatabaseName, database.Description, database.Status, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Update(ctx, database)
@@ -370,10 +489,12 @@ func TestDatabaseUpdate(t *testing.T) {
 	t.Run("validation error - empty name", func(t *testing.T) {
 		database := &models.Database{
 			ID:                 uuid.New(),
-			Name:               "",
+			DatabaseName:       "",
 			DatabaseInstanceID: uuid.New(),
 			ProjectID:          uuid.New(),
 			EnvironmentID:      uuid.New(),
+			Status:             models.DatabaseStatusActive,
+			CreatedByID:        uuid.New(),
 		}
 
 		err := repo.Update(ctx, database)
