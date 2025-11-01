@@ -32,18 +32,18 @@ Rebuild the database schema from scratch aligned with refined project definition
 
 ### P01M01: Design fresh PostgreSQL schema for refined project definitions
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M01
 
 **Goal**
 Design the complete PostgreSQL database schema aligned with refined project definitions from docs/project.md, including all core tables: users, projects, environments, policies, database_instances, databases, change_plans, approvals, audit_logs, schema_snapshots, policy_findings.
 
 **Acceptance Criteria**
-- [ ] Schema ERD created documenting all tables and relationships
-- [ ] All core tables defined with columns, constraints, and indexes
-- [ ] Foreign key relationships documented
-- [ ] Schema aligns with refined project definitions (Change Plans instead of Issues)
-- [ ] Schema design document created at `backend/docs/schema.md` (overwrite the existing schema.md)
+- [x] Schema ERD created documenting all tables and relationships
+- [x] All core tables defined with columns, constraints, and indexes
+- [x] Foreign key relationships documented
+- [x] Schema aligns with refined project definitions (Change Plans instead of Issues)
+- [x] Schema design document created at `backend/docs/schema.md` (overwrite the existing schema.md)
 
 ---
 
