@@ -203,85 +203,85 @@ Add audit_logs table for comprehensive audit trail of all user actions.
 
 ### P01M11: Create schema_snapshots table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M11
 
 **Goal**
 Add schema_snapshots table for storing before/after schema snapshots (JSONB per PRD).
 
 **Acceptance Criteria**
-- [ ] Schema_snapshots table created with columns: id (UUID), database_id, change_plan_id, snapshot_type (before/after), snapshot_data (JSONB), snapshot_data_raw (TEXT), created_at
-- [ ] Foreign key constraints to databases, change_plans
-- [ ] Indexes for querying snapshots by database and change plan
-- [ ] Migration file updated
+- [x] Schema_snapshots table created with columns: id (UUID), database_id, change_plan_id, snapshot_type (before/after), snapshot_data (JSONB), snapshot_data_raw (TEXT), created_at
+- [x] Foreign key constraints to databases, change_plans
+- [x] Indexes for querying snapshots by database and change plan
+- [x] Migration file updated
 
 ---
 
 ### P01M12: Create policy_findings table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M12
 
 **Goal**
 Add policy_findings table for storing SQL Review findings (results) with severity levels from policy evaluation.
 
 **Acceptance Criteria**
-- [ ] Policy_findings table created with columns: id (UUID), change_plan_id, validator_type, severity (Error/Warning/Info), message, rule_name, line_number (nullable), column_number (nullable), created_at
-- [ ] Foreign key constraint to change_plans table
-- [ ] Indexes for querying findings by change plan and severity
-- [ ] Migration file updated
+- [x] Policy_findings table created with columns: id (UUID), change_plan_id, validator_type, severity (Error/Warning/Info), message, rule_name, line_number (nullable), column_number (nullable), created_at
+- [x] Foreign key constraint to change_plans table
+- [x] Indexes for querying findings by change plan and severity
+- [x] Migration file updated
 
 ---
 
 ### P01M13: Create project_members table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M13
 
 **Goal**
 Add project_members table for managing project membership and project-level roles.
 
 **Acceptance Criteria**
-- [ ] Project_members table created with columns: id (UUID), project_id, user_id, project_role (Owner/Developer/Approver/Viewer), added_by_id, added_at
-- [ ] Foreign key constraints to projects, users
-- [ ] Unique constraint on (project_id, user_id)
-- [ ] Project role enum/check constraint
-- [ ] Indexes for common queries
-- [ ] Migration file updated
+- [x] Project_members table created with columns: id (UUID), project_id, user_id, project_role (Owner/Developer/Approver/Viewer), added_by_id, added_at
+- [x] Foreign key constraints to projects, users
+- [x] Unique constraint on (project_id, user_id)
+- [x] Project role enum/check constraint
+- [x] Indexes for common queries
+- [x] Migration file updated
 
 ---
 
 ### P01M14: Add indexes and constraints to schema migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M14
 
 **Goal**
 Add performance indexes, unique constraints, and check constraints to complete the schema migration.
 
 **Acceptance Criteria**
-- [ ] All foreign key indexes created
-- [ ] Unique constraints added where needed (email, project names, etc.)
-- [ ] Check constraints for enum values
-- [ ] Composite indexes for common query patterns
-- [ ] Migration file complete and validated
+- [x] All foreign key indexes created (verified in all migration files)
+- [x] Unique constraints added where needed (email, project names, policy names, environment names, etc.)
+- [x] Check constraints for enum values (all status, type, role fields have CHECK constraints)
+- [x] Composite indexes for common query patterns (e.g., audit_logs resource_type+resource_id, approvals change_plan+approver)
+- [x] Migration files complete and validated (all 12 migrations include proper indexes and constraints)
 
 ---
 
 ### P01M15: Create User model struct
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M15
 
 **Goal**
 Create Go User model struct aligned with new schema, including all fields and JSON/database tags.
 
 **Acceptance Criteria**
-- [ ] User struct defined in `backend/internal/models/user.go`
-- [ ] All fields match schema: id, email, password_hash, display_name, organization_role, is_active, oauth_provider, oauth_id, two_factor_enabled, two_factor_secret, last_login_at, created_at, updated_at
-- [ ] JSON tags for API responses (password_hash and two_factor_secret excluded)
-- [ ] Database tags match column names
-- [ ] OrganizationRole constants defined
+- [x] User struct defined in `backend/internal/models/user.go`
+- [x] All fields match schema: id, email, password_hash, display_name, organization_role, is_active, oauth_provider, oauth_id, two_factor_enabled, two_factor_secret, last_login_at, created_at, updated_at
+- [x] JSON tags for API responses (password_hash and two_factor_secret excluded)
+- [x] Database tags match column names
+- [x] OrganizationRole constants defined (OrganizationAdmin, OrganizationDBA, OrganizationDeveloper)
 
 ---
 
