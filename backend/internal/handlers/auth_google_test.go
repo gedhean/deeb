@@ -19,7 +19,7 @@ import (
 func TestGoogleOAuthRedirect(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -63,7 +63,7 @@ func TestGoogleOAuthRedirect(t *testing.T) {
 func TestGoogleOAuthRedirect_WrongMethod(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -90,7 +90,7 @@ func TestGoogleOAuthRedirect_WrongMethod(t *testing.T) {
 func TestGoogleOAuthCallback_MissingState(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -122,7 +122,7 @@ func TestGoogleOAuthCallback_MissingState(t *testing.T) {
 func TestGoogleOAuthCallback_InvalidState(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -154,7 +154,7 @@ func TestGoogleOAuthCallback_InvalidState(t *testing.T) {
 func TestGoogleOAuthCallback_ExpiredState(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -194,7 +194,7 @@ func TestGoogleOAuthCallback_ExpiredState(t *testing.T) {
 func TestGoogleOAuthCallback_ErrorFromGoogle(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -230,7 +230,7 @@ func TestGoogleOAuthCallback_ErrorFromGoogle(t *testing.T) {
 func TestGoogleOAuthCallback_MissingCode(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -266,7 +266,7 @@ func TestGoogleOAuthCallback_MissingCode(t *testing.T) {
 func TestGoogleOAuthCallback_WrongMethod(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -307,7 +307,7 @@ func TestGoogleOAuthCallback_InactiveUser(t *testing.T) {
 func TestGenerateStateToken(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -340,7 +340,7 @@ func TestGenerateStateToken(t *testing.T) {
 func TestStateCleanup(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
@@ -378,7 +378,7 @@ func TestStateCleanup(t *testing.T) {
 func TestOAuthConfig(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(

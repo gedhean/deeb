@@ -59,4 +59,3 @@ func (a *AuditLog) ToResponse() *AuditLogResponse {
 		Timestamp:    a.Timestamp,
 	}
 }
-

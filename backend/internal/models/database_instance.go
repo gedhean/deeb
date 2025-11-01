@@ -27,63 +27,63 @@ const (
 
 // DatabaseInstance represents a database server or cluster
 type DatabaseInstance struct {
-	ID                        uuid.UUID            `json:"id"                         db:"id"`
-	Name                      string               `json:"name"                       db:"name"`
-	Description               *string              `json:"description,omitempty"      db:"description"`
-	DatabaseType              DatabaseType          `json:"database_type"              db:"database_type"`
-	Host                      string               `json:"host"                       db:"host"`
-	Port                      int                  `json:"port"                       db:"port"`
-	Username                  string               `json:"username"                   db:"username"`
-	ConnectionDetailsEncrypted *string             `json:"-"                          db:"connection_details_encrypted"`
-	UseRDSIAMAuth             bool                 `json:"use_rds_iam_auth"          db:"use_rds_iam_auth"`
-	RequireSSL                bool                 `json:"require_ssl"                db:"require_ssl"`
-	Status                    DatabaseInstanceStatus `json:"status"                    db:"status"`
-	CreatedByID               uuid.UUID            `json:"created_by_id"              db:"created_by_id"`
-	CreatedAt                 time.Time            `json:"created_at"                 db:"created_at"`
-	UpdatedAt                 time.Time            `json:"updated_at"                 db:"updated_at"`
+	ID                         uuid.UUID              `json:"id"                         db:"id"`
+	Name                       string                 `json:"name"                       db:"name"`
+	Description                *string                `json:"description,omitempty"      db:"description"`
+	DatabaseType               DatabaseType           `json:"database_type"              db:"database_type"`
+	Host                       string                 `json:"host"                       db:"host"`
+	Port                       int                    `json:"port"                       db:"port"`
+	Username                   string                 `json:"username"                   db:"username"`
+	ConnectionDetailsEncrypted *string                `json:"-"                          db:"connection_details_encrypted"`
+	UseRDSIAMAuth              bool                   `json:"use_rds_iam_auth"          db:"use_rds_iam_auth"`
+	RequireSSL                 bool                   `json:"require_ssl"                db:"require_ssl"`
+	Status                     DatabaseInstanceStatus `json:"status"                    db:"status"`
+	CreatedByID                uuid.UUID              `json:"created_by_id"              db:"created_by_id"`
+	CreatedAt                  time.Time              `json:"created_at"                 db:"created_at"`
+	UpdatedAt                  time.Time              `json:"updated_at"                 db:"updated_at"`
 }
 
 // CreateDatabaseInstanceRequest represents the request to create a new database instance
 type CreateDatabaseInstanceRequest struct {
-	Name                      string      `json:"name"                       validate:"required,max=100"`
-	Description               *string     `json:"description,omitempty"`
-	DatabaseType              DatabaseType `json:"database_type"            validate:"required,oneof=mysql postgresql"`
-	Host                      string      `json:"host"                       validate:"required,max=255"`
-	Port                      int         `json:"port"                       validate:"required,min=1,max=65535"`
-	Username                  string      `json:"username"                   validate:"required,max=255"`
-	ConnectionDetailsEncrypted *string    `json:"connection_details_encrypted,omitempty"`
-	UseRDSIAMAuth             bool        `json:"use_rds_iam_auth"`
-	RequireSSL                bool        `json:"require_ssl"`
+	Name                       string       `json:"name"                       validate:"required,max=100"`
+	Description                *string      `json:"description,omitempty"`
+	DatabaseType               DatabaseType `json:"database_type"            validate:"required,oneof=mysql postgresql"`
+	Host                       string       `json:"host"                       validate:"required,max=255"`
+	Port                       int          `json:"port"                       validate:"required,min=1,max=65535"`
+	Username                   string       `json:"username"                   validate:"required,max=255"`
+	ConnectionDetailsEncrypted *string      `json:"connection_details_encrypted,omitempty"`
+	UseRDSIAMAuth              bool         `json:"use_rds_iam_auth"`
+	RequireSSL                 bool         `json:"require_ssl"`
 }
 
 // UpdateDatabaseInstanceRequest represents the request to update a database instance
 type UpdateDatabaseInstanceRequest struct {
-	Name                      *string               `json:"name,omitempty"                       validate:"omitempty,max=100"`
-	Description               *string               `json:"description,omitempty"`
-	DatabaseType              *DatabaseType         `json:"database_type,omitempty"              validate:"omitempty,oneof=mysql postgresql"`
-	Host                      *string               `json:"host,omitempty"                       validate:"omitempty,max=255"`
-	Port                      *int                  `json:"port,omitempty"                       validate:"omitempty,min=1,max=65535"`
-	Username                  *string               `json:"username,omitempty"                   validate:"omitempty,max=255"`
-	ConnectionDetailsEncrypted *string              `json:"connection_details_encrypted,omitempty"`
-	UseRDSIAMAuth             *bool                 `json:"use_rds_iam_auth,omitempty"`
-	RequireSSL                *bool                 `json:"require_ssl,omitempty"`
-	Status                    *DatabaseInstanceStatus `json:"status,omitempty"                   validate:"omitempty,oneof=Active Inactive Maintenance"`
+	Name                       *string                 `json:"name,omitempty"                       validate:"omitempty,max=100"`
+	Description                *string                 `json:"description,omitempty"`
+	DatabaseType               *DatabaseType           `json:"database_type,omitempty"              validate:"omitempty,oneof=mysql postgresql"`
+	Host                       *string                 `json:"host,omitempty"                       validate:"omitempty,max=255"`
+	Port                       *int                    `json:"port,omitempty"                       validate:"omitempty,min=1,max=65535"`
+	Username                   *string                 `json:"username,omitempty"                   validate:"omitempty,max=255"`
+	ConnectionDetailsEncrypted *string                 `json:"connection_details_encrypted,omitempty"`
+	UseRDSIAMAuth              *bool                   `json:"use_rds_iam_auth,omitempty"`
+	RequireSSL                 *bool                   `json:"require_ssl,omitempty"`
+	Status                     *DatabaseInstanceStatus `json:"status,omitempty"                   validate:"omitempty,oneof=Active Inactive Maintenance"`
 }
 
 // DatabaseInstanceResponse represents a database instance response
 type DatabaseInstanceResponse struct {
-	ID            uuid.UUID            `json:"id"`
-	Name          string               `json:"name"`
-	Description   *string              `json:"description,omitempty"`
-	DatabaseType  DatabaseType         `json:"database_type"`
-	Host          string               `json:"host"`
-	Port          int                  `json:"port"`
-	Username      string               `json:"username"`
-	UseRDSIAMAuth bool                 `json:"use_rds_iam_auth"`
-	RequireSSL    bool                 `json:"require_ssl"`
+	ID            uuid.UUID              `json:"id"`
+	Name          string                 `json:"name"`
+	Description   *string                `json:"description,omitempty"`
+	DatabaseType  DatabaseType           `json:"database_type"`
+	Host          string                 `json:"host"`
+	Port          int                    `json:"port"`
+	Username      string                 `json:"username"`
+	UseRDSIAMAuth bool                   `json:"use_rds_iam_auth"`
+	RequireSSL    bool                   `json:"require_ssl"`
 	Status        DatabaseInstanceStatus `json:"status"`
-	CreatedAt     time.Time            `json:"created_at"`
-	UpdatedAt     time.Time            `json:"updated_at"`
+	CreatedAt     time.Time              `json:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at"`
 }
 
 // ToResponse converts a DatabaseInstance to DatabaseInstanceResponse

@@ -55,4 +55,3 @@ func (a *Approval) ToResponse() *ApprovalResponse {
 		CreatedAt:    a.CreatedAt,
 	}
 }
-

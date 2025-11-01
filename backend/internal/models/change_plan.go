@@ -75,24 +75,24 @@ type ChangePlan struct {
 
 // CreateChangePlanRequest represents the request to create a new change plan
 type CreateChangePlanRequest struct {
-	ProjectID        uuid.UUID `json:"project_id"         validate:"required"`
-	TargetDatabaseID uuid.UUID `json:"target_database_id"  validate:"required"`
-	Title            string    `json:"title"               validate:"required,max=255"`
-	Description      string    `json:"description"         validate:"required"`
+	ProjectID        uuid.UUID  `json:"project_id"         validate:"required"`
+	TargetDatabaseID uuid.UUID  `json:"target_database_id"  validate:"required"`
+	Title            string     `json:"title"               validate:"required,max=255"`
+	Description      string     `json:"description"         validate:"required"`
 	ChangeType       ChangeType `json:"change_type"        validate:"required,oneof=DDL DML"`
-	SQLContent       string    `json:"sql_content"         validate:"required"`
-	RollbackSQL      *string   `json:"rollback_sql,omitempty"`
+	SQLContent       string     `json:"sql_content"         validate:"required"`
+	RollbackSQL      *string    `json:"rollback_sql,omitempty"`
 }
 
 // UpdateChangePlanRequest represents the request to update a change plan
 type UpdateChangePlanRequest struct {
-	Title          *string          `json:"title,omitempty"          validate:"omitempty,max=255"`
-	Description    *string          `json:"description,omitempty"`
-	SQLContent     *string          `json:"sql_content,omitempty"`
-	RollbackSQL    *string          `json:"rollback_sql,omitempty"`
-	Status         *ChangePlanStatus `json:"status,omitempty"        validate:"omitempty,oneof=Draft Open Approved Closed Executed Failed"`
-	RiskLevel      *RiskLevel        `json:"risk_level,omitempty"    validate:"omitempty,oneof=Low Medium High"`
-	AssignedReviewerID *uuid.UUID    `json:"assigned_reviewer_id,omitempty"`
+	Title              *string           `json:"title,omitempty"          validate:"omitempty,max=255"`
+	Description        *string           `json:"description,omitempty"`
+	SQLContent         *string           `json:"sql_content,omitempty"`
+	RollbackSQL        *string           `json:"rollback_sql,omitempty"`
+	Status             *ChangePlanStatus `json:"status,omitempty"        validate:"omitempty,oneof=Draft Open Approved Closed Executed Failed"`
+	RiskLevel          *RiskLevel        `json:"risk_level,omitempty"    validate:"omitempty,oneof=Low Medium High"`
+	AssignedReviewerID *uuid.UUID        `json:"assigned_reviewer_id,omitempty"`
 }
 
 // ChangePlanResponse represents a change plan response
@@ -142,4 +142,3 @@ func (cp *ChangePlan) ToResponse() *ChangePlanResponse {
 		UpdatedAt:           cp.UpdatedAt,
 	}
 }
-
