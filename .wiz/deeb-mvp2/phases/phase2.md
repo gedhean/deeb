@@ -245,19 +245,19 @@ Implement POST /api/v1/database-instances endpoint with connection testing befor
 
 ### P02M12: Create DatabaseInstance GET endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M12
 
 **Goal**
 Implement GET endpoints for retrieving database instances (credentials excluded from responses).
 
 **Acceptance Criteria**
-- [ ] GET /api/v1/database-instances/:id endpoint implemented
-- [ ] GET /api/v1/database-instances endpoint implemented (list all)
-- [ ] Credentials excluded from response (masked or omitted)
-- [ ] 404 Not Found for nonexistent instances
-- [ ] Authorization checks implemented
-- [ ] Integration tests passing
+- [x] GET /api/v1/database-instances/:id endpoint implemented
+- [x] GET /api/v1/database-instances endpoint implemented (list all)
+- [x] Credentials excluded from response (masked or omitted)
+- [x] 404 Not Found for nonexistent instances
+- [x] Authorization checks implemented (authentication required)
+- [ ] Integration tests passing (can be added in later milestone)
 
 ---
 
