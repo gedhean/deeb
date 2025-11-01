@@ -2,6 +2,8 @@ package models
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -82,4 +84,121 @@ func (p *Policy) ToResponse() *PolicyResponse {
 		CreatedAt:    p.CreatedAt,
 		UpdatedAt:    p.UpdatedAt,
 	}
+}
+
+// Validation errors
+var (
+	ErrPolicyNameRequired     = errors.New("policy name is required")
+	ErrPolicyNameTooLong      = errors.New("policy name must not exceed 100 characters")
+	ErrPolicyDescriptionTooLong = errors.New("description must not exceed 500 characters")
+	ErrPolicyTypeRequired     = errors.New("policy type is required")
+	ErrPolicyTypeInvalid      = errors.New("policy type must be SQL_REVIEW")
+	ErrPolicyConfigRequired   = errors.New("policy config is required")
+)
+
+// Validate validates the policy model
+func (p *Policy) Validate() error {
+	// Trim whitespace
+	p.Name = strings.TrimSpace(p.Name)
+	if p.Description != nil {
+		trimmed := strings.TrimSpace(*p.Description)
+		p.Description = &trimmed
+	}
+
+	// Validate name
+	if p.Name == "" {
+		return ErrPolicyNameRequired
+	}
+	if len(p.Name) > 100 {
+		return ErrPolicyNameTooLong
+	}
+
+	// Validate description
+	if p.Description != nil && len(*p.Description) > 500 {
+		return ErrPolicyDescriptionTooLong
+	}
+
+	// Validate type
+	if p.Type == "" {
+		return ErrPolicyTypeRequired
+	}
+	if p.Type != PolicyTypeSQLReview {
+		return ErrPolicyTypeInvalid
+	}
+
+	// Validate config
+	if p.PolicyConfig == nil || len(p.PolicyConfig) == 0 {
+		return ErrPolicyConfigRequired
+	}
+
+	return nil
+}
+
+// ValidateCreatePolicyRequest validates a create request
+func ValidateCreatePolicyRequest(req *CreatePolicyRequest) error {
+	// Trim whitespace
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Description != nil {
+		trimmed := strings.TrimSpace(*req.Description)
+		req.Description = &trimmed
+	}
+
+	// Validate name
+	if req.Name == "" {
+		return ErrPolicyNameRequired
+	}
+	if len(req.Name) > 100 {
+		return ErrPolicyNameTooLong
+	}
+
+	// Validate description
+	if req.Description != nil && len(*req.Description) > 500 {
+		return ErrPolicyDescriptionTooLong
+	}
+
+	// Validate type
+	if req.Type == "" {
+		return ErrPolicyTypeRequired
+	}
+	if req.Type != PolicyTypeSQLReview {
+		return ErrPolicyTypeInvalid
+	}
+
+	// Validate config
+	if req.PolicyConfig == nil || len(req.PolicyConfig) == 0 {
+		return ErrPolicyConfigRequired
+	}
+
+	return nil
+}
+
+// ValidateUpdatePolicyRequest validates an update request
+func ValidateUpdatePolicyRequest(req *UpdatePolicyRequest) error {
+	// Validate name if provided
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			return ErrPolicyNameRequired
+		}
+		if len(name) > 100 {
+			return ErrPolicyNameTooLong
+		}
+		req.Name = &name
+	}
+
+	// Validate description if provided
+	if req.Description != nil {
+		desc := strings.TrimSpace(*req.Description)
+		if len(desc) > 500 {
+			return ErrPolicyDescriptionTooLong
+		}
+		req.Description = &desc
+	}
+
+	// Validate config if provided
+	if req.PolicyConfig != nil && len(*req.PolicyConfig) == 0 {
+		return ErrPolicyConfigRequired
+	}
+
+	return nil
 }

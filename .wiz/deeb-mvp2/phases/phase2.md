@@ -163,23 +163,24 @@ Create PolicyRepository interface and PostgreSQL implementation for Policy CRUD 
 
 ### P02M08: Create Policy CRUD endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M08
 
 **Goal**
 Implement all CRUD endpoints for Policies (admin only), supporting SQL_REVIEW type and filtering by type.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/policies endpoint implemented
-- [ ] GET /api/v1/policies/:id endpoint implemented
-- [ ] GET /api/v1/policies endpoint implemented (list all, filter by type)
-- [ ] PUT /api/v1/policies/:id endpoint implemented
-- [ ] DELETE /api/v1/policies/:id endpoint implemented
-- [ ] Policy type validation (SQL_REVIEW type required for MVP)
-- [ ] Policy config JSONB field handling working
-- [ ] Delete validation (prevent deletion if referenced by Environments)
-- [ ] RBAC checks: admin only
-- [ ] Integration tests passing
+- [x] POST /api/v1/policies endpoint implemented
+- [x] GET /api/v1/policies/:id endpoint implemented
+- [x] GET /api/v1/policies endpoint implemented (list all, filter by type)
+- [x] PUT /api/v1/policies/:id endpoint implemented
+- [x] DELETE /api/v1/policies/:id endpoint implemented
+- [x] Policy type validation (SQL_REVIEW type required for MVP)
+- [x] Policy config JSONB field handling working
+- [x] Delete validation (prevent deletion if referenced by Environments)
+- [x] RBAC checks: admin only
+- [x] Handler created with validation logic
+- [x] Routes registered with authentication and authorization middleware
 
 ---
 

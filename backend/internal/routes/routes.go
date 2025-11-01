@@ -157,6 +157,23 @@ func setupEnvironmentRoutes(e *echo.Echo, envRepo repository.EnvironmentReposito
 	environmentsGroup.DELETE("/:id", envHandler.DeleteEnvironment, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 }
 
+// setupPolicyRoutes registers policy management routes
+func setupPolicyRoutes(e *echo.Echo, policyRepo repository.PolicyRepository, envRepo repository.EnvironmentRepository, tokenManager *auth.TokenManager) {
+	policyHandler := handlers.NewPolicyHandler(policyRepo, envRepo, logger.Get())
+	policiesGroup := e.Group("/api/v1/policies")
+
+	// Authentication and authorization middleware
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	authzMiddleware := middleware.NewAuthzMiddleware()
+
+	// All policy routes require admin role
+	policiesGroup.POST("", policyHandler.CreatePolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	policiesGroup.GET("", policyHandler.ListPolicies, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	policiesGroup.GET("/:id", policyHandler.GetPolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	policiesGroup.PUT("/:id", policyHandler.UpdatePolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	policiesGroup.DELETE("/:id", policyHandler.DeletePolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+}
+
 // setupDatabaseInstanceRoutes registers database instance management routes
 func setupDatabaseInstanceRoutes(e *echo.Echo, dbInstanceRepo repository.DatabaseInstanceRepository) {
 	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(dbInstanceRepo, logger.Get())
