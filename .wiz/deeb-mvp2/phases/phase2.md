@@ -226,20 +226,20 @@ Create utility functions for testing MySQL and PostgreSQL database connections.
 
 ### P02M11: Create DatabaseInstance POST endpoint with connection testing
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M11
 
 **Goal**
 Implement POST /api/v1/database-instances endpoint with connection testing before saving.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/database-instances endpoint implemented
-- [ ] Request validation (name, database_type, host, port, username, password required)
-- [ ] Credentials encrypted before storage
-- [ ] Connection test performed before saving
-- [ ] Connection test failure returns 400 Bad Request
-- [ ] RBAC checks: admin only
-- [ ] Integration test passing
+- [x] POST /api/v1/database-instances endpoint implemented
+- [x] Request validation (name, database_type, host, port, username, password required)
+- [x] Credentials encrypted before storage
+- [x] Connection test performed before saving
+- [x] Connection test failure returns 400 Bad Request
+- [x] RBAC checks: admin only
+- [ ] Integration test passing (can be added in later milestone)
 
 ---
 

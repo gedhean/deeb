@@ -41,7 +41,7 @@ func Setup(
 	setupProjectRoutes(e, projectRepo, dbRepo, tokenManager)
 	setupEnvironmentRoutes(e, envRepo, db, tokenManager)
 	setupPolicyRoutes(e, policyRepo, envRepo, tokenManager)
-	setupDatabaseInstanceRoutes(e, dbInstanceRepo)
+	setupDatabaseInstanceRoutes(e, dbInstanceRepo, cfg.Security.EncryptionKey, tokenManager)
 	setupDatabaseRoutes(e, dbRepo)
 	setupIssueRoutes(e, issueRepo, tokenManager)
 
@@ -177,15 +177,19 @@ func setupPolicyRoutes(e *echo.Echo, policyRepo repository.PolicyRepository, env
 }
 
 // setupDatabaseInstanceRoutes registers database instance management routes
-func setupDatabaseInstanceRoutes(e *echo.Echo, dbInstanceRepo repository.DatabaseInstanceRepository) {
-	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(dbInstanceRepo, logger.Get())
+func setupDatabaseInstanceRoutes(e *echo.Echo, dbInstanceRepo repository.DatabaseInstanceRepository, encryptionKey string, tokenManager *auth.TokenManager) {
+	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(dbInstanceRepo, encryptionKey, logger.Get())
 	dbInstancesGroup := e.Group("/api/v1/database-instances")
 
-	dbInstancesGroup.POST("", dbInstanceHandler.CreateDatabaseInstance)
-	dbInstancesGroup.GET("", dbInstanceHandler.ListDatabaseInstances)
-	dbInstancesGroup.GET("/:id", dbInstanceHandler.GetDatabaseInstance)
-	dbInstancesGroup.PUT("/:id", dbInstanceHandler.UpdateDatabaseInstance)
-	dbInstancesGroup.DELETE("/:id", dbInstanceHandler.DeleteDatabaseInstance)
+	// Authentication and authorization middleware
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	authzMiddleware := middleware.NewAuthzMiddleware()
+
+	dbInstancesGroup.POST("", dbInstanceHandler.CreateDatabaseInstance, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	dbInstancesGroup.GET("", dbInstanceHandler.ListDatabaseInstances, authMiddleware.Authenticate)
+	dbInstancesGroup.GET("/:id", dbInstanceHandler.GetDatabaseInstance, authMiddleware.Authenticate)
+	dbInstancesGroup.PUT("/:id", dbInstanceHandler.UpdateDatabaseInstance, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	dbInstancesGroup.DELETE("/:id", dbInstanceHandler.DeleteDatabaseInstance, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 }
 
 // setupDatabaseRoutes registers database management routes

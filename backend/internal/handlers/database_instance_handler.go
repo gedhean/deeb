@@ -1,38 +1,64 @@
 package handlers
 
 import (
-	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/utils"
 	"go.uber.org/zap"
 )
 
 // DatabaseInstanceHandler handles HTTP requests for database instances
 type DatabaseInstanceHandler struct {
 	dbInstanceRepo repository.DatabaseInstanceRepository
+	encryptionKey  string
 	logger         *zap.Logger
 }
 
 // NewDatabaseInstanceHandler creates a new database instance handler
 func NewDatabaseInstanceHandler(
 	dbInstanceRepo repository.DatabaseInstanceRepository,
+	encryptionKey string,
 	logger *zap.Logger,
 ) *DatabaseInstanceHandler {
 	return &DatabaseInstanceHandler{
 		dbInstanceRepo: dbInstanceRepo,
+		encryptionKey:  encryptionKey,
 		logger:         logger,
 	}
 }
 
+// encryptConnectionDetails encrypts password and returns encrypted JSON string
+func (h *DatabaseInstanceHandler) encryptConnectionDetails(password string) (string, error) {
+	details := map[string]string{
+		"password": password,
+	}
+	detailsJSON, err := json.Marshal(details)
+	if err != nil {
+		return "", err
+	}
+	return utils.Encrypt(string(detailsJSON), h.encryptionKey)
+}
+
 // CreateDatabaseInstance handles POST /api/v1/database-instances
 func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
 
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse request
 	var req models.CreateDatabaseInstanceRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error("Failed to bind request", zap.Error(err))
@@ -45,19 +71,71 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 	if err := models.ValidateCreateDatabaseInstanceRequest(&req); err != nil {
 		h.logger.Error("Validation failed", zap.Error(err))
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": err.Error(),
+			"error":   "Validation failed",
+			"details": err.Error(),
 		})
 	}
 
-	// Create database instance
-	instance := &models.DatabaseInstance{
-		Name:          req.Name,
-		Host:          req.Host,
-		Port:          req.Port,
-		Engine:        req.Engine,
-		EnvironmentID: req.EnvironmentID,
+	// Test database connection before saving
+	// Use a default database name for connection testing (e.g., "mysql" for MySQL, "postgres" for PostgreSQL)
+	testDatabase := ""
+	if req.DatabaseType == models.DatabaseTypeMySQL {
+		testDatabase = "mysql"
+	} else if req.DatabaseType == models.DatabaseTypePostgreSQL {
+		testDatabase = "postgres"
 	}
 
+	connectionParams := utils.ConnectionTestParams{
+		DatabaseType:             string(req.DatabaseType),
+		Host:                    req.Host,
+		Port:                    req.Port,
+		Username:                req.Username,
+		Password:                req.Password,
+		Database:                testDatabase,
+		UseSSL:                  req.RequireSSL,
+		ConnectionTimeoutSeconds: 10,
+	}
+
+	var connectionErr error
+	if req.DatabaseType == models.DatabaseTypeMySQL {
+		connectionErr = utils.TestMySQLConnection(ctx, connectionParams)
+	} else if req.DatabaseType == models.DatabaseTypePostgreSQL {
+		connectionErr = utils.TestPostgreSQLConnection(ctx, connectionParams)
+	}
+
+	if connectionErr != nil {
+		h.logger.Warn("Database connection test failed", zap.Error(connectionErr), zap.String("host", req.Host), zap.Int("port", req.Port))
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error":   "Database connection test failed",
+			"details": connectionErr.Error(),
+		})
+	}
+
+	// Encrypt connection details (password)
+	encryptedDetails, err := h.encryptConnectionDetails(req.Password)
+	if err != nil {
+		h.logger.Error("Failed to encrypt connection details", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to encrypt credentials",
+		})
+	}
+
+	// Create database instance model
+	instance := &models.DatabaseInstance{
+		Name:                       req.Name,
+		Description:                req.Description,
+		DatabaseType:               req.DatabaseType,
+		Host:                       req.Host,
+		Port:                       req.Port,
+		Username:                   req.Username,
+		ConnectionDetailsEncrypted: &encryptedDetails,
+		UseRDSIAMAuth:              req.UseRDSIAMAuth,
+		RequireSSL:                 req.RequireSSL,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                 claims.UserID,
+	}
+
+	// Save to repository
 	if err := h.dbInstanceRepo.Create(ctx, instance); err != nil {
 		h.logger.Error("Failed to create database instance", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -65,13 +143,13 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Database instance created", zap.String("id", instance.ID.String()), zap.String("name", instance.Name))
+	h.logger.Info("Database instance created successfully", zap.String("database_instance_id", instance.ID.String()), zap.String("name", instance.Name))
 	return c.JSON(http.StatusCreated, instance.ToResponse())
 }
 
 // ListDatabaseInstances handles GET /api/v1/database-instances
 func (h *DatabaseInstanceHandler) ListDatabaseInstances(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
 
 	// Parse pagination parameters
 	limit := 100
@@ -114,7 +192,7 @@ func (h *DatabaseInstanceHandler) ListDatabaseInstances(c echo.Context) error {
 
 // GetDatabaseInstance handles GET /api/v1/database-instances/:id
 func (h *DatabaseInstanceHandler) GetDatabaseInstance(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
 
 	// Parse ID parameter
 	idStr := c.Param("id")

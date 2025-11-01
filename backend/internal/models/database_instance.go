@@ -45,15 +45,15 @@ type DatabaseInstance struct {
 
 // CreateDatabaseInstanceRequest represents the request to create a new database instance
 type CreateDatabaseInstanceRequest struct {
-	Name                       string       `json:"name"                       validate:"required,max=100"`
-	Description                *string      `json:"description,omitempty"`
-	DatabaseType               DatabaseType `json:"database_type"            validate:"required,oneof=mysql postgresql"`
-	Host                       string       `json:"host"                       validate:"required,max=255"`
-	Port                       int          `json:"port"                       validate:"required,min=1,max=65535"`
-	Username                   string       `json:"username"                   validate:"required,max=255"`
-	ConnectionDetailsEncrypted *string      `json:"connection_details_encrypted,omitempty"`
-	UseRDSIAMAuth              bool         `json:"use_rds_iam_auth"`
-	RequireSSL                 bool         `json:"require_ssl"`
+	Name         string       `json:"name"                       validate:"required,max=100"`
+	Description  *string      `json:"description,omitempty"`
+	DatabaseType DatabaseType `json:"database_type"            validate:"required,oneof=mysql postgresql"`
+	Host         string       `json:"host"                       validate:"required,max=255"`
+	Port         int          `json:"port"                       validate:"required,min=1,max=65535"`
+	Username     string       `json:"username"                   validate:"required,max=255"`
+	Password     string       `json:"password"                   validate:"required"` // Plain password (will be encrypted)
+	UseRDSIAMAuth bool        `json:"use_rds_iam_auth"`
+	RequireSSL   bool         `json:"require_ssl"`
 }
 
 // UpdateDatabaseInstanceRequest represents the request to update a database instance
@@ -115,6 +115,7 @@ var (
 	ErrDatabaseTypeRequired         = errors.New("database type is required")
 	ErrDatabaseTypeInvalid          = errors.New("database type must be mysql or postgresql")
 	ErrUsernameRequired             = errors.New("username is required")
+	ErrPasswordRequired             = errors.New("password is required")
 )
 
 // Validate validates the database instance model
@@ -198,6 +199,11 @@ func ValidateCreateDatabaseInstanceRequest(req *CreateDatabaseInstanceRequest) e
 	// Validate username
 	if req.Username == "" {
 		return ErrUsernameRequired
+	}
+
+	// Validate password
+	if req.Password == "" {
+		return ErrPasswordRequired
 	}
 
 	return nil
