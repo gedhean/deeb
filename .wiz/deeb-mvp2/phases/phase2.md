@@ -106,18 +106,18 @@ Implement PUT and DELETE endpoints for updating and deleting projects (admin onl
 
 ### P02M05: Create Environment repository interface and implementation
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M05
 
 **Goal**
 Create EnvironmentRepository interface and PostgreSQL implementation for Environment CRUD operations with Policy reference.
 
 **Acceptance Criteria**
-- [ ] EnvironmentRepository interface defined
-- [ ] Interface methods: Create, GetByID, Update, Delete, List, Count
-- [ ] PostgreSQL implementation created
-- [ ] Policy ID foreign key handling implemented
-- [ ] All methods implemented with proper SQL queries
+- [x] EnvironmentRepository interface defined
+- [x] Interface methods: Create, GetByID, Update, Delete, List, Count
+- [x] PostgreSQL implementation created
+- [x] Policy ID foreign key handling implemented (nullable)
+- [x] All methods implemented with proper SQL queries
 
 ---
 
