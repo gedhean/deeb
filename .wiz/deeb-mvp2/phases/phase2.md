@@ -123,22 +123,23 @@ Create EnvironmentRepository interface and PostgreSQL implementation for Environ
 
 ### P02M06: Create Environment CRUD endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M06
 
 **Goal**
 Implement all CRUD endpoints for Environments (admin only) with Policy assignment.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/environments endpoint implemented
-- [ ] GET /api/v1/environments/:id endpoint implemented
-- [ ] GET /api/v1/environments endpoint implemented (list all)
-- [ ] PUT /api/v1/environments/:id endpoint implemented
-- [ ] DELETE /api/v1/environments/:id endpoint implemented
-- [ ] Policy ID field handling working (nullable, references policies)
-- [ ] Policy validation (must exist and be SQL_REVIEW type if provided)
-- [ ] RBAC checks: admin only
-- [ ] Integration tests passing
+- [x] POST /api/v1/environments endpoint implemented
+- [x] GET /api/v1/environments/:id endpoint implemented
+- [x] GET /api/v1/environments endpoint implemented (list all)
+- [x] PUT /api/v1/environments/:id endpoint implemented
+- [x] DELETE /api/v1/environments/:id endpoint implemented
+- [x] Policy ID field handling working (nullable, references policies)
+- [x] Policy validation (must exist and be SQL_REVIEW type if provided)
+- [x] RBAC checks: admin only
+- [x] Handler created with validation logic
+- [x] Routes registered with authentication and authorization middleware
 
 ---
 

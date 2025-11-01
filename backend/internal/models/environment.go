@@ -1,6 +1,8 @@
 package models
 
 import (
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,4 +53,87 @@ func (e *Environment) ToResponse() *EnvironmentResponse {
 		CreatedAt:   e.CreatedAt,
 		UpdatedAt:   e.UpdatedAt,
 	}
+}
+
+// Validation errors
+var (
+	ErrEnvironmentNameRequired = errors.New("environment name is required")
+	ErrEnvironmentNameTooLong  = errors.New("environment name must not exceed 100 characters")
+	ErrEnvironmentDescriptionTooLong = errors.New("description must not exceed 500 characters")
+)
+
+// Validate validates the environment model
+func (e *Environment) Validate() error {
+	// Trim whitespace
+	e.Name = strings.TrimSpace(e.Name)
+	if e.Description != nil {
+		trimmed := strings.TrimSpace(*e.Description)
+		e.Description = &trimmed
+	}
+
+	// Validate name
+	if e.Name == "" {
+		return ErrEnvironmentNameRequired
+	}
+	if len(e.Name) > 100 {
+		return ErrEnvironmentNameTooLong
+	}
+
+	// Validate description
+	if e.Description != nil && len(*e.Description) > 500 {
+		return ErrEnvironmentDescriptionTooLong
+	}
+
+	return nil
+}
+
+// ValidateCreateEnvironmentRequest validates a create request
+func ValidateCreateEnvironmentRequest(req *CreateEnvironmentRequest) error {
+	// Trim whitespace
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Description != nil {
+		trimmed := strings.TrimSpace(*req.Description)
+		req.Description = &trimmed
+	}
+
+	// Validate name
+	if req.Name == "" {
+		return ErrEnvironmentNameRequired
+	}
+	if len(req.Name) > 100 {
+		return ErrEnvironmentNameTooLong
+	}
+
+	// Validate description
+	if req.Description != nil && len(*req.Description) > 500 {
+		return ErrEnvironmentDescriptionTooLong
+	}
+
+	return nil
+}
+
+// ValidateUpdateEnvironmentRequest validates an update request
+func ValidateUpdateEnvironmentRequest(req *UpdateEnvironmentRequest) error {
+	// Validate name if provided
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			return ErrEnvironmentNameRequired
+		}
+		if len(name) > 100 {
+			return ErrEnvironmentNameTooLong
+		}
+		req.Name = &name
+	}
+
+	// Validate description if provided
+	if req.Description != nil {
+		desc := strings.TrimSpace(*req.Description)
+		if len(desc) > 500 {
+			return ErrEnvironmentDescriptionTooLong
+		}
+		req.Description = &desc
+	}
+
+	return nil
 }

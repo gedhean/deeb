@@ -27,4 +27,3 @@ type EnvironmentRepository interface {
 	// Delete deletes an environment by its ID
 	Delete(ctx context.Context, id uuid.UUID) error
 }
-

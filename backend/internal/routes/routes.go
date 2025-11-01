@@ -27,6 +27,7 @@ func Setup(
 	// Initialize repositories
 	userRepo := postgres.NewUserRepository(db)
 	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
 	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db)
 	dbRepo := postgres.NewDatabaseRepository(db)
 	issueRepo := postgres.NewIssueRepository(db.DB)
@@ -37,6 +38,7 @@ func Setup(
 	setupAuthRoutes(e, cfg, userRepo, tokenManager, loginRateLimiter)
 	setupUserRoutes(e, userRepo, tokenManager)
 	setupProjectRoutes(e, projectRepo, dbRepo, tokenManager)
+	setupEnvironmentRoutes(e, envRepo, db, tokenManager)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo)
 	setupDatabaseRoutes(e, dbRepo)
 	setupIssueRoutes(e, issueRepo, tokenManager)
@@ -136,6 +138,23 @@ func setupProjectRoutes(e *echo.Echo, projectRepo repository.ProjectRepository, 
 	// PUT and DELETE require admin role
 	projectsGroup.PUT("/:id", projectHandler.UpdateProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 	projectsGroup.DELETE("/:id", projectHandler.DeleteProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+}
+
+// setupEnvironmentRoutes registers environment management routes
+func setupEnvironmentRoutes(e *echo.Echo, envRepo repository.EnvironmentRepository, db *sqlx.DB, tokenManager *auth.TokenManager) {
+	envHandler := handlers.NewEnvironmentHandler(envRepo, db, logger.Get())
+	environmentsGroup := e.Group("/api/v1/environments")
+
+	// Authentication and authorization middleware
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	authzMiddleware := middleware.NewAuthzMiddleware()
+
+	// All environment routes require admin role
+	environmentsGroup.POST("", envHandler.CreateEnvironment, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	environmentsGroup.GET("", envHandler.ListEnvironments, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	environmentsGroup.GET("/:id", envHandler.GetEnvironment, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	environmentsGroup.PUT("/:id", envHandler.UpdateEnvironment, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	environmentsGroup.DELETE("/:id", envHandler.DeleteEnvironment, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 }
 
 // setupDatabaseInstanceRoutes registers database instance management routes
