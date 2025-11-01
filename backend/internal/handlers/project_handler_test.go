@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
@@ -78,30 +79,37 @@ func (m *mockProjectRepository) Update(ctx context.Context, project *models.Proj
 	return repository.ErrNotFound
 }
 
-func (m *mockProjectRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	if m.deleteErr != nil {
-		return m.deleteErr
-	}
-	for i, p := range m.projects {
-		if p.ID == id {
-			m.projects = append(m.projects[:i], m.projects[i+1:]...)
-			return nil
-		}
-	}
-	return repository.ErrNotFound
+func (m *mockProjectRepository) Count(ctx context.Context) (int64, error) {
+	return int64(len(m.projects)), nil
 }
 
 // Helper to create test projects
 func createTestProject(id string, name string, description string) *models.Project {
 	uid, _ := uuid.Parse(id)
+	createdByID := uuid.New()
 	now := time.Now()
+	descPtr := &description
+	if description == "" {
+		descPtr = nil
+	}
 	return &models.Project{
 		ID:          uid,
 		Name:        name,
-		Description: description,
+		Description: descPtr,
+		CreatedByID: createdByID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
+}
+
+// Helper to set authenticated user in Echo context
+func setAuthContext(c echo.Context, userID uuid.UUID, email string, orgRole string) {
+	claims := &auth.Claims{
+		UserID:           userID,
+		Email:            email,
+		OrganizationRole: orgRole,
+	}
+	c.Set(string(auth.UserContextKey), claims)
 }
 
 func TestCreateProject(t *testing.T) {
@@ -144,6 +152,11 @@ func TestCreateProject(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
+			name:           "authentication required",
+			requestBody:    `{"name":"Test Project","description":"Test Description"}`,
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
 			name:           "database create error",
 			requestBody:    `{"name":"Test Project","description":"Test Description"}`,
 			mockErr:        errors.New("database error"),
@@ -166,6 +179,12 @@ func TestCreateProject(t *testing.T) {
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
+
+			// Set authenticated user context for CreateProject (except for auth test)
+			if !strings.Contains(tt.name, "authentication required") {
+				userID := uuid.New()
+				setAuthContext(c, userID, "admin@example.com", "OrganizationAdmin")
+			}
 
 			// Execute handler
 			err := handler.CreateProject(c)

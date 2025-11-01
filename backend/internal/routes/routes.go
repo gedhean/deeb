@@ -36,7 +36,7 @@ func Setup(
 	setupSetupRoutes(e, userRepo)
 	setupAuthRoutes(e, cfg, userRepo, tokenManager, loginRateLimiter)
 	setupUserRoutes(e, userRepo, tokenManager)
-	setupProjectRoutes(e, projectRepo)
+	setupProjectRoutes(e, projectRepo, tokenManager)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo)
 	setupDatabaseRoutes(e, dbRepo)
 	setupIssueRoutes(e, issueRepo, tokenManager)
@@ -117,11 +117,18 @@ func setupUserRoutes(e *echo.Echo, userRepo repository.UserRepository, tokenMana
 }
 
 // setupProjectRoutes registers project management routes
-func setupProjectRoutes(e *echo.Echo, projectRepo repository.ProjectRepository) {
+func setupProjectRoutes(e *echo.Echo, projectRepo repository.ProjectRepository, tokenManager *auth.TokenManager) {
 	projectHandler := handlers.NewProjectHandler(projectRepo, logger.Get())
 	projectsGroup := e.Group("/api/v1/projects")
 
-	projectsGroup.POST("", projectHandler.CreateProject)
+	// Authentication and authorization middleware
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	authzMiddleware := middleware.NewAuthzMiddleware()
+
+	// POST requires Admin or DBA role
+	projectsGroup.POST("", projectHandler.CreateProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationDBA())
+
+	// GET endpoints (will be secured in later milestones)
 	projectsGroup.GET("", projectHandler.ListProjects)
 	projectsGroup.GET("/:id", projectHandler.GetProject)
 	projectsGroup.PUT("/:id", projectHandler.UpdateProject)

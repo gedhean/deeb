@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
@@ -28,6 +30,14 @@ func NewProjectHandler(projectRepo repository.ProjectRepository, logger *zap.Log
 func (h *ProjectHandler) CreateProject(c echo.Context) error {
 	ctx := c.Request().Context()
 
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
 	// Parse request
 	var req models.CreateProjectRequest
 	if err := c.Bind(&req); err != nil {
@@ -44,10 +54,11 @@ func (h *ProjectHandler) CreateProject(c echo.Context) error {
 		})
 	}
 
-	// Create project model
+	// Create project model with created_by_id set to authenticated user
 	project := &models.Project{
 		Name:        req.Name,
-		Description: req.Description,
+		Description: stringPtrOrNil(req.Description),
+		CreatedByID: claims.UserID,
 	}
 
 	// Save to repository
@@ -62,6 +73,14 @@ func (h *ProjectHandler) CreateProject(c echo.Context) error {
 	return c.JSON(http.StatusCreated, project.ToResponse())
 }
 
+// stringPtrOrNil returns a pointer to the string if non-empty, nil otherwise
+func stringPtrOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // ListProjects handles GET /api/v1/projects - list projects (all authenticated users)
 func (h *ProjectHandler) ListProjects(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -72,13 +91,13 @@ func (h *ProjectHandler) ListProjects(c echo.Context) error {
 
 	// Parse query parameters if provided
 	if limitParam := c.QueryParam("limit"); limitParam != "" {
-		if parsedLimit, err := parseInt(limitParam); err == nil && parsedLimit > 0 && parsedLimit <= 1000 {
+		if parsedLimit, err := strconv.Atoi(limitParam); err == nil && parsedLimit > 0 && parsedLimit <= 1000 {
 			limit = parsedLimit
 		}
 	}
 
 	if offsetParam := c.QueryParam("offset"); offsetParam != "" {
-		if parsedOffset, err := parseInt(offsetParam); err == nil && parsedOffset >= 0 {
+		if parsedOffset, err := strconv.Atoi(offsetParam); err == nil && parsedOffset >= 0 {
 			offset = parsedOffset
 		}
 	}
@@ -184,7 +203,7 @@ func (h *ProjectHandler) UpdateProject(c echo.Context) error {
 		project.Name = *req.Name
 	}
 	if req.Description != nil {
-		project.Description = *req.Description
+		project.Description = req.Description
 	}
 
 	// Update project in repository
