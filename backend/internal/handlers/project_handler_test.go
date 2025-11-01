@@ -83,6 +83,74 @@ func (m *mockProjectRepository) Count(ctx context.Context) (int64, error) {
 	return int64(len(m.projects)), nil
 }
 
+func (m *mockProjectRepository) Update(ctx context.Context, project *models.Project) error {
+	if m.updateErr != nil {
+		return m.updateErr
+	}
+	for i, p := range m.projects {
+		if p.ID == project.ID {
+			m.projects[i] = project
+			return nil
+		}
+	}
+	return repository.ErrNotFound
+}
+
+func (m *mockProjectRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
+	for i, p := range m.projects {
+		if p.ID == id {
+			m.projects = append(m.projects[:i], m.projects[i+1:]...)
+			return nil
+		}
+	}
+	return repository.ErrNotFound
+}
+
+// Mock DatabaseRepository for testing
+type mockDatabaseRepository struct {
+	databases []*models.Database
+	listErr   error
+}
+
+func (m *mockDatabaseRepository) Create(ctx context.Context, database *models.Database) error {
+	return nil
+}
+
+func (m *mockDatabaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Database, error) {
+	return nil, nil
+}
+
+func (m *mockDatabaseRepository) List(ctx context.Context, limit, offset int) ([]*models.Database, error) {
+	return nil, nil
+}
+
+func (m *mockDatabaseRepository) ListByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	var result []*models.Database
+	for _, db := range m.databases {
+		if db.ProjectID == projectID {
+			result = append(result, db)
+		}
+	}
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
+func (m *mockDatabaseRepository) Update(ctx context.Context, database *models.Database) error {
+	return nil
+}
+
+func (m *mockDatabaseRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
 // Helper to create test projects
 func createTestProject(id string, name string, description string) *models.Project {
 	uid, _ := uuid.Parse(id)
@@ -171,7 +239,7 @@ func TestCreateProject(t *testing.T) {
 				projects:  []*models.Project{},
 				createErr: tt.mockErr,
 			}
-			handler := NewProjectHandler(mockRepo, logger)
+			handler := NewProjectHandler(mockRepo, &mockDatabaseRepository{databases: []*models.Database{}}, logger)
 
 			// Create request
 			e := echo.New()
@@ -262,7 +330,7 @@ func TestListProjects(t *testing.T) {
 				projects: tt.mockProjects,
 				listErr:  tt.mockErr,
 			}
-			handler := NewProjectHandler(mockRepo, logger)
+			handler := NewProjectHandler(mockRepo, &mockDatabaseRepository{databases: []*models.Database{}}, logger)
 
 			// Create request
 			e := echo.New()
@@ -356,7 +424,7 @@ func TestGetProject(t *testing.T) {
 				projects: tt.mockProjects,
 				getErr:   tt.mockErr,
 			}
-			handler := NewProjectHandler(mockRepo, logger)
+			handler := NewProjectHandler(mockRepo, &mockDatabaseRepository{databases: []*models.Database{}}, logger)
 
 			// Create request
 			e := echo.New()
@@ -464,7 +532,7 @@ func TestUpdateProject(t *testing.T) {
 				projects:  tt.mockProjects,
 				updateErr: tt.mockErr,
 			}
-			handler := NewProjectHandler(mockRepo, logger)
+			handler := NewProjectHandler(mockRepo, &mockDatabaseRepository{databases: []*models.Database{}}, logger)
 
 			// Create request
 			e := echo.New()
@@ -498,32 +566,53 @@ func TestDeleteProject(t *testing.T) {
 		name           string
 		projectID      string
 		mockProjects   []*models.Project
+		mockDatabases  []*models.Database
 		mockErr        error
+		dbListErr      error
 		expectedStatus int
 	}{
 		{
 			name:           "delete project successfully",
 			projectID:      testProjectID,
 			mockProjects:   []*models.Project{testProject},
+			mockDatabases:  []*models.Database{},
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "project not found",
 			projectID:      "550e8400-e29b-41d4-a716-446655440099",
 			mockProjects:   []*models.Project{testProject},
+			mockDatabases:  []*models.Database{},
 			expectedStatus: http.StatusNotFound,
 		},
 		{
 			name:           "invalid project ID format",
 			projectID:      "invalid-uuid",
 			mockProjects:   []*models.Project{testProject},
+			mockDatabases:  []*models.Database{},
 			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "cannot delete project with databases",
+			projectID:      testProjectID,
+			mockProjects:   []*models.Project{testProject},
+			mockDatabases:  []*models.Database{{ProjectID: uuid.MustParse(testProjectID)}},
+			expectedStatus: http.StatusConflict,
 		},
 		{
 			name:           "database delete error",
 			projectID:      testProjectID,
 			mockProjects:   []*models.Project{testProject},
+			mockDatabases:  []*models.Database{},
 			mockErr:        errors.New("database error"),
+			expectedStatus: http.StatusInternalServerError,
+		},
+		{
+			name:           "database list error",
+			projectID:      testProjectID,
+			mockProjects:   []*models.Project{testProject},
+			mockDatabases:  []*models.Database{},
+			dbListErr:      errors.New("database list error"),
 			expectedStatus: http.StatusInternalServerError,
 		},
 	}
@@ -535,7 +624,11 @@ func TestDeleteProject(t *testing.T) {
 				projects:  tt.mockProjects,
 				deleteErr: tt.mockErr,
 			}
-			handler := NewProjectHandler(mockRepo, logger)
+			mockDBRepo := &mockDatabaseRepository{
+				databases: tt.mockDatabases,
+				listErr:   tt.dbListErr,
+			}
+			handler := NewProjectHandler(mockRepo, mockDBRepo, logger)
 
 			// Create request
 			e := echo.New()

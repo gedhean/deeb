@@ -36,7 +36,7 @@ func Setup(
 	setupSetupRoutes(e, userRepo)
 	setupAuthRoutes(e, cfg, userRepo, tokenManager, loginRateLimiter)
 	setupUserRoutes(e, userRepo, tokenManager)
-	setupProjectRoutes(e, projectRepo, tokenManager)
+	setupProjectRoutes(e, projectRepo, dbRepo, tokenManager)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo)
 	setupDatabaseRoutes(e, dbRepo)
 	setupIssueRoutes(e, issueRepo, tokenManager)
@@ -117,8 +117,8 @@ func setupUserRoutes(e *echo.Echo, userRepo repository.UserRepository, tokenMana
 }
 
 // setupProjectRoutes registers project management routes
-func setupProjectRoutes(e *echo.Echo, projectRepo repository.ProjectRepository, tokenManager *auth.TokenManager) {
-	projectHandler := handlers.NewProjectHandler(projectRepo, logger.Get())
+func setupProjectRoutes(e *echo.Echo, projectRepo repository.ProjectRepository, databaseRepo repository.DatabaseRepository, tokenManager *auth.TokenManager) {
+	projectHandler := handlers.NewProjectHandler(projectRepo, databaseRepo, logger.Get())
 	projectsGroup := e.Group("/api/v1/projects")
 
 	// Authentication and authorization middleware
@@ -132,8 +132,10 @@ func setupProjectRoutes(e *echo.Echo, projectRepo repository.ProjectRepository, 
 	// List all projects requires admin role
 	projectsGroup.GET("", projectHandler.ListProjects, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 	projectsGroup.GET("/:id", projectHandler.GetProject, authMiddleware.Authenticate)
-	projectsGroup.PUT("/:id", projectHandler.UpdateProject)
-	projectsGroup.DELETE("/:id", projectHandler.DeleteProject)
+
+	// PUT and DELETE require admin role
+	projectsGroup.PUT("/:id", projectHandler.UpdateProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	projectsGroup.DELETE("/:id", projectHandler.DeleteProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 }
 
 // setupDatabaseInstanceRoutes registers database instance management routes

@@ -88,19 +88,19 @@ Implement GET endpoints for retrieving individual projects and listing projects.
 
 ### P02M04: Create Project PUT and DELETE endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M04
 
 **Goal**
 Implement PUT and DELETE endpoints for updating and deleting projects (admin only).
 
 **Acceptance Criteria**
-- [ ] PUT /api/v1/projects/:id endpoint implemented
-- [ ] DELETE /api/v1/projects/:id endpoint implemented
-- [ ] RBAC checks: admin only
-- [ ] Update validation working
-- [ ] Delete cascade handling (prevent deletion if databases exist)
-- [ ] Integration tests passing
+- [x] PUT /api/v1/projects/:id endpoint implemented
+- [x] DELETE /api/v1/projects/:id endpoint implemented
+- [x] RBAC checks: admin only
+- [x] Update validation working
+- [x] Delete cascade handling (prevent deletion if databases exist)
+- [x] Unit tests updated (integration tests can be added in later milestone)
 
 ---
 

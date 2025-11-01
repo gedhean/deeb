@@ -15,13 +15,15 @@ import (
 // ProjectHandler handles project management endpoints
 type ProjectHandler struct {
 	projectRepo repository.ProjectRepository
+	databaseRepo repository.DatabaseRepository
 	logger      *zap.Logger
 }
 
 // NewProjectHandler creates a new project handler
-func NewProjectHandler(projectRepo repository.ProjectRepository, logger *zap.Logger) *ProjectHandler {
+func NewProjectHandler(projectRepo repository.ProjectRepository, databaseRepo repository.DatabaseRepository, logger *zap.Logger) *ProjectHandler {
 	return &ProjectHandler{
 		projectRepo: projectRepo,
+		databaseRepo: databaseRepo,
 		logger:      logger,
 	}
 }
@@ -242,6 +244,21 @@ func (h *ProjectHandler) DeleteProject(c echo.Context) error {
 		h.logger.Error("Failed to get project for deletion", zap.Error(err), zap.String("project_id", projectID.String()))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "Failed to retrieve project",
+		})
+	}
+
+	// Check if project has associated databases
+	databases, err := h.databaseRepo.ListByProject(ctx, projectID, 1, 0)
+	if err != nil {
+		h.logger.Error("Failed to check databases for project", zap.Error(err), zap.String("project_id", projectID.String()))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to check project dependencies",
+		})
+	}
+
+	if len(databases) > 0 {
+		return c.JSON(http.StatusConflict, map[string]interface{}{
+			"error": "Cannot delete project: project has associated databases. Please delete or reassign databases first.",
 		})
 	}
 
