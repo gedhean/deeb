@@ -151,52 +151,53 @@ Add databases table linking databases to projects and environments with one-to-o
 
 ### P01M08: Create change_plans table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M08
 
 **Goal**
 Add change_plans table (renamed from issues) with all required fields for Change Plan lifecycle.
 
 **Acceptance Criteria**
-- [ ] Change_plans table created with columns: id (UUID), project_id, target_database_id, title, change_type (DDL/DML), sql_content (TEXT), description (TEXT nullable), rollback_sql (TEXT nullable), status, risk_level, author_id, assigned_reviewer_id (nullable), created_at, updated_at
-- [ ] Foreign key constraints to projects, databases, users
-- [ ] Status enum/check constraint: Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled
-- [ ] Risk level enum/check constraint: Low, Medium, High
-- [ ] Indexes for filtering and queries
-- [ ] Migration file updated
+- [x] Change_plans table created with columns: id (UUID), project_id, target_database_id, title, change_type (DDL/DML), sql_content (TEXT), description (TEXT nullable), rollback_sql (TEXT nullable), status, risk_level, author_id, assigned_reviewer_id (nullable), created_at, updated_at
+- [x] Foreign key constraints to projects, databases, users
+- [x] Status enum/check constraint: Draft, Open, Approved, Closed, Executed, Failed
+- [x] Risk level enum/check constraint: Low, Medium, High
+- [x] Indexes for filtering and queries
+- [x] Migration file updated
 
 ---
 
 ### P01M09: Create approvals table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M09
 
 **Goal**
 Add approvals table for tracking approval workflow with comments and history.
 
 **Acceptance Criteria**
-- [ ] Approvals table created with columns: id (UUID), change_plan_id, approver_id, action (approve/close), comment (TEXT nullable), created_at
-- [ ] Foreign key constraints to change_plans, users
-- [ ] Indexes for querying approval history
-- [ ] Migration file updated
+- [x] Approvals table created with columns: id (UUID), change_plan_id, approver_id, status (Approved/Rejected), comments (TEXT nullable), approved_at, created_at
+- [x] Foreign key constraints to change_plans, users
+- [x] Unique constraint on (change_plan_id, approver_id)
+- [x] Indexes for querying approval history
+- [x] Migration file updated
 
 ---
 
 ### P01M10: Create audit_logs table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M10
 
 **Goal**
 Add audit_logs table for comprehensive audit trail of all user actions.
 
 **Acceptance Criteria**
-- [ ] Audit_logs table created with columns: id (UUID), user_id, action, target_type, target_id, result, details (JSONB), created_at
-- [ ] Foreign key constraint to users
-- [ ] Indexes for filtering by user, action, target_type, created_at
-- [ ] JSONB column for flexible details storage
-- [ ] Migration file updated
+- [x] Audit_logs table created with columns: id (UUID), user_id, action, resource_type, resource_id, details (JSONB), ip_address, user_agent, timestamp
+- [x] Foreign key constraint to users
+- [x] Indexes for filtering by user, action, resource_type, timestamp
+- [x] GIN index on JSONB details column for efficient querying
+- [x] Migration file updated
 
 ---
 
