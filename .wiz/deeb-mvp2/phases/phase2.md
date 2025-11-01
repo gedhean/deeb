@@ -186,18 +186,21 @@ Implement all CRUD endpoints for Policies (admin only), supporting SQL_REVIEW ty
 
 ### P02M09: Create DatabaseInstance repository interface and implementation
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M09
 
 **Goal**
 Create DatabaseInstanceRepository interface and PostgreSQL implementation with encrypted credential handling.
 
 **Acceptance Criteria**
-- [ ] DatabaseInstanceRepository interface defined
-- [ ] Interface methods: Create, GetByID, Update, Delete, List, Count
-- [ ] PostgreSQL implementation created
-- [ ] Encrypted credential storage/retrieval working
-- [ ] All methods implemented with proper SQL queries
+- [x] DatabaseInstanceRepository interface defined
+- [x] Interface methods: Create, GetByID, Update, Delete, List, Count
+- [x] PostgreSQL implementation created
+- [x] Encrypted credential storage/retrieval working
+- [x] All methods implemented with proper SQL queries
+- [x] Repository updated to match new schema (database_type, no environment_id)
+- [x] Encryption key passed to repository constructor
+- [x] Helper methods for encryption/decryption (private methods)
 
 ---
 

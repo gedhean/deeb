@@ -29,7 +29,7 @@ func Setup(
 	projectRepo := postgres.NewProjectRepository(db)
 	envRepo := postgres.NewEnvironmentRepository(db)
 	policyRepo := postgres.NewPolicyRepository(db)
-	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, cfg.Security.EncryptionKey)
 	dbRepo := postgres.NewDatabaseRepository(db)
 	issueRepo := postgres.NewIssueRepository(db.DB)
 
