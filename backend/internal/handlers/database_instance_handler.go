@@ -273,10 +273,11 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 	passwordToTest := ""
 
 	// Determine password for connection testing
+	// Connection test is needed if: password, connection params (host, port, username), database type, or SSL settings change
 	if req.Password != nil && *req.Password != "" {
 		passwordToTest = *req.Password
 		credentialsUpdated = true
-	} else if req.Host != nil || req.Port != nil || req.Username != nil {
+	} else if req.Host != nil || req.Port != nil || req.Username != nil || req.DatabaseType != nil || req.RequireSSL != nil {
 		// If connection params are being updated but password is not, we need to decrypt existing password for testing
 		credentialsUpdated = true
 		// Decrypt existing password for connection testing
