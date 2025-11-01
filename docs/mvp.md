@@ -23,79 +23,133 @@ This document outlines the phased development approach for Deeb, focusing on del
    **Organization Roles**:
     - **Organization Admin**: Full system access, manages databases and users
     - **Organization DBA**: Administrator databases across the organization
-    - **Organization Developer**: member of the organization (default role)
+    - **Organization Developer**: Member of the organization (default role)
    **Project Roles**:
     - **Project Owner**: Full control over project resources
-    - **Project Developer**: Create and manage change requests
-    - **Project Approver**: Approve and reject change requests
+    - **Project Developer**: Create and manage Change Plans
+    - **Project Approver**: Approve and close Change Plans
     - **Project Viewer**: View only access to project resources
 - ✓ User management UI (admin only)
 - ✗ Groups (Phase 2)
 - ✗ 2FA (Phase 3)
 
-#### 1.2 Database Management
+#### 1.2 Projects & Environments
+- ✓ Create and manage Projects
+- ✓ Create and manage Environments (Dev, Staging, Prod)
+- ✓ Assign databases to Projects and Environments
+- ✓ Each database belongs to exactly one Project and one Environment
+- ✗ Environment-specific policies (Phase 2)
+
+#### 1.3 Database Management
 - ✓ Admin can add/remove database instances (name, host, port, credentials)
 - ✓ Support **MySQL and PostgreSQL**
-- ✓ Connection via **username/password** or **RDS IAM** authentication
+- ✓ Connection via **username/password** authentication
 - ✓ Test connection before saving
 - ✓ List all registered databases
 
-#### 1.3 Change Request Workflow
-- ✓ Create change request with:
+#### 1.4 Change Plan Workflow
+- ✓ Create Change Plan with:
   - Title and description
   - SQL query (DDL or DML)
   - **Single target database** (no multi-DB yet)
   - Change type classification (DDL/DML)
-- ✓ **Simple approval flow**: 1 approver required
-- ✓ View change request details
-- ✓ List all change requests (with filters: pending, approved, rejected, executed)
-- ✓ Approve/reject with comments
+  - Optional rollback SQL script
+  - Risk level assignment (Low, Medium, High)
+- ✓ Status workflow: Draft → Open → [Approved/Closed] → [Scheduled/InProgress] → Completed/Failed/Cancelled
+
+**Status Definitions**:
+- **Draft**: Change Plan is being created/edited, not yet submitted for review
+- **Open**: Change Plan is submitted and ready for review/approval
+- **Approved**: Change Plan has been approved and is ready for execution
+- **Closed**: Change Plan was rejected or closed without execution
+- **Scheduled**: Change Plan is approved and scheduled for future execution
+- **InProgress**: Change Plan is currently being executed
+- **Completed**: Change Plan was successfully executed
+- **Failed**: Change Plan execution failed with errors
+- **Cancelled**: Change Plan was cancelled before execution
+
+**Status Transition Rules**:
+- **Draft → Open**: Author (Project Developer) submits Change Plan for review (automatic SQL Review runs)
+- **Open → Draft**: Author can reopen if SQL Review has errors or needs changes (Phase 1: manual reopen)
+- **Open → Approved**: Project Approver approves the Change Plan
+- **Open → Closed**: Project Approver closes/rejects the Change Plan
+- **Approved → Scheduled**: Author or Project Owner schedules execution for future time (Phase 2)
+- **Approved → InProgress**: Author, Project Owner, Organization Admin, or Organization DBA triggers immediate execution
+- **Scheduled → InProgress**: System automatically transitions when scheduled time arrives (Phase 2)
+- **InProgress → Completed**: System automatically transitions on successful execution
+- **InProgress → Failed**: System automatically transitions on execution failure (automatic rollback)
+- **Approved/Scheduled → Cancelled**: Author, Project Owner, Organization Admin, or Organization DBA cancels before execution
+- **Closed/Cancelled**: Terminal states (cannot transition further)
+
+**Permissions**:
+- Only Change Plan author can edit Change Plan in Draft status
+- Only Project Approvers can approve/close Change Plans in Open status
+- Only users with rollout permissions can execute Change Plans (Organization Admin, Organization DBA, Project Owner)
+- Authors can reopen Closed Change Plans back to Draft (Phase 1: manual, Phase 2+: workflow-based)
+
+- ✓ **Simple approval flow**: 1 approver required (any Project Approver in the project)
+- ✓ Optional reviewer assignment (Phase 1: manual assignment, Phase 2+: automatic assignment based on rules)
+- ✓ View Change Plan details
+- ✓ List all Change Plans (with filters: draft, open, approved, closed, completed, failed, cancelled)
+- ✓ Approve/close with comments
 - ✗ Risk-based approval rules (Phase 2)
 - ✗ Multiple approvers (Phase 2)
+- ✗ Approval assignment/delegation (Phase 2)
 
-#### 1.4 Change Validation
+#### 1.5 SQL Review
+- ✓ SQL Review runs automatically when Change Plan is submitted (Draft → Open transition)
 - ✓ **Basic SQL syntax validation** (using database parser libraries)
 - ✓ Detect destructive operations (DROP TABLE, DROP DATABASE, TRUNCATE)
-- ✓ Show warnings to user (don't block, just warn)
+- ✓ SQL Review **errors** block execution, **warnings** shown but don't block
+- ✓ SQL Review results displayed in Change Plan details page
+- ✓ If SQL Review has errors, author can fix and resubmit (Change Plan returns to Open)
+- ✓ SQL Review Policies: Basic policies enabled by default (Phase 1: fixed rules, Phase 2: configurable per environment/project)
 - ✗ Advanced validations (Phase 2+)
 
-#### 1.5 Change Execution
-- ✓ Execute approved changes **immediately** (manual trigger by user)
-- ✓ Capture schema snapshot **before** execution (pg_dump or information_schema)
-- ✓ Execute SQL in **transaction** with automatic rollback on error
+#### 1.6 Change Execution
+- ✓ Execute Change Plans with status "Approved" **immediately** (manual trigger by user)
+- ✓ **Rollout permissions**: Organization Admin, Organization DBA, and Project Owner can execute rollouts
+- ✓ Capture schema snapshot **before** execution (pg_dump for PostgreSQL, mysqldump/information_schema for MySQL)
+- ✓ Execute SQL in **transaction** with automatic rollback on error (transaction wrapping cannot be disabled in Phase 1)
 - ✓ Capture execution results (success/error, rows affected, duration)
 - ✓ Store schema snapshot **after** execution
-- ✓ Update change request status (executed, failed)
-- ✓ Scheduled execution
+- ✓ Update Change Plan status (completed, failed)
+- ✓ **Concurrency control**: One Change Plan executes at a time per database (other Change Plans queue automatically)
+- ✓ **Automatic rollback**: On execution failure, transaction automatically rolls back to previous state
+- ✗ Scheduled execution (Phase 2)
 - ✗ Multi-database execution (Phase 2)
+- ✗ Manual rollback from UI (Phase 3)
+- ✗ Transaction opt-out option (Phase 2+)
 
-#### 1.6 Error Handling
+#### 1.7 Error Handling
 - ✓ Log all SQL errors with full context
 - ✓ Automatic transaction rollback on failure
 - ✓ Display error to user who triggered execution
-- ✓ Mark change request as "failed" with error details
+- ✓ Mark Change Plan as "failed" with error details
 
-#### 1.7 Audit Logging
+#### 1.8 Audit Logging
 - ✓ Log all actions:
   - User login/logout
   - Database added/removed
-  - Change request created/approved/rejected/executed
+  - Change Plan created/approved/closed/completed
   - Execution success/failure
 - ✓ Store: timestamp, user, action, target resource, result
 - ✓ View audit log UI (admin only)
+- ✓ **Change History**: Detailed migration history and before/after schema snapshots stored for each Change Plan
 - ✗ Advanced log filtering (Phase 2)
 - ✗ Log export (Phase 2)
 
-#### 1.8 UI Components
-- ✓ Dashboard: Overview of pending/recent changes
+#### 1.9 UI Components
+- ✓ Dashboard: Overview of open/recent Change Plans
+- ✓ Projects & Environments management (admin)
 - ✓ Database management page (admin)
-- ✓ Create change request form
-- ✓ Change request detail view
+- ✓ Create Change Plan form
+- ✓ Change Plan detail view
 - ✓ User management (admin)
 - ✓ Audit log viewer (admin)
 
 ### Technical Stack Decisions (Phase 1)
-- **Frontend**: React + TypeScript + HeroUI
+- **Frontend**: React + TypeScript + Vite + shadcn/ui
 - **Backend**: Golang
 - **Database**: PostgreSQL (for Deeb metadata)
 - **Authentication**: OAuth 2.0 with Google
@@ -108,15 +162,16 @@ This document outlines the phased development approach for Deeb, focusing on del
 - Risk-based approval workflows
 - Schema drift detection
 
-- Multi-database changes
-- Read-only query execution
-- Change history visualization
-- Email/Slack notifications
+- ✗ Multi-database changes
+- ✗ Read-only query execution
+- ✗ Change history visualization
+- ✗ Email/Slack notifications
+- ✗ Transaction opt-out option
 
 ### Success Metrics
 - ✓ 5 users can authenticate via OAuth
 - ✓ 10+ database instances managed
-- ✓ 50+ change requests created and executed
+- ✓ 50+ Change Plans created and executed
 - ✓ Zero security incidents
 - ✓ 100% audit log coverage
 
@@ -130,17 +185,18 @@ This document outlines the phased development approach for Deeb, focusing on del
 
 ### Features
 
-#### 2.1 Database Support
-- ✓ Add **MySQL** support
+#### 2.1 Database Support Enhancements
 - ✓ RDS IAM authentication option
 - ✓ SSL/TLS connection enforcement
+- ✓ Enhanced connection pooling and monitoring
 
 #### 2.2 Advanced Approval Workflows
 - ✓ Multiple approvers (e.g., 2 out of 3 required)
-- ✓ Risk-based rules:
+- ✓ Risk-based rules based on risk levels (Low, Medium, High):
   - Production databases → 2 approvers
   - Large tables (>1M rows) → Senior engineer approval
   - Destructive operations → Additional confirmation
+  - High risk level → Requires DBA approval
 - ✓ Custom approval rule configuration UI (admin)
 
 #### 2.3 Multi-Database Changes
@@ -150,9 +206,9 @@ This document outlines the phased development approach for Deeb, focusing on del
 - ✓ Partial failure handling
 
 #### 2.4 Scheduled Execution
-- ✓ Schedule change for specific date/time
-- ✓ View scheduled changes
-- ✓ Cancel scheduled changes (before execution)
+- ✓ Schedule Change Plan for specific date/time
+- ✓ View scheduled Change Plans
+- ✓ Cancel scheduled Change Plans (before execution)
 - ✓ Timezone handling
 
 #### 2.5 Groups & Permissions
@@ -167,7 +223,7 @@ This document outlines the phased development approach for Deeb, focusing on del
 - ✓ Configurable validation rules per database/environment
 - ✓ Validation override capability (with audit trail)
 
-#### 2.7 Change Testing
+#### 2.7 Multi-Stage Deployment
 - ✓ Multi-stage deployment: Dev → Staging → Production
 - ✓ "Promote to next environment" workflow
 - ✓ Environment-specific execution
@@ -175,8 +231,8 @@ This document outlines the phased development approach for Deeb, focusing on del
 #### 2.8 Notifications
 - ✓ Email notifications for:
   - Approval requests
-  - Change execution results
-  - Scheduled change reminders
+  - Change Plan execution results
+  - Scheduled Change Plan reminders
 - ✓ In-app notification center
 - ✗ Slack/webhook integrations (Phase 3)
 
@@ -188,7 +244,7 @@ This document outlines the phased development approach for Deeb, focusing on del
 
 ### Success Metrics
 - ✓ Support for 50+ databases across MySQL and PostgreSQL
-- ✓ 200+ changes executed with <5% failure rate
+- ✓ 200+ Change Plans executed with <5% failure rate
 - ✓ Average approval time <1 hour
 - ✓ 90% user satisfaction score
 
@@ -237,7 +293,7 @@ This document outlines the phased development approach for Deeb, focusing on del
 - ✓ Point-in-time schema comparison
 
 #### 3.7 Multiple OAuth Providers
-- ✓ Add Google OAuth (if GitHub was Phase 1)
+- ✓ Add GitHub OAuth (additional provider)
 - ✓ Support multiple providers simultaneously
 - ✓ Account linking
 
@@ -249,7 +305,7 @@ This document outlines the phased development approach for Deeb, focusing on del
 
 ### Success Metrics
 - ✓ 100+ databases under management
-- ✓ 1000+ changes executed per month
+- ✓ 1000+ Change Plans executed per month
 - ✓ <1% drift detection false positives
 - ✓ 99.9% uptime SLA
 
@@ -286,9 +342,9 @@ This document outlines the phased development approach for Deeb, focusing on del
 - ✓ Cost estimation for changes
 
 #### 4.5 Collaboration Features
-- ✓ Comments on change requests
+- ✓ Comments on Change Plans
 - ✓ @mentions and notifications
-- ✓ Change request templates
+- ✓ Change Plan templates
 - ✓ Approval delegation
 
 #### 4.6 Backup & Disaster Recovery
@@ -384,7 +440,7 @@ This document outlines the phased development approach for Deeb, focusing on del
 **Product-Market Fit Indicators**:
 - ✓ 10+ active organizations using Deeb
 - ✓ 80%+ approval from early adopters
-- ✓ 500+ changes executed successfully
+- ✓ 500+ Change Plans executed successfully
 - ✓ Zero security breaches
 - ✓ Users prefer Deeb over direct database access
 
