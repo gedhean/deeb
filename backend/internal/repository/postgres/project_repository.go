@@ -38,14 +38,15 @@ func (r *ProjectRepository) Create(ctx context.Context, project *models.Project)
 	project.UpdatedAt = now
 
 	query := `
-		INSERT INTO projects (id, name, description, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO projects (id, name, description, created_by_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
 		project.ID,
 		project.Name,
 		project.Description,
+		project.CreatedByID,
 		project.CreatedAt,
 		project.UpdatedAt,
 	)
@@ -59,7 +60,7 @@ func (r *ProjectRepository) Create(ctx context.Context, project *models.Project)
 // GetByID retrieves a project by its ID
 func (r *ProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Project, error) {
 	query := `
-		SELECT id, name, description, created_at, updated_at
+		SELECT id, name, description, created_by_id, created_at, updated_at
 		FROM projects
 		WHERE id = $1
 	`
@@ -79,7 +80,7 @@ func (r *ProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.
 // List retrieves all projects with pagination
 func (r *ProjectRepository) List(ctx context.Context, limit, offset int) ([]*models.Project, error) {
 	query := `
-		SELECT id, name, description, created_at, updated_at
+		SELECT id, name, description, created_by_id, created_at, updated_at
 		FROM projects
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -97,6 +98,19 @@ func (r *ProjectRepository) List(ctx context.Context, limit, offset int) ([]*mod
 	}
 
 	return projects, nil
+}
+
+// Count returns the total number of projects
+func (r *ProjectRepository) Count(ctx context.Context) (int64, error) {
+	query := `SELECT COUNT(*) FROM projects`
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }
 
 // Update updates an existing project's information

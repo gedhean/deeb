@@ -18,6 +18,9 @@ type ProjectRepository interface {
 	// List retrieves all projects with pagination
 	List(ctx context.Context, limit, offset int) ([]*models.Project, error)
 
+	// Count returns the total number of projects
+	Count(ctx context.Context) (int64, error)
+
 	// Update updates an existing project's information
 	Update(ctx context.Context, project *models.Project) error
 

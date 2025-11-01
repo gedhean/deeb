@@ -32,11 +32,12 @@ func TestCreate(t *testing.T) {
 	t.Run("successful creation", func(t *testing.T) {
 		project := &models.Project{
 			Name:        "Test Project",
-			Description: "Test Description",
+			Description: stringPtr("Test Description"),
+			CreatedByID: uuid.New(),
 		}
 
 		mock.ExpectExec("INSERT INTO projects").
-			WithArgs(sqlmock.AnyArg(), project.Name, project.Description, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(sqlmock.AnyArg(), project.Name, project.Description, project.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, project)
@@ -63,7 +64,8 @@ func TestCreate(t *testing.T) {
 	t.Run("validation error - empty name", func(t *testing.T) {
 		project := &models.Project{
 			Name:        "",
-			Description: "Test Description",
+			Description: stringPtr("Test Description"),
+			CreatedByID: uuid.New(),
 		}
 
 		err := repo.Create(ctx, project)
@@ -76,7 +78,8 @@ func TestCreate(t *testing.T) {
 		longName := string(make([]byte, 101))
 		project := &models.Project{
 			Name:        longName,
-			Description: "Test Description",
+			Description: stringPtr("Test Description"),
+			CreatedByID: uuid.New(),
 		}
 
 		err := repo.Create(ctx, project)
@@ -89,7 +92,8 @@ func TestCreate(t *testing.T) {
 		longDesc := string(make([]byte, 501))
 		project := &models.Project{
 			Name:        "Test Project",
-			Description: longDesc,
+			Description: &longDesc,
+			CreatedByID: uuid.New(),
 		}
 
 		err := repo.Create(ctx, project)
@@ -108,10 +112,11 @@ func TestGetByID(t *testing.T) {
 
 	t.Run("successful retrieval", func(t *testing.T) {
 		projectID := uuid.New()
+		createdByID := uuid.New()
 		now := time.Now()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "created_at", "updated_at"}).
-			AddRow(projectID, "Test Project", "Test Description", now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "created_by_id", "created_at", "updated_at"}).
+			AddRow(projectID, "Test Project", "Test Description", createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM projects WHERE id =").
 			WithArgs(projectID).
@@ -144,7 +149,7 @@ func TestGetByID(t *testing.T) {
 
 		mock.ExpectQuery("SELECT (.+) FROM projects WHERE id =").
 			WithArgs(projectID).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "description", "created_at", "updated_at"}))
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "description", "created_by_id", "created_at", "updated_at"}))
 
 		project, err := repo.GetByID(ctx, projectID)
 		if err != repository.ErrNotFound {
@@ -172,10 +177,11 @@ func TestList(t *testing.T) {
 		now := time.Now()
 		projectID1 := uuid.New()
 		projectID2 := uuid.New()
+		createdByID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "created_at", "updated_at"}).
-			AddRow(projectID1, "Project 1", "Description 1", now, now).
-			AddRow(projectID2, "Project 2", "Description 2", now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "created_by_id", "created_at", "updated_at"}).
+			AddRow(projectID1, "Project 1", "Description 1", createdByID, now, now).
+			AddRow(projectID2, "Project 2", "Description 2", createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM projects ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).
@@ -196,7 +202,7 @@ func TestList(t *testing.T) {
 	})
 
 	t.Run("empty list", func(t *testing.T) {
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "created_at", "updated_at"})
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "created_by_id", "created_at", "updated_at"})
 
 		mock.ExpectQuery("SELECT (.+) FROM projects ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).
@@ -233,7 +239,8 @@ func TestUpdate(t *testing.T) {
 		project := &models.Project{
 			ID:          projectID,
 			Name:        "Updated Project",
-			Description: "Updated Description",
+			Description: stringPtr("Updated Description"),
+			CreatedByID: uuid.New(),
 		}
 
 		mock.ExpectExec("UPDATE projects").
@@ -260,7 +267,8 @@ func TestUpdate(t *testing.T) {
 		project := &models.Project{
 			ID:          projectID,
 			Name:        "Updated Project",
-			Description: "Updated Description",
+			Description: stringPtr("Updated Description"),
+			CreatedByID: uuid.New(),
 		}
 
 		mock.ExpectExec("UPDATE projects").
@@ -281,7 +289,8 @@ func TestUpdate(t *testing.T) {
 		project := &models.Project{
 			ID:          uuid.New(),
 			Name:        "",
-			Description: "Updated Description",
+			Description: stringPtr("Updated Description"),
+			CreatedByID: uuid.New(),
 		}
 
 		err := repo.Update(ctx, project)
@@ -331,4 +340,58 @@ func TestDelete(t *testing.T) {
 			t.Errorf("Unfulfilled expectations: %v", err)
 		}
 	})
+}
+
+func TestCount(t *testing.T) {
+	db, mock := setupProjectMockDB(t)
+	defer db.Close()
+
+	repo := NewProjectRepository(db)
+	ctx := context.Background()
+
+	t.Run("successful count", func(t *testing.T) {
+		rows := sqlmock.NewRows([]string{"count"}).
+			AddRow(5)
+
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM projects").
+			WillReturnRows(rows)
+
+		count, err := repo.Count(ctx)
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		if count != 5 {
+			t.Errorf("Expected count 5, got %d", count)
+		}
+
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unfulfilled expectations: %v", err)
+		}
+	})
+
+	t.Run("count zero", func(t *testing.T) {
+		rows := sqlmock.NewRows([]string{"count"}).
+			AddRow(0)
+
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM projects").
+			WillReturnRows(rows)
+
+		count, err := repo.Count(ctx)
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		if count != 0 {
+			t.Errorf("Expected count 0, got %d", count)
+		}
+
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unfulfilled expectations: %v", err)
+		}
+	})
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
