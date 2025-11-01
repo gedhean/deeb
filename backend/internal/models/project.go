@@ -12,7 +12,8 @@ import (
 type Project struct {
 	ID          uuid.UUID `json:"id"          db:"id"`
 	Name        string    `json:"name"        db:"name"`
-	Description string    `json:"description" db:"description"`
+	Description *string   `json:"description,omitempty" db:"description"`
+	CreatedByID uuid.UUID `json:"created_by_id" db:"created_by_id"`
 	CreatedAt   time.Time `json:"created_at"  db:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"  db:"updated_at"`
 }

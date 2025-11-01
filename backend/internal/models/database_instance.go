@@ -8,54 +8,82 @@ import (
 	"github.com/google/uuid"
 )
 
-// DatabaseEngine represents supported database engines
-type DatabaseEngine string
+// DatabaseType represents the type of database
+type DatabaseType string
 
 const (
-	DatabaseEngineMySQL      DatabaseEngine = "mysql"
-	DatabaseEnginePostgreSQL DatabaseEngine = "postgresql"
+	DatabaseTypeMySQL      DatabaseType = "mysql"
+	DatabaseTypePostgreSQL DatabaseType = "postgresql"
+)
+
+// DatabaseInstanceStatus represents the status of a database instance
+type DatabaseInstanceStatus string
+
+const (
+	DatabaseInstanceStatusActive      DatabaseInstanceStatus = "Active"
+	DatabaseInstanceStatusInactive    DatabaseInstanceStatus = "Inactive"
+	DatabaseInstanceStatusMaintenance DatabaseInstanceStatus = "Maintenance"
 )
 
 // DatabaseInstance represents a database server or cluster
 type DatabaseInstance struct {
-	ID            uuid.UUID      `json:"id"             db:"id"`
-	Name          string         `json:"name"           db:"name"`
-	Host          string         `json:"host"           db:"host"`
-	Port          int            `json:"port"           db:"port"`
-	Engine        DatabaseEngine `json:"engine"         db:"engine"`
-	EnvironmentID uuid.UUID      `json:"environment_id" db:"environment_id"`
-	CreatedAt     time.Time      `json:"created_at"     db:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"     db:"updated_at"`
+	ID                        uuid.UUID            `json:"id"                         db:"id"`
+	Name                      string               `json:"name"                       db:"name"`
+	Description               *string              `json:"description,omitempty"      db:"description"`
+	DatabaseType              DatabaseType          `json:"database_type"              db:"database_type"`
+	Host                      string               `json:"host"                       db:"host"`
+	Port                      int                  `json:"port"                       db:"port"`
+	Username                  string               `json:"username"                   db:"username"`
+	ConnectionDetailsEncrypted *string             `json:"-"                          db:"connection_details_encrypted"`
+	UseRDSIAMAuth             bool                 `json:"use_rds_iam_auth"          db:"use_rds_iam_auth"`
+	RequireSSL                bool                 `json:"require_ssl"                db:"require_ssl"`
+	Status                    DatabaseInstanceStatus `json:"status"                    db:"status"`
+	CreatedByID               uuid.UUID            `json:"created_by_id"              db:"created_by_id"`
+	CreatedAt                 time.Time            `json:"created_at"                 db:"created_at"`
+	UpdatedAt                 time.Time            `json:"updated_at"                 db:"updated_at"`
 }
 
 // CreateDatabaseInstanceRequest represents the request to create a new database instance
 type CreateDatabaseInstanceRequest struct {
-	Name          string         `json:"name"           validate:"required,max=100"`
-	Host          string         `json:"host"           validate:"required,max=255"`
-	Port          int            `json:"port"           validate:"required,min=1,max=65535"`
-	Engine        DatabaseEngine `json:"engine"         validate:"required,oneof=mysql postgresql"`
-	EnvironmentID uuid.UUID      `json:"environment_id" validate:"required"`
+	Name                      string      `json:"name"                       validate:"required,max=100"`
+	Description               *string     `json:"description,omitempty"`
+	DatabaseType              DatabaseType `json:"database_type"            validate:"required,oneof=mysql postgresql"`
+	Host                      string      `json:"host"                       validate:"required,max=255"`
+	Port                      int         `json:"port"                       validate:"required,min=1,max=65535"`
+	Username                  string      `json:"username"                   validate:"required,max=255"`
+	ConnectionDetailsEncrypted *string    `json:"connection_details_encrypted,omitempty"`
+	UseRDSIAMAuth             bool        `json:"use_rds_iam_auth"`
+	RequireSSL                bool        `json:"require_ssl"`
 }
 
 // UpdateDatabaseInstanceRequest represents the request to update a database instance
 type UpdateDatabaseInstanceRequest struct {
-	Name          *string         `json:"name,omitempty"           validate:"omitempty,max=100"`
-	Host          *string         `json:"host,omitempty"           validate:"omitempty,max=255"`
-	Port          *int            `json:"port,omitempty"           validate:"omitempty,min=1,max=65535"`
-	Engine        *DatabaseEngine `json:"engine,omitempty"         validate:"omitempty,oneof=mysql postgresql"`
-	EnvironmentID *uuid.UUID      `json:"environment_id,omitempty"`
+	Name                      *string               `json:"name,omitempty"                       validate:"omitempty,max=100"`
+	Description               *string               `json:"description,omitempty"`
+	DatabaseType              *DatabaseType         `json:"database_type,omitempty"              validate:"omitempty,oneof=mysql postgresql"`
+	Host                      *string               `json:"host,omitempty"                       validate:"omitempty,max=255"`
+	Port                      *int                  `json:"port,omitempty"                       validate:"omitempty,min=1,max=65535"`
+	Username                  *string               `json:"username,omitempty"                   validate:"omitempty,max=255"`
+	ConnectionDetailsEncrypted *string              `json:"connection_details_encrypted,omitempty"`
+	UseRDSIAMAuth             *bool                 `json:"use_rds_iam_auth,omitempty"`
+	RequireSSL                *bool                 `json:"require_ssl,omitempty"`
+	Status                    *DatabaseInstanceStatus `json:"status,omitempty"                   validate:"omitempty,oneof=Active Inactive Maintenance"`
 }
 
 // DatabaseInstanceResponse represents a database instance response
 type DatabaseInstanceResponse struct {
-	ID            uuid.UUID      `json:"id"`
-	Name          string         `json:"name"`
-	Host          string         `json:"host"`
-	Port          int            `json:"port"`
-	Engine        DatabaseEngine `json:"engine"`
-	EnvironmentID uuid.UUID      `json:"environment_id"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
+	ID            uuid.UUID            `json:"id"`
+	Name          string               `json:"name"`
+	Description   *string              `json:"description,omitempty"`
+	DatabaseType  DatabaseType         `json:"database_type"`
+	Host          string               `json:"host"`
+	Port          int                  `json:"port"`
+	Username      string               `json:"username"`
+	UseRDSIAMAuth bool                 `json:"use_rds_iam_auth"`
+	RequireSSL    bool                 `json:"require_ssl"`
+	Status        DatabaseInstanceStatus `json:"status"`
+	CreatedAt     time.Time            `json:"created_at"`
+	UpdatedAt     time.Time            `json:"updated_at"`
 }
 
 // ToResponse converts a DatabaseInstance to DatabaseInstanceResponse
@@ -63,10 +91,14 @@ func (d *DatabaseInstance) ToResponse() *DatabaseInstanceResponse {
 	return &DatabaseInstanceResponse{
 		ID:            d.ID,
 		Name:          d.Name,
+		Description:   d.Description,
+		DatabaseType:  d.DatabaseType,
 		Host:          d.Host,
 		Port:          d.Port,
-		Engine:        d.Engine,
-		EnvironmentID: d.EnvironmentID,
+		Username:      d.Username,
+		UseRDSIAMAuth: d.UseRDSIAMAuth,
+		RequireSSL:    d.RequireSSL,
+		Status:        d.Status,
 		CreatedAt:     d.CreatedAt,
 		UpdatedAt:     d.UpdatedAt,
 	}
@@ -80,9 +112,9 @@ var (
 	ErrHostTooLong                  = errors.New("host must not exceed 255 characters")
 	ErrPortRequired                 = errors.New("port is required")
 	ErrPortInvalid                  = errors.New("port must be between 1 and 65535")
-	ErrEngineRequired               = errors.New("database engine is required")
-	ErrEngineInvalid                = errors.New("database engine must be mysql or postgresql")
-	ErrEnvironmentIDRequired        = errors.New("environment ID is required")
+	ErrDatabaseTypeRequired         = errors.New("database type is required")
+	ErrDatabaseTypeInvalid          = errors.New("database type must be mysql or postgresql")
+	ErrUsernameRequired             = errors.New("username is required")
 )
 
 // Validate validates the database instance model
@@ -112,17 +144,17 @@ func (d *DatabaseInstance) Validate() error {
 		return ErrPortInvalid
 	}
 
-	// Validate engine
-	if d.Engine == "" {
-		return ErrEngineRequired
+	// Validate database type
+	if d.DatabaseType == "" {
+		return ErrDatabaseTypeRequired
 	}
-	if d.Engine != DatabaseEngineMySQL && d.Engine != DatabaseEnginePostgreSQL {
-		return ErrEngineInvalid
+	if d.DatabaseType != DatabaseTypeMySQL && d.DatabaseType != DatabaseTypePostgreSQL {
+		return ErrDatabaseTypeInvalid
 	}
 
-	// Validate environment ID
-	if d.EnvironmentID == uuid.Nil {
-		return ErrEnvironmentIDRequired
+	// Validate username
+	if d.Username == "" {
+		return ErrUsernameRequired
 	}
 
 	return nil
@@ -155,17 +187,17 @@ func ValidateCreateDatabaseInstanceRequest(req *CreateDatabaseInstanceRequest) e
 		return ErrPortInvalid
 	}
 
-	// Validate engine
-	if req.Engine == "" {
-		return ErrEngineRequired
+	// Validate database type
+	if req.DatabaseType == "" {
+		return ErrDatabaseTypeRequired
 	}
-	if req.Engine != DatabaseEngineMySQL && req.Engine != DatabaseEnginePostgreSQL {
-		return ErrEngineInvalid
+	if req.DatabaseType != DatabaseTypeMySQL && req.DatabaseType != DatabaseTypePostgreSQL {
+		return ErrDatabaseTypeInvalid
 	}
 
-	// Validate environment ID
-	if req.EnvironmentID == uuid.Nil {
-		return ErrEnvironmentIDRequired
+	// Validate username
+	if req.Username == "" {
+		return ErrUsernameRequired
 	}
 
 	return nil
@@ -204,16 +236,16 @@ func ValidateUpdateDatabaseInstanceRequest(req *UpdateDatabaseInstanceRequest) e
 		}
 	}
 
-	// Validate engine if provided
-	if req.Engine != nil {
-		if *req.Engine != DatabaseEngineMySQL && *req.Engine != DatabaseEnginePostgreSQL {
-			return ErrEngineInvalid
+	// Validate database type if provided
+	if req.DatabaseType != nil {
+		if *req.DatabaseType != DatabaseTypeMySQL && *req.DatabaseType != DatabaseTypePostgreSQL {
+			return ErrDatabaseTypeInvalid
 		}
 	}
 
-	// Validate environment ID if provided
-	if req.EnvironmentID != nil && *req.EnvironmentID == uuid.Nil {
-		return ErrEnvironmentIDRequired
+	// Validate username if provided
+	if req.Username != nil && *req.Username == "" {
+		return ErrUsernameRequired
 	}
 
 	return nil

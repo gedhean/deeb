@@ -8,52 +8,67 @@ import (
 	"github.com/google/uuid"
 )
 
+// DatabaseStatus represents the status of a database
+type DatabaseStatus string
+
+const (
+	DatabaseStatusActive   DatabaseStatus = "Active"
+	DatabaseStatusInactive DatabaseStatus = "Inactive"
+)
+
 // Database represents an individual database within a database instance
 type Database struct {
-	ID                 uuid.UUID `json:"id"                   db:"id"`
-	Name               string    `json:"name"                 db:"name"`
-	DatabaseInstanceID uuid.UUID `json:"database_instance_id" db:"database_instance_id"`
-	ProjectID          uuid.UUID `json:"project_id"           db:"project_id"`
-	EnvironmentID      uuid.UUID `json:"environment_id"       db:"environment_id"`
-	CreatedAt          time.Time `json:"created_at"           db:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"           db:"updated_at"`
+	ID                 uuid.UUID     `json:"id"                   db:"id"`
+	ProjectID          uuid.UUID     `json:"project_id"            db:"project_id"`
+	DatabaseInstanceID uuid.UUID     `json:"database_instance_id"  db:"database_instance_id"`
+	EnvironmentID      uuid.UUID     `json:"environment_id"        db:"environment_id"`
+	DatabaseName       string         `json:"database_name"        db:"database_name"`
+	Description        *string        `json:"description,omitempty" db:"description"`
+	Status             DatabaseStatus `json:"status"               db:"status"`
+	CreatedByID        uuid.UUID     `json:"created_by_id"        db:"created_by_id"`
+	CreatedAt          time.Time     `json:"created_at"            db:"created_at"`
+	UpdatedAt          time.Time     `json:"updated_at"            db:"updated_at"`
 }
 
 // CreateDatabaseRequest represents the request to create a new database
 type CreateDatabaseRequest struct {
-	Name               string    `json:"name"                 validate:"required,max=100"`
-	DatabaseInstanceID uuid.UUID `json:"database_instance_id" validate:"required"`
 	ProjectID          uuid.UUID `json:"project_id"           validate:"required"`
+	DatabaseInstanceID uuid.UUID `json:"database_instance_id" validate:"required"`
 	EnvironmentID      uuid.UUID `json:"environment_id"       validate:"required"`
+	DatabaseName       string    `json:"database_name"        validate:"required,max=255"`
+	Description        *string   `json:"description,omitempty"`
 }
 
 // UpdateDatabaseRequest represents the request to update a database
 type UpdateDatabaseRequest struct {
-	Name               *string    `json:"name,omitempty"                 validate:"omitempty,max=100"`
-	DatabaseInstanceID *uuid.UUID `json:"database_instance_id,omitempty"`
-	ProjectID          *uuid.UUID `json:"project_id,omitempty"`
-	EnvironmentID      *uuid.UUID `json:"environment_id,omitempty"`
+	DatabaseName       *string      `json:"database_name,omitempty"        validate:"omitempty,max=255"`
+	Description        *string      `json:"description,omitempty"`
+	Status             *DatabaseStatus `json:"status,omitempty"            validate:"omitempty,oneof=Active Inactive"`
 }
 
 // DatabaseResponse represents a database response
 type DatabaseResponse struct {
-	ID                 uuid.UUID `json:"id"`
-	Name               string    `json:"name"`
-	DatabaseInstanceID uuid.UUID `json:"database_instance_id"`
-	ProjectID          uuid.UUID `json:"project_id"`
-	EnvironmentID      uuid.UUID `json:"environment_id"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                 uuid.UUID     `json:"id"`
+	ProjectID          uuid.UUID     `json:"project_id"`
+	DatabaseInstanceID uuid.UUID     `json:"database_instance_id"`
+	EnvironmentID      uuid.UUID     `json:"environment_id"`
+	DatabaseName       string         `json:"database_name"`
+	Description        *string       `json:"description,omitempty"`
+	Status             DatabaseStatus `json:"status"`
+	CreatedAt          time.Time     `json:"created_at"`
+	UpdatedAt          time.Time     `json:"updated_at"`
 }
 
 // ToResponse converts a Database to DatabaseResponse
 func (d *Database) ToResponse() *DatabaseResponse {
 	return &DatabaseResponse{
 		ID:                 d.ID,
-		Name:               d.Name,
-		DatabaseInstanceID: d.DatabaseInstanceID,
 		ProjectID:          d.ProjectID,
+		DatabaseInstanceID: d.DatabaseInstanceID,
 		EnvironmentID:      d.EnvironmentID,
+		DatabaseName:       d.DatabaseName,
+		Description:        d.Description,
+		Status:             d.Status,
 		CreatedAt:          d.CreatedAt,
 		UpdatedAt:          d.UpdatedAt,
 	}
@@ -62,7 +77,7 @@ func (d *Database) ToResponse() *DatabaseResponse {
 // Validation errors
 var (
 	ErrDatabaseNameRequired          = errors.New("database name is required")
-	ErrDatabaseNameTooLong           = errors.New("database name must not exceed 100 characters")
+	ErrDatabaseNameTooLong           = errors.New("database name must not exceed 255 characters")
 	ErrDatabaseInstanceIDRequired    = errors.New("database instance ID is required")
 	ErrDatabaseProjectIDRequired     = errors.New("project ID is required")
 	ErrDatabaseEnvironmentIDRequired = errors.New("environment ID is required")
@@ -71,13 +86,13 @@ var (
 // Validate validates the database model
 func (d *Database) Validate() error {
 	// Trim whitespace
-	d.Name = strings.TrimSpace(d.Name)
+	d.DatabaseName = strings.TrimSpace(d.DatabaseName)
 
-	// Validate name
-	if d.Name == "" {
+	// Validate database name
+	if d.DatabaseName == "" {
 		return ErrDatabaseNameRequired
 	}
-	if len(d.Name) > 100 {
+	if len(d.DatabaseName) > 255 {
 		return ErrDatabaseNameTooLong
 	}
 
@@ -102,13 +117,13 @@ func (d *Database) Validate() error {
 // ValidateCreateDatabaseRequest validates a create request
 func ValidateCreateDatabaseRequest(req *CreateDatabaseRequest) error {
 	// Trim whitespace
-	req.Name = strings.TrimSpace(req.Name)
+	req.DatabaseName = strings.TrimSpace(req.DatabaseName)
 
-	// Validate name
-	if req.Name == "" {
+	// Validate database name
+	if req.DatabaseName == "" {
 		return ErrDatabaseNameRequired
 	}
-	if len(req.Name) > 100 {
+	if len(req.DatabaseName) > 255 {
 		return ErrDatabaseNameTooLong
 	}
 
@@ -132,31 +147,16 @@ func ValidateCreateDatabaseRequest(req *CreateDatabaseRequest) error {
 
 // ValidateUpdateDatabaseRequest validates an update request
 func ValidateUpdateDatabaseRequest(req *UpdateDatabaseRequest) error {
-	// Validate name if provided
-	if req.Name != nil {
-		name := strings.TrimSpace(*req.Name)
+	// Validate database name if provided
+	if req.DatabaseName != nil {
+		name := strings.TrimSpace(*req.DatabaseName)
 		if name == "" {
 			return ErrDatabaseNameRequired
 		}
-		if len(name) > 100 {
+		if len(name) > 255 {
 			return ErrDatabaseNameTooLong
 		}
-		req.Name = &name
-	}
-
-	// Validate database instance ID if provided
-	if req.DatabaseInstanceID != nil && *req.DatabaseInstanceID == uuid.Nil {
-		return ErrDatabaseInstanceIDRequired
-	}
-
-	// Validate project ID if provided
-	if req.ProjectID != nil && *req.ProjectID == uuid.Nil {
-		return ErrDatabaseProjectIDRequired
-	}
-
-	// Validate environment ID if provided
-	if req.EnvironmentID != nil && *req.EnvironmentID == uuid.Nil {
-		return ErrDatabaseEnvironmentIDRequired
+		req.DatabaseName = &name
 	}
 
 	return nil

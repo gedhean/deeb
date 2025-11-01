@@ -287,87 +287,87 @@ Create Go User model struct aligned with new schema, including all fields and JS
 
 ### P01M16: Create Project and Environment model structs
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M16
 
 **Goal**
 Create Project and Environment model structs aligned with refined schema. Environment references Policy instead of storing policy config directly.
 
 **Acceptance Criteria**
-- [ ] Project struct defined in `backend/internal/models/project.go`
-- [ ] Environment struct defined in `backend/internal/models/environment.go`
-- [ ] All fields match schema (name, description for Project; name, description, policy_id for Environment)
-- [ ] JSON and database tags properly defined
-- [ ] Policy ID field is nullable UUID
+- [x] Project struct defined in `backend/internal/models/project.go`
+- [x] Environment struct defined in `backend/internal/models/environment.go`
+- [x] All fields match schema (name, description, created_by_id for Project; name, description, policy_id, created_by_id for Environment)
+- [x] JSON and database tags properly defined
+- [x] Policy ID field is nullable UUID
 
 ---
 
 ### P01M17: Create Policy model struct
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M17
 
 **Goal**
 Create Policy model struct for storing Policy configurations (SQL_REVIEW type and future types).
 
 **Acceptance Criteria**
-- [ ] Policy struct defined in `backend/internal/models/policy.go`
-- [ ] All fields match schema: id, name, description, type (enum: SQL_REVIEW), policy_config (JSONB), created_by_id, created_at, updated_at
-- [ ] PolicyType enum defined (SQL_REVIEW, extensible)
-- [ ] PolicyConfig type defined for JSONB handling
-- [ ] JSON and database tags properly defined
+- [x] Policy struct defined in `backend/internal/models/policy.go`
+- [x] All fields match schema: id, name, description, type (enum: SQL_REVIEW), policy_config (JSONB), created_by_id, created_at, updated_at
+- [x] PolicyType enum defined (SQL_REVIEW, extensible)
+- [x] PolicyConfig type defined for JSONB handling
+- [x] JSON and database tags properly defined
 
 ---
 
 ### P01M18: Create DatabaseInstance and Database model structs
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M18
 
 **Goal**
 Create DatabaseInstance and Database model structs with encrypted credential handling.
 
 **Acceptance Criteria**
-- [ ] DatabaseInstance struct defined in `backend/internal/models/database_instance.go`
-- [ ] Database struct defined in `backend/internal/models/database.go`
-- [ ] All fields match schema including encrypted credential field
-- [ ] DatabaseType constants defined (MySQL, PostgreSQL)
-- [ ] JSON tags exclude sensitive credential fields
+- [x] DatabaseInstance struct defined in `backend/internal/models/database_instance.go`
+- [x] Database struct defined in `backend/internal/models/database.go`
+- [x] All fields match schema including encrypted credential field
+- [x] DatabaseType constants defined (MySQL, PostgreSQL)
+- [x] JSON tags exclude sensitive credential fields
 
 ---
 
 ### P01M19: Create ChangePlan model struct
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M19
 
 **Goal**
 Create ChangePlan model struct (renamed from Issue) with all status and risk level fields.
 
 **Acceptance Criteria**
-- [ ] ChangePlan struct defined in `backend/internal/models/change_plan.go`
-- [ ] All fields match schema: id, project_id, target_database_id, title, change_type, sql_content, description, rollback_sql, status, risk_level, author_id, assigned_reviewer_id, created_at, updated_at
-- [ ] Status and RiskLevel constants/types defined
-- [ ] ChangeType constants defined (DDL, DML)
-- [ ] JSON and database tags properly defined
+- [x] ChangePlan struct defined in `backend/internal/models/change_plan.go`
+- [x] All fields match schema: id, project_id, target_database_id, title, change_type, sql_content, description, rollback_sql, status, risk_level, author_id, assigned_reviewer_id, created_at, updated_at
+- [x] Status and RiskLevel constants/types defined
+- [x] ChangeType constants defined (DDL, DML)
+- [x] JSON and database tags properly defined
 
 ---
 
 ### P01M20: Create supporting model structs (Approval, AuditLog, SchemaSnapshot, PolicyFinding)
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M20
 
 **Goal**
 Create model structs for Approval, AuditLog, SchemaSnapshot, and PolicyFinding tables.
 
 **Acceptance Criteria**
-- [ ] Approval struct defined in `backend/internal/models/approval.go`
-- [ ] AuditLog struct defined in `backend/internal/models/audit_log.go`
-- [ ] SchemaSnapshot struct defined in `backend/internal/models/schema_snapshot.go`
-- [ ] PolicyFinding struct defined in `backend/internal/models/policy_finding.go`
-- [ ] All fields match schema with proper tags
-- [ ] Severity and Action constants defined
+- [x] Approval struct defined in `backend/internal/models/approval.go`
+- [x] AuditLog struct defined in `backend/internal/models/audit_log.go`
+- [x] SchemaSnapshot struct defined in `backend/internal/models/schema_snapshot.go`
+- [x] PolicyFinding struct defined in `backend/internal/models/policy_finding.go`
+- [x] All fields match schema with proper tags
+- [x] Severity and Action constants defined
 
 ---
 
