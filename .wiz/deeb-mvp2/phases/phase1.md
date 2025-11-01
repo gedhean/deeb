@@ -82,19 +82,19 @@ Add projects table to migration with name, description fields (no status field p
 
 ### P01M04: Create policies table migration
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M04
 
 **Goal**
 Add policies table for storing Policy configurations (SQL_REVIEW type and future types) that can be referenced by Environments.
 
 **Acceptance Criteria**
-- [ ] Policies table created with columns: id (UUID), name, description, type (enum: SQL_REVIEW), policy_config (JSONB), created_by_id, created_at, updated_at
-- [ ] Foreign key constraint to users table
-- [ ] Unique constraint on name
-- [ ] Type enum defined (SQL_REVIEW, extensible for future types)
-- [ ] Policy config JSONB column for storing validator settings
-- [ ] Migration file updated
+- [x] Policies table created with columns: id (UUID), name, description, type (enum: SQL_REVIEW), policy_config (JSONB), created_by_id, created_at, updated_at
+- [x] Foreign key constraint to users table
+- [x] Unique constraint on name
+- [x] Type enum defined (SQL_REVIEW, extensible for future types)
+- [x] Policy config JSONB column for storing validator settings
+- [x] Migration file updated
 
 ---
 
