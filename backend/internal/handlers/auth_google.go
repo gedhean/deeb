@@ -166,13 +166,35 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 	}
 
+	// Determine organization role for new users
+	var orgRole string
+	if user == nil {
+		// Check if this is the first user (initial setup)
+		users, err := h.userRepo.List(ctx, 1, 0)
+		if err != nil {
+			h.logger.Error("Failed to check user count for first user setup", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
+		}
+
+		if len(users) == 0 {
+			// First user - automatically grant OrganizationAdmin role
+			orgRole = "OrganizationAdmin"
+			h.logger.Info("First user registration via Google OAuth - granting OrganizationAdmin role", zap.String("email", email))
+		} else {
+			// Subsequent users - use default role
+			orgRole = "OrganizationDeveloper"
+		}
+	}
+
 	// Create new user if doesn't exist
 	if user == nil {
 		user = &models.User{
 			Email:            email,
 			PasswordHash:     "", // No password for OAuth users
 			IsActive:         true,
-			OrganizationRole: "OrganizationDeveloper",
+			OrganizationRole: orgRole,
+			OAuthProvider:    stringPtr("google"),
+			OAuthID:          stringPtr(userInfo.Email), // Using email as OAuth ID for now
 		}
 
 		if err := h.userRepo.Create(ctx, user); err != nil {
@@ -206,6 +228,14 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 			zap.Error(err),
 			zap.String("user_id", user.ID.String()))
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
+	}
+
+	// Update last login timestamp
+	if err := h.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
+		h.logger.Warn("Failed to update last login timestamp",
+			zap.Error(err),
+			zap.String("user_id", user.ID.String()))
+		// Don't fail the OAuth flow if this update fails
 	}
 
 	// Set JWT token in HttpOnly cookie
@@ -261,4 +291,9 @@ func (h *GoogleOAuthHandler) generateStateToken() (string, error) {
 // normalizeEmail normalizes an email address (lowercase and trim whitespace)
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// stringPtr returns a pointer to the given string
+func stringPtr(s string) *string {
+	return &s
 }

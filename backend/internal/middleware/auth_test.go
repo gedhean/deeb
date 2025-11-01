@@ -18,7 +18,7 @@ import (
 const testJWTSecret = "test-secret-key-minimum-32-characters-long"
 
 func TestNewAuthMiddleware(t *testing.T) {
-	tm, err := auth.NewTokenManager(testJWTSecret)
+	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	middleware := NewAuthMiddleware(tm)
@@ -29,7 +29,7 @@ func TestNewAuthMiddleware(t *testing.T) {
 
 func TestAuthenticate_Success(t *testing.T) {
 	// Setup token manager and middleware
-	tm, err := auth.NewTokenManager(testJWTSecret)
+	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	middleware := NewAuthMiddleware(tm)
@@ -73,7 +73,7 @@ func TestAuthenticate_Success(t *testing.T) {
 }
 
 func TestAuthenticate_MissingAuthorizationHeader(t *testing.T) {
-	tm, err := auth.NewTokenManager(testJWTSecret)
+	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	middleware := NewAuthMiddleware(tm)
@@ -103,7 +103,7 @@ func TestAuthenticate_MissingAuthorizationHeader(t *testing.T) {
 }
 
 func TestAuthenticate_InvalidAuthorizationHeaderFormat(t *testing.T) {
-	tm, err := auth.NewTokenManager(testJWTSecret)
+	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	middleware := NewAuthMiddleware(tm)
@@ -156,7 +156,7 @@ func TestAuthenticate_InvalidAuthorizationHeaderFormat(t *testing.T) {
 }
 
 func TestAuthenticate_EmptyToken(t *testing.T) {
-	tm, err := auth.NewTokenManager(testJWTSecret)
+	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	middleware := NewAuthMiddleware(tm)
@@ -187,7 +187,7 @@ func TestAuthenticate_EmptyToken(t *testing.T) {
 }
 
 func TestAuthenticate_InvalidToken(t *testing.T) {
-	tm, err := auth.NewTokenManager(testJWTSecret)
+	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	middleware := NewAuthMiddleware(tm)
@@ -218,7 +218,7 @@ func TestAuthenticate_InvalidToken(t *testing.T) {
 }
 
 func TestAuthenticate_ExpiredToken(t *testing.T) {
-	tm, err := auth.NewTokenManager(testJWTSecret)
+	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	middleware := NewAuthMiddleware(tm)
@@ -275,7 +275,7 @@ func TestAuthenticate_WrongSecret(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create middleware with different secret
-	tm2, err := auth.NewTokenManager("different-secret-key-minimum-32-characters-long")
+	tm2, err := auth.NewTokenManager("different-secret-key-minimum-32-characters-long", 0)
 	require.NoError(t, err)
 
 	middleware := NewAuthMiddleware(tm2)
@@ -340,7 +340,7 @@ func TestGetUserFromContext_WrongType(t *testing.T) {
 }
 
 func TestAuthenticate_MultipleRequests(t *testing.T) {
-	tm, err := auth.NewTokenManager(testJWTSecret)
+	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	middleware := NewAuthMiddleware(tm)

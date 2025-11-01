@@ -103,6 +103,14 @@ func (h *LoginHandler) Login(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 	}
 
+	// Update last login timestamp
+	if err := h.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
+		h.logger.Warn("Failed to update last login timestamp",
+			zap.Error(err),
+			zap.String("user_id", user.ID.String()))
+		// Don't fail the login if this update fails
+	}
+
 	// Reset rate limit on successful login
 	h.rateLimiter.Reset(req.Email)
 

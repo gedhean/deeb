@@ -13,7 +13,7 @@ import (
 const testJWTSecret = "test-secret-key-minimum-32-characters-long"
 
 func TestNewTokenManager_Success(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 
 	require.NoError(t, err)
 	assert.NotNil(t, tm)
@@ -21,7 +21,7 @@ func TestNewTokenManager_Success(t *testing.T) {
 }
 
 func TestNewTokenManager_EmptySecret(t *testing.T) {
-	tm, err := NewTokenManager("")
+	tm, err := NewTokenManager("", 0)
 
 	assert.Error(t, err)
 	assert.Nil(t, tm)
@@ -31,7 +31,7 @@ func TestNewTokenManager_EmptySecret(t *testing.T) {
 func TestNewTokenManager_SecretTooShort(t *testing.T) {
 	shortSecret := "short"
 
-	tm, err := NewTokenManager(shortSecret)
+	tm, err := NewTokenManager(shortSecret, 0)
 
 	assert.Error(t, err)
 	assert.Nil(t, tm)
@@ -39,7 +39,7 @@ func TestNewTokenManager_SecretTooShort(t *testing.T) {
 }
 
 func TestGenerateToken_Success(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	userID := uuid.New()
@@ -60,7 +60,7 @@ func TestGenerateToken_Success(t *testing.T) {
 }
 
 func TestGenerateToken_NilUserID(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	token, err := tm.GenerateToken(uuid.Nil, "test@example.com", "OrganizationDeveloper")
@@ -71,7 +71,7 @@ func TestGenerateToken_NilUserID(t *testing.T) {
 }
 
 func TestGenerateToken_EmptyEmail(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	token, err := tm.GenerateToken(uuid.New(), "", "OrganizationDeveloper")
@@ -82,7 +82,7 @@ func TestGenerateToken_EmptyEmail(t *testing.T) {
 }
 
 func TestGenerateToken_EmptyRole(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	token, err := tm.GenerateToken(uuid.New(), "test@example.com", "")
@@ -93,7 +93,7 @@ func TestGenerateToken_EmptyRole(t *testing.T) {
 }
 
 func TestGenerateToken_Expiration(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	userID := uuid.New()
@@ -113,7 +113,7 @@ func TestGenerateToken_Expiration(t *testing.T) {
 }
 
 func TestValidateToken_Success(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	userID := uuid.New()
@@ -135,7 +135,7 @@ func TestValidateToken_Success(t *testing.T) {
 }
 
 func TestValidateToken_EmptyToken(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	claims, err := tm.ValidateToken("")
@@ -146,7 +146,7 @@ func TestValidateToken_EmptyToken(t *testing.T) {
 }
 
 func TestValidateToken_InvalidToken(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	claims, err := tm.ValidateToken("invalid.token.string")
@@ -164,7 +164,7 @@ func TestValidateToken_WrongSecret(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to validate with different secret
-	tm2, err := NewTokenManager("different-secret-key-minimum-32-characters-long")
+	tm2, err := NewTokenManager("different-secret-key-minimum-32-characters-long", 0)
 	require.NoError(t, err)
 
 	claims, err := tm2.ValidateToken(token)
@@ -175,7 +175,7 @@ func TestValidateToken_WrongSecret(t *testing.T) {
 }
 
 func TestValidateToken_ExpiredToken(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	// Create a token that's already expired
@@ -203,7 +203,7 @@ func TestValidateToken_ExpiredToken(t *testing.T) {
 }
 
 func TestValidateToken_MissingUserID(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	// Create token with missing user ID
@@ -230,7 +230,7 @@ func TestValidateToken_MissingUserID(t *testing.T) {
 }
 
 func TestValidateToken_MissingEmail(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	// Create token with missing email
@@ -257,7 +257,7 @@ func TestValidateToken_MissingEmail(t *testing.T) {
 }
 
 func TestValidateToken_MissingRole(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	// Create token with missing role
@@ -284,7 +284,7 @@ func TestValidateToken_MissingRole(t *testing.T) {
 }
 
 func TestGenerateAndValidateToken_DifferentRoles(t *testing.T) {
-	tm, err := NewTokenManager(testJWTSecret)
+	tm, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	roles := []string{

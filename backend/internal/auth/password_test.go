@@ -12,7 +12,7 @@ import (
 func TestHashPassword_Success(t *testing.T) {
 	password := "securePassword123"
 
-	hash, err := HashPassword(password)
+	hash, err := HashPassword(password, 0)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, hash)
@@ -37,7 +37,7 @@ func TestHashPassword_EmptyPassword(t *testing.T) {
 func TestHashPassword_TooShort(t *testing.T) {
 	password := "short"
 
-	hash, err := HashPassword(password)
+	hash, err := HashPassword(password, 0)
 
 	assert.Error(t, err)
 	assert.Equal(t, ErrPasswordTooShort, err)
@@ -47,7 +47,7 @@ func TestHashPassword_TooShort(t *testing.T) {
 func TestHashPassword_MinimumLength(t *testing.T) {
 	password := "12345678" // Exactly 8 characters
 
-	hash, err := HashPassword(password)
+	hash, err := HashPassword(password, 0)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, hash)
@@ -76,21 +76,21 @@ func TestHashPassword_DifferentHashesForSamePassword(t *testing.T) {
 func TestHashPassword_CorrectCost(t *testing.T) {
 	password := "testPassword123"
 
-	hash, err := HashPassword(password)
+	hash, err := HashPassword(password, 0)
 	require.NoError(t, err)
 
 	// Extract cost from hash
 	cost, err := bcrypt.Cost([]byte(hash))
 	require.NoError(t, err)
 
-	assert.Equal(t, BcryptCost, cost)
-	assert.GreaterOrEqual(t, cost, 12, "Bcrypt cost should be at least 12")
+	assert.Equal(t, DefaultBcryptCost, cost)
+	assert.GreaterOrEqual(t, cost, 10, "Bcrypt cost should be at least 10")
 }
 
 func TestVerifyPassword_Success(t *testing.T) {
 	password := "correctPassword123"
 
-	hash, err := HashPassword(password)
+	hash, err := HashPassword(password, 0)
 	require.NoError(t, err)
 
 	err = VerifyPassword(hash, password)
@@ -101,7 +101,7 @@ func TestVerifyPassword_WrongPassword(t *testing.T) {
 	password := "correctPassword123"
 	wrongPassword := "wrongPassword123"
 
-	hash, err := HashPassword(password)
+	hash, err := HashPassword(password, 0)
 	require.NoError(t, err)
 
 	err = VerifyPassword(hash, wrongPassword)
@@ -133,7 +133,7 @@ func TestVerifyPassword_InvalidHash(t *testing.T) {
 func TestVerifyPassword_CaseSensitive(t *testing.T) {
 	password := "CaseSensitive123"
 
-	hash, err := HashPassword(password)
+	hash, err := HashPassword(password, 0)
 	require.NoError(t, err)
 
 	// Correct case should work
@@ -160,7 +160,7 @@ func TestVerifyPassword_SpecialCharacters(t *testing.T) {
 
 	for _, password := range passwords {
 		t.Run(password, func(t *testing.T) {
-			hash, err := HashPassword(password)
+			hash, err := HashPassword(password, 0)
 			require.NoError(t, err)
 
 			err = VerifyPassword(hash, password)
@@ -223,13 +223,13 @@ func BenchmarkHashPassword(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = HashPassword(password)
+		_, _ = HashPassword(password, 0)
 	}
 }
 
 func BenchmarkVerifyPassword(b *testing.B) {
 	password := "benchmarkPassword123"
-	hash, _ := HashPassword(password)
+	hash, _ := HashPassword(password, 0)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

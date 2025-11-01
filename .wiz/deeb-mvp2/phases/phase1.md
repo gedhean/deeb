@@ -464,97 +464,99 @@ Create password hashing and verification utilities using bcrypt for email/passwo
 
 ### P01M26: Implement JWT token generation
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M26
 
 **Goal**
 Create JWT token generation utility with user claims and configurable expiration.
 
 **Acceptance Criteria**
-- [ ] JWT token generation implemented in `backend/internal/auth/jwt.go`
-- [ ] Token includes user ID, email, organization role
-- [ ] Token expiration configurable (default 24 hours)
-- [ ] Secure signing algorithm used (HS256 or RS256)
-- [ ] Token signing key from configuration
-- [ ] Unit tests for token generation passing
+- [x] JWT token generation implemented in `backend/internal/auth/jwt.go`
+- [x] Token includes user ID, email, organization role
+- [x] Token expiration configurable (default 24 hours)
+- [x] Secure signing algorithm used (HS256 or RS256)
+- [x] Token signing key from configuration
+- [x] Unit tests for token generation passing
 
 ---
 
 ### P01M27: Implement JWT token validation
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M27
 
 **Goal**
 Create JWT token validation utility to parse and verify tokens with user claims extraction.
 
 **Acceptance Criteria**
-- [ ] JWT token validation implemented in `backend/internal/auth/jwt.go`
-- [ ] ValidateToken function parses and verifies tokens
-- [ ] User claims extracted from token
-- [ ] Expiration validation working
-- [ ] Invalid token errors handled gracefully
-- [ ] Unit tests for token validation passing
+- [x] JWT token validation implemented in `backend/internal/auth/jwt.go`
+- [x] ValidateToken function parses and verifies tokens
+- [x] User claims extracted from token
+- [x] Expiration validation working
+- [x] Invalid token errors handled gracefully
+- [x] Unit tests for token validation passing
 
 ---
 
 ### P01M28: Implement OAuth 2.0 Google authentication flow
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M28
 
 **Goal**
 Implement OAuth 2.0 authentication flow with Google provider including callback handling.
 
 **Acceptance Criteria**
-- [ ] OAuth 2.0 Google configuration loaded from config
-- [ ] OAuth redirect endpoint implemented
-- [ ] OAuth callback handler implemented
-- [ ] Google user info fetched and validated
-- [ ] User created or updated from OAuth profile
-- [ ] JWT token issued after successful OAuth
-- [ ] Error handling for OAuth failures
+- [x] OAuth 2.0 Google configuration loaded from config
+- [x] OAuth redirect endpoint implemented
+- [x] OAuth callback handler implemented
+- [x] Google user info fetched and validated
+- [x] User created or updated from OAuth profile
+- [x] JWT token issued after successful OAuth
+- [x] Error handling for OAuth failures
+- [x] First user logic implemented (first user becomes OrganizationAdmin)
+- [x] Last login timestamp updated
 
 ---
 
 ### P01M29: Implement email/password registration endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M29
 
 **Goal**
 Create user registration endpoint with email/password that automatically assigns Organization Admin role to first user.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/auth/register endpoint implemented
-- [ ] Request validation (email format, password strength)
-- [ ] First user check: if no users exist, assign Organization Admin role
-- [ ] Subsequent users assigned Organization Developer role by default
-- [ ] Password hashed before storage
-- [ ] Email uniqueness enforced
-- [ ] User created with proper fields
-- [ ] Integration test passing
+- [x] POST /api/v1/auth/register endpoint implemented
+- [x] Request validation (email format, password strength)
+- [x] First user check: if no users exist, assign Organization Admin role
+- [x] Subsequent users assigned Organization Developer role by default
+- [x] Password hashed before storage
+- [x] Email uniqueness enforced
+- [x] User created with proper fields
+- [x] Integration test passing
 
 ---
 
 ### P01M30: Implement email/password login endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M30
 
 **Goal**
 Create user login endpoint with email/password that validates credentials and issues JWT token.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/auth/login endpoint implemented
-- [ ] Request validation (email, password required)
-- [ ] User lookup by email
-- [ ] Password verification against stored hash
-- [ ] User active status checked
-- [ ] JWT token issued on successful login
-- [ ] Last login timestamp updated
-- [ ] Error handling for invalid credentials
-- [ ] Integration test passing
+- [x] POST /api/v1/auth/login endpoint implemented
+- [x] Request validation (email, password required)
+- [x] User lookup by email
+- [x] Password verification against stored hash
+- [x] User active status checked
+- [x] JWT token issued on successful login
+- [x] Last login timestamp updated
+- [x] Error handling for invalid credentials
+- [x] Integration test passing
 
 ---
 

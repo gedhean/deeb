@@ -141,7 +141,7 @@ func TestIntegration_RegisterAndLogin_Success(t *testing.T) {
 	assert.True(t, registerResp.User.IsActive)
 
 	// Test Login
-	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", 0)
 	require.NoError(t, err)
 
 	rateLimiter := handlers.NewRateLimiter()
@@ -268,7 +268,7 @@ func TestIntegration_Login_InvalidPassword(t *testing.T) {
 	require.Equal(t, http.StatusCreated, rec.Code)
 
 	// Try to login with wrong password
-	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", 0)
 	require.NoError(t, err)
 
 	rateLimiter := handlers.NewRateLimiter()
@@ -307,7 +307,7 @@ func TestIntegration_Login_UserNotFound(t *testing.T) {
 	userRepo := postgres.NewUserRepository(db)
 	logger := zap.NewNop()
 
-	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", 0)
 	require.NoError(t, err)
 
 	rateLimiter := handlers.NewRateLimiter()
@@ -377,7 +377,7 @@ func TestIntegration_Login_InactiveUser(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to login with inactive account
-	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", 0)
 	require.NoError(t, err)
 
 	rateLimiter := handlers.NewRateLimiter()

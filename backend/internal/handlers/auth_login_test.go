@@ -22,7 +22,7 @@ import (
 func TestLoginHandler_SuccessfulLogin(t *testing.T) {
 	// Create a test user with hashed password
 	password := "testpassword123"
-	hashedPassword, err := auth.HashPassword(password)
+	hashedPassword, err := auth.HashPassword(password, 0)
 	assert.NoError(t, err)
 
 	testUser := &models.User{
@@ -38,7 +38,7 @@ func TestLoginHandler_SuccessfulLogin(t *testing.T) {
 	mockRepo := new(MockUserRepository)
 	mockRepo.On("GetByEmail", mock.Anything, testUser.Email).Return(testUser, nil)
 
-	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	assert.NoError(t, err)
 
 	rateLimiter := NewRateLimiter()
