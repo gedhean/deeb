@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
+	"github.com/nsxbet/deeb/internal/rbac"
 )
 
 // AuthMiddleware creates an HTTP middleware that validates JWT tokens.
@@ -66,6 +67,29 @@ func (m *AuthMiddleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 
 		// Store claims in Echo context
 		c.Set("user", claims)
+
+		// Map organization role from JWT format to RBAC format
+		// JWT uses: "OrganizationAdmin", "OrganizationDBA", "OrganizationDeveloper"
+		// RBAC uses: "organization_admin", "organization_dba", "organization_developer"
+		var rbacRole rbac.OrganizationRole
+		switch claims.OrganizationRole {
+		case "OrganizationAdmin":
+			rbacRole = rbac.OrganizationAdmin
+		case "OrganizationDBA":
+			rbacRole = rbac.OrganizationDBA
+		case "OrganizationDeveloper":
+			rbacRole = rbac.OrganizationDeveloper
+		default:
+			// Fallback to developer if unknown role
+			rbacRole = rbac.OrganizationDeveloper
+		}
+
+		// Also set RBAC context values for authorization middleware
+		ctx := c.Request().Context()
+		ctx = context.WithValue(ctx, rbac.ContextKeyUserID, claims.UserID.String())
+		ctx = context.WithValue(ctx, rbac.ContextKeyOrganizationID, "default") // Single-tenant for MVP
+		ctx = context.WithValue(ctx, rbac.ContextKeyOrganizationRole, rbacRole)
+		c.SetRequest(c.Request().WithContext(ctx))
 
 		// Call next handler
 		return next(c)

@@ -9,6 +9,7 @@ import (
 	"github.com/nsxbet/deeb/internal/handlers"
 	"github.com/nsxbet/deeb/internal/logger"
 	"github.com/nsxbet/deeb/internal/middleware"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 )
@@ -34,7 +35,7 @@ func Setup(
 	setupHealthRoute(e, db, version)
 	setupSetupRoutes(e, userRepo)
 	setupAuthRoutes(e, cfg, userRepo, tokenManager, loginRateLimiter)
-	setupUserRoutes(e, userRepo)
+	setupUserRoutes(e, userRepo, tokenManager)
 	setupProjectRoutes(e, projectRepo)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo)
 	setupDatabaseRoutes(e, dbRepo)
@@ -99,16 +100,20 @@ func setupAuthRoutes(
 }
 
 // setupUserRoutes registers user management routes
-func setupUserRoutes(e *echo.Echo, userRepo repository.UserRepository) {
+func setupUserRoutes(e *echo.Echo, userRepo repository.UserRepository, tokenManager *auth.TokenManager) {
 	userHandler := handlers.NewUserHandler(userRepo, logger.Get())
 	usersGroup := e.Group("/api/v1/users")
 
-	// TODO: Add authentication middleware for protected routes
-	// For now, routes are accessible without authentication for development
-	usersGroup.GET("", userHandler.ListUsers)
-	usersGroup.GET("/:id", userHandler.GetUser)
-	usersGroup.PUT("/:id", userHandler.UpdateUser)
-	usersGroup.DELETE("/:id", userHandler.DeleteUser)
+	// Authentication middleware required for all user routes
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	authzMiddleware := middleware.NewAuthzMiddleware()
+
+	// All user management routes require authentication and admin role
+	usersGroup.GET("", userHandler.ListUsers, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersRead))
+	usersGroup.GET("/:id", userHandler.GetUser, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersRead))
+	usersGroup.POST("", userHandler.CreateUser, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersCreate))
+	usersGroup.PUT("/:id", userHandler.UpdateUser, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersUpdate))
+	usersGroup.DELETE("/:id", userHandler.DeleteUser, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersDelete))
 }
 
 // setupProjectRoutes registers project management routes

@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
@@ -23,6 +27,86 @@ func NewUserHandler(userRepo repository.UserRepository, logger *zap.Logger) *Use
 		userRepo: userRepo,
 		logger:   logger,
 	}
+}
+
+// CreateUser handles POST /api/v1/users - create a new user (admin only)
+func (h *UserHandler) CreateUser(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Parse create request
+	var req models.CreateUserRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate request
+	if err := c.Validate(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error":   "Validation failed",
+			"details": err.Error(),
+		})
+	}
+
+	// Normalize email
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	// Check for duplicate email
+	existingUser, err := h.userRepo.GetByEmail(ctx, req.Email)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		h.logger.Error("Failed to check for existing user", zap.Error(err), zap.String("email", req.Email))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to check user existence",
+		})
+	}
+	if existingUser != nil {
+		return c.JSON(http.StatusConflict, map[string]interface{}{
+			"error": "Email already registered",
+		})
+	}
+
+	// Hash password
+	passwordHash, err := auth.HashPassword(req.Password, 0) // Use default cost (12)
+	if err != nil {
+		h.logger.Debug("Password validation failed", zap.Error(err))
+		if errors.Is(err, auth.ErrPasswordTooShort) {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Password must be at least 8 characters",
+			})
+		}
+		if errors.Is(err, auth.ErrPasswordTooLong) {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Password must not exceed 72 characters",
+			})
+		}
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid password",
+		})
+	}
+
+	// Create user
+	user := &models.User{
+		Email:            req.Email,
+		PasswordHash:     passwordHash,
+		OrganizationRole: req.OrganizationRole,
+		TwoFactorEnabled: false,
+		IsActive:         true,
+	}
+
+	if err := h.userRepo.Create(ctx, user); err != nil {
+		h.logger.Error("Failed to create user", zap.Error(err), zap.String("email", req.Email))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to create user",
+		})
+	}
+
+	h.logger.Info("User created successfully",
+		zap.String("email", user.Email),
+		zap.String("user_id", user.ID.String()),
+		zap.String("organization_role", string(user.OrganizationRole)))
+
+	return c.JSON(http.StatusCreated, user.ToResponse())
 }
 
 // ListUsers handles GET /api/v1/users - list all users
@@ -85,7 +169,7 @@ func (h *UserHandler) GetUser(c echo.Context) error {
 	// Fetch user from repository
 	user, err := h.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		if err == repository.ErrNotFound {
+		if errors.Is(err, sql.ErrNoRows) {
 			return c.JSON(http.StatusNotFound, map[string]interface{}{
 				"error": "User not found",
 			})

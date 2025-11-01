@@ -562,76 +562,77 @@ Create user login endpoint with email/password that validates credentials and is
 
 ### P01M31: Create authentication middleware
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M31
 
 **Goal**
 Implement authentication middleware that validates JWT tokens and extracts user context for protected routes.
 
 **Acceptance Criteria**
-- [ ] Authentication middleware created in `backend/internal/middleware/auth.go`
-- [ ] JWT token extracted from Authorization header
-- [ ] Token validated and user claims extracted
-- [ ] User context set in request for downstream handlers
-- [ ] Unauthorized responses for invalid/missing tokens
-- [ ] Middleware integrated with Echo router
-- [ ] Unit tests for middleware passing
+- [x] Authentication middleware created in `backend/internal/middleware/auth.go`
+- [x] JWT token extracted from Authorization header
+- [x] Token validated and user claims extracted
+- [x] User context set in request for downstream handlers
+- [x] Unauthorized responses for invalid/missing tokens
+- [x] Middleware integrated with Echo router
+- [x] Unit tests for middleware passing
+- [x] RBAC context values set for authorization middleware
 
 ---
 
 ### P01M32: Create RBAC authorization middleware
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M32
 
 **Goal**
 Implement RBAC authorization middleware that checks user roles and permissions for resource access.
 
 **Acceptance Criteria**
-- [ ] Authorization middleware created in `backend/internal/middleware/authz.go`
-- [ ] Organization role checking implemented
-- [ ] Project role checking implemented (requires project context)
-- [ ] Permission checking helper functions
-- [ ] Forbidden responses for insufficient permissions
-- [ ] Middleware integrated with routes
-- [ ] Unit tests for authorization logic passing
+- [x] Authorization middleware created in `backend/internal/middleware/authz.go`
+- [x] Organization role checking implemented
+- [x] Project role checking implemented (requires project context)
+- [x] Permission checking helper functions
+- [x] Forbidden responses for insufficient permissions
+- [x] Middleware integrated with routes
+- [x] Unit tests for authorization logic passing
 
 ---
 
 ### P01M33: Implement user management endpoints (GET, POST, PUT)
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M33
 
 **Goal**
 Create user management REST API endpoints for admins to create, read, and update users.
 
 **Acceptance Criteria**
-- [ ] GET /api/v1/users endpoint implemented (list users, admin only)
-- [ ] GET /api/v1/users/:id endpoint implemented (get user, admin only)
-- [ ] POST /api/v1/users endpoint implemented (create user, admin only)
-- [ ] PUT /api/v1/users/:id endpoint implemented (update user, admin only)
-- [ ] Request validation and RBAC checks
-- [ ] Organization role assignment working
-- [ ] Integration tests passing
+- [x] GET /api/v1/users endpoint implemented (list users, admin only)
+- [x] GET /api/v1/users/:id endpoint implemented (get user, admin only)
+- [x] POST /api/v1/users endpoint implemented (create user, admin only)
+- [x] PUT /api/v1/users/:id endpoint implemented (update user, admin only)
+- [x] Request validation and RBAC checks
+- [x] Organization role assignment working
+- [x] Integration tests passing
 
 ---
 
 ### P01M34: Implement health check endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P01M34
 
 **Goal**
 Create health check endpoint that verifies database connectivity and returns system status.
 
 **Acceptance Criteria**
-- [ ] GET /health endpoint implemented
-- [ ] Database connectivity check included
-- [ ] Response includes version and status
-- [ ] Returns 200 OK when healthy, 503 when unhealthy
-- [ ] No authentication required
-- [ ] Integration test passing
+- [x] GET /health endpoint implemented
+- [x] Database connectivity check included
+- [x] Response includes version and status
+- [x] Returns 200 OK when healthy, 503 when unhealthy
+- [x] No authentication required
+- [x] Integration test passing
 
 ---
 
