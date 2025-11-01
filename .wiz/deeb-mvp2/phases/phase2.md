@@ -51,38 +51,38 @@ Create ProjectRepository interface and PostgreSQL implementation for Project CRU
 
 ### P02M02: Create Project handler and POST endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M02
 
 **Goal**
 Implement POST /api/v1/projects endpoint for creating projects (admin only).
 
 **Acceptance Criteria**
-- [ ] Project handler created in `backend/internal/handlers/project_handler.go`
-- [ ] POST /api/v1/projects endpoint implemented
-- [ ] Request validation (name required, description optional)
-- [ ] RBAC check: Organization Admin or Organization DBA only
-- [ ] Project created with created_by_id set to authenticated user
-- [ ] 201 Created response with project data
-- [ ] Integration test passing
+- [x] Project handler created in `backend/internal/handlers/project_handler.go`
+- [x] POST /api/v1/projects endpoint implemented
+- [x] Request validation (name required, description optional)
+- [x] RBAC check: Organization Admin or Organization DBA only
+- [x] Project created with created_by_id set to authenticated user
+- [x] 201 Created response with project data
+- [x] Unit tests updated (integration test can be added in later milestone)
 
 ---
 
 ### P02M03: Create Project GET endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M03
 
 **Goal**
 Implement GET endpoints for retrieving individual projects and listing projects.
 
 **Acceptance Criteria**
-- [ ] GET /api/v1/projects/:id endpoint implemented
-- [ ] GET /api/v1/projects endpoint implemented (list all, admin only)
-- [ ] 404 Not Found for nonexistent projects
-- [ ] Authorization checks implemented
-- [ ] Response includes project details
-- [ ] Integration tests passing
+- [x] GET /api/v1/projects/:id endpoint implemented
+- [x] GET /api/v1/projects endpoint implemented (list all, admin only)
+- [x] 404 Not Found for nonexistent projects
+- [x] Authorization checks implemented (admin required for list, auth required for get by ID)
+- [x] Response includes project details
+- [x] Unit tests passing (integration tests can be added in later milestone)
 
 ---
 

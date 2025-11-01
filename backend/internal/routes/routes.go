@@ -128,9 +128,10 @@ func setupProjectRoutes(e *echo.Echo, projectRepo repository.ProjectRepository, 
 	// POST requires Admin or DBA role
 	projectsGroup.POST("", projectHandler.CreateProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationDBA())
 
-	// GET endpoints (will be secured in later milestones)
-	projectsGroup.GET("", projectHandler.ListProjects)
-	projectsGroup.GET("/:id", projectHandler.GetProject)
+	// GET endpoints require authentication
+	// List all projects requires admin role
+	projectsGroup.GET("", projectHandler.ListProjects, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	projectsGroup.GET("/:id", projectHandler.GetProject, authMiddleware.Authenticate)
 	projectsGroup.PUT("/:id", projectHandler.UpdateProject)
 	projectsGroup.DELETE("/:id", projectHandler.DeleteProject)
 }
