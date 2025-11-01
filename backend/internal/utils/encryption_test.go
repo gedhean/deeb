@@ -64,6 +64,48 @@ func TestDecrypt_InvalidCiphertext(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestEncrypt_Decrypt_BinaryData(t *testing.T) {
+	key := "12345678901234567890123456789012"
+	binaryData := []byte{0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE, 0xFD, 0xFC}
+
+	encrypted, err := Encrypt(string(binaryData), key)
+	require.NoError(t, err)
+	assert.NotEmpty(t, encrypted)
+
+	decrypted, err := Decrypt(encrypted, key)
+	require.NoError(t, err)
+	assert.Equal(t, string(binaryData), decrypted)
+}
+
+func TestEncrypt_Decrypt_LargeData(t *testing.T) {
+	key := "12345678901234567890123456789012"
+	largeData := make([]byte, 10000)
+	for i := range largeData {
+		largeData[i] = byte(i % 256)
+	}
+
+	encrypted, err := Encrypt(string(largeData), key)
+	require.NoError(t, err)
+	assert.NotEmpty(t, encrypted)
+
+	decrypted, err := Decrypt(encrypted, key)
+	require.NoError(t, err)
+	assert.Equal(t, string(largeData), decrypted)
+}
+
+func TestEncrypt_KeyByteSlice(t *testing.T) {
+	key := "12345678901234567890123456789012"
+	plaintext := "test-data"
+
+	encrypted, err := Encrypt(plaintext, key)
+	require.NoError(t, err)
+	assert.NotEmpty(t, encrypted)
+
+	decrypted, err := Decrypt(encrypted, key)
+	require.NoError(t, err)
+	assert.Equal(t, plaintext, decrypted)
+}
+
 func TestEncrypt_DifferentResultsForSameInput(t *testing.T) {
 	key := "12345678901234567890123456789012"
 	plaintext := "same-input"

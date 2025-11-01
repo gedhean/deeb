@@ -27,7 +27,7 @@ func TestHashPassword_Success(t *testing.T) {
 }
 
 func TestHashPassword_EmptyPassword(t *testing.T) {
-	hash, err := HashPassword("")
+	hash, err := HashPassword("", 0)
 
 	assert.Error(t, err)
 	assert.Equal(t, ErrEmptyPassword, err)
@@ -56,8 +56,8 @@ func TestHashPassword_MinimumLength(t *testing.T) {
 func TestHashPassword_DifferentHashesForSamePassword(t *testing.T) {
 	password := "samePassword123"
 
-	hash1, err1 := HashPassword(password)
-	hash2, err2 := HashPassword(password)
+	hash1, err1 := HashPassword(password, 0)
+	hash2, err2 := HashPassword(password, 0)
 
 	require.NoError(t, err1)
 	require.NoError(t, err2)
@@ -110,7 +110,7 @@ func TestVerifyPassword_WrongPassword(t *testing.T) {
 }
 
 func TestVerifyPassword_EmptyPassword(t *testing.T) {
-	hash, err := HashPassword("validPassword123")
+	hash, err := HashPassword("validPassword123", 0)
 	require.NoError(t, err)
 
 	err = VerifyPassword(hash, "")
@@ -173,7 +173,7 @@ func TestHashPassword_LongPassword(t *testing.T) {
 	// Test with a password at bcrypt's 72-byte limit
 	longPassword := strings.Repeat("a", 72)
 
-	hash, err := HashPassword(longPassword)
+	hash, err := HashPassword(longPassword, 0)
 	require.NoError(t, err)
 
 	// Should verify successfully
@@ -185,7 +185,7 @@ func TestHashPassword_ExceedsBcryptLimit(t *testing.T) {
 	// Test with a password exceeding bcrypt's 72-byte limit
 	tooLongPassword := strings.Repeat("a", 100)
 
-	hash, err := HashPassword(tooLongPassword)
+	hash, err := HashPassword(tooLongPassword, 0)
 
 	// Should return ErrPasswordTooLong for passwords > 72 bytes
 	assert.Error(t, err)
@@ -197,7 +197,7 @@ func TestHashPassword_MaximumLength(t *testing.T) {
 	// Test with a password at exactly 72 bytes (maximum allowed)
 	maxPassword := strings.Repeat("a", MaxPasswordLength)
 
-	hash, err := HashPassword(maxPassword)
+	hash, err := HashPassword(maxPassword, 0)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, hash)
@@ -211,7 +211,7 @@ func TestHashPassword_ExceedsMaximumByOne(t *testing.T) {
 	// Test with a password one character over the limit
 	tooLongPassword := strings.Repeat("a", MaxPasswordLength+1)
 
-	hash, err := HashPassword(tooLongPassword)
+	hash, err := HashPassword(tooLongPassword, 0)
 
 	assert.Error(t, err)
 	assert.Equal(t, ErrPasswordTooLong, err)

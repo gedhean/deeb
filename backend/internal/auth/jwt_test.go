@@ -157,7 +157,7 @@ func TestValidateToken_InvalidToken(t *testing.T) {
 }
 
 func TestValidateToken_WrongSecret(t *testing.T) {
-	tm1, err := NewTokenManager(testJWTSecret)
+	tm1, err := NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	token, err := tm1.GenerateToken(uuid.New(), "test@example.com", "OrganizationDeveloper")
@@ -307,7 +307,7 @@ func TestGenerateAndValidateToken_DifferentRoles(t *testing.T) {
 }
 
 func BenchmarkGenerateToken(b *testing.B) {
-	tm, _ := NewTokenManager(testJWTSecret)
+	tm, _ := NewTokenManager(testJWTSecret, 0)
 	userID := uuid.New()
 
 	b.ResetTimer()
@@ -317,7 +317,7 @@ func BenchmarkGenerateToken(b *testing.B) {
 }
 
 func BenchmarkValidateToken(b *testing.B) {
-	tm, _ := NewTokenManager(testJWTSecret)
+	tm, _ := NewTokenManager(testJWTSecret, 0)
 	token, _ := tm.GenerateToken(uuid.New(), "test@example.com", "OrganizationDeveloper")
 
 	b.ResetTimer()

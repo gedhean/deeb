@@ -41,10 +41,14 @@ type ProjectResponse struct {
 
 // ToResponse converts a Project to ProjectResponse.
 func (p *Project) ToResponse() *ProjectResponse {
+	desc := ""
+	if p.Description != nil {
+		desc = *p.Description
+	}
 	return &ProjectResponse{
 		ID:          p.ID,
 		Name:        p.Name,
-		Description: p.Description,
+		Description: desc,
 		CreatedAt:   p.CreatedAt,
 		UpdatedAt:   p.UpdatedAt,
 	}
@@ -61,7 +65,10 @@ var (
 func (p *Project) Validate() error {
 	// Trim whitespace
 	p.Name = strings.TrimSpace(p.Name)
-	p.Description = strings.TrimSpace(p.Description)
+	if p.Description != nil {
+		trimmed := strings.TrimSpace(*p.Description)
+		p.Description = &trimmed
+	}
 
 	// Validate name
 	if p.Name == "" {
@@ -72,7 +79,7 @@ func (p *Project) Validate() error {
 	}
 
 	// Validate description
-	if len(p.Description) > 500 {
+	if p.Description != nil && len(*p.Description) > 500 {
 		return ErrDescriptionTooLong
 	}
 

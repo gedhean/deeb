@@ -37,23 +37,9 @@ func (s IssueStatus) IsValid() bool {
 	return false
 }
 
-// ChangeType represents the type of database change
-type ChangeType string
-
-const (
-	ChangeTypeDDL ChangeType = "DDL"
-	ChangeTypeDML ChangeType = "DML"
-)
-
-// RiskLevel represents the risk level of a database change
-type RiskLevel string
-
-const (
-	RiskLevelLow      RiskLevel = "Low"
-	RiskLevelMedium   RiskLevel = "Medium"
-	RiskLevelHigh     RiskLevel = "High"
-	RiskLevelCritical RiskLevel = "Critical"
-)
+// Note: ChangeType and RiskLevel are defined in change_plan.go
+// RiskLevelCritical is specific to Issue model
+const RiskLevelCritical RiskLevel = "Critical"
 
 // Issue represents a database change request
 type Issue struct {
