@@ -1,0 +1,70 @@
+[
+  {
+    "index": 1,
+    "answer": "Use the same stack (Go backend + React/TypeScript frontend)"
+  },
+  {
+    "index": 2,
+    "answer": "Skip"
+  },
+  {
+    "index": 3,
+    "answer": "Skip"
+  },
+  {
+    "index": 4,
+    "answer": "The deeb-mvp2 is enhanced version of deeb-mvp that makes some project definitions changes defined in docs/project.md and refine the MVP scope in docs/mvp.md. Some existing code and features can be reused but some will need to be updated or rewritten."
+  },
+  {
+    "index": 5,
+    "answer": "Should prioritize the core features described in docs/mvp.md and docs/project.md"
+  },
+  {
+    "index": 6,
+    "answer": "All MVP scoped definitions are at docs/mvp.md"
+  },
+  {
+    "index": 7,
+    "answer": "Clear project definitions and MVP scope"
+  },
+  {
+    "index": 8,
+    "answer": "Start a fresh schema. Rebuild the database schema from scratch."
+  },
+  {
+    "index": 9,
+    "answer": "Keep the same authentication methods as deeb-mvp. OAuth 2.0 with Google and email/password."
+  },
+  {
+    "index": 10,
+    "answer": "4 weeks"
+  },
+  {
+    "index": 11,
+    "answer": "deeb-mvp2 should use the same codebase as deeb-mvp and rebuild/adjust existing features to fit the new project definitions and MVP scope."
+  },
+  {
+    "index": 12,
+    "answer": "Same as deeb-mvp (backend engineers, SREs, DBAs)"
+  },
+  {
+    "index": 13,
+    "answer": "Same as deeb-mvp (syntax, security, performance, backwards compatibility, and best practices validators)"
+  },
+  {
+    "index": 14,
+    "answer": "Same as deeb-mvp (Docker deployment)"
+  },
+  {
+    "index": 15,
+    "answer": "Same as deeb-mvp (comprehensive testing with unit, integration, and e2e tests)"
+  },
+  {
+    "index": 16,
+    "answer": "Missing features and unclear definitions for the project and MVP scope"
+  },
+  {
+    "index": 17,
+    "answer": "Same as deeb-mvp (comprehensive logging and monitoring)"
+  }
+]

@@ -103,19 +103,19 @@ Create PUT /api/v1/issues/:id endpoint for updating issues in Draft status.
 
 ### P02M05: Implement issue search and filter
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M05
 
 **Goal**
 Add search and filter capabilities to issue listing endpoint.
 
 **Acceptance Criteria**
-- [ ] Filter by status query parameter
-- [ ] Filter by author query parameter
-- [ ] Filter by date range query parameters
-- [ ] Filter by target database query parameter
-- [ ] Full-text search on title and description
-- [ ] Proper SQL indexes for filter fields
+- [x] Filter by status query parameter
+- [x] Filter by author query parameter
+- [x] Filter by date range query parameters
+- [x] Filter by target database query parameter
+- [x] Full-text search on title and description
+- [x] Proper SQL indexes for filter fields
 
 ---
 

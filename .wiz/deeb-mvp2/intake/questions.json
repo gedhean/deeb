@@ -1,0 +1,87 @@
+[
+  {
+    "index": 1,
+    "question": "Detected primary language: Go (75 files) and TypeScript (47 files) from codebase analysis. The existing deeb-mvp project uses Go backend + React/TypeScript frontend. Should deeb-mvp2 use the same stack, or are there any changes needed?",
+    "rationale": "Confirms technology stack alignment with existing codebase and determines design guidelines to apply"
+  },
+  {
+    "index": 2,
+    "question": "What is the benchmarking policy for deeb-mvp2? (hot spots only, comprehensive, or skip). Note: No existing benchmarks found in codebase.",
+    "rationale": "Defines performance measurement requirements for critical code paths and optimization validation"
+  },
+  {
+    "index": 3,
+    "question": "What is the fuzzing policy for deeb-mvp2? (core areas only, comprehensive, or skip). Note: No existing fuzz tests found in codebase.",
+    "rationale": "Determines fuzz testing scope for input validation and security-critical components"
+  },
+  {
+    "index": 4,
+    "question": "How does deeb-mvp2 differ from the existing deeb-mvp project? Is this a refinement/revision, a simplified subset, an enhanced version, or a completely different MVP scope?",
+    "rationale": "Clarifies the relationship between MVP1 and MVP2 to avoid duplication and focus planning appropriately"
+  },
+  {
+    "index": 5,
+    "question": "What specific features or workflows from deeb-mvp should be prioritized differently in deeb-mvp2? (e.g., simplify approval workflow, prioritize different SQL validations, focus on different user personas)",
+    "rationale": "Ensures MVP2 addresses lessons learned and focuses on highest-value features based on MVP1 experience"
+  },
+  {
+    "index": 6,
+    "question": "Are there any features from deeb-mvp Phase 1 that should be excluded from deeb-mvp2 to reduce scope? (e.g., skip multi-environment promotion, simplify RBAC, remove certain validators)",
+    "rationale": "Defines MVP2 scope boundaries and helps create a more focused deliverable"
+  },
+  {
+    "index": 7,
+    "question": "What are the key success criteria for deeb-mvp2 that differ from deeb-mvp? (e.g., faster time-to-market, lower complexity, different user segments, improved UX)",
+    "rationale": "Establishes measurable goals specific to MVP2 and validates what 'better' means in this iteration"
+  },
+  {
+    "index": 8,
+    "question": "Given the existing database schema and models in deeb-mvp, should deeb-mvp2 reuse the same schema, extend it, or start fresh? What schema changes are needed?",
+    "rationale": "Determines database migration strategy and impacts implementation approach (reuse vs rebuild)"
+  },
+  {
+    "index": 9,
+    "question": "Which authentication methods should deeb-mvp2 support? The existing deeb-mvp supports OAuth 2.0 with Google and email/password. Should MVP2 keep the same, simplify to OAuth-only, or add additional providers?",
+    "rationale": "Defines authentication system scope and user onboarding complexity"
+  },
+  {
+    "index": 10,
+    "question": "What is the expected timeline for deeb-mvp2 delivery? (e.g., 4 weeks, 8 weeks, 12 weeks) and how does this compare to deeb-mvp's timeline?",
+    "rationale": "Establishes delivery constraints and helps prioritize features based on available time"
+  },
+  {
+    "index": 11,
+    "question": "Should deeb-mvp2 integrate with or build upon the existing deeb-mvp codebase, or should it be a separate implementation? (e.g., branch from existing, fork and simplify, or greenfield)",
+    "rationale": "Determines codebase strategy and impacts development approach, testing, and deployment"
+  },
+  {
+    "index": 12,
+    "question": "What are the target users and use cases for deeb-mvp2? Are they the same as deeb-mvp (backend engineers, SREs, DBAs) or different?",
+    "rationale": "Guides feature prioritization and UI/UX design decisions based on user needs"
+  },
+  {
+    "index": 13,
+    "question": "What level of SQL validation should deeb-mvp2 include? deeb-mvp includes syntax, security, performance, backwards compatibility, and best practices validators. Should MVP2 include all, a subset, or different validators?",
+    "rationale": "Determines validation engine complexity and development effort for SQL analysis features"
+  },
+  {
+    "index": 14,
+    "question": "What deployment and infrastructure requirements apply to deeb-mvp2? (e.g., same Docker deployment, cloud requirements, self-hosted vs SaaS, multi-tenant vs single-tenant)",
+    "rationale": "Impacts architecture decisions, infrastructure setup, and operational complexity"
+  },
+  {
+    "index": 15,
+    "question": "What testing strategy should deeb-mvp2 follow? deeb-mvp has 23 test files. Should MVP2 maintain the same level, increase testing, or simplify testing for faster delivery?",
+    "rationale": "Establishes quality assurance scope and trade-offs between speed and quality"
+  },
+  {
+    "index": 16,
+    "question": "Are there specific pain points or limitations from deeb-mvp that deeb-mvp2 should address? (e.g., complexity issues, performance problems, UX concerns, missing features)",
+    "rationale": "Ensures MVP2 addresses real problems identified in MVP1 experience"
+  },
+  {
+    "index": 17,
+    "question": "What observability and monitoring requirements apply to deeb-mvp2? (e.g., same logging/monitoring as deeb-mvp, simplified observability, or enhanced monitoring)",
+    "rationale": "Determines logging, metrics, and monitoring infrastructure needs"
+  }
+]

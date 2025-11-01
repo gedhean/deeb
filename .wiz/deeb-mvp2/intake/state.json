@@ -1,0 +1,27 @@
+{
+  "stage": "done",
+  "created_at": "2025-11-01T15:45:09Z",
+  "updated_at": "2025-11-01T15:45:09Z",
+  "questions_generated_at": "2025-11-01T15:45:09Z",
+  "answers_collected_at": "2025-11-01T15:45:09Z",
+  "prd_generated_at": "2025-11-01T15:45:09Z",
+  "codebase_analysis": {
+    "primary_language": "go",
+    "language_file_counts": {
+      "go": 75,
+      "typescript": 47,
+      "python": 0,
+      "csharp": 0,
+      "java": 0
+    },
+    "has_test_infrastructure": 23,
+    "has_benchmarks": "no",
+    "has_fuzzing": "no",
+    "backend_framework": "Echo v4",
+    "frontend_framework": "React + TypeScript + Vite",
+    "database": "PostgreSQL",
+    "authentication": "JWT + OAuth 2.0 (Google)",
+    "existing_project": "deeb-mvp",
+    "project_type": "Database change management tool"
+  }
+}
