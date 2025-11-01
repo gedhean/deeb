@@ -64,7 +64,7 @@ type UpdateDatabaseInstanceRequest struct {
 	Host                       *string                 `json:"host,omitempty"                       validate:"omitempty,max=255"`
 	Port                       *int                    `json:"port,omitempty"                       validate:"omitempty,min=1,max=65535"`
 	Username                   *string                 `json:"username,omitempty"                   validate:"omitempty,max=255"`
-	ConnectionDetailsEncrypted *string                 `json:"connection_details_encrypted,omitempty"`
+	Password                   *string                 `json:"password,omitempty"` // Plain password (will be encrypted)
 	UseRDSIAMAuth              *bool                   `json:"use_rds_iam_auth,omitempty"`
 	RequireSSL                 *bool                   `json:"require_ssl,omitempty"`
 	Status                     *DatabaseInstanceStatus `json:"status,omitempty"                   validate:"omitempty,oneof=Active Inactive Maintenance"`

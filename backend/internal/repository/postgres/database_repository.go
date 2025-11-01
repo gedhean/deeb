@@ -129,6 +129,34 @@ func (r *DatabaseRepository) ListByProject(
 	return databases, nil
 }
 
+// ListByInstanceID retrieves databases for a specific database instance
+func (r *DatabaseRepository) ListByInstanceID(
+	ctx context.Context,
+	instanceID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
+	query := `
+		SELECT id, name, database_instance_id, project_id, environment_id, created_at, updated_at
+		FROM databases
+		WHERE database_instance_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	var databases []*models.Database
+	err := r.db.SelectContext(ctx, &databases, query, instanceID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return empty slice instead of nil if no databases found
+	if databases == nil {
+		databases = []*models.Database{}
+	}
+
+	return databases, nil
+}
+
 // Update updates an existing database's information
 func (r *DatabaseRepository) Update(ctx context.Context, database *models.Database) error {
 	// Validate database

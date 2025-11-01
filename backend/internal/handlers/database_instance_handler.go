@@ -17,20 +17,23 @@ import (
 // DatabaseInstanceHandler handles HTTP requests for database instances
 type DatabaseInstanceHandler struct {
 	dbInstanceRepo repository.DatabaseInstanceRepository
-	encryptionKey  string
-	logger         *zap.Logger
+	databaseRepo    repository.DatabaseRepository // For cascade delete checks
+	encryptionKey   string
+	logger          *zap.Logger
 }
 
 // NewDatabaseInstanceHandler creates a new database instance handler
 func NewDatabaseInstanceHandler(
 	dbInstanceRepo repository.DatabaseInstanceRepository,
+	databaseRepo repository.DatabaseRepository,
 	encryptionKey string,
 	logger *zap.Logger,
 ) *DatabaseInstanceHandler {
 	return &DatabaseInstanceHandler{
 		dbInstanceRepo: dbInstanceRepo,
-		encryptionKey:  encryptionKey,
-		logger:         logger,
+		databaseRepo:    databaseRepo,
+		encryptionKey:   encryptionKey,
+		logger:          logger,
 	}
 }
 
@@ -222,7 +225,7 @@ func (h *DatabaseInstanceHandler) GetDatabaseInstance(c echo.Context) error {
 
 // UpdateDatabaseInstance handles PUT /api/v1/database-instances/:id
 func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
 
 	// Parse ID parameter
 	idStr := c.Param("id")
@@ -246,7 +249,8 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 	if err := models.ValidateUpdateDatabaseInstanceRequest(&req); err != nil {
 		h.logger.Error("Validation failed", zap.Error(err))
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": err.Error(),
+			"error":   "Validation failed",
+			"details": err.Error(),
 		})
 	}
 
@@ -264,9 +268,114 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 		})
 	}
 
+	// Track if credentials are being updated
+	credentialsUpdated := false
+	passwordToTest := ""
+
+	// Determine password for connection testing
+	if req.Password != nil && *req.Password != "" {
+		passwordToTest = *req.Password
+		credentialsUpdated = true
+	} else if req.Host != nil || req.Port != nil || req.Username != nil {
+		// If connection params are being updated but password is not, we need to decrypt existing password for testing
+		credentialsUpdated = true
+		// Decrypt existing password for connection testing
+		if instance.ConnectionDetailsEncrypted != nil {
+			decrypted, err := utils.DecryptPassword(instance.ConnectionDetailsEncrypted, h.encryptionKey)
+			if err != nil {
+				h.logger.Error("Failed to decrypt existing password", zap.Error(err))
+				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+					"error": "Failed to decrypt existing credentials",
+				})
+			}
+			passwordToTest = decrypted
+		}
+	}
+
+	// Test connection if credentials or connection parameters are being updated
+	if credentialsUpdated {
+		// Use updated values or existing values
+		testHost := instance.Host
+		if req.Host != nil {
+			testHost = *req.Host
+		}
+
+		testPort := instance.Port
+		if req.Port != nil {
+			testPort = *req.Port
+		}
+
+		testUsername := instance.Username
+		if req.Username != nil {
+			testUsername = *req.Username
+		}
+
+		testDatabaseType := instance.DatabaseType
+		if req.DatabaseType != nil {
+			testDatabaseType = *req.DatabaseType
+		}
+
+		testRequireSSL := instance.RequireSSL
+		if req.RequireSSL != nil {
+			testRequireSSL = *req.RequireSSL
+		}
+
+		// Use a default database name for connection testing
+		testDatabase := ""
+		if testDatabaseType == models.DatabaseTypeMySQL {
+			testDatabase = "mysql"
+		} else if testDatabaseType == models.DatabaseTypePostgreSQL {
+			testDatabase = "postgres"
+		}
+
+		connectionParams := utils.ConnectionTestParams{
+			DatabaseType:             string(testDatabaseType),
+			Host:                     testHost,
+			Port:                     testPort,
+			Username:                 testUsername,
+			Password:                 passwordToTest,
+			Database:                 testDatabase,
+			UseSSL:                   testRequireSSL,
+			ConnectionTimeoutSeconds: 10,
+		}
+
+		var connectionErr error
+		if testDatabaseType == models.DatabaseTypeMySQL {
+			connectionErr = utils.TestMySQLConnection(ctx, connectionParams)
+		} else if testDatabaseType == models.DatabaseTypePostgreSQL {
+			connectionErr = utils.TestPostgreSQLConnection(ctx, connectionParams)
+		}
+
+		if connectionErr != nil {
+			h.logger.Warn("Database connection test failed", zap.Error(connectionErr), zap.String("host", testHost), zap.Int("port", testPort))
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error":   "Database connection test failed",
+				"details": connectionErr.Error(),
+			})
+		}
+
+		// Encrypt password if provided
+		if req.Password != nil && *req.Password != "" {
+			encryptedDetails, err := h.encryptConnectionDetails(*req.Password)
+			if err != nil {
+				h.logger.Error("Failed to encrypt connection details", zap.Error(err))
+				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+					"error": "Failed to encrypt credentials",
+				})
+			}
+			instance.ConnectionDetailsEncrypted = &encryptedDetails
+		}
+	}
+
 	// Apply updates
 	if req.Name != nil {
 		instance.Name = *req.Name
+	}
+	if req.Description != nil {
+		instance.Description = req.Description
+	}
+	if req.DatabaseType != nil {
+		instance.DatabaseType = *req.DatabaseType
 	}
 	if req.Host != nil {
 		instance.Host = *req.Host
@@ -274,11 +383,17 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 	if req.Port != nil {
 		instance.Port = *req.Port
 	}
-	if req.Engine != nil {
-		instance.Engine = *req.Engine
+	if req.Username != nil {
+		instance.Username = *req.Username
 	}
-	if req.EnvironmentID != nil {
-		instance.EnvironmentID = *req.EnvironmentID
+	if req.UseRDSIAMAuth != nil {
+		instance.UseRDSIAMAuth = *req.UseRDSIAMAuth
+	}
+	if req.RequireSSL != nil {
+		instance.RequireSSL = *req.RequireSSL
+	}
+	if req.Status != nil {
+		instance.Status = *req.Status
 	}
 
 	// Update database instance
@@ -294,13 +409,13 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Database instance updated", zap.String("id", instance.ID.String()))
+	h.logger.Info("Database instance updated successfully", zap.String("id", instance.ID.String()))
 	return c.JSON(http.StatusOK, instance.ToResponse())
 }
 
 // DeleteDatabaseInstance handles DELETE /api/v1/database-instances/:id
 func (h *DatabaseInstanceHandler) DeleteDatabaseInstance(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
 
 	// Parse ID parameter
 	idStr := c.Param("id")
@@ -308,6 +423,35 @@ func (h *DatabaseInstanceHandler) DeleteDatabaseInstance(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"error": "Invalid database instance ID",
+		})
+	}
+
+	// Check if database instance exists
+	_, err = h.dbInstanceRepo.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Database instance not found",
+			})
+		}
+		h.logger.Error("Failed to get database instance for deletion", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve database instance",
+		})
+	}
+
+	// Check for associated databases before allowing deletion
+	databases, err := h.databaseRepo.ListByInstanceID(ctx, id, 1, 0)
+	if err != nil {
+		h.logger.Error("Failed to check databases for instance", zap.Error(err), zap.String("instance_id", id.String()))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to check database dependencies",
+		})
+	}
+
+	if len(databases) > 0 {
+		return c.JSON(http.StatusConflict, map[string]interface{}{
+			"error": "Cannot delete database instance: instance is referenced by databases. Please delete or reassign databases first.",
 		})
 	}
 
@@ -324,7 +468,7 @@ func (h *DatabaseInstanceHandler) DeleteDatabaseInstance(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Database instance deleted", zap.String("id", id.String()))
+	h.logger.Info("Database instance deleted successfully", zap.String("id", id.String()))
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Database instance deleted successfully",
 	})

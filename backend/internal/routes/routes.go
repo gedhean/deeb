@@ -41,7 +41,7 @@ func Setup(
 	setupProjectRoutes(e, projectRepo, dbRepo, tokenManager)
 	setupEnvironmentRoutes(e, envRepo, db, tokenManager)
 	setupPolicyRoutes(e, policyRepo, envRepo, tokenManager)
-	setupDatabaseInstanceRoutes(e, dbInstanceRepo, cfg.Security.EncryptionKey, tokenManager)
+	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager)
 	setupDatabaseRoutes(e, dbRepo)
 	setupIssueRoutes(e, issueRepo, tokenManager)
 
@@ -177,8 +177,8 @@ func setupPolicyRoutes(e *echo.Echo, policyRepo repository.PolicyRepository, env
 }
 
 // setupDatabaseInstanceRoutes registers database instance management routes
-func setupDatabaseInstanceRoutes(e *echo.Echo, dbInstanceRepo repository.DatabaseInstanceRepository, encryptionKey string, tokenManager *auth.TokenManager) {
-	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(dbInstanceRepo, encryptionKey, logger.Get())
+func setupDatabaseInstanceRoutes(e *echo.Echo, dbInstanceRepo repository.DatabaseInstanceRepository, databaseRepo repository.DatabaseRepository, encryptionKey string, tokenManager *auth.TokenManager) {
+	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(dbInstanceRepo, databaseRepo, encryptionKey, logger.Get())
 	dbInstancesGroup := e.Group("/api/v1/database-instances")
 
 	// Authentication and authorization middleware

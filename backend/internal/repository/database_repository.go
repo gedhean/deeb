@@ -21,6 +21,9 @@ type DatabaseRepository interface {
 	// ListByProject retrieves databases for a specific project
 	ListByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error)
 
+	// ListByInstanceID retrieves databases for a specific database instance
+	ListByInstanceID(ctx context.Context, instanceID uuid.UUID, limit, offset int) ([]*models.Database, error)
+
 	// Update updates an existing database's information
 	Update(ctx context.Context, database *models.Database) error
 
