@@ -41,6 +41,12 @@ type connectionDetails struct {
 	Password string `json:"password"`
 }
 
+// DecryptPassword decrypts password from encrypted JSON string
+// This is a public wrapper around the private decryptPassword function
+func DecryptPassword(encrypted *string, encryptionKey string) (string, error) {
+	return decryptPassword(encrypted, encryptionKey)
+}
+
 // decryptPassword decrypts password from encrypted JSON string
 func decryptPassword(encrypted *string, encryptionKey string) (string, error) {
 	if encrypted == nil || *encrypted == "" {

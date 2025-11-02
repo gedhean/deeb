@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
@@ -14,21 +15,41 @@ import (
 
 // DatabaseHandler handles HTTP requests for databases
 type DatabaseHandler struct {
-	databaseRepo repository.DatabaseRepository
-	logger       *zap.Logger
+	databaseRepo      repository.DatabaseRepository
+	projectRepo       repository.ProjectRepository
+	environmentRepo   repository.EnvironmentRepository
+	databaseInstanceRepo repository.DatabaseInstanceRepository
+	logger            *zap.Logger
 }
 
 // NewDatabaseHandler creates a new database handler
-func NewDatabaseHandler(databaseRepo repository.DatabaseRepository, logger *zap.Logger) *DatabaseHandler {
+func NewDatabaseHandler(
+	databaseRepo repository.DatabaseRepository,
+	projectRepo repository.ProjectRepository,
+	environmentRepo repository.EnvironmentRepository,
+	databaseInstanceRepo repository.DatabaseInstanceRepository,
+	logger *zap.Logger,
+) *DatabaseHandler {
 	return &DatabaseHandler{
-		databaseRepo: databaseRepo,
-		logger:       logger,
+		databaseRepo:        databaseRepo,
+		projectRepo:          projectRepo,
+		environmentRepo:      environmentRepo,
+		databaseInstanceRepo: databaseInstanceRepo,
+		logger:               logger,
 	}
 }
 
 // CreateDatabase handles POST /api/v1/databases
 func (h *DatabaseHandler) CreateDatabase(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
 
 	var req models.CreateDatabaseRequest
 	if err := c.Bind(&req); err != nil {
@@ -46,12 +67,57 @@ func (h *DatabaseHandler) CreateDatabase(c echo.Context) error {
 		})
 	}
 
+	// Validate that project exists
+	_, err := h.projectRepo.GetByID(ctx, req.ProjectID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Project not found",
+			})
+		}
+		h.logger.Error("Failed to validate project", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to validate project",
+		})
+	}
+
+	// Validate that database instance exists
+	_, err = h.databaseInstanceRepo.GetByID(ctx, req.DatabaseInstanceID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Database instance not found",
+			})
+		}
+		h.logger.Error("Failed to validate database instance", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to validate database instance",
+		})
+	}
+
+	// Validate that environment exists
+	_, err = h.environmentRepo.GetByID(ctx, req.EnvironmentID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Environment not found",
+			})
+		}
+		h.logger.Error("Failed to validate environment", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to validate environment",
+		})
+	}
+
 	// Create database
 	database := &models.Database{
-		Name:               req.Name,
+		DatabaseName:       req.DatabaseName,
 		DatabaseInstanceID: req.DatabaseInstanceID,
 		ProjectID:          req.ProjectID,
 		EnvironmentID:      req.EnvironmentID,
+		Description:        req.Description,
+		Status:             models.DatabaseStatusActive,
+		CreatedByID:        claims.UserID,
 	}
 
 	if err := h.databaseRepo.Create(ctx, database); err != nil {
@@ -61,7 +127,7 @@ func (h *DatabaseHandler) CreateDatabase(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Database created", zap.String("id", database.ID.String()), zap.String("name", database.Name))
+	h.logger.Info("Database created", zap.String("id", database.ID.String()), zap.String("name", database.DatabaseName))
 	return c.JSON(http.StatusCreated, database.ToResponse())
 }
 
@@ -251,17 +317,14 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 	}
 
 	// Apply updates
-	if req.Name != nil {
-		database.Name = *req.Name
+	if req.DatabaseName != nil {
+		database.DatabaseName = *req.DatabaseName
 	}
-	if req.DatabaseInstanceID != nil {
-		database.DatabaseInstanceID = *req.DatabaseInstanceID
+	if req.Description != nil {
+		database.Description = req.Description
 	}
-	if req.ProjectID != nil {
-		database.ProjectID = *req.ProjectID
-	}
-	if req.EnvironmentID != nil {
-		database.EnvironmentID = *req.EnvironmentID
+	if req.Status != nil {
+		database.Status = *req.Status
 	}
 
 	// Update database

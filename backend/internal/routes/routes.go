@@ -42,7 +42,7 @@ func Setup(
 	setupEnvironmentRoutes(e, envRepo, db, tokenManager)
 	setupPolicyRoutes(e, policyRepo, envRepo, tokenManager)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager)
-	setupDatabaseRoutes(e, dbRepo)
+	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, tokenManager)
 	setupIssueRoutes(e, issueRepo, tokenManager)
 
 	// Setup Swagger documentation
@@ -294,11 +294,23 @@ func setupDatabaseInstanceRoutes(
 }
 
 // setupDatabaseRoutes registers database management routes
-func setupDatabaseRoutes(e *echo.Echo, dbRepo repository.DatabaseRepository) {
-	dbHandler := handlers.NewDatabaseHandler(dbRepo, logger.Get())
+func setupDatabaseRoutes(
+	e *echo.Echo,
+	dbRepo repository.DatabaseRepository,
+	projectRepo repository.ProjectRepository,
+	envRepo repository.EnvironmentRepository,
+	dbInstanceRepo repository.DatabaseInstanceRepository,
+	tokenManager *auth.TokenManager,
+) {
+	dbHandler := handlers.NewDatabaseHandler(dbRepo, projectRepo, envRepo, dbInstanceRepo, logger.Get())
 	databasesGroup := e.Group("/api/v1/databases")
 
-	databasesGroup.POST("", dbHandler.CreateDatabase)
+	// Authentication and authorization middleware
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	authzMiddleware := middleware.NewAuthzMiddleware()
+
+	// POST requires admin role
+	databasesGroup.POST("", dbHandler.CreateDatabase, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 	databasesGroup.GET("", dbHandler.ListDatabases)
 	databasesGroup.GET("/:id", dbHandler.GetDatabase)
 	databasesGroup.PUT("/:id", dbHandler.UpdateDatabase)

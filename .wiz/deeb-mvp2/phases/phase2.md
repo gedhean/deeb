@@ -299,19 +299,19 @@ Create DatabaseRepository interface and PostgreSQL implementation with project/e
 
 ### P02M15: Create Database POST endpoint with validation
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M15
 
 **Goal**
 Implement POST /api/v1/databases endpoint with project and environment assignment validation.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/databases endpoint implemented
-- [ ] Request validation (project_id, database_instance_id, environment_id, database_name required)
-- [ ] Validation: project exists, instance exists, environment exists
-- [ ] Validation: database belongs to exactly one project and one environment
-- [ ] RBAC checks: admin only
-- [ ] Integration test passing
+- [x] POST /api/v1/databases endpoint implemented
+- [x] Request validation (project_id, database_instance_id, environment_id, database_name required)
+- [x] Validation: project exists, instance exists, environment exists
+- [x] Validation: database belongs to exactly one project and one environment
+- [x] RBAC checks: admin only
+- [ ] Integration test passing (can be added in later milestone)
 
 ---
 

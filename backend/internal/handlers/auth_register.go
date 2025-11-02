@@ -129,7 +129,7 @@ func (h *RegisterHandler) Register(c echo.Context) error {
 	user := &models.User{
 		Email:            req.Email,
 		PasswordHash:     passwordHash,
-		OrganizationRole: orgRole,
+		OrganizationRole: models.OrganizationRole(orgRole),
 		TwoFactorEnabled: false,
 		IsActive:         true,
 	}

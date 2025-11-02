@@ -195,7 +195,7 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 			Email:            email,
 			PasswordHash:     "", // No password for OAuth users
 			IsActive:         true,
-			OrganizationRole: orgRole,
+			OrganizationRole: models.OrganizationRole(orgRole),
 			OAuthProvider:    stringPtr("google"),
 			OAuthID:          stringPtr(userInfo.Email), // Using email as OAuth ID for now
 		}
@@ -225,7 +225,7 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 	}
 
 	// Generate JWT token
-	jwtToken, err := h.tokenManager.GenerateToken(user.ID, user.Email, user.OrganizationRole)
+	jwtToken, err := h.tokenManager.GenerateToken(user.ID, user.Email, string(user.OrganizationRole))
 	if err != nil {
 		h.logger.Error("Failed to generate token",
 			zap.Error(err),

@@ -95,7 +95,7 @@ func (h *LoginHandler) Login(c echo.Context) error {
 	}
 
 	// Generate JWT token
-	token, err := h.tokenManager.GenerateToken(user.ID, user.Email, user.OrganizationRole)
+	token, err := h.tokenManager.GenerateToken(user.ID, user.Email, string(user.OrganizationRole))
 	if err != nil {
 		h.logger.Error("Failed to generate token",
 			zap.Error(err),
