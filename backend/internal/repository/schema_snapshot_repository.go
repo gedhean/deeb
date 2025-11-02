@@ -18,5 +18,9 @@ type SchemaSnapshotRepository interface {
 	// GetByChangePlanID retrieves all snapshots for a specific change plan
 	// Returns snapshots ordered by created_at DESC (most recent first)
 	GetByChangePlanID(ctx context.Context, changePlanID uuid.UUID) ([]*models.SchemaSnapshot, error)
+
+	// GetByDatabaseID retrieves all snapshots for a specific database
+	// Returns snapshots ordered by created_at DESC (most recent first)
+	GetByDatabaseID(ctx context.Context, databaseID uuid.UUID) ([]*models.SchemaSnapshot, error)
 }
 

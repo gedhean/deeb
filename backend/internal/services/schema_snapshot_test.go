@@ -43,6 +43,14 @@ func (m *MockSchemaSnapshotRepository) GetByChangePlanID(ctx context.Context, ch
 	return args.Get(0).([]*models.SchemaSnapshot), args.Error(1)
 }
 
+func (m *MockSchemaSnapshotRepository) GetByDatabaseID(ctx context.Context, databaseID uuid.UUID) ([]*models.SchemaSnapshot, error) {
+	args := m.Called(ctx, databaseID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.SchemaSnapshot), args.Error(1)
+}
+
 func TestNewSchemaSnapshotService(t *testing.T) {
 	snapshotRepo := new(MockSchemaSnapshotRepository)
 	dbInstanceRepo := new(MockDatabaseInstanceRepository)
