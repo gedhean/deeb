@@ -57,6 +57,10 @@ type DatabaseResponse struct {
 	Status             DatabaseStatus `json:"status"`
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
+	// Related entities
+	Project            *ProjectResponse            `json:"project,omitempty"`
+	DatabaseInstance   *DatabaseInstanceResponse   `json:"database_instance,omitempty"`
+	Environment        *EnvironmentResponse       `json:"environment,omitempty"`
 }
 
 // ToResponse converts a Database to DatabaseResponse

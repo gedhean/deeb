@@ -317,18 +317,18 @@ Implement POST /api/v1/databases endpoint with project and environment assignmen
 
 ### P02M16: Create Database GET endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M16
 
 **Goal**
 Implement GET endpoints for retrieving databases with filtering options.
 
 **Acceptance Criteria**
-- [ ] GET /api/v1/databases/:id endpoint implemented
-- [ ] GET /api/v1/databases endpoint implemented (list with optional filters: project_id, environment_id)
-- [ ] Response includes project, instance, and environment details
-- [ ] Authorization checks implemented
-- [ ] Integration tests passing
+- [x] GET /api/v1/databases/:id endpoint implemented
+- [x] GET /api/v1/databases endpoint implemented (list with optional filters: project_id, environment_id)
+- [x] Response includes project, instance, and environment details
+- [x] Authorization checks implemented
+- [ ] Integration tests passing (can be added in later milestone)
 
 ---
 

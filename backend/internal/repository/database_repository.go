@@ -30,6 +30,9 @@ type DatabaseRepository interface {
 	// ListByInstanceID retrieves databases for a specific database instance
 	ListByInstanceID(ctx context.Context, instanceID uuid.UUID, limit, offset int) ([]*models.Database, error)
 
+	// ListByEnvironmentID retrieves databases for a specific environment (with pagination)
+	ListByEnvironmentID(ctx context.Context, environmentID uuid.UUID, limit, offset int) ([]*models.Database, error)
+
 	// Update updates an existing database's information
 	Update(ctx context.Context, database *models.Database) error
 

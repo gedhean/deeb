@@ -194,6 +194,36 @@ func (r *DatabaseRepository) ListByInstanceID(
 	return databases, nil
 }
 
+// ListByEnvironmentID retrieves databases for a specific environment
+func (r *DatabaseRepository) ListByEnvironmentID(
+	ctx context.Context,
+	environmentID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
+	query := `
+		SELECT id, project_id, database_instance_id, environment_id,
+		       database_name, description, status, created_by_id,
+		       created_at, updated_at
+		FROM databases
+		WHERE environment_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	var databases []*models.Database
+	err := r.db.SelectContext(ctx, &databases, query, environmentID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return empty slice instead of nil if no databases found
+	if databases == nil {
+		databases = []*models.Database{}
+	}
+
+	return databases, nil
+}
+
 // Update updates an existing database's information
 func (r *DatabaseRepository) Update(ctx context.Context, database *models.Database) error {
 	// Validate database

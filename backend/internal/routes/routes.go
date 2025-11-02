@@ -311,13 +311,14 @@ func setupDatabaseRoutes(
 
 	// POST requires admin role
 	databasesGroup.POST("", dbHandler.CreateDatabase, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	databasesGroup.GET("", dbHandler.ListDatabases)
-	databasesGroup.GET("/:id", dbHandler.GetDatabase)
+	// GET endpoints require authentication
+	databasesGroup.GET("", dbHandler.ListDatabases, authMiddleware.Authenticate)
+	databasesGroup.GET("/:id", dbHandler.GetDatabase, authMiddleware.Authenticate)
 	databasesGroup.PUT("/:id", dbHandler.UpdateDatabase)
 	databasesGroup.DELETE("/:id", dbHandler.DeleteDatabase)
 
-	// Project-scoped database routes
-	e.GET("/api/v1/projects/:project_id/databases", dbHandler.ListProjectDatabases)
+	// Project-scoped database routes require authentication
+	e.GET("/api/v1/projects/:project_id/databases", dbHandler.ListProjectDatabases, authMiddleware.Authenticate)
 }
 
 // setupIssueRoutes registers issue management routes

@@ -131,9 +131,39 @@ func (h *DatabaseHandler) CreateDatabase(c echo.Context) error {
 	return c.JSON(http.StatusCreated, database.ToResponse())
 }
 
+// ToResponseWithDetails converts a Database to DatabaseResponse with related entities
+func (h *DatabaseHandler) ToResponseWithDetails(ctx context.Context, database *models.Database) *models.DatabaseResponse {
+	resp := database.ToResponse()
+
+	// Fetch project
+	if project, err := h.projectRepo.GetByID(ctx, database.ProjectID); err == nil {
+		resp.Project = project.ToResponse()
+	}
+
+	// Fetch database instance
+	if instance, err := h.databaseInstanceRepo.GetByID(ctx, database.DatabaseInstanceID); err == nil {
+		resp.DatabaseInstance = instance.ToResponse()
+	}
+
+	// Fetch environment
+	if env, err := h.environmentRepo.GetByID(ctx, database.EnvironmentID); err == nil {
+		resp.Environment = env.ToResponse()
+	}
+
+	return resp
+}
+
 // ListDatabases handles GET /api/v1/databases
 func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
+
+	// Authorization check - authentication required
+	_, ok := auth.GetUserFromEchoContext(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
 
 	// Parse pagination parameters
 	limit := 100
@@ -151,12 +181,48 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 		}
 	}
 
-	// Check for project filter
+	// Parse filters
 	projectIDStr := c.QueryParam("project_id")
+	environmentIDStr := c.QueryParam("environment_id")
+
 	var databases []*models.Database
 	var err error
 
-	if projectIDStr != "" {
+	// Filter by both project_id and environment_id
+	if projectIDStr != "" && environmentIDStr != "" {
+		projectID, parseErr := uuid.Parse(projectIDStr)
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid project ID",
+			})
+		}
+		environmentID, parseErr := uuid.Parse(environmentIDStr)
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid environment ID",
+			})
+		}
+		// Filter by project first, then filter by environment in memory
+		// (Alternatively, we could add a ListByProjectAndEnvironment method)
+		projectDatabases, err := h.databaseRepo.ListByProject(ctx, projectID, limit*2, offset)
+		if err != nil {
+			h.logger.Error("Failed to list databases by project", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to list databases",
+			})
+		}
+		// Filter by environment
+		databases = []*models.Database{}
+		for _, db := range projectDatabases {
+			if db.EnvironmentID == environmentID {
+				databases = append(databases, db)
+			}
+		}
+		// Apply limit
+		if len(databases) > limit {
+			databases = databases[:limit]
+		}
+	} else if projectIDStr != "" {
 		projectID, parseErr := uuid.Parse(projectIDStr)
 		if parseErr != nil {
 			return c.JSON(http.StatusBadRequest, map[string]interface{}{
@@ -164,6 +230,14 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 			})
 		}
 		databases, err = h.databaseRepo.ListByProject(ctx, projectID, limit, offset)
+	} else if environmentIDStr != "" {
+		environmentID, parseErr := uuid.Parse(environmentIDStr)
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid environment ID",
+			})
+		}
+		databases, err = h.databaseRepo.ListByEnvironmentID(ctx, environmentID, limit, offset)
 	} else {
 		databases, err = h.databaseRepo.List(ctx, limit, offset)
 	}
@@ -175,10 +249,10 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 		})
 	}
 
-	// Convert to response format
+	// Convert to response format with related entities
 	responses := make([]*models.DatabaseResponse, len(databases))
 	for i, database := range databases {
-		responses[i] = database.ToResponse()
+		responses[i] = h.ToResponseWithDetails(ctx, database)
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
@@ -191,7 +265,15 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 
 // GetDatabase handles GET /api/v1/databases/:id
 func (h *DatabaseHandler) GetDatabase(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
+
+	// Authorization check - authentication required
+	_, ok := auth.GetUserFromEchoContext(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
 
 	// Parse ID parameter
 	idStr := c.Param("id")
@@ -216,12 +298,21 @@ func (h *DatabaseHandler) GetDatabase(c echo.Context) error {
 		})
 	}
 
-	return c.JSON(http.StatusOK, database.ToResponse())
+	// Return response with related entities
+	return c.JSON(http.StatusOK, h.ToResponseWithDetails(ctx, database))
 }
 
 // ListProjectDatabases handles GET /api/v1/projects/:project_id/databases
 func (h *DatabaseHandler) ListProjectDatabases(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
+
+	// Authorization check - authentication required
+	_, ok := auth.GetUserFromEchoContext(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
 
 	// Parse project ID parameter
 	projectIDStr := c.Param("project_id")
@@ -257,10 +348,10 @@ func (h *DatabaseHandler) ListProjectDatabases(c echo.Context) error {
 		})
 	}
 
-	// Convert to response format
+	// Convert to response format with related entities
 	responses := make([]*models.DatabaseResponse, len(databases))
 	for i, database := range databases {
-		responses[i] = database.ToResponse()
+		responses[i] = h.ToResponseWithDetails(ctx, database)
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
@@ -274,7 +365,7 @@ func (h *DatabaseHandler) ListProjectDatabases(c echo.Context) error {
 
 // UpdateDatabase handles PUT /api/v1/databases/:id
 func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
 
 	// Parse ID parameter
 	idStr := c.Param("id")
@@ -346,7 +437,7 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 
 // DeleteDatabase handles DELETE /api/v1/databases/:id
 func (h *DatabaseHandler) DeleteDatabase(c echo.Context) error {
-	ctx := context.Background()
+	ctx := c.Request().Context()
 
 	// Parse ID parameter
 	idStr := c.Param("id")
