@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,12 +11,14 @@ import (
 type ChangePlanStatus string
 
 const (
-	ChangePlanStatusDraft    ChangePlanStatus = "Draft"
-	ChangePlanStatusOpen     ChangePlanStatus = "Open"
-	ChangePlanStatusApproved ChangePlanStatus = "Approved"
-	ChangePlanStatusClosed   ChangePlanStatus = "Closed"
-	ChangePlanStatusExecuted ChangePlanStatus = "Executed"
-	ChangePlanStatusFailed   ChangePlanStatus = "Failed"
+	ChangePlanStatusDraft      ChangePlanStatus = "Draft"
+	ChangePlanStatusOpen       ChangePlanStatus = "Open"
+	ChangePlanStatusApproved   ChangePlanStatus = "Approved"
+	ChangePlanStatusClosed     ChangePlanStatus = "Closed"
+	ChangePlanStatusInProgress ChangePlanStatus = "InProgress"
+	ChangePlanStatusCompleted  ChangePlanStatus = "Completed"
+	ChangePlanStatusFailed     ChangePlanStatus = "Failed"
+	ChangePlanStatusCancelled  ChangePlanStatus = "Cancelled"
 )
 
 // String returns the string representation of ChangePlanStatus
@@ -27,7 +30,8 @@ func (s ChangePlanStatus) String() string {
 func (s ChangePlanStatus) IsValid() bool {
 	switch s {
 	case ChangePlanStatusDraft, ChangePlanStatusOpen, ChangePlanStatusApproved,
-		ChangePlanStatusClosed, ChangePlanStatusExecuted, ChangePlanStatusFailed:
+		ChangePlanStatusClosed, ChangePlanStatusInProgress, ChangePlanStatusCompleted,
+		ChangePlanStatusFailed, ChangePlanStatusCancelled:
 		return true
 	}
 	return false
@@ -90,7 +94,7 @@ type UpdateChangePlanRequest struct {
 	Description        *string           `json:"description,omitempty"`
 	SQLContent         *string           `json:"sql_content,omitempty"`
 	RollbackSQL        *string           `json:"rollback_sql,omitempty"`
-	Status             *ChangePlanStatus `json:"status,omitempty"               validate:"omitempty,oneof=Draft Open Approved Closed Executed Failed"`
+	Status             *ChangePlanStatus `json:"status,omitempty"               validate:"omitempty,oneof=Draft Open Approved Closed InProgress Completed Failed Cancelled"`
 	RiskLevel          *RiskLevel        `json:"risk_level,omitempty"           validate:"omitempty,oneof=Low Medium High"`
 	AssignedReviewerID *uuid.UUID        `json:"assigned_reviewer_id,omitempty"`
 }
@@ -141,4 +145,65 @@ func (cp *ChangePlan) ToResponse() *ChangePlanResponse {
 		CreatedAt:           cp.CreatedAt,
 		UpdatedAt:           cp.UpdatedAt,
 	}
+}
+
+// ErrInvalidChangePlan represents a validation error for a ChangePlan
+type ErrInvalidChangePlan string
+
+func (e ErrInvalidChangePlan) Error() string {
+	return string(e)
+}
+
+// Validate validates the ChangePlan model
+func (cp *ChangePlan) Validate() error {
+	// Trim whitespace
+	cp.Title = strings.TrimSpace(cp.Title)
+	cp.Description = strings.TrimSpace(cp.Description)
+	cp.SQLContent = strings.TrimSpace(cp.SQLContent)
+
+	// Validate title
+	if cp.Title == "" {
+		return ErrInvalidChangePlan("title is required")
+	}
+	if len(cp.Title) > 255 {
+		return ErrInvalidChangePlan("title must not exceed 255 characters")
+	}
+
+	// Validate description
+	if cp.Description == "" {
+		return ErrInvalidChangePlan("description is required")
+	}
+
+	// Validate SQL content
+	if cp.SQLContent == "" {
+		return ErrInvalidChangePlan("sql_content is required")
+	}
+
+	// Validate change type
+	if cp.ChangeType != ChangeTypeDDL && cp.ChangeType != ChangeTypeDML {
+		return ErrInvalidChangePlan("change_type must be DDL or DML")
+	}
+
+	// Validate status
+	if !cp.Status.IsValid() {
+		return ErrInvalidChangePlan("invalid status")
+	}
+
+	// Validate risk level
+	if cp.RiskLevel != RiskLevelLow && cp.RiskLevel != RiskLevelMedium && cp.RiskLevel != RiskLevelHigh {
+		return ErrInvalidChangePlan("risk_level must be Low, Medium, or High")
+	}
+
+	// Validate required IDs
+	if cp.ProjectID == uuid.Nil {
+		return ErrInvalidChangePlan("project_id is required")
+	}
+	if cp.TargetDatabaseID == uuid.Nil {
+		return ErrInvalidChangePlan("target_database_id is required")
+	}
+	if cp.AuthorID == uuid.Nil {
+		return ErrInvalidChangePlan("author_id is required")
+	}
+
+	return nil
 }
