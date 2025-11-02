@@ -513,19 +513,19 @@ Allow authors to fix errors and resubmit Change Plans (Open → Draft → Open a
 
 ### P03M27: Write unit tests for ChangePlan repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M27
 
 **Goal**
 Create comprehensive unit tests for all Change Plan repository operations.
 
 **Acceptance Criteria**
-- [ ] Unit tests for Create, GetByID, Update, Delete, List methods
-- [ ] Test coverage >85%
-- [ ] Edge cases covered (not found, duplicate, etc.)
-- [ ] Filter tests passing
-- [ ] Error scenarios tested
-- [ ] All tests passing
+- [x] Unit tests for Create, GetByID, Update, Delete, List methods
+- [x] Test coverage >85%
+- [x] Edge cases covered (not found, duplicate, etc.)
+- [x] Filter tests passing
+- [x] Error scenarios tested
+- [x] All tests passing
 
 ---
 
