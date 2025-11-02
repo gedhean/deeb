@@ -92,6 +92,31 @@ func TestExtractLineNumber(t *testing.T) {
 			errorMsg: "syntax error at line 10",
 			expected: 10,
 		},
+		{
+			name:     "extracts from complex error message",
+			errorMsg: "ERROR: syntax error at or near \"FROM\" LINE 7: SELECT * FROM users WHERE",
+			expected: 7,
+		},
+		{
+			name:     "extracts from error with character position",
+			errorMsg: "syntax error at character 42 LINE 3",
+			expected: 3,
+		},
+		{
+			name:     "handles empty error message",
+			errorMsg: "",
+			expected: 0,
+		},
+		{
+			name:     "handles error message with no numbers",
+			errorMsg: "syntax error at or near \"FROM\"",
+			expected: 0,
+		},
+		{
+			name:     "extracts line number when multiple numbers present",
+			errorMsg: "error at line 5 character 10",
+			expected: 5,
+		},
 	}
 
 	for _, tt := range tests {
@@ -100,6 +125,58 @@ func TestExtractLineNumber(t *testing.T) {
 			assert.Equal(t, tt.expected, lineNum)
 		})
 	}
+}
+
+// TestPostgreSQLSyntaxValidator_ErrorHandling tests error handling scenarios
+func TestPostgreSQLSyntaxValidator_ErrorHandling(t *testing.T) {
+	validator := NewPostgreSQLSyntaxValidator()
+	ctx := context.Background()
+
+	t.Run("handles multiple database types", func(t *testing.T) {
+		testCases := []struct {
+			dbType models.DatabaseType
+			shouldSkip bool
+		}{
+			{models.DatabaseTypePostgreSQL, false},
+			{models.DatabaseTypeMySQL, true},
+			{"", true}, // Empty database type
+		}
+
+		for _, tc := range testCases {
+			t.Run(string(tc.dbType), func(t *testing.T) {
+				result := validator.Validate(ctx, "SELECT * FROM users", tc.dbType)
+				if tc.shouldSkip {
+					assert.True(t, result.Valid)
+					assert.Empty(t, result.Violations)
+				}
+			})
+		}
+	})
+
+	t.Run("handles various empty/whitespace inputs", func(t *testing.T) {
+		emptyInputs := []string{
+			"",
+			"   ",
+			"\n",
+			"\t",
+			"   \n\t   ",
+		}
+
+		for _, input := range emptyInputs {
+			t.Run("input: "+input, func(t *testing.T) {
+				result := validator.Validate(ctx, input, models.DatabaseTypePostgreSQL)
+				assert.True(t, result.Valid)
+				assert.Empty(t, result.Violations)
+			})
+		}
+	})
+
+	t.Run("validator implements interface correctly", func(t *testing.T) {
+		var _ review.Validator = validator
+		assert.NotNil(t, validator)
+		assert.Equal(t, "postgresql-syntax", validator.GetName())
+		assert.Equal(t, review.SeverityError, validator.GetSeverity())
+	})
 }
 
 // TestPostgreSQLSyntaxValidatorIntegration tests the full validator functionality
