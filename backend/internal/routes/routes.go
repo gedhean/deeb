@@ -39,6 +39,7 @@ func Setup(
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 	projectMemberRepo := postgres.NewProjectMemberRepository(db)
 	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
+	approvalRepo := postgres.NewApprovalRepository(db)
 
 	// Setup API routes
 	setupHealthRoute(e, db, version)
@@ -61,6 +62,7 @@ func Setup(
 		projectMemberRepo,
 		policyFindingRepo,
 		policyRepo,
+		approvalRepo,
 		tokenManager,
 	)
 
@@ -433,6 +435,7 @@ func setupChangePlanRoutes(
 	projectMemberRepo repository.ProjectMemberRepository,
 	policyFindingRepo repository.PolicyFindingRepository,
 	policyRepo repository.PolicyRepository,
+	approvalRepo repository.ApprovalRepository,
 	tokenManager *auth.TokenManager,
 ) {
 	// Initialize risk assessment service
@@ -472,6 +475,17 @@ func setupChangePlanRoutes(
 		logger.Get().Warn("Failed to register best practices validator", zap.Error(err))
 	}
 
+	// Initialize approval service
+	rbacChecker := rbac.NewCheckerService()
+	approvalService := services.NewApprovalService(
+		approvalRepo,
+		changePlanRepo,
+		policyFindingRepo,
+		projectMemberRepo,
+		rbacChecker,
+		logger.Get(),
+	)
+
 	changePlanHandler := handlers.NewChangePlanHandler(
 		changePlanRepo,
 		projectRepo,
@@ -481,6 +495,7 @@ func setupChangePlanRoutes(
 		policyFindingRepo,
 		riskAssessmentSvc,
 		reviewService,
+		approvalService,
 		logger.Get(),
 	)
 	changePlansGroup := e.Group("/api/v1/change-plans")
@@ -495,6 +510,7 @@ func setupChangePlanRoutes(
 	// All change plan routes require authentication
 	changePlansGroup.POST("", changePlanHandler.CreateChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.GET("/:id", changePlanHandler.GetChangePlan, authMiddleware.Authenticate)
+	changePlansGroup.GET("/:id/approvals", changePlanHandler.GetApprovalHistory, authMiddleware.Authenticate)
 	changePlansGroup.GET("", changePlanHandler.ListChangePlans, authMiddleware.Authenticate)
 	changePlansGroup.PUT(
 		"/:id",
@@ -502,9 +518,15 @@ func setupChangePlanRoutes(
 		authMiddleware.Authenticate,
 		statusTransitionMiddleware.ValidateStatusTransition,
 	)
+	changePlansGroup.PUT(
+		"/:id/reviewer",
+		changePlanHandler.AssignReviewer,
+		authMiddleware.Authenticate,
+	)
 	changePlansGroup.DELETE("/:id", changePlanHandler.DeleteChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/review", changePlanHandler.TriggerSQLReview, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/approve", changePlanHandler.ApproveChangePlan, authMiddleware.Authenticate)
+	changePlansGroup.POST("/:id/close", changePlanHandler.CloseChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/execute", changePlanHandler.ExecuteChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/resubmit", changePlanHandler.ResubmitChangePlan, authMiddleware.Authenticate)
 }

@@ -302,6 +302,7 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 	projectMemberRepo := postgres.NewProjectMemberRepository(db)
 	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
 	policyRepo := postgres.NewPolicyRepository(db)
+	approvalRepo := postgres.NewApprovalRepository(db)
 
 	// Initialize risk assessment service
 	riskAssessmentSvc := services.NewRiskAssessmentService(
@@ -328,6 +329,17 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 	require.NoError(t, reviewService.RegisterValidator(validators.NewBackwardsCompatibilityValidator()))
 	require.NoError(t, reviewService.RegisterValidator(validators.NewBestPracticesValidator()))
 
+	// Initialize approval service
+	rbacChecker := rbac.NewCheckerService()
+	approvalService := services.NewApprovalService(
+		approvalRepo,
+		changePlanRepo,
+		policyFindingRepo,
+		projectMemberRepo,
+		rbacChecker,
+		logger,
+	)
+
 	// Create handler
 	handler := handlers.NewChangePlanHandler(
 		changePlanRepo,
@@ -338,6 +350,7 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		policyFindingRepo,
 		riskAssessmentSvc,
 		reviewService,
+		approvalService,
 		logger,
 	)
 
@@ -3077,4 +3090,397 @@ func TestIntegration_ChangePlan_Delete_InvalidStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, response["error"], "can only be deleted")
+}
+
+// TestIntegration_ChangePlan_AssignReviewer tests PUT /api/v1/change-plans/:id/reviewer
+func TestIntegration_ChangePlan_AssignReviewer(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	ctx := context.Background()
+
+	// Create author user
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create reviewer user (Project Approver)
+	reviewer := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("reviewer-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member with Developer role
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Add reviewer as project member with Approver role
+	reviewerMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    reviewer.ID,
+		Role:      models.ProjectRoleApprover,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, reviewerMember)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan in Draft status
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request body
+	requestBody := map[string]interface{}{
+		"reviewer_id": reviewer.ID.String(),
+	}
+	requestJSON, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/change-plans/%s/reviewer", changePlan.ID.String()),
+		bytes.NewReader(requestJSON),
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/reviewer")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.AssignReviewer(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Reviewer assigned successfully", response["message"])
+	assert.Equal(t, changePlan.ID.String(), response["change_plan_id"])
+	assert.Equal(t, reviewer.ID.String(), response["reviewer_id"])
+
+	// Verify change plan was updated
+	updatedPlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, updatedPlan.AssignedReviewerID)
+	assert.Equal(t, reviewer.ID, *updatedPlan.AssignedReviewerID)
+}
+
+// TestIntegration_ChangePlan_AssignReviewer_Forbidden tests PUT /api/v1/change-plans/:id/reviewer with non-author
+func TestIntegration_ChangePlan_AssignReviewer_Forbidden(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	ctx := context.Background()
+
+	// Create author user
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create another user (not the author)
+	otherUser := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("other-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create reviewer user
+	reviewer := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("reviewer-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add users as project members
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	otherMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    otherUser.ID,
+		Role:      models.ProjectRoleDeveloper,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, otherMember)
+	require.NoError(t, err)
+
+	reviewerMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    reviewer.ID,
+		Role:      models.ProjectRoleApprover,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, reviewerMember)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan authored by author
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for other user (not the author)
+	token, err := tokenManager.GenerateToken(otherUser.ID.String(), otherUser.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request body
+	requestBody := map[string]interface{}{
+		"reviewer_id": reviewer.ID.String(),
+	}
+	requestJSON, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/change-plans/%s/reviewer", changePlan.ID.String()),
+		bytes.NewReader(requestJSON),
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/reviewer")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, otherUser.ID, otherUser.Email, otherUser.OrganizationRole)
+
+	// Execute
+	err = handler.AssignReviewer(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Contains(t, response["error"], "Only the author can assign")
+}
+
+// TestIntegration_ChangePlan_AssignReviewer_InvalidReviewer tests PUT /api/v1/change-plans/:id/reviewer with non-approver
+func TestIntegration_ChangePlan_AssignReviewer_InvalidReviewer(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	ctx := context.Background()
+
+	// Create author user
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create developer user (not an approver)
+	developer := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("developer-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add users as project members
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Add developer with Developer role (not Approver)
+	developerMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    developer.ID,
+		Role:      models.ProjectRoleDeveloper,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, developerMember)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request body trying to assign a developer as reviewer
+	requestBody := map[string]interface{}{
+		"reviewer_id": developer.ID.String(),
+	}
+	requestJSON, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/change-plans/%s/reviewer", changePlan.ID.String()),
+		bytes.NewReader(requestJSON),
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/reviewer")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.AssignReviewer(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Contains(t, response["error"], "Reviewer must have Project Approver role")
 }

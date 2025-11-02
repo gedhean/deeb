@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -27,6 +28,7 @@ type ChangePlanHandler struct {
 	policyFindingRepo    repository.PolicyFindingRepository
 	riskAssessmentSvc    *services.RiskAssessmentService
 	reviewService        *review.ReviewService
+	approvalService      *services.ApprovalService
 	logger               *zap.Logger
 }
 
@@ -40,6 +42,7 @@ func NewChangePlanHandler(
 	policyFindingRepo repository.PolicyFindingRepository,
 	riskAssessmentSvc *services.RiskAssessmentService,
 	reviewService *review.ReviewService,
+	approvalService *services.ApprovalService,
 	logger *zap.Logger,
 ) *ChangePlanHandler {
 	return &ChangePlanHandler{
@@ -51,6 +54,7 @@ func NewChangePlanHandler(
 		policyFindingRepo:    policyFindingRepo,
 		riskAssessmentSvc:    riskAssessmentSvc,
 		reviewService:        reviewService,
+		approvalService:      approvalService,
 		logger:               logger,
 	}
 }
@@ -1175,9 +1179,312 @@ func (h *ChangePlanHandler) enrichWithPolicyFindings(
 	return response
 }
 
+// ApproveChangePlanRequest represents the request body for approving a change plan
+type ApproveChangePlanRequest struct {
+	Comments *string `json:"comments,omitempty"`
+}
+
 // ApproveChangePlan handles POST /api/v1/change-plans/:id/approve
 // Approves a change plan, blocking if SQL Review errors exist
 func (h *ChangePlanHandler) ApproveChangePlan(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Parse request body (optional comments)
+	var req ApproveChangePlanRequest
+	if err := c.Bind(&req); err != nil {
+		// If binding fails, continue with empty comments (comments are optional)
+		req.Comments = nil
+	}
+
+	// Use approval service to approve the change plan
+	// The service handles:
+	// - Change plan existence check
+	// - Status validation (must be Open)
+	// - RBAC permission checks
+	// - SQL Review errors check
+	// - Approval record creation
+	// - Change plan status update
+	err = h.approvalService.Approve(ctx, changePlanID, claims.UserID, req.Comments)
+	if err != nil {
+		// Handle specific error types
+		if err == services.ErrChangePlanNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		if err == services.ErrInvalidChangePlanStatus {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		if err == services.ErrUnauthorizedApprover {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		if err == services.ErrCannotApproveWithErrors {
+			// Extract error details from the error message
+			// The service error message includes details about which errors exist
+			errorMsg := err.Error()
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Cannot approve change plan with SQL Review errors",
+				"details": map[string]interface{}{
+					"message": errorMsg,
+				},
+			})
+		}
+		if err == services.ErrChangePlanAlreadyApproved {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		if err == services.ErrChangePlanAlreadyClosed {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+
+		// Generic error
+		h.logger.Error("Failed to approve change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to approve change plan",
+		})
+	}
+
+	h.logger.Info("Change plan approved successfully",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("approved_by", claims.UserID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message":        "Change plan approved successfully",
+		"change_plan_id": changePlanID.String(),
+	})
+}
+
+// CloseChangePlanRequest represents the request body for closing/rejecting a change plan
+type CloseChangePlanRequest struct {
+	Comments *string `json:"comments,omitempty"`
+}
+
+// CloseChangePlan handles POST /api/v1/change-plans/:id/close
+// Closes/rejects a change plan
+func (h *ChangePlanHandler) CloseChangePlan(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Parse request body (optional comments)
+	var req CloseChangePlanRequest
+	if err := c.Bind(&req); err != nil {
+		// If binding fails, continue with empty comments (comments are optional)
+		req.Comments = nil
+	}
+
+	// Use approval service to close the change plan
+	// The service handles:
+	// - Change plan existence check
+	// - Status validation (must be Open)
+	// - RBAC permission checks
+	// - Approval record creation with Rejected status
+	// - Change plan status update to Closed
+	err = h.approvalService.Close(ctx, changePlanID, claims.UserID, req.Comments)
+	if err != nil {
+		// Handle specific error types
+		if err == services.ErrChangePlanNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		if err == services.ErrInvalidChangePlanStatus {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		if err == services.ErrUnauthorizedApprover {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		if err == services.ErrChangePlanAlreadyApproved {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		if err == services.ErrChangePlanAlreadyClosed {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+
+		// Generic error
+		h.logger.Error("Failed to close change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to close change plan",
+		})
+	}
+
+	h.logger.Info("Change plan closed successfully",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("closed_by", claims.UserID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message":        "Change plan closed successfully",
+		"change_plan_id": changePlanID.String(),
+	})
+}
+
+// GetApprovalHistory handles GET /api/v1/change-plans/:id/approvals
+// Retrieves approval history for a change plan
+func (h *ChangePlanHandler) GetApprovalHistory(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Get change plan to verify it exists and check authorization
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// Check authorization: User must be able to view change plans in the project
+	userIDStr, _, organizationRole, ok := rbac.GetUserFromContext(ctx)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Organization admins can view any change plan
+	if organizationRole != rbac.OrganizationAdmin {
+		// Check if user is a member of the project
+		member, err := h.projectMemberRepo.GetMemberRole(ctx, changePlan.ProjectID, userID)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				return c.JSON(http.StatusForbidden, map[string]interface{}{
+					"error": "Not a member of this project",
+				})
+			}
+			h.logger.Error("Failed to check project membership", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to check project membership",
+			})
+		}
+
+		// Check if user has PermissionChangesRead
+		projectRole := convertProjectRoleToRBAC(member.Role)
+		checker := rbac.NewCheckerService()
+		if !checker.HasProjectPermission(projectRole, rbac.PermissionChangesRead) {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "Insufficient permissions to view change plans",
+			})
+		}
+	}
+
+	// Get approval history using the approval service
+	approvals, err := h.approvalService.GetApprovalHistory(ctx, changePlanID)
+	if err != nil {
+		h.logger.Error("Failed to get approval history", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve approval history",
+		})
+	}
+
+	// Convert to response format
+	approvalResponses := make([]map[string]interface{}, len(approvals))
+	for i, approval := range approvals {
+		approvalResponse := map[string]interface{}{
+			"id":             approval.ID.String(),
+			"change_plan_id": approval.ChangePlanID.String(),
+			"approver_id":    approval.ApproverID.String(),
+			"status":         string(approval.Status),
+			"comments":       approval.Comments,
+			"created_at":     approval.CreatedAt.Format(time.RFC3339),
+		}
+		if approval.ApprovedAt != nil {
+			approvalResponse["approved_at"] = approval.ApprovedAt.Format(time.RFC3339)
+		}
+		approvalResponses[i] = approvalResponse
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"change_plan_id": changePlanID.String(),
+		"approvals":      approvalResponses,
+		"count":          len(approvalResponses),
+	})
+}
+
+// AssignReviewerRequest represents the request body for assigning a reviewer
+type AssignReviewerRequest struct {
+	ReviewerID uuid.UUID `json:"reviewer_id" validate:"required"`
+}
+
+// AssignReviewer handles PUT /api/v1/change-plans/:id/reviewer
+// Assigns an optional reviewer (Project Approver) to a change plan
+func (h *ChangePlanHandler) AssignReviewer(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get authenticated user from context
@@ -1211,8 +1518,8 @@ func (h *ChangePlanHandler) ApproveChangePlan(c echo.Context) error {
 		})
 	}
 
-	// Check authorization: User must have approval permissions
-	userIDStr, _, organizationRole, ok := rbac.GetUserFromContext(ctx)
+	// Check authorization: Only the author can assign reviewer
+	userIDStr, _, _, ok := rbac.GetUserFromContext(ctx)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
 			"error": "Authentication required",
@@ -1226,109 +1533,78 @@ func (h *ChangePlanHandler) ApproveChangePlan(c echo.Context) error {
 		})
 	}
 
-	// Organization admins can approve any change plan
-	if organizationRole != rbac.OrganizationAdmin {
-		// Check if user is a member of the project
-		member, err := h.projectMemberRepo.GetMemberRole(ctx, changePlan.ProjectID, userID)
-		if err != nil {
-			if err == repository.ErrNotFound {
-				return c.JSON(http.StatusForbidden, map[string]interface{}{
-					"error": "Not a member of this project",
-				})
-			}
-			h.logger.Error("Failed to check project membership", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to check project membership",
-			})
-		}
-
-		// Check if user has PermissionChangesApprove
-		projectRole := convertProjectRoleToRBAC(member.Role)
-		checker := rbac.NewCheckerService()
-		if !checker.HasProjectPermission(projectRole, rbac.PermissionChangesApprove) {
-			return c.JSON(http.StatusForbidden, map[string]interface{}{
-				"error": "Insufficient permissions to approve change plans",
-			})
-		}
-	}
-
-	// Validate status: Only Open status can be approved
-	if changePlan.Status != models.ChangePlanStatusOpen {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Only Open change plans can be approved",
-			"details": map[string]interface{}{
-				"current_status": changePlan.Status,
-			},
+	if changePlan.AuthorID != userID {
+		return c.JSON(http.StatusForbidden, map[string]interface{}{
+			"error": "Only the author can assign a reviewer to their change plan",
 		})
 	}
 
-	// Check for SQL Review errors
-	severityCounts, err := h.policyFindingRepo.CountBySeverity(ctx, changePlan.ID)
+	// Parse request body
+	var req AssignReviewerRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error("Failed to bind request", zap.Error(err))
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate reviewer_id is provided
+	if req.ReviewerID == uuid.Nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "reviewer_id is required",
+		})
+	}
+
+	// Validate that reviewer is a Project Approver in the project
+	reviewerMember, err := h.projectMemberRepo.GetMemberRole(ctx, changePlan.ProjectID, req.ReviewerID)
 	if err != nil {
-		h.logger.Warn("Failed to fetch policy findings", zap.Error(err))
-		// Continue - treat as no errors if we can't fetch
-		severityCounts = map[string]int{}
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Reviewer is not a member of this project",
+			})
+		}
+		h.logger.Error("Failed to check reviewer membership", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to validate reviewer",
+		})
 	}
 
-	errorCount := severityCounts["Error"]
-	if errorCount > 0 {
-		// Fetch error findings to return in response
-		findings, err := h.policyFindingRepo.GetByChangePlanID(ctx, changePlan.ID)
-		if err != nil {
-			h.logger.Warn("Failed to fetch policy findings", zap.Error(err))
-			findings = []*models.PolicyFinding{}
-		}
-
-		// Filter only errors
-		errorFindings := make([]models.PolicyFindingItem, 0)
-		for _, finding := range findings {
-			if finding.Severity == "Error" {
-				errorFindings = append(errorFindings, models.PolicyFindingItem{
-					ValidatorType: finding.ValidatorType,
-					RuleName:      finding.RuleName,
-					Message:       finding.Message,
-					LineNumber:    finding.LineNumber,
-					ColumnNumber:  finding.ColumnNumber,
-				})
-			}
-		}
-
-		h.logger.Info("Change plan approval blocked due to SQL Review errors",
-			zap.String("change_plan_id", changePlan.ID.String()),
-			zap.Int("error_count", errorCount),
-		)
-
+	// Check that reviewer has Project Approver role (or Project Owner, who also has approve permissions)
+	projectRole := convertProjectRoleToRBAC(reviewerMember.Role)
+	checker := rbac.NewCheckerService()
+	if !checker.HasProjectPermission(projectRole, rbac.PermissionChangesApprove) {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Cannot approve change plan with SQL Review errors",
+			"error": "Reviewer must have Project Approver role",
 			"details": map[string]interface{}{
-				"error_count": errorCount,
-				"errors":      errorFindings,
+				"reviewer_role": reviewerMember.Role,
 			},
 		})
 	}
 
-	// Validate transition
-	if err := workflow.ValidateTransition(changePlan.Status, models.ChangePlanStatusApproved); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": err.Error(),
-		})
-	}
+	// Update assigned reviewer
+	changePlan.AssignedReviewerID = &req.ReviewerID
+	changePlan.UpdatedAt = time.Now()
 
-	// Update status to Approved
-	changePlan.Status = models.ChangePlanStatusApproved
+	// Update in repository
 	if err := h.changePlanRepo.Update(ctx, changePlan); err != nil {
-		h.logger.Error("Failed to approve change plan", zap.Error(err))
+		h.logger.Error("Failed to assign reviewer", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to approve change plan",
+			"error": "Failed to assign reviewer",
 		})
 	}
 
-	h.logger.Info("Change plan approved successfully",
-		zap.String("change_plan_id", changePlan.ID.String()),
-		zap.String("approved_by", userID.String()),
+	h.logger.Info("Reviewer assigned successfully",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("reviewer_id", req.ReviewerID.String()),
+		zap.String("author_id", userID.String()),
 	)
 
-	return c.JSON(http.StatusOK, changePlan.ToResponse())
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message":              "Reviewer assigned successfully",
+		"change_plan_id":       changePlanID.String(),
+		"reviewer_id":          req.ReviewerID.String(),
+		"assigned_reviewer_id": req.ReviewerID.String(),
+	})
 }
 
 // ExecuteChangePlan handles POST /api/v1/change-plans/:id/execute
