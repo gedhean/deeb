@@ -1476,6 +1476,103 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 	return c.JSON(http.StatusOK, changePlan.ToResponse())
 }
 
+// ResubmitChangePlan handles POST /api/v1/change-plans/:id/resubmit
+// Allows authors to move Open Change Plans back to Draft for fixing errors
+func (h *ChangePlanHandler) ResubmitChangePlan(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Get change plan
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// Check authorization: Only the author can resubmit
+	userIDStr, _, _, ok := rbac.GetUserFromContext(ctx)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Invalid user ID",
+		})
+	}
+
+	if changePlan.AuthorID != userID {
+		return c.JSON(http.StatusForbidden, map[string]interface{}{
+			"error": "Only the author can resubmit their change plan",
+		})
+	}
+
+	// Validate status: Only Open status can be resubmitted
+	if changePlan.Status != models.ChangePlanStatusOpen {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Only Open change plans can be resubmitted",
+			"details": map[string]interface{}{
+				"current_status": changePlan.Status,
+			},
+		})
+	}
+
+	// Validate transition
+	if err := workflow.ValidateTransition(changePlan.Status, models.ChangePlanStatusDraft); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	// Clear old policy findings
+	if err := h.policyFindingRepo.DeleteByChangePlanID(ctx, changePlan.ID); err != nil {
+		h.logger.Warn("Failed to delete policy findings during resubmission", zap.Error(err))
+		// Continue - non-critical error
+	}
+
+	// Update status to Draft
+	changePlan.Status = models.ChangePlanStatusDraft
+	if err := h.changePlanRepo.Update(ctx, changePlan); err != nil {
+		h.logger.Error("Failed to resubmit change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to resubmit change plan",
+		})
+	}
+
+	h.logger.Info("Change plan resubmitted successfully",
+		zap.String("change_plan_id", changePlan.ID.String()),
+		zap.String("author_id", userID.String()),
+	)
+
+	return c.JSON(http.StatusOK, changePlan.ToResponse())
+}
+
 // convertProjectRoleToRBAC converts models.ProjectRole to rbac.ProjectRole
 func convertProjectRoleToRBAC(role models.ProjectRole) rbac.ProjectRole {
 	switch role {

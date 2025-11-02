@@ -495,19 +495,19 @@ Ensure Change Plans with only warnings can be approved and executed.
 
 ### P03M26: Implement Change Plan resubmission logic
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M26
 
 **Goal**
 Allow authors to fix errors and resubmit Change Plans (Open → Draft → Open again).
 
 **Acceptance Criteria**
-- [ ] Resubmission endpoint or logic implemented
-- [ ] Authors can move Open Change Plans back to Draft
-- [ ] SQL Review runs again on resubmission (Draft → Open)
-- [ ] Old policy findings cleared on resubmission
-- [ ] Resubmission history tracked
-- [ ] Integration test passing
+- [x] Resubmission endpoint or logic implemented
+- [x] Authors can move Open Change Plans back to Draft
+- [x] SQL Review runs again on resubmission (Draft → Open)
+- [x] Old policy findings cleared on resubmission
+- [x] Resubmission history tracked
+- [x] Integration test passing
 
 ---
 

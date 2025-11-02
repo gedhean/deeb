@@ -1735,3 +1735,311 @@ func TestIntegration_ChangePlan_ExecutionWithOnlyWarnings(t *testing.T) {
 	assert.Equal(t, models.ChangePlanStatusInProgress, updatedPlan.Status)
 }
 
+// TestIntegration_ChangePlan_Resubmission tests resubmission workflow
+func TestIntegration_ChangePlan_Resubmission(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
+
+	ctx := context.Background()
+
+	// Create author user
+	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+
+	// Create project and add author as member
+	project := createTestProject(t, projectRepo, "Test Project")
+	_, err = projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan in Open status
+	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan.Status = models.ChangePlanStatusOpen
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Create policy findings (errors) that need to be fixed
+	_, err = policyFindingRepo.Create(ctx, &models.PolicyFinding{
+		ChangePlanID:  changePlan.ID,
+		ValidatorType: "syntax_error",
+		Severity:      "Error",
+		RuleName:      "InvalidSyntax",
+		Message:       "Syntax error at line 1",
+		LineNumber:    intPtr(1),
+		ColumnNumber:  intPtr(10),
+	})
+	require.NoError(t, err)
+
+	// Verify findings exist
+	findings, err := policyFindingRepo.GetByChangePlanID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(findings))
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Test 1: Resubmit change plan
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/change-plans/%s/resubmit", changePlan.ID.String()), nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/resubmit")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+
+	// Execute
+	err = handler.ResubmitChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify response
+	var response models.ChangePlanResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, changePlan.ID, response.ID)
+	assert.Equal(t, models.ChangePlanStatusDraft, response.Status)
+
+	// Verify change plan status is now Draft
+	updatedPlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.ChangePlanStatusDraft, updatedPlan.Status)
+
+	// Verify policy findings are cleared
+	findingsAfterResubmit, err := policyFindingRepo.GetByChangePlanID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(findingsAfterResubmit))
+
+	// Test 2: Resubmit and then resubmit again (Draft → Open → Draft)
+	// Update SQL content to fix the error
+	updatedPlan.SQLContent = "CREATE TABLE users (id UUID PRIMARY KEY, name VARCHAR(255));"
+	err = changePlanRepo.Update(ctx, updatedPlan)
+	require.NoError(t, err)
+
+	// Transition back to Open (this will trigger SQL Review again)
+	updatedPlan.Status = models.ChangePlanStatusOpen
+	err = changePlanRepo.Update(ctx, updatedPlan)
+	require.NoError(t, err)
+
+	// Resubmit again
+	req2 := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/change-plans/%s/resubmit", changePlan.ID.String()), nil)
+	req2.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec2 := httptest.NewRecorder()
+	c2 := e.NewContext(req2, rec2)
+	c2.SetPath("/api/v1/change-plans/:id/resubmit")
+	c2.SetParamNames("id")
+	c2.SetParamValues(changePlan.ID.String())
+
+	err = handler.ResubmitChangePlan(c2)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec2.Code)
+
+	// Verify status is Draft again
+	finalPlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.ChangePlanStatusDraft, finalPlan.Status)
+}
+
+// TestIntegration_ChangePlan_Resubmission_Unauthorized tests that non-authors cannot resubmit
+func TestIntegration_ChangePlan_Resubmission_Unauthorized(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	ctx := context.Background()
+
+	// Create author user
+	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+
+	// Create non-author user
+	nonAuthor := createTestUser(t, userRepo, fmt.Sprintf("nonauthor-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+
+	// Create project and add both users as members
+	project := createTestProject(t, projectRepo, "Test Project")
+	_, err = projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	_, err = projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    nonAuthor.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan in Open status
+	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan.Status = models.ChangePlanStatusOpen
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for non-author
+	token, err := tokenManager.GenerateToken(nonAuthor.ID.String(), nonAuthor.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/change-plans/%s/resubmit", changePlan.ID.String()), nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/resubmit")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+
+	// Execute
+	err = handler.ResubmitChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Contains(t, response["error"], "Only the author can resubmit")
+
+	// Verify change plan status is still Open
+	updatedPlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.ChangePlanStatusOpen, updatedPlan.Status)
+}
+
+// TestIntegration_ChangePlan_Resubmission_InvalidStatus tests that only Open status can be resubmitted
+func TestIntegration_ChangePlan_Resubmission_InvalidStatus(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	ctx := context.Background()
+
+	// Create author user
+	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+
+	// Create project and add author as member
+	project := createTestProject(t, projectRepo, "Test Project")
+	_, err = projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan in Draft status (should not be resubmittable)
+	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	// Status is already Draft by default
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/change-plans/%s/resubmit", changePlan.ID.String()), nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/resubmit")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+
+	// Execute
+	err = handler.ResubmitChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Contains(t, response["error"], "Only Open change plans can be resubmitted")
+}
+

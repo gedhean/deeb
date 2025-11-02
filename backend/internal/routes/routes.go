@@ -435,4 +435,5 @@ func setupChangePlanRoutes(
 	changePlansGroup.POST("/:id/review", changePlanHandler.TriggerSQLReview, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/approve", changePlanHandler.ApproveChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/execute", changePlanHandler.ExecuteChangePlan, authMiddleware.Authenticate)
+	changePlansGroup.POST("/:id/resubmit", changePlanHandler.ResubmitChangePlan, authMiddleware.Authenticate)
 }
