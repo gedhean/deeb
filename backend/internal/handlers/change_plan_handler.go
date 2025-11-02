@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/review"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/workflow"
 	"go.uber.org/zap"
@@ -17,12 +19,15 @@ import (
 
 // ChangePlanHandler handles HTTP requests for change plan operations
 type ChangePlanHandler struct {
-	changePlanRepo      repository.ChangePlanRepository
-	projectRepo         repository.ProjectRepository
-	databaseRepo        repository.DatabaseRepository
-	projectMemberRepo   repository.ProjectMemberRepository
-	riskAssessmentSvc  *services.RiskAssessmentService
-	logger              *zap.Logger
+	changePlanRepo       repository.ChangePlanRepository
+	projectRepo          repository.ProjectRepository
+	databaseRepo         repository.DatabaseRepository
+	databaseInstanceRepo repository.DatabaseInstanceRepository
+	projectMemberRepo    repository.ProjectMemberRepository
+	policyFindingRepo    repository.PolicyFindingRepository
+	riskAssessmentSvc    *services.RiskAssessmentService
+	reviewService        *review.ReviewService
+	logger               *zap.Logger
 }
 
 // NewChangePlanHandler creates a new change plan handler
@@ -30,17 +35,23 @@ func NewChangePlanHandler(
 	changePlanRepo repository.ChangePlanRepository,
 	projectRepo repository.ProjectRepository,
 	databaseRepo repository.DatabaseRepository,
+	databaseInstanceRepo repository.DatabaseInstanceRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
+	policyFindingRepo repository.PolicyFindingRepository,
 	riskAssessmentSvc *services.RiskAssessmentService,
+	reviewService *review.ReviewService,
 	logger *zap.Logger,
 ) *ChangePlanHandler {
 	return &ChangePlanHandler{
-		changePlanRepo:     changePlanRepo,
-		projectRepo:        projectRepo,
-		databaseRepo:       databaseRepo,
-		projectMemberRepo:  projectMemberRepo,
-		riskAssessmentSvc: riskAssessmentSvc,
-		logger:             logger,
+		changePlanRepo:       changePlanRepo,
+		projectRepo:          projectRepo,
+		databaseRepo:         databaseRepo,
+		databaseInstanceRepo: databaseInstanceRepo,
+		projectMemberRepo:    projectMemberRepo,
+		policyFindingRepo:    policyFindingRepo,
+		riskAssessmentSvc:    riskAssessmentSvc,
+		reviewService:        reviewService,
+		logger:               logger,
 	}
 }
 
@@ -653,6 +664,29 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 				"error": err.Error(),
 			})
 		}
+
+		// If transitioning from Draft to Open, trigger SQL Review
+		if changePlan.Status == models.ChangePlanStatusDraft && *req.Status == models.ChangePlanStatusOpen {
+			if err := h.triggerSQLReview(c, changePlan); err != nil {
+				h.logger.Error("SQL Review failed", zap.Error(err), zap.String("change_plan_id", changePlan.ID.String()))
+
+				// Check if errors prevent transition
+				if reviewErr, ok := err.(*SQLReviewError); ok && reviewErr.HasErrors {
+					return c.JSON(http.StatusBadRequest, map[string]interface{}{
+						"error": "SQL Review failed - cannot transition to Open status",
+						"details": map[string]interface{}{
+							"review_result":  reviewErr.ReviewResult,
+							"errors_count":   reviewErr.ReviewResult.Errors,
+							"warnings_count": reviewErr.ReviewResult.Warnings,
+						},
+					})
+				}
+
+				// Other errors (e.g., policy loading failure) - allow transition but log
+				h.logger.Warn("SQL Review encountered issues but allowing transition", zap.Error(err))
+			}
+		}
+
 		changePlan.Status = *req.Status
 	}
 
@@ -691,6 +725,305 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 	)
 
 	return c.JSON(http.StatusOK, changePlan.ToResponse())
+}
+
+// SQLReviewError represents an error during SQL Review
+type SQLReviewError struct {
+	HasErrors    bool
+	ReviewResult *review.ReviewResultWithSummary
+	Message      string
+}
+
+func (e *SQLReviewError) Error() string {
+	return e.Message
+}
+
+// triggerSQLReview triggers SQL Review for a change plan and stores findings
+func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.ChangePlan) error {
+	if h.reviewService == nil {
+		h.logger.Warn("ReviewService not configured, skipping SQL Review")
+		return nil
+	}
+
+	ctx := c.Request().Context()
+
+	// Get database type from database instance
+	database, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+	if err != nil {
+		return &SQLReviewError{
+			HasErrors: false,
+			Message:   "Failed to get database: " + err.Error(),
+		}
+	}
+
+	databaseInstance, err := h.databaseInstanceRepo.GetByID(ctx, database.DatabaseInstanceID)
+	if err != nil {
+		return &SQLReviewError{
+			HasErrors: false,
+			Message:   "Failed to get database instance: " + err.Error(),
+		}
+	}
+
+	// Run SQL Review
+	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
+		ChangePlanID: changePlan.ID,
+		SQLContent:   changePlan.SQLContent,
+		DatabaseType: databaseInstance.DatabaseType,
+	})
+	if err != nil {
+		return &SQLReviewError{
+			HasErrors: false,
+			Message:   "Failed to run SQL Review: " + err.Error(),
+		}
+	}
+
+	// Delete existing findings for this change plan
+	if err := h.policyFindingRepo.DeleteByChangePlanID(ctx, changePlan.ID); err != nil {
+		h.logger.Warn("Failed to delete existing findings", zap.Error(err))
+		// Continue - we'll try to create new ones
+	}
+
+	// Convert review results to policy findings and store them
+	if err := h.storeReviewFindings(ctx, changePlan.ID, reviewResult); err != nil {
+		h.logger.Error("Failed to store review findings", zap.Error(err))
+		return &SQLReviewError{
+			HasErrors:    reviewResult.Errors > 0,
+			ReviewResult: reviewResult,
+			Message:      "Failed to store review findings: " + err.Error(),
+		}
+	}
+
+	// Check if there are errors that should prevent status transition
+	if reviewResult.Errors > 0 {
+		return &SQLReviewError{
+			HasErrors:    true,
+			ReviewResult: reviewResult,
+			Message:      "SQL Review found errors that prevent status transition",
+		}
+	}
+
+	h.logger.Info("SQL Review completed successfully",
+		zap.String("change_plan_id", changePlan.ID.String()),
+		zap.Int("errors", reviewResult.Errors),
+		zap.Int("warnings", reviewResult.Warnings),
+		zap.Int("infos", reviewResult.Infos),
+	)
+
+	return nil
+}
+
+// storeReviewFindings converts review results to policy findings and stores them
+func (h *ChangePlanHandler) storeReviewFindings(ctx context.Context, changePlanID uuid.UUID, reviewResult *review.ReviewResultWithSummary) error {
+	findings := make([]*models.PolicyFinding, 0)
+
+	for _, result := range reviewResult.Results {
+		for _, violation := range result.Violations {
+			// Map validator name to validator type
+			validatorType := mapValidatorNameToType(result.ValidatorName)
+
+			finding := &models.PolicyFinding{
+				ChangePlanID:  changePlanID,
+				ValidatorType: validatorType,
+				Severity:      string(violation.Severity),
+				RuleName:      violation.Rule,
+				Message:       violation.Message,
+			}
+
+			if violation.Line > 0 {
+				lineNum := violation.Line
+				finding.LineNumber = &lineNum
+			}
+
+			if violation.Column > 0 {
+				colNum := violation.Column
+				finding.ColumnNumber = &colNum
+			}
+
+			findings = append(findings, finding)
+		}
+	}
+
+	// Batch insert findings
+	if len(findings) > 0 {
+		if err := h.policyFindingRepo.CreateBatch(ctx, findings); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// mapValidatorNameToType maps validator name to validator type string
+func mapValidatorNameToType(validatorName string) string {
+	switch validatorName {
+	case "postgresql-syntax", "mysql-syntax":
+		return "syntax_error"
+	case "security":
+		return "security_risk"
+	case "performance":
+		return "performance_issue"
+	case "backwards-compatibility":
+		return "backwards_incompatible"
+	case "best-practices":
+		return "best_practice_violation"
+	default:
+		return "best_practice_violation" // Default fallback
+	}
+}
+
+// TriggerSQLReview handles POST /api/v1/change-plans/:id/review
+// Manually triggers SQL Review for an existing Change Plan
+func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Get change plan
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// Check authorization: User must have Project Developer role in the project
+	userIDStr, _, organizationRole, ok := rbac.GetUserFromContext(ctx)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Organization admins can trigger review
+	if organizationRole != rbac.OrganizationAdmin {
+		// Check project membership and role
+		member, err := h.projectMemberRepo.GetMemberRole(ctx, changePlan.ProjectID, userID)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				return c.JSON(http.StatusForbidden, map[string]interface{}{
+					"error": "Not a member of this project",
+				})
+			}
+			h.logger.Error("Failed to check project membership", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to check project membership",
+			})
+		}
+
+		// Convert to RBAC role and check permission
+		projectRole := convertProjectRoleToRBAC(member.Role)
+		checker := rbac.NewCheckerService()
+		if !checker.HasProjectPermission(projectRole, rbac.PermissionChangesCreate) {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "Project Developer role required to trigger SQL Review",
+				"details": map[string]interface{}{
+					"user_project_role": projectRole,
+				},
+			})
+		}
+	}
+
+	// Trigger SQL Review (without blocking on errors - manual review always returns results)
+	if h.reviewService == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "SQL Review service not configured",
+		})
+	}
+
+	// Get database type from database instance
+	database, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+	if err != nil {
+		h.logger.Error("Failed to get database", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to get database",
+		})
+	}
+
+	databaseInstance, err := h.databaseInstanceRepo.GetByID(ctx, database.DatabaseInstanceID)
+	if err != nil {
+		h.logger.Error("Failed to get database instance", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to get database instance",
+		})
+	}
+
+	// Run SQL Review
+	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
+		ChangePlanID: changePlan.ID,
+		SQLContent:   changePlan.SQLContent,
+		DatabaseType: databaseInstance.DatabaseType,
+	})
+	if err != nil {
+		h.logger.Error("Failed to run SQL Review", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to run SQL Review: " + err.Error(),
+		})
+	}
+
+	// Delete existing findings for this change plan
+	if err := h.policyFindingRepo.DeleteByChangePlanID(ctx, changePlan.ID); err != nil {
+		h.logger.Warn("Failed to delete existing findings", zap.Error(err))
+		// Continue - we'll try to create new ones
+	}
+
+	// Convert review results to policy findings and store them
+	if err := h.storeReviewFindings(ctx, changePlan.ID, reviewResult); err != nil {
+		h.logger.Error("Failed to store review findings", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to store review findings: " + err.Error(),
+		})
+	}
+
+	h.logger.Info("SQL Review triggered manually",
+		zap.String("change_plan_id", changePlan.ID.String()),
+		zap.Int("errors", reviewResult.Errors),
+		zap.Int("warnings", reviewResult.Warnings),
+		zap.Int("infos", reviewResult.Infos),
+	)
+
+	// Return review results in response
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"change_plan_id": changePlan.ID,
+		"review_result": map[string]interface{}{
+			"valid":              reviewResult.Valid,
+			"errors":             reviewResult.Errors,
+			"warnings":           reviewResult.Warnings,
+			"infos":              reviewResult.Infos,
+			"results":            reviewResult.Results,
+			"policy_id":          reviewResult.PolicyID,
+			"policy_name":        reviewResult.PolicyName,
+			"enabled_validators": reviewResult.EnabledValidators,
+			"skipped_validators": reviewResult.SkippedValidators,
+		},
+	})
 }
 
 // DeleteChangePlan handles DELETE /api/v1/change-plans/:id
@@ -822,4 +1155,3 @@ func convertProjectRoleToRBAC(role models.ProjectRole) rbac.ProjectRole {
 		return rbac.ProjectViewer
 	}
 }
-

@@ -12,7 +12,10 @@ import (
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
+	"github.com/nsxbet/deeb/internal/review"
+	"github.com/nsxbet/deeb/internal/review/validators"
 	"github.com/nsxbet/deeb/internal/services"
+	"go.uber.org/zap"
 )
 
 // Setup registers all application routes including health checks, authentication,
@@ -35,6 +38,7 @@ func Setup(
 	issueRepo := postgres.NewIssueRepository(db.DB)
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
 
 	// Setup API routes
 	setupHealthRoute(e, db, version)
@@ -47,7 +51,7 @@ func Setup(
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager)
 	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, projectMemberRepo, tokenManager)
 	setupIssueRoutes(e, issueRepo, tokenManager)
-	setupChangePlanRoutes(e, changePlanRepo, projectRepo, dbRepo, envRepo, dbInstanceRepo, projectMemberRepo, tokenManager)
+	setupChangePlanRoutes(e, changePlanRepo, projectRepo, dbRepo, envRepo, dbInstanceRepo, projectMemberRepo, policyFindingRepo, policyRepo, tokenManager)
 
 	// Setup Swagger documentation
 	SetupSwaggerRoutes(e)
@@ -361,6 +365,8 @@ func setupChangePlanRoutes(
 	environmentRepo repository.EnvironmentRepository,
 	databaseInstanceRepo repository.DatabaseInstanceRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
+	policyFindingRepo repository.PolicyFindingRepository,
+	policyRepo repository.PolicyRepository,
 	tokenManager *auth.TokenManager,
 ) {
 	// Initialize risk assessment service
@@ -371,12 +377,44 @@ func setupChangePlanRoutes(
 		logger.Get(),
 	)
 
+	// Initialize SQL Review engine and register validators
+	reviewEngine := review.NewEngine()
+	reviewService := review.NewReviewService(
+		policyRepo,
+		databaseRepo,
+		reviewEngine,
+		logger.Get(),
+	)
+
+	// Register all validators
+	if err := reviewService.RegisterValidator(validators.NewPostgreSQLSyntaxValidator()); err != nil {
+		logger.Get().Warn("Failed to register PostgreSQL syntax validator", zap.Error(err))
+	}
+	if err := reviewService.RegisterValidator(validators.NewMySQLSyntaxValidator()); err != nil {
+		logger.Get().Warn("Failed to register MySQL syntax validator", zap.Error(err))
+	}
+	if err := reviewService.RegisterValidator(validators.NewSecurityValidator()); err != nil {
+		logger.Get().Warn("Failed to register security validator", zap.Error(err))
+	}
+	if err := reviewService.RegisterValidator(validators.NewPerformanceValidator()); err != nil {
+		logger.Get().Warn("Failed to register performance validator", zap.Error(err))
+	}
+	if err := reviewService.RegisterValidator(validators.NewBackwardsCompatibilityValidator()); err != nil {
+		logger.Get().Warn("Failed to register backwards compatibility validator", zap.Error(err))
+	}
+	if err := reviewService.RegisterValidator(validators.NewBestPracticesValidator()); err != nil {
+		logger.Get().Warn("Failed to register best practices validator", zap.Error(err))
+	}
+
 	changePlanHandler := handlers.NewChangePlanHandler(
 		changePlanRepo,
 		projectRepo,
 		databaseRepo,
+		databaseInstanceRepo,
 		projectMemberRepo,
+		policyFindingRepo,
 		riskAssessmentSvc,
+		reviewService,
 		logger.Get(),
 	)
 	changePlansGroup := e.Group("/api/v1/change-plans")
@@ -391,4 +429,5 @@ func setupChangePlanRoutes(
 	changePlansGroup.GET("", changePlanHandler.ListChangePlans, authMiddleware.Authenticate)
 	changePlansGroup.PUT("/:id", changePlanHandler.UpdateChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.DELETE("/:id", changePlanHandler.DeleteChangePlan, authMiddleware.Authenticate)
+	changePlansGroup.POST("/:id/review", changePlanHandler.TriggerSQLReview, authMiddleware.Authenticate)
 }

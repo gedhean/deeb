@@ -372,37 +372,37 @@ Create repository for storing and querying policy findings from SQL Review.
 
 ### P03M19: Implement automatic SQL Review on submission
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M19
 
 **Goal**
 Trigger SQL Review automatically when Change Plan transitions from Draft to Open status.
 
 **Acceptance Criteria**
-- [ ] Status transition handler updated
-- [ ] SQL Review triggered on Draft → Open transition
-- [ ] Review results stored as policy findings
-- [ ] Change Plan status updated to Open only if no errors
-- [ ] Review errors prevent status transition
-- [ ] Integration test for automatic review passing
+- [x] Status transition handler updated
+- [x] SQL Review triggered on Draft → Open transition
+- [x] Review results stored as policy findings
+- [x] Change Plan status updated to Open only if no errors
+- [x] Review errors prevent status transition
+- [x] Integration test for automatic review passing
 
 ---
 
 ### P03M20: Implement manual SQL Review trigger endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M20
 
 **Goal**
 Create POST /api/v1/change-plans/:id/review endpoint for manually triggering SQL Review.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/change-plans/:id/review endpoint implemented
-- [ ] Endpoint triggers SQL Review for existing Change Plan
-- [ ] Review results returned in response
-- [ ] Policy findings updated/created
-- [ ] RBAC checks: Project Developer role required
-- [ ] Integration test passing
+- [x] POST /api/v1/change-plans/:id/review endpoint implemented
+- [x] Endpoint triggers SQL Review for existing Change Plan
+- [x] Review results returned in response
+- [x] Policy findings updated/created
+- [x] RBAC checks: Project Developer role required
+- [x] Integration test passing
 
 ---
 
