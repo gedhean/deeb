@@ -101,8 +101,18 @@ func (s *ExecutionService) Execute(
 	result, err := s.executeInTransaction(ctx, dbConn, changePlan.SQLContent)
 	duration := time.Since(startTime)
 
+	// Store execution results in Change Plan
+	now := time.Now()
+	changePlan.ExecutedAt = &now
+	durationMs := int(duration.Milliseconds())
+	changePlan.ExecutionDurationMs = &durationMs
+	changePlan.UpdatedAt = time.Now()
+
 	if err != nil {
 		errorMsg := err.Error()
+		changePlan.ErrorMessage = &errorMsg
+		changePlan.AffectedRows = nil // No rows affected on error
+
 		s.logger.Error("Execution failed",
 			zap.String("change_plan_id", changePlanID.String()),
 			zap.String("database_id", db.ID.String()),
@@ -110,12 +120,27 @@ func (s *ExecutionService) Execute(
 			zap.Duration("duration", duration),
 		)
 
+		// Update Change Plan with error results
+		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
+			s.logger.Error("Failed to update change plan with execution results", zap.Error(updateErr))
+			// Don't fail the whole operation if update fails, but log it
+		}
+
 		return &ExecutionResult{
 			Success:      false,
 			RowsAffected: 0,
 			Duration:     duration,
 			ErrorMessage: &errorMsg,
 		}, nil // Return result with error, don't propagate error
+	}
+
+	// Store success results
+	changePlan.AffectedRows = &result.RowsAffected
+	changePlan.ErrorMessage = nil // Clear any previous error message
+
+	// Update Change Plan with execution results
+	if err := s.changePlanRepo.Update(ctx, changePlan); err != nil {
+		return nil, fmt.Errorf("failed to update change plan with execution results: %w", err)
 	}
 
 	s.logger.Info("Execution succeeded",
