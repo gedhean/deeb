@@ -354,19 +354,19 @@ Create service that runs all validators and aggregates results into policy findi
 
 ### P03M18: Implement PolicyFinding repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M18
 
 **Goal**
 Create repository for storing and querying policy findings from SQL Review.
 
 **Acceptance Criteria**
-- [ ] PolicyFindingRepository interface defined
-- [ ] Interface methods: Create, GetByChangePlanID, DeleteByChangePlanID, CountBySeverity
-- [ ] PostgreSQL implementation created
-- [ ] Batch insert for multiple findings
-- [ ] Querying by change plan ID and severity working
-- [ ] Unit tests for repository passing
+- [x] PolicyFindingRepository interface defined
+- [x] Interface methods: Create, GetByChangePlanID, DeleteByChangePlanID, CountBySeverity
+- [x] PostgreSQL implementation created
+- [x] Batch insert for multiple findings
+- [x] Querying by change plan ID and severity working
+- [x] Unit tests for repository passing
 
 ---
 
