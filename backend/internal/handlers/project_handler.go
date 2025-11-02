@@ -489,8 +489,8 @@ func (h *ProjectHandler) ListProjectMembers(c echo.Context) error {
 		responses[i] = map[string]interface{}{
 			"member": member.ToResponse(),
 			"user": map[string]interface{}{
-				"id":    user.ID,
-				"email": user.Email,
+				"id":           user.ID,
+				"email":        user.Email,
 				"display_name": user.DisplayName,
 			},
 		}

@@ -8,7 +8,7 @@ import (
 
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/review"
-	pg_query "github.com/pganalyze/pg_query_go/v5"
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
 
 // PostgreSQLSyntaxValidator validates PostgreSQL SQL syntax
@@ -16,9 +16,13 @@ type PostgreSQLSyntaxValidator struct {
 	review.BaseValidator
 }
 
-// postgresErrorLineRegex matches PostgreSQL error messages with line numbers
-// Format: "syntax error at or near \"...\" at character X" or "LINE X: ..."
-var postgresErrorLineRegex = regexp.MustCompile(`(?i)(?:line|at character)\s+(\d+)`)
+// postgresLineRegex matches PostgreSQL error messages with line numbers
+// Format: "LINE X: ..."
+var postgresLineRegex = regexp.MustCompile(`(?i)LINE\s+(\d+)`)
+
+// postgresCharRegex matches PostgreSQL error messages with character positions
+// Format: "at character X"
+var postgresCharRegex = regexp.MustCompile(`(?i)at character\s+(\d+)`)
 
 // NewPostgreSQLSyntaxValidator creates a new PostgreSQL syntax validator
 func NewPostgreSQLSyntaxValidator() *PostgreSQLSyntaxValidator {
@@ -69,11 +73,21 @@ func (v *PostgreSQLSyntaxValidator) Validate(ctx context.Context, sqlContent str
 
 // extractLineNumber extracts line number from PostgreSQL error message
 func (v *PostgreSQLSyntaxValidator) extractLineNumber(errorMsg string) int {
-	matches := postgresErrorLineRegex.FindStringSubmatch(errorMsg)
-	if len(matches) >= 2 {
-		if lineNum, err := strconv.Atoi(matches[1]); err == nil {
+	// Prioritize LINE over character position
+	lineMatches := postgresLineRegex.FindStringSubmatch(errorMsg)
+	if len(lineMatches) >= 2 {
+		if lineNum, err := strconv.Atoi(lineMatches[1]); err == nil {
 			return lineNum
 		}
 	}
+
+	// If no LINE found, check for character position (fallback for backwards compatibility)
+	charMatches := postgresCharRegex.FindStringSubmatch(errorMsg)
+	if len(charMatches) >= 2 {
+		if charNum, err := strconv.Atoi(charMatches[1]); err == nil {
+			return charNum
+		}
+	}
+
 	return 0 // Line number not found
 }

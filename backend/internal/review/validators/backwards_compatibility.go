@@ -25,7 +25,11 @@ func NewBackwardsCompatibilityValidator() *BackwardsCompatibilityValidator {
 }
 
 // Validate validates SQL for backwards compatibility issues
-func (v *BackwardsCompatibilityValidator) Validate(ctx context.Context, sqlContent string, dbType models.DatabaseType) review.Result {
+func (v *BackwardsCompatibilityValidator) Validate(
+	ctx context.Context,
+	sqlContent string,
+	dbType models.DatabaseType,
+) review.Result {
 	// Skip empty SQL
 	sqlContent = strings.TrimSpace(sqlContent)
 	if sqlContent == "" {
@@ -52,16 +56,32 @@ func (v *BackwardsCompatibilityValidator) detectBreakingChanges(sqlUpper, sqlCon
 	var violations []review.Violation
 
 	// DROP COLUMN - Breaking change
-	if matched, _ := regexp.MatchString(`(?i)\bDROP\s+COLUMN\b`, sqlUpper); matched {
-		violations = append(violations, review.NewViolation(
-			"drop-column",
-			"DROP COLUMN operation detected. This is a breaking change that will cause applications using this column to fail. Ensure all dependent applications are updated before proceeding.",
-			review.SeverityWarning,
-		))
+	// Count occurrences to detect multiple DROP COLUMN operations
+	dropColumnRegex := regexp.MustCompile(`(?i)\bDROP\s+COLUMN\b`)
+	dropColumnMatches := dropColumnRegex.FindAllString(sqlUpper, -1)
+	if len(dropColumnMatches) > 0 {
+		// Report one violation per occurrence
+		for i := 0; i < len(dropColumnMatches); i++ {
+			violations = append(violations, review.NewViolation(
+				"drop-column",
+				"DROP COLUMN operation detected. This is a breaking change that will cause applications using this column to fail. Ensure all dependent applications are updated before proceeding.",
+				review.SeverityWarning,
+			))
+		}
 	}
 
 	// RENAME TABLE - Breaking change
-	if matched, _ := regexp.MatchString(`(?i)\bRENAME\s+(TABLE\s+)?`, sqlUpper); matched {
+	// Match "RENAME TABLE" or "RENAME TO" (both are table renames)
+	// Match "RENAME TABLE" but not "RENAME COLUMN"
+	if matched, _ := regexp.MatchString(`(?i)\bRENAME\s+TABLE\b`, sqlUpper); matched {
+		violations = append(violations, review.NewViolation(
+			"rename-table",
+			"RENAME TABLE operation detected. This is a breaking change that will cause applications referencing the old table name to fail. Ensure all dependent applications are updated before proceeding.",
+			review.SeverityWarning,
+		))
+	}
+	// RENAME TO (PostgreSQL/MySQL syntax for table rename)
+	if matched, _ := regexp.MatchString(`(?i)\bALTER\s+TABLE\b.*\bRENAME\s+TO\b`, sqlUpper); matched {
 		violations = append(violations, review.NewViolation(
 			"rename-table",
 			"RENAME TABLE operation detected. This is a breaking change that will cause applications referencing the old table name to fail. Ensure all dependent applications are updated before proceeding.",
@@ -89,7 +109,8 @@ func (v *BackwardsCompatibilityValidator) detectBreakingChanges(sqlUpper, sqlCon
 	}
 
 	// MODIFY COLUMN (MySQL syntax) - Breaking change
-	if matched, _ := regexp.MatchString(`(?i)\bMODIFY\s+COLUMN\b`, sqlUpper); matched {
+	// Matches both "MODIFY COLUMN" and "MODIFY" (without COLUMN keyword)
+	if matched, _ := regexp.MatchString(`(?i)\bALTER\s+TABLE\b.*\bMODIFY\b`, sqlUpper); matched {
 		violations = append(violations, review.NewViolation(
 			"modify-column",
 			"MODIFY COLUMN operation detected. This may change data types and is a breaking change. Ensure data migration is planned and all dependent applications are updated.",
@@ -116,7 +137,16 @@ func (v *BackwardsCompatibilityValidator) detectBreakingChanges(sqlUpper, sqlCon
 	}
 
 	// ALTER COLUMN SET NOT NULL - Breaking change (may fail if nulls exist)
+	// Also matches MODIFY COLUMN ... NOT NULL (MySQL syntax)
 	if matched, _ := regexp.MatchString(`(?i)\bALTER\s+COLUMN\b.*\bSET\s+NOT\s+NULL\b`, sqlUpper); matched {
+		violations = append(violations, review.NewViolation(
+			"set-not-null",
+			"SET NOT NULL constraint detected. This may fail if existing rows contain NULL values. Ensure data is cleaned before applying this change.",
+			review.SeverityWarning,
+		))
+	}
+	// MODIFY COLUMN ... NOT NULL (MySQL syntax) - Breaking change
+	if matched, _ := regexp.MatchString(`(?i)\bMODIFY\s+COLUMN\b.*\bNOT\s+NULL\b`, sqlUpper); matched {
 		violations = append(violations, review.NewViolation(
 			"set-not-null",
 			"SET NOT NULL constraint detected. This may fail if existing rows contain NULL values. Ensure data is cleaned before applying this change.",

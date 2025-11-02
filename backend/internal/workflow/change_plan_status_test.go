@@ -212,9 +212,9 @@ func TestStatusHelperFunctions(t *testing.T) {
 				expect  bool
 			}{
 				"IsDraftStatus":      {IsDraftStatus, false},
-				"IsOpenStatus":        {IsOpenStatus, true},
-				"IsApprovedStatus":    {IsApprovedStatus, false},
-				"IsInProgressStatus":  {IsInProgressStatus, false},
+				"IsOpenStatus":       {IsOpenStatus, true},
+				"IsApprovedStatus":   {IsApprovedStatus, false},
+				"IsInProgressStatus": {IsInProgressStatus, false},
 			},
 		},
 		{
@@ -362,10 +362,10 @@ func TestValidateTransition_InvalidStatusValues(t *testing.T) {
 
 func TestValidateTransition_ErrorMessages(t *testing.T) {
 	tests := []struct {
-		name           string
-		from           models.ChangePlanStatus
-		to             models.ChangePlanStatus
-		expectedInMsg  string
+		name          string
+		from          models.ChangePlanStatus
+		to            models.ChangePlanStatus
+		expectedInMsg string
 	}{
 		{
 			name:          "invalid transition error message",
@@ -399,7 +399,13 @@ func TestValidateTransition_ErrorMessages(t *testing.T) {
 				return
 			}
 			if !strings.Contains(err.Error(), tt.expectedInMsg) {
-				t.Errorf("ValidateTransition(%s, %s) error message = %q, want to contain %q", tt.from, tt.to, err.Error(), tt.expectedInMsg)
+				t.Errorf(
+					"ValidateTransition(%s, %s) error message = %q, want to contain %q",
+					tt.from,
+					tt.to,
+					err.Error(),
+					tt.expectedInMsg,
+				)
 			}
 		})
 	}

@@ -109,4 +109,3 @@ type Engine interface {
 	// GetRegistry returns the validator registry
 	GetRegistry() ValidatorRegistry
 }
-

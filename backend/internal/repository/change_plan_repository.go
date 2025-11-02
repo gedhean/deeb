@@ -9,12 +9,12 @@ import (
 
 // ChangePlanListFilters defines filtering options for listing change plans
 type ChangePlanListFilters struct {
-	Limit         int                     // Maximum number of results to return
-	Offset        int                     // Number of results to skip
-	Status        models.ChangePlanStatus // Filter by status (empty for all)
-	ProjectID     uuid.UUID               // Filter by project ID (Nil for all)
-	DatabaseID    uuid.UUID               // Filter by database ID (Nil for all)
-	AuthorID      uuid.UUID               // Filter by author ID (Nil for all)
+	Limit      int                     // Maximum number of results to return
+	Offset     int                     // Number of results to skip
+	Status     models.ChangePlanStatus // Filter by status (empty for all)
+	ProjectID  uuid.UUID               // Filter by project ID (Nil for all)
+	DatabaseID uuid.UUID               // Filter by database ID (Nil for all)
+	AuthorID   uuid.UUID               // Filter by author ID (Nil for all)
 }
 
 // ChangePlanRepository defines the interface for change plan data operations

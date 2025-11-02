@@ -614,7 +614,12 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 
 		// Re-assess risk level when SQL content changes
 		if h.riskAssessmentSvc != nil {
-			riskLevel, err := h.riskAssessmentSvc.AssessRisk(ctx, *req.SQLContent, changePlan.ChangeType, changePlan.TargetDatabaseID)
+			riskLevel, err := h.riskAssessmentSvc.AssessRisk(
+				ctx,
+				*req.SQLContent,
+				changePlan.ChangeType,
+				changePlan.TargetDatabaseID,
+			)
 			if err != nil {
 				h.logger.Warn("Failed to reassess risk level after SQL content change", zap.Error(err))
 				// Continue with existing risk level
@@ -784,7 +789,11 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 }
 
 // storeReviewFindings converts review results to policy findings and stores them
-func (h *ChangePlanHandler) storeReviewFindings(ctx context.Context, changePlanID uuid.UUID, reviewResult *review.ReviewResultWithSummary) error {
+func (h *ChangePlanHandler) storeReviewFindings(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+	reviewResult *review.ReviewResultWithSummary,
+) error {
 	findings := make([]*models.PolicyFinding, 0)
 
 	for _, result := range reviewResult.Results {
@@ -1112,7 +1121,10 @@ func (h *ChangePlanHandler) DeleteChangePlan(c echo.Context) error {
 }
 
 // enrichWithPolicyFindings enriches ChangePlanResponse with policy findings
-func (h *ChangePlanHandler) enrichWithPolicyFindings(response *models.ChangePlanResponse, findings []*models.PolicyFinding) *models.ChangePlanResponse {
+func (h *ChangePlanHandler) enrichWithPolicyFindings(
+	response *models.ChangePlanResponse,
+	findings []*models.PolicyFinding,
+) *models.ChangePlanResponse {
 	if len(findings) == 0 {
 		response.HasErrors = false
 		response.HasWarnings = false

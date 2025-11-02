@@ -89,7 +89,11 @@ func (r *PolicyFindingRepository) CreateBatch(ctx context.Context, findings []*m
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() {
+		if closeErr := stmt.Close(); closeErr != nil {
+			err = closeErr
+		}
+	}()
 
 	now := time.Now()
 	for _, finding := range findings {
@@ -129,7 +133,10 @@ func (r *PolicyFindingRepository) CreateBatch(ctx context.Context, findings []*m
 }
 
 // GetByChangePlanID retrieves all policy findings for a specific change plan
-func (r *PolicyFindingRepository) GetByChangePlanID(ctx context.Context, changePlanID uuid.UUID) ([]*models.PolicyFinding, error) {
+func (r *PolicyFindingRepository) GetByChangePlanID(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+) ([]*models.PolicyFinding, error) {
 	query := `
 		SELECT id, change_plan_id, validator_type, severity, rule_name,
 		       message, line_number, column_number, created_at

@@ -19,7 +19,9 @@ type ChangePlanStatusTransitionMiddleware struct {
 }
 
 // NewChangePlanStatusTransitionMiddleware creates a new status transition validation middleware
-func NewChangePlanStatusTransitionMiddleware(changePlanRepo repository.ChangePlanRepository) *ChangePlanStatusTransitionMiddleware {
+func NewChangePlanStatusTransitionMiddleware(
+	changePlanRepo repository.ChangePlanRepository,
+) *ChangePlanStatusTransitionMiddleware {
 	return &ChangePlanStatusTransitionMiddleware{
 		changePlanRepo: changePlanRepo,
 	}

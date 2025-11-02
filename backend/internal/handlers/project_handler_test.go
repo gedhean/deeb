@@ -138,15 +138,27 @@ func (m *mockDatabaseRepositoryForProject) Count(ctx context.Context) (int, erro
 	return len(m.databases), nil
 }
 
-func (m *mockDatabaseRepositoryForProject) GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (m *mockDatabaseRepositoryForProject) GetByProjectID(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	return m.ListByProject(ctx, projectID, limit, offset)
 }
 
-func (m *mockDatabaseRepositoryForProject) ListByInstanceID(ctx context.Context, instanceID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (m *mockDatabaseRepositoryForProject) ListByInstanceID(
+	ctx context.Context,
+	instanceID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	return nil, nil
 }
 
-func (m *mockDatabaseRepositoryForProject) ListByEnvironmentID(ctx context.Context, environmentID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (m *mockDatabaseRepositoryForProject) ListByEnvironmentID(
+	ctx context.Context,
+	environmentID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	return nil, nil
 }
 
@@ -160,21 +172,63 @@ func (m *mockDatabaseRepositoryForProject) Delete(ctx context.Context, id uuid.U
 
 // Mock ProjectMemberRepository for testing
 type mockProjectMemberRepositoryForProject struct{}
-func (m *mockProjectMemberRepositoryForProject) AddMember(ctx context.Context, member *models.ProjectMember) error { return nil }
-func (m *mockProjectMemberRepositoryForProject) RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error { return nil }
-func (m *mockProjectMemberRepositoryForProject) GetMembers(ctx context.Context, projectID uuid.UUID) ([]*models.ProjectMember, error) { return nil, nil }
-func (m *mockProjectMemberRepositoryForProject) GetMemberRole(ctx context.Context, projectID, userID uuid.UUID) (*models.ProjectMember, error) { return nil, nil }
-func (m *mockProjectMemberRepositoryForProject) UpdateRole(ctx context.Context, projectID, userID uuid.UUID, role models.ProjectRole) error { return nil }
+
+func (m *mockProjectMemberRepositoryForProject) AddMember(ctx context.Context, member *models.ProjectMember) error {
+	return nil
+}
+
+func (m *mockProjectMemberRepositoryForProject) RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error {
+	return nil
+}
+
+func (m *mockProjectMemberRepositoryForProject) GetMembers(
+	ctx context.Context,
+	projectID uuid.UUID,
+) ([]*models.ProjectMember, error) {
+	return nil, nil
+}
+
+func (m *mockProjectMemberRepositoryForProject) GetMemberRole(
+	ctx context.Context,
+	projectID, userID uuid.UUID,
+) (*models.ProjectMember, error) {
+	return nil, nil
+}
+
+func (m *mockProjectMemberRepositoryForProject) UpdateRole(
+	ctx context.Context,
+	projectID, userID uuid.UUID,
+	role models.ProjectRole,
+) error {
+	return nil
+}
 
 // Mock UserRepository for testing
 type mockUserRepositoryForProject struct{}
-func (m *mockUserRepositoryForProject) Create(ctx context.Context, user *models.User) error { return nil }
-func (m *mockUserRepositoryForProject) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) { return nil, nil }
-func (m *mockUserRepositoryForProject) GetByEmail(ctx context.Context, email string) (*models.User, error) { return nil, nil }
-func (m *mockUserRepositoryForProject) Update(ctx context.Context, user *models.User) error { return nil }
+
+func (m *mockUserRepositoryForProject) Create(ctx context.Context, user *models.User) error {
+	return nil
+}
+
+func (m *mockUserRepositoryForProject) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	return nil, nil
+}
+
+func (m *mockUserRepositoryForProject) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	return nil, nil
+}
+
+func (m *mockUserRepositoryForProject) Update(ctx context.Context, user *models.User) error {
+	return nil
+}
 func (m *mockUserRepositoryForProject) Delete(ctx context.Context, id uuid.UUID) error { return nil }
-func (m *mockUserRepositoryForProject) List(ctx context.Context, limit, offset int) ([]*models.User, error) { return nil, nil }
-func (m *mockUserRepositoryForProject) UpdateLastLogin(ctx context.Context, id uuid.UUID) error { return nil }
+func (m *mockUserRepositoryForProject) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
+	return nil, nil
+}
+
+func (m *mockUserRepositoryForProject) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
 
 // Helper to create test projects
 func createTestProject(id string, name string, description string) *models.Project {
@@ -264,7 +318,13 @@ func TestCreateProject(t *testing.T) {
 				projects:  []*models.Project{},
 				createErr: tt.mockErr,
 			}
-			handler := NewProjectHandler(mockRepo, &mockDatabaseRepositoryForProject{databases: []*models.Database{}}, &mockProjectMemberRepositoryForProject{}, &mockUserRepositoryForProject{}, logger)
+			handler := NewProjectHandler(
+				mockRepo,
+				&mockDatabaseRepositoryForProject{databases: []*models.Database{}},
+				&mockProjectMemberRepositoryForProject{},
+				&mockUserRepositoryForProject{},
+				logger,
+			)
 
 			// Create request
 			e := echo.New()
@@ -355,7 +415,13 @@ func TestListProjects(t *testing.T) {
 				projects: tt.mockProjects,
 				listErr:  tt.mockErr,
 			}
-			handler := NewProjectHandler(mockRepo, &mockDatabaseRepositoryForProject{databases: []*models.Database{}}, &mockProjectMemberRepositoryForProject{}, &mockUserRepositoryForProject{}, logger)
+			handler := NewProjectHandler(
+				mockRepo,
+				&mockDatabaseRepositoryForProject{databases: []*models.Database{}},
+				&mockProjectMemberRepositoryForProject{},
+				&mockUserRepositoryForProject{},
+				logger,
+			)
 
 			// Create request
 			e := echo.New()
@@ -449,7 +515,13 @@ func TestGetProject(t *testing.T) {
 				projects: tt.mockProjects,
 				getErr:   tt.mockErr,
 			}
-			handler := NewProjectHandler(mockRepo, &mockDatabaseRepositoryForProject{databases: []*models.Database{}}, &mockProjectMemberRepositoryForProject{}, &mockUserRepositoryForProject{}, logger)
+			handler := NewProjectHandler(
+				mockRepo,
+				&mockDatabaseRepositoryForProject{databases: []*models.Database{}},
+				&mockProjectMemberRepositoryForProject{},
+				&mockUserRepositoryForProject{},
+				logger,
+			)
 
 			// Create request
 			e := echo.New()
@@ -557,7 +629,13 @@ func TestUpdateProject(t *testing.T) {
 				projects:  tt.mockProjects,
 				updateErr: tt.mockErr,
 			}
-			handler := NewProjectHandler(mockRepo, &mockDatabaseRepositoryForProject{databases: []*models.Database{}}, &mockProjectMemberRepositoryForProject{}, &mockUserRepositoryForProject{}, logger)
+			handler := NewProjectHandler(
+				mockRepo,
+				&mockDatabaseRepositoryForProject{databases: []*models.Database{}},
+				&mockProjectMemberRepositoryForProject{},
+				&mockUserRepositoryForProject{},
+				logger,
+			)
 
 			// Create request
 			e := echo.New()
@@ -653,7 +731,13 @@ func TestDeleteProject(t *testing.T) {
 				databases: tt.mockDatabases,
 				listErr:   tt.dbListErr,
 			}
-			handler := NewProjectHandler(mockRepo, mockDBRepo, &mockProjectMemberRepositoryForProject{}, &mockUserRepositoryForProject{}, logger)
+			handler := NewProjectHandler(
+				mockRepo,
+				mockDBRepo,
+				&mockProjectMemberRepositoryForProject{},
+				&mockUserRepositoryForProject{},
+				logger,
+			)
 
 			// Create request
 			e := echo.New()

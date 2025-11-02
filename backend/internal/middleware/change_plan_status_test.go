@@ -53,7 +53,10 @@ func (m *MockChangePlanRepository) List(ctx context.Context, limit, offset int) 
 	return args.Get(0).([]*models.ChangePlan), args.Error(1)
 }
 
-func (m *MockChangePlanRepository) ListWithFilters(ctx context.Context, filters repository.ChangePlanListFilters) ([]*models.ChangePlan, error) {
+func (m *MockChangePlanRepository) ListWithFilters(
+	ctx context.Context,
+	filters repository.ChangePlanListFilters,
+) ([]*models.ChangePlan, error) {
 	args := m.Called(ctx, filters)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -66,12 +69,19 @@ func (m *MockChangePlanRepository) Count(ctx context.Context) (int64, error) {
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockChangePlanRepository) CountWithFilters(ctx context.Context, filters repository.ChangePlanListFilters) (int64, error) {
+func (m *MockChangePlanRepository) CountWithFilters(
+	ctx context.Context,
+	filters repository.ChangePlanListFilters,
+) (int64, error) {
 	args := m.Called(ctx, filters)
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockChangePlanRepository) GetByStatus(ctx context.Context, status models.ChangePlanStatus, limit, offset int) ([]*models.ChangePlan, error) {
+func (m *MockChangePlanRepository) GetByStatus(
+	ctx context.Context,
+	status models.ChangePlanStatus,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	args := m.Called(ctx, status, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -79,7 +89,11 @@ func (m *MockChangePlanRepository) GetByStatus(ctx context.Context, status model
 	return args.Get(0).([]*models.ChangePlan), args.Error(1)
 }
 
-func (m *MockChangePlanRepository) GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) {
+func (m *MockChangePlanRepository) GetByProjectID(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	args := m.Called(ctx, projectID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -87,7 +101,11 @@ func (m *MockChangePlanRepository) GetByProjectID(ctx context.Context, projectID
 	return args.Get(0).([]*models.ChangePlan), args.Error(1)
 }
 
-func (m *MockChangePlanRepository) GetByDatabaseID(ctx context.Context, databaseID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) {
+func (m *MockChangePlanRepository) GetByDatabaseID(
+	ctx context.Context,
+	databaseID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	args := m.Called(ctx, databaseID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -95,7 +113,11 @@ func (m *MockChangePlanRepository) GetByDatabaseID(ctx context.Context, database
 	return args.Get(0).([]*models.ChangePlan), args.Error(1)
 }
 
-func (m *MockChangePlanRepository) GetByAuthorID(ctx context.Context, authorID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) {
+func (m *MockChangePlanRepository) GetByAuthorID(
+	ctx context.Context,
+	authorID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	args := m.Called(ctx, authorID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)

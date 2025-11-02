@@ -26,7 +26,7 @@ func (m *mockValidator) Validate(ctx context.Context, sqlContent string, dbType 
 func TestBaseValidator(t *testing.T) {
 	t.Run("GetName returns validator name", func(t *testing.T) {
 		validator := &BaseValidator{
-			Name:           "test-validator",
+			Name:            "test-validator",
 			DefaultSeverity: SeverityError,
 		}
 
@@ -35,7 +35,7 @@ func TestBaseValidator(t *testing.T) {
 
 	t.Run("GetSeverity returns default severity", func(t *testing.T) {
 		validator := &BaseValidator{
-			Name:           "test-validator",
+			Name:            "test-validator",
 			DefaultSeverity: SeverityWarning,
 		}
 
@@ -122,7 +122,7 @@ func TestValidatorRegistry(t *testing.T) {
 		registry := NewValidatorRegistry()
 		validator := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "test-validator",
+				Name:            "test-validator",
 				DefaultSeverity: SeverityError,
 			},
 		}
@@ -147,7 +147,7 @@ func TestValidatorRegistry(t *testing.T) {
 		registry := NewValidatorRegistry()
 		validator := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "",
+				Name:            "",
 				DefaultSeverity: SeverityError,
 			},
 		}
@@ -161,13 +161,13 @@ func TestValidatorRegistry(t *testing.T) {
 		registry := NewValidatorRegistry()
 		validator1 := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "test-validator",
+				Name:            "test-validator",
 				DefaultSeverity: SeverityError,
 			},
 		}
 		validator2 := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "test-validator",
+				Name:            "test-validator",
 				DefaultSeverity: SeverityWarning,
 			},
 		}
@@ -184,7 +184,7 @@ func TestValidatorRegistry(t *testing.T) {
 		registry := NewValidatorRegistry()
 		validator := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "test-validator",
+				Name:            "test-validator",
 				DefaultSeverity: SeverityError,
 			},
 		}
@@ -208,13 +208,13 @@ func TestValidatorRegistry(t *testing.T) {
 		registry := NewValidatorRegistry()
 		validator1 := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "validator1",
+				Name:            "validator1",
 				DefaultSeverity: SeverityError,
 			},
 		}
 		validator2 := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "validator2",
+				Name:            "validator2",
 				DefaultSeverity: SeverityWarning,
 			},
 		}
@@ -230,7 +230,7 @@ func TestValidatorRegistry(t *testing.T) {
 		registry := NewValidatorRegistry()
 		validator := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "test-validator",
+				Name:            "test-validator",
 				DefaultSeverity: SeverityError,
 			},
 		}
@@ -263,7 +263,7 @@ func TestValidatorRegistry(t *testing.T) {
 				defer func() { done <- true }()
 				validator := &mockValidator{
 					BaseValidator: BaseValidator{
-						Name:           fmt.Sprintf("validator-%d", idx),
+						Name:            fmt.Sprintf("validator-%d", idx),
 						DefaultSeverity: SeverityError,
 					},
 				}
@@ -294,7 +294,7 @@ func TestEngine(t *testing.T) {
 		engine := NewEngine()
 		validator := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "test-validator",
+				Name:            "test-validator",
 				DefaultSeverity: SeverityError,
 			},
 		}
@@ -327,7 +327,7 @@ func TestEngine(t *testing.T) {
 
 		validator1 := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "validator1",
+				Name:            "validator1",
 				DefaultSeverity: SeverityError,
 			},
 			validateFunc: func(ctx context.Context, sqlContent string, dbType models.DatabaseType) Result {
@@ -339,7 +339,7 @@ func TestEngine(t *testing.T) {
 
 		validator2 := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "validator2",
+				Name:            "validator2",
 				DefaultSeverity: SeverityWarning,
 			},
 			validateFunc: func(ctx context.Context, sqlContent string, dbType models.DatabaseType) Result {
@@ -368,7 +368,7 @@ func TestEngine(t *testing.T) {
 
 		validator := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "test-validator",
+				Name:            "test-validator",
 				DefaultSeverity: SeverityError,
 			},
 			validateFunc: func(ctx context.Context, sqlContent string, dbType models.DatabaseType) Result {
@@ -397,7 +397,7 @@ func TestEngine(t *testing.T) {
 
 		validator := &mockValidator{
 			BaseValidator: BaseValidator{
-				Name:           "test-validator",
+				Name:            "test-validator",
 				DefaultSeverity: SeverityError,
 			},
 			validateFunc: func(ctx context.Context, sqlContent string, dbType models.DatabaseType) Result {
@@ -459,4 +459,3 @@ func TestAggregateResults(t *testing.T) {
 		assert.Equal(t, 1, aggregated.Warnings)
 	})
 }
-

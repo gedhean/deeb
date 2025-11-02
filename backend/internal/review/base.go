@@ -276,4 +276,3 @@ func aggregateResults(results []Result) ReviewResult {
 		Infos:           infos,
 	}
 }
-

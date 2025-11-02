@@ -164,7 +164,12 @@ func createTestUser(t *testing.T, db *sqlx.DB, email string, orgRole models.Orga
 	// Update organization role if needed
 	if orgRole != models.OrganizationRoleDeveloper {
 		ctx := context.Background()
-		_, err = db.ExecContext(ctx, "UPDATE users SET organization_role = $1 WHERE id = $2", string(orgRole), registerResp.User.ID)
+		_, err = db.ExecContext(
+			ctx,
+			"UPDATE users SET organization_role = $1 WHERE id = $2",
+			string(orgRole),
+			registerResp.User.ID,
+		)
 		require.NoError(t, err)
 	}
 
@@ -374,7 +379,14 @@ func TestIntegration_Projects_CRUD(t *testing.T) {
 		require.NoError(t, err)
 
 		// Then get it
-		rec = makeAuthenticatedRequest(t, e, http.MethodGet, fmt.Sprintf("/api/v1/projects/%s", createdProject.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodGet,
+			fmt.Sprintf("/api/v1/projects/%s", createdProject.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		var project models.ProjectResponse
@@ -403,7 +415,14 @@ func TestIntegration_Projects_CRUD(t *testing.T) {
 			Description: stringPtr("Updated Description"),
 		}
 		updateBody, _ := json.Marshal(updateReq)
-		rec = makeAuthenticatedRequest(t, e, http.MethodPut, fmt.Sprintf("/api/v1/projects/%s", createdProject.ID.String()), bytes.NewReader(updateBody), adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPut,
+			fmt.Sprintf("/api/v1/projects/%s", createdProject.ID.String()),
+			bytes.NewReader(updateBody),
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		var updatedProject models.ProjectResponse
@@ -427,11 +446,25 @@ func TestIntegration_Projects_CRUD(t *testing.T) {
 		require.NoError(t, err)
 
 		// Then delete it
-		rec = makeAuthenticatedRequest(t, e, http.MethodDelete, fmt.Sprintf("/api/v1/projects/%s", createdProject.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodDelete,
+			fmt.Sprintf("/api/v1/projects/%s", createdProject.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify it's deleted
-		rec = makeAuthenticatedRequest(t, e, http.MethodGet, fmt.Sprintf("/api/v1/projects/%s", createdProject.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodGet,
+			fmt.Sprintf("/api/v1/projects/%s", createdProject.ID.String()),
+			nil,
+			adminToken,
+		)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 	})
 }
@@ -508,7 +541,14 @@ func TestIntegration_Environments_CRUD(t *testing.T) {
 		require.NoError(t, err)
 
 		// Then get it
-		rec = makeAuthenticatedRequest(t, e, http.MethodGet, fmt.Sprintf("/api/v1/environments/%s", createdEnv.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodGet,
+			fmt.Sprintf("/api/v1/environments/%s", createdEnv.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		var env models.EnvironmentResponse
@@ -536,7 +576,14 @@ func TestIntegration_Environments_CRUD(t *testing.T) {
 			Description: stringPtr("Updated Description"),
 		}
 		updateBody, _ := json.Marshal(updateReq)
-		rec = makeAuthenticatedRequest(t, e, http.MethodPut, fmt.Sprintf("/api/v1/environments/%s", createdEnv.ID.String()), bytes.NewReader(updateBody), adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPut,
+			fmt.Sprintf("/api/v1/environments/%s", createdEnv.ID.String()),
+			bytes.NewReader(updateBody),
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		var updatedEnv models.EnvironmentResponse
@@ -559,11 +606,25 @@ func TestIntegration_Environments_CRUD(t *testing.T) {
 		require.NoError(t, err)
 
 		// Then delete it
-		rec = makeAuthenticatedRequest(t, e, http.MethodDelete, fmt.Sprintf("/api/v1/environments/%s", createdEnv.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodDelete,
+			fmt.Sprintf("/api/v1/environments/%s", createdEnv.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify it's deleted
-		rec = makeAuthenticatedRequest(t, e, http.MethodGet, fmt.Sprintf("/api/v1/environments/%s", createdEnv.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodGet,
+			fmt.Sprintf("/api/v1/environments/%s", createdEnv.ID.String()),
+			nil,
+			adminToken,
+		)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 	})
 }
@@ -756,7 +817,14 @@ func TestIntegration_Databases_CRUD_WithConstraints(t *testing.T) {
 	})
 
 	t.Run("List Databases by Project", func(t *testing.T) {
-		rec := makeAuthenticatedRequest(t, e, http.MethodGet, fmt.Sprintf("/api/v1/projects/%s/databases", project.ID.String()), nil, adminToken)
+		rec := makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodGet,
+			fmt.Sprintf("/api/v1/projects/%s/databases", project.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		var response map[string]interface{}
@@ -782,7 +850,14 @@ func TestIntegration_Databases_CRUD_WithConstraints(t *testing.T) {
 		require.NoError(t, err)
 
 		// Then get it
-		rec = makeAuthenticatedRequest(t, e, http.MethodGet, fmt.Sprintf("/api/v1/databases/%s", createdDB.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodGet,
+			fmt.Sprintf("/api/v1/databases/%s", createdDB.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		var database models.DatabaseResponse
@@ -814,7 +889,14 @@ func TestIntegration_Databases_CRUD_WithConstraints(t *testing.T) {
 			Description:  stringPtr("Updated Description"),
 		}
 		updateBody, _ := json.Marshal(updateReq)
-		rec = makeAuthenticatedRequest(t, e, http.MethodPut, fmt.Sprintf("/api/v1/databases/%s", createdDB.ID.String()), bytes.NewReader(updateBody), adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPut,
+			fmt.Sprintf("/api/v1/databases/%s", createdDB.ID.String()),
+			bytes.NewReader(updateBody),
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		var updatedDB models.DatabaseResponse
@@ -840,11 +922,25 @@ func TestIntegration_Databases_CRUD_WithConstraints(t *testing.T) {
 		require.NoError(t, err)
 
 		// Then delete it
-		rec = makeAuthenticatedRequest(t, e, http.MethodDelete, fmt.Sprintf("/api/v1/databases/%s", createdDB.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodDelete,
+			fmt.Sprintf("/api/v1/databases/%s", createdDB.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify it's deleted
-		rec = makeAuthenticatedRequest(t, e, http.MethodGet, fmt.Sprintf("/api/v1/databases/%s", createdDB.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodGet,
+			fmt.Sprintf("/api/v1/databases/%s", createdDB.ID.String()),
+			nil,
+			adminToken,
+		)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 	})
 }

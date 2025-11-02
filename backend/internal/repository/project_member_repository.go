@@ -24,4 +24,3 @@ type ProjectMemberRepository interface {
 	// UpdateRole updates the role of a member in a project
 	UpdateRole(ctx context.Context, projectID, userID uuid.UUID, role models.ProjectRole) error
 }
-

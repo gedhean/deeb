@@ -15,12 +15,12 @@ import (
 
 // DatabaseHandler handles HTTP requests for databases
 type DatabaseHandler struct {
-	databaseRepo      repository.DatabaseRepository
-	projectRepo       repository.ProjectRepository
-	environmentRepo   repository.EnvironmentRepository
+	databaseRepo         repository.DatabaseRepository
+	projectRepo          repository.ProjectRepository
+	environmentRepo      repository.EnvironmentRepository
 	databaseInstanceRepo repository.DatabaseInstanceRepository
-	changePlanRepo    repository.ChangePlanRepository
-	logger            *zap.Logger
+	changePlanRepo       repository.ChangePlanRepository
+	logger               *zap.Logger
 }
 
 // NewDatabaseHandler creates a new database handler
@@ -33,7 +33,7 @@ func NewDatabaseHandler(
 	logger *zap.Logger,
 ) *DatabaseHandler {
 	return &DatabaseHandler{
-		databaseRepo:        databaseRepo,
+		databaseRepo:         databaseRepo,
 		projectRepo:          projectRepo,
 		environmentRepo:      environmentRepo,
 		databaseInstanceRepo: databaseInstanceRepo,

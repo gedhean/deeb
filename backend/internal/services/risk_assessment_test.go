@@ -39,21 +39,37 @@ func (m *MockDatabaseRepository) Count(ctx context.Context) (int, error) {
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockDatabaseRepository) GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (m *MockDatabaseRepository) GetByProjectID(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	args := m.Called(ctx, projectID, limit, offset)
 	return args.Get(0).([]*models.Database), args.Error(1)
 }
 
-func (m *MockDatabaseRepository) ListByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (m *MockDatabaseRepository) ListByProject(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	return m.GetByProjectID(ctx, projectID, limit, offset)
 }
 
-func (m *MockDatabaseRepository) ListByInstanceID(ctx context.Context, instanceID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (m *MockDatabaseRepository) ListByInstanceID(
+	ctx context.Context,
+	instanceID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	args := m.Called(ctx, instanceID, limit, offset)
 	return args.Get(0).([]*models.Database), args.Error(1)
 }
 
-func (m *MockDatabaseRepository) ListByEnvironmentID(ctx context.Context, environmentID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (m *MockDatabaseRepository) ListByEnvironmentID(
+	ctx context.Context,
+	environmentID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	args := m.Called(ctx, environmentID, limit, offset)
 	return args.Get(0).([]*models.Database), args.Error(1)
 }
@@ -149,13 +165,13 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name            string
-		sqlContent      string
-		changeType      models.ChangeType
-		envName         string
-		dbType          models.DatabaseType
-		expectedRisk    models.RiskLevel
-		setupMocks      func(*MockDatabaseRepository, *MockEnvironmentRepository, *MockDatabaseInstanceRepository)
+		name         string
+		sqlContent   string
+		changeType   models.ChangeType
+		envName      string
+		dbType       models.DatabaseType
+		expectedRisk models.RiskLevel
+		setupMocks   func(*MockDatabaseRepository, *MockEnvironmentRepository, *MockDatabaseInstanceRepository)
 	}{
 		{
 			name:         "Low risk - SELECT in Dev environment",
@@ -433,61 +449,61 @@ func TestRiskAssessmentService_analyzeSQLContent(t *testing.T) {
 			name:       "SELECT query - no risk",
 			sqlContent: "SELECT * FROM users",
 			changeType: models.ChangeTypeDML,
-			expected:  0,
+			expected:   0,
 		},
 		{
 			name:       "DROP TABLE - high risk",
 			sqlContent: "DROP TABLE users",
 			changeType: models.ChangeTypeDDL,
-			expected:  7, // 2 (DDL) + 5 (DROP TABLE)
+			expected:   7, // 2 (DDL) + 5 (DROP TABLE)
 		},
 		{
 			name:       "TRUNCATE TABLE - high risk",
 			sqlContent: "TRUNCATE TABLE orders",
 			changeType: models.ChangeTypeDDL,
-			expected:  7, // 2 (DDL) + 5 (TRUNCATE)
+			expected:   7, // 2 (DDL) + 5 (TRUNCATE)
 		},
 		{
 			name:       "DELETE without WHERE - high risk",
 			sqlContent: "DELETE FROM users",
 			changeType: models.ChangeTypeDML,
-			expected:  5, // DELETE without WHERE
+			expected:   5, // DELETE without WHERE
 		},
 		{
 			name:       "DELETE with WHERE - moderate risk",
 			sqlContent: "DELETE FROM users WHERE id = 1",
 			changeType: models.ChangeTypeDML,
-			expected:  3, // DELETE with WHERE
+			expected:   3, // DELETE with WHERE
 		},
 		{
 			name:       "UPDATE without WHERE - moderate risk",
 			sqlContent: "UPDATE users SET status = 'active'",
 			changeType: models.ChangeTypeDML,
-			expected:  3, // UPDATE without WHERE
+			expected:   3, // UPDATE without WHERE
 		},
 		{
 			name:       "UPDATE with WHERE - low risk",
 			sqlContent: "UPDATE users SET status = 'active' WHERE id = 1",
 			changeType: models.ChangeTypeDML,
-			expected:  1, // UPDATE with WHERE
+			expected:   1, // UPDATE with WHERE
 		},
 		{
 			name:       "ALTER TABLE - moderate risk",
 			sqlContent: "ALTER TABLE users ADD COLUMN email VARCHAR(255)",
 			changeType: models.ChangeTypeDDL,
-			expected:  3, // 2 (DDL) + 1 (ALTER TABLE)
+			expected:   3, // 2 (DDL) + 1 (ALTER TABLE)
 		},
 		{
 			name:       "INSERT - low risk",
 			sqlContent: "INSERT INTO users (name) VALUES ('John')",
 			changeType: models.ChangeTypeDML,
-			expected:  1, // INSERT
+			expected:   1, // INSERT
 		},
 		{
 			name:       "CREATE INDEX - moderate risk",
 			sqlContent: "CREATE INDEX idx_users_email ON users(email)",
 			changeType: models.ChangeTypeDDL,
-			expected:  3, // 2 (DDL) + 1 (CREATE INDEX)
+			expected:   3, // 2 (DDL) + 1 (CREATE INDEX)
 		},
 	}
 
@@ -504,9 +520,9 @@ func TestRiskAssessmentService_analyzeEnvironment(t *testing.T) {
 	service := &RiskAssessmentService{logger: logger}
 
 	tests := []struct {
-		name       string
-		envName    string
-		expected   int
+		name     string
+		envName  string
+		expected int
 	}{
 		{
 			name:     "Production - high risk",
@@ -1022,17 +1038,17 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 			envName      string
 			expectedRisk models.RiskLevel
 		}{
-			{"Production", "Production", models.RiskLevelHigh},   // ALTER TABLE (3) + Production (3) = 6 = High
-			{"Prod", "Prod", models.RiskLevelHigh},               // ALTER TABLE (3) + Prod (3) = 6 = High
-			{"PRODUCTION", "PRODUCTION", models.RiskLevelHigh},   // ALTER TABLE (3) + PRODUCTION (3) = 6 = High
-			{"prod", "prod", models.RiskLevelHigh},               // ALTER TABLE (3) + prod (3) = 6 = High
-			{"Staging", "Staging", models.RiskLevelMedium},       // ALTER TABLE (3) + Staging (1) = 4 = Medium
-			{"Stage", "Stage", models.RiskLevelMedium},           // ALTER TABLE (3) + Stage (1) = 4 = Medium
+			{"Production", "Production", models.RiskLevelHigh},     // ALTER TABLE (3) + Production (3) = 6 = High
+			{"Prod", "Prod", models.RiskLevelHigh},                 // ALTER TABLE (3) + Prod (3) = 6 = High
+			{"PRODUCTION", "PRODUCTION", models.RiskLevelHigh},     // ALTER TABLE (3) + PRODUCTION (3) = 6 = High
+			{"prod", "prod", models.RiskLevelHigh},                 // ALTER TABLE (3) + prod (3) = 6 = High
+			{"Staging", "Staging", models.RiskLevelMedium},         // ALTER TABLE (3) + Staging (1) = 4 = Medium
+			{"Stage", "Stage", models.RiskLevelMedium},             // ALTER TABLE (3) + Stage (1) = 4 = Medium
 			{"Development", "Development", models.RiskLevelMedium}, // ALTER TABLE (3) + Dev (0) = 3 = Medium
-			{"Dev", "Dev", models.RiskLevelMedium},               // ALTER TABLE (3) + Dev (0) = 3 = Medium
-			{"Test", "Test", models.RiskLevelMedium},             // ALTER TABLE (3) + Test (0) = 3 = Medium
-			{"Local", "Local", models.RiskLevelMedium},           // ALTER TABLE (3) + Local (0) = 3 = Medium
-			{"QA", "QA", models.RiskLevelMedium},                 // ALTER TABLE (3) + Unknown (1) = 4 = Medium
+			{"Dev", "Dev", models.RiskLevelMedium},                 // ALTER TABLE (3) + Dev (0) = 3 = Medium
+			{"Test", "Test", models.RiskLevelMedium},               // ALTER TABLE (3) + Test (0) = 3 = Medium
+			{"Local", "Local", models.RiskLevelMedium},             // ALTER TABLE (3) + Local (0) = 3 = Medium
+			{"QA", "QA", models.RiskLevelMedium},                   // ALTER TABLE (3) + Unknown (1) = 4 = Medium
 		}
 
 		for _, tc := range testCases {
@@ -1069,7 +1085,12 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 				)
 
 				// Use ALTER TABLE which gives score 3
-				riskLevel, err := service.AssessRisk(ctx, "ALTER TABLE users ADD COLUMN email VARCHAR(255)", models.ChangeTypeDDL, dbID)
+				riskLevel, err := service.AssessRisk(
+					ctx,
+					"ALTER TABLE users ADD COLUMN email VARCHAR(255)",
+					models.ChangeTypeDDL,
+					dbID,
+				)
 
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedRisk, riskLevel)
@@ -1253,4 +1274,3 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		mockInstanceRepo.AssertExpectations(t)
 	})
 }
-

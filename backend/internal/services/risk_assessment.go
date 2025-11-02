@@ -12,10 +12,10 @@ import (
 
 // RiskAssessmentService provides risk assessment functionality for change plans
 type RiskAssessmentService struct {
-	databaseRepo      repository.DatabaseRepository
-	environmentRepo  repository.EnvironmentRepository
+	databaseRepo         repository.DatabaseRepository
+	environmentRepo      repository.EnvironmentRepository
 	databaseInstanceRepo repository.DatabaseInstanceRepository
-	logger            *zap.Logger
+	logger               *zap.Logger
 }
 
 // NewRiskAssessmentService creates a new risk assessment service
@@ -26,10 +26,10 @@ func NewRiskAssessmentService(
 	logger *zap.Logger,
 ) *RiskAssessmentService {
 	return &RiskAssessmentService{
-		databaseRepo:        databaseRepo,
-		environmentRepo:     environmentRepo,
+		databaseRepo:         databaseRepo,
+		environmentRepo:      environmentRepo,
 		databaseInstanceRepo: databaseInstanceRepo,
-		logger:              logger,
+		logger:               logger,
 	}
 }
 
@@ -37,7 +37,12 @@ func NewRiskAssessmentService(
 // - SQL content (destructive operations)
 // - Environment (Production = higher risk)
 // - Database type (for future extensions)
-func (s *RiskAssessmentService) AssessRisk(ctx context.Context, sqlContent string, changeType models.ChangeType, targetDatabaseID uuid.UUID) (models.RiskLevel, error) {
+func (s *RiskAssessmentService) AssessRisk(
+	ctx context.Context,
+	sqlContent string,
+	changeType models.ChangeType,
+	targetDatabaseID uuid.UUID,
+) (models.RiskLevel, error) {
 	riskScore := 0
 
 	// Get database to access environment and database instance
@@ -198,4 +203,3 @@ func (s *RiskAssessmentService) calculateRiskLevel(riskScore int) models.RiskLev
 	}
 	return models.RiskLevelHigh
 }
-

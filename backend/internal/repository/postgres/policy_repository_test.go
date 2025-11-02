@@ -298,7 +298,9 @@ func TestPolicyRepository_List(t *testing.T) {
 	})
 
 	t.Run("empty list", func(t *testing.T) {
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"})
+		rows := sqlmock.NewRows(
+			[]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"},
+		)
 
 		mock.ExpectQuery("SELECT (.+) FROM policies ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).
@@ -381,7 +383,9 @@ func TestPolicyRepository_GetByType(t *testing.T) {
 	})
 
 	t.Run("empty list by type", func(t *testing.T) {
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"})
+		rows := sqlmock.NewRows(
+			[]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"},
+		)
 
 		mock.ExpectQuery("SELECT (.+) FROM policies WHERE type =").
 			WithArgs(models.PolicyTypeSQLReview, 10, 0).

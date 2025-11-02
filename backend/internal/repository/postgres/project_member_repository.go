@@ -154,4 +154,3 @@ func (r *ProjectMemberRepository) UpdateRole(ctx context.Context, projectID, use
 
 	return nil
 }
-

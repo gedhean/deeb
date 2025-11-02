@@ -333,7 +333,10 @@ func (r *ChangePlanRepository) GetByAuthorID(
 }
 
 // ListWithFilters retrieves change plans with combined filters
-func (r *ChangePlanRepository) ListWithFilters(ctx context.Context, filters repository.ChangePlanListFilters) ([]*models.ChangePlan, error) {
+func (r *ChangePlanRepository) ListWithFilters(
+	ctx context.Context,
+	filters repository.ChangePlanListFilters,
+) ([]*models.ChangePlan, error) {
 	// Build WHERE clause dynamically
 	whereClauses := []string{}
 	args := []interface{}{}
@@ -360,7 +363,6 @@ func (r *ChangePlanRepository) ListWithFilters(ctx context.Context, filters repo
 	if filters.AuthorID != uuid.Nil {
 		whereClauses = append(whereClauses, "author_id = $"+fmt.Sprintf("%d", argIndex))
 		args = append(args, filters.AuthorID)
-		argIndex++
 	}
 
 	// Build query
@@ -432,7 +434,6 @@ func (r *ChangePlanRepository) CountWithFilters(ctx context.Context, filters rep
 	if filters.AuthorID != uuid.Nil {
 		whereClauses = append(whereClauses, "author_id = $"+fmt.Sprintf("%d", argIndex))
 		args = append(args, filters.AuthorID)
-		argIndex++
 	}
 
 	// Build query

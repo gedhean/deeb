@@ -264,7 +264,7 @@ func TestGetUser(t *testing.T) {
 			c := e.NewContext(req, rec)
 			c.SetParamNames("id")
 			c.SetParamValues(tt.userID)
-			
+
 			// Set authenticated user context
 			userID := uuid.New()
 			c.Set("user", &auth.Claims{

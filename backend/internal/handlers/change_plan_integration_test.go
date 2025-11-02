@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -23,12 +22,12 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/handlers"
-	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/migrate"
+	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/review"
 	"github.com/nsxbet/deeb/internal/review/validators"
-	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,7 +176,12 @@ func createTestEnvironment(t *testing.T, envRepo *postgres.EnvironmentRepository
 }
 
 // createTestDatabaseInstance creates a test database instance
-func createTestDatabaseInstance(t *testing.T, dbInstanceRepo *postgres.DatabaseInstanceRepository, name string, dbType models.DatabaseType) *models.DatabaseInstance {
+func createTestDatabaseInstance(
+	t *testing.T,
+	dbInstanceRepo *postgres.DatabaseInstanceRepository,
+	name string,
+	dbType models.DatabaseType,
+) *models.DatabaseInstance {
 	t.Helper()
 
 	ctx := context.Background()
@@ -198,7 +202,12 @@ func createTestDatabaseInstance(t *testing.T, dbInstanceRepo *postgres.DatabaseI
 }
 
 // createTestDatabase creates a test database
-func createTestDatabase(t *testing.T, dbRepo *postgres.DatabaseRepository, projectID, envID, dbInstanceID uuid.UUID, name string) *models.Database {
+func createTestDatabase(
+	t *testing.T,
+	dbRepo *postgres.DatabaseRepository,
+	projectID, envID, dbInstanceID uuid.UUID,
+	name string,
+) *models.Database {
 	t.Helper()
 
 	ctx := context.Background()
@@ -217,7 +226,12 @@ func createTestDatabase(t *testing.T, dbRepo *postgres.DatabaseRepository, proje
 }
 
 // createTestChangePlan creates a test change plan
-func createTestChangePlan(t *testing.T, changePlanRepo *postgres.ChangePlanRepository, projectID, databaseID, authorID uuid.UUID, sqlContent string) *models.ChangePlan {
+func createTestChangePlan(
+	t *testing.T,
+	changePlanRepo *postgres.ChangePlanRepository,
+	projectID, databaseID, authorID uuid.UUID,
+	sqlContent string,
+) *models.ChangePlan {
 	t.Helper()
 
 	ctx := context.Background()
@@ -258,7 +272,13 @@ func setUserContext(c echo.Context, userID uuid.UUID, email string, orgRole mode
 }
 
 // createAuthToken creates a JWT token for testing
-func createAuthToken(t *testing.T, tokenManager *auth.TokenManager, userID uuid.UUID, email string, orgRole models.OrganizationRole) string {
+func createAuthToken(
+	t *testing.T,
+	tokenManager *auth.TokenManager,
+	userID uuid.UUID,
+	email string,
+	orgRole models.OrganizationRole,
+) string {
 	t.Helper()
 
 	token, err := tokenManager.GenerateToken(userID, email, string(orgRole))
@@ -392,7 +412,11 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_Success(t *testing.T) {
 	body, _ := json.Marshal(updateReq)
 
 	// Create HTTP request
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), bytes.NewReader(body))
+	req := httptest.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()),
+		bytes.NewReader(body),
+	)
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	token := createAuthToken(t, tokenManager, user.ID, user.Email, user.OrganizationRole)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -500,7 +524,11 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_ErrorsBlockTransition(t *test
 	body, _ := json.Marshal(updateReq)
 
 	// Create HTTP request
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), bytes.NewReader(body))
+	req := httptest.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()),
+		bytes.NewReader(body),
+	)
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	token := createAuthToken(t, tokenManager, user.ID, user.Email, user.OrganizationRole)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -616,7 +644,11 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_OnlyWarnings(t *testing.T) {
 	body, _ := json.Marshal(updateReq)
 
 	// Create HTTP request
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), bytes.NewReader(body))
+	req := httptest.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()),
+		bytes.NewReader(body),
+	)
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	token := createAuthToken(t, tokenManager, user.ID, user.Email, user.OrganizationRole)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -963,7 +995,11 @@ func TestIntegration_ChangePlan_ListWithFilters(t *testing.T) {
 	assert.Equal(t, 3, len(changePlans2), "should return 3 change plans for project")
 
 	// Test 3: Combined filters (status + project_id)
-	req3 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans?status=Draft&project_id=%s", project.ID.String()), nil)
+	req3 := httptest.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf("/api/v1/change-plans?status=Draft&project_id=%s", project.ID.String()),
+		nil,
+	)
 	req3.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	req3.Header.Set("Authorization", "Bearer "+token)
 
@@ -1023,7 +1059,11 @@ func TestIntegration_ChangePlan_ListWithFilters(t *testing.T) {
 	assert.Equal(t, 3, len(changePlans5), "should return 3 change plans by author")
 
 	// Test 6: Combined filters (status + database_id + author_id)
-	req6 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans?status=Open&database_id=%s&author_id=%s", database.ID.String(), user.ID.String()), nil)
+	req6 := httptest.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf("/api/v1/change-plans?status=Open&database_id=%s&author_id=%s", database.ID.String(), user.ID.String()),
+		nil,
+	)
 	req6.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	req6.Header.Set("Authorization", "Bearer "+token)
 
@@ -1043,7 +1083,11 @@ func TestIntegration_ChangePlan_ListWithFilters(t *testing.T) {
 	assert.Equal(t, 2, len(changePlans6), "should return 2 Open change plans matching all filters")
 
 	// Test 7: Pagination with filters
-	req7 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans?status=Open&limit=1&offset=0", database.ID.String()), nil)
+	req7 := httptest.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf("/api/v1/change-plans?status=Open&limit=1&offset=0", database.ID.String()),
+		nil,
+	)
 	req7.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	req7.Header.Set("Authorization", "Bearer "+token)
 
@@ -1111,7 +1155,14 @@ func TestIntegration_ChangePlan_GetWithPolicyFindings(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, user.ID, "CREATE TABLE users (id UUID PRIMARY KEY, name TEXT);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		user.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY, name TEXT);",
+	)
 
 	// Create policy findings manually
 	_, err = policyFindingRepo.Create(ctx, &models.PolicyFinding{
@@ -1252,7 +1303,14 @@ func TestIntegration_ChangePlan_GetWithoutPolicyFindings(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan (no policy findings)
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, user.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		user.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 
 	// Setup handler
 	handler := setupChangePlanHandler(t, db, tokenManager)
@@ -1323,7 +1381,12 @@ func TestIntegration_ChangePlan_ApprovalWithErrors(t *testing.T) {
 	ctx := context.Background()
 
 	// Create approver user
-	approver := createTestUser(t, userRepo, fmt.Sprintf("approver-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	approver := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project and add approver as member with Approver role
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1344,7 +1407,12 @@ func TestIntegration_ChangePlan_ApprovalWithErrors(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create author user
-	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 	_, err = projectMemberRepo.Create(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
@@ -1353,7 +1421,14 @@ func TestIntegration_ChangePlan_ApprovalWithErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create change plan in Open status
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 	changePlan.Status = models.ChangePlanStatusOpen
 	err = changePlanRepo.Update(ctx, changePlan)
 	require.NoError(t, err)
@@ -1446,7 +1521,12 @@ func TestIntegration_ChangePlan_ApprovalWithOnlyWarnings(t *testing.T) {
 	ctx := context.Background()
 
 	// Create approver user
-	approver := createTestUser(t, userRepo, fmt.Sprintf("approver-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	approver := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project and add approver as member with Approver role
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1467,7 +1547,12 @@ func TestIntegration_ChangePlan_ApprovalWithOnlyWarnings(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create author user
-	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 	_, err = projectMemberRepo.Create(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
@@ -1476,7 +1561,14 @@ func TestIntegration_ChangePlan_ApprovalWithOnlyWarnings(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create change plan in Open status
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 	changePlan.Status = models.ChangePlanStatusOpen
 	err = changePlanRepo.Update(ctx, changePlan)
 	require.NoError(t, err)
@@ -1562,7 +1654,12 @@ func TestIntegration_ChangePlan_ExecutionWithErrors(t *testing.T) {
 	ctx := context.Background()
 
 	// Create executor user
-	executor := createTestUser(t, userRepo, fmt.Sprintf("executor-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	executor := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("executor-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project and add executor as member with Approver role (can execute)
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1583,7 +1680,12 @@ func TestIntegration_ChangePlan_ExecutionWithErrors(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create author user
-	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 	_, err = projectMemberRepo.Create(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
@@ -1592,7 +1694,14 @@ func TestIntegration_ChangePlan_ExecutionWithErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create change plan in Approved status
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 	changePlan.Status = models.ChangePlanStatusApproved
 	err = changePlanRepo.Update(ctx, changePlan)
 	require.NoError(t, err)
@@ -1672,7 +1781,12 @@ func TestIntegration_ChangePlan_ExecutionWithOnlyWarnings(t *testing.T) {
 	ctx := context.Background()
 
 	// Create executor user
-	executor := createTestUser(t, userRepo, fmt.Sprintf("executor-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	executor := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("executor-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project and add executor as member with Approver role (can execute)
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1693,7 +1807,12 @@ func TestIntegration_ChangePlan_ExecutionWithOnlyWarnings(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create author user
-	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 	_, err = projectMemberRepo.Create(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
@@ -1702,7 +1821,14 @@ func TestIntegration_ChangePlan_ExecutionWithOnlyWarnings(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create change plan in Approved status
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 	changePlan.Status = models.ChangePlanStatusApproved
 	err = changePlanRepo.Update(ctx, changePlan)
 	require.NoError(t, err)
@@ -1778,7 +1904,12 @@ func TestIntegration_ChangePlan_Resubmission(t *testing.T) {
 	ctx := context.Background()
 
 	// Create author user
-	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project and add author as member
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1799,7 +1930,14 @@ func TestIntegration_ChangePlan_Resubmission(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan in Open status
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 	changePlan.Status = models.ChangePlanStatusOpen
 	err = changePlanRepo.Update(ctx, changePlan)
 	require.NoError(t, err)
@@ -1914,10 +2052,20 @@ func TestIntegration_ChangePlan_Resubmission_Unauthorized(t *testing.T) {
 	ctx := context.Background()
 
 	// Create author user
-	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create non-author user
-	nonAuthor := createTestUser(t, userRepo, fmt.Sprintf("nonauthor-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	nonAuthor := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("nonauthor-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project and add both users as members
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1945,7 +2093,14 @@ func TestIntegration_ChangePlan_Resubmission_Unauthorized(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan in Open status
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 	changePlan.Status = models.ChangePlanStatusOpen
 	err = changePlanRepo.Update(ctx, changePlan)
 	require.NoError(t, err)
@@ -2008,7 +2163,12 @@ func TestIntegration_ChangePlan_Resubmission_InvalidStatus(t *testing.T) {
 	ctx := context.Background()
 
 	// Create author user
-	author := createTestUser(t, userRepo, fmt.Sprintf("author-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project and add author as member
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -2029,7 +2189,14 @@ func TestIntegration_ChangePlan_Resubmission_InvalidStatus(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan in Draft status (should not be resubmittable)
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 	// Status is already Draft by default
 
 	// Setup handler
@@ -2291,7 +2458,14 @@ func TestIntegration_ChangePlan_GetByID(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 
 	// Setup handler
 	handler := setupChangePlanHandler(t, db, tokenManager)
@@ -2413,9 +2587,30 @@ func TestIntegration_ChangePlan_List(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create multiple change plans
-	changePlan1 := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
-	changePlan2 := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE orders (id UUID PRIMARY KEY);")
-	changePlan3 := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE products (id UUID PRIMARY KEY);")
+	changePlan1 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+	changePlan2 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE orders (id UUID PRIMARY KEY);",
+	)
+	changePlan3 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE products (id UUID PRIMARY KEY);",
+	)
 
 	// Setup handler
 	handler := setupChangePlanHandler(t, db, tokenManager)
@@ -2496,7 +2691,14 @@ func TestIntegration_ChangePlan_Update(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan in Draft status
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 
 	// Setup handler
 	handler := setupChangePlanHandler(t, db, tokenManager)
@@ -2514,7 +2716,11 @@ func TestIntegration_ChangePlan_Update(t *testing.T) {
 
 	body, _ := json.Marshal(updateReq)
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), bytes.NewReader(body))
+	req := httptest.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()),
+		bytes.NewReader(body),
+	)
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
 	rec := httptest.NewRecorder()
@@ -2584,7 +2790,14 @@ func TestIntegration_ChangePlan_Update_Forbidden(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 
 	// Setup handler
 	handler := setupChangePlanHandler(t, db, tokenManager)
@@ -2600,7 +2813,11 @@ func TestIntegration_ChangePlan_Update_Forbidden(t *testing.T) {
 
 	body, _ := json.Marshal(updateReq)
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), bytes.NewReader(body))
+	req := httptest.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()),
+		bytes.NewReader(body),
+	)
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
 	rec := httptest.NewRecorder()
@@ -2660,7 +2877,14 @@ func TestIntegration_ChangePlan_Delete(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan in Draft status (deletable)
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 
 	// Setup handler
 	handler := setupChangePlanHandler(t, db, tokenManager)
@@ -2735,7 +2959,14 @@ func TestIntegration_ChangePlan_Delete_Forbidden(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 
 	// Setup handler
 	handler := setupChangePlanHandler(t, db, tokenManager)
@@ -2805,7 +3036,14 @@ func TestIntegration_ChangePlan_Delete_InvalidStatus(t *testing.T) {
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
 
 	// Create change plan in Open status (not deletable)
-	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
 	changePlan.Status = models.ChangePlanStatusOpen
 	err = changePlanRepo.Update(ctx, changePlan)
 	require.NoError(t, err)

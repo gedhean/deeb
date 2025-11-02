@@ -34,13 +34,25 @@ func (v *PerformanceValidator) Validate(ctx context.Context, sqlContent string, 
 
 	var violations []review.Violation
 
-	// Normalize SQL for pattern matching (case-insensitive)
-	sqlUpper := strings.ToUpper(sqlContent)
+	// Split SQL by semicolons to handle multiple statements
+	statements := strings.Split(sqlContent, ";")
 
-	// Detect performance issues
-	violations = append(violations, v.detectMissingIndexes(sqlUpper, sqlContent)...)
-	violations = append(violations, v.detectMissingPrimaryKeys(sqlUpper, sqlContent)...)
-	violations = append(violations, v.detectMissingForeignKeyIndexes(sqlUpper, sqlContent)...)
+	for _, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+
+		// Normalize SQL for pattern matching (case-insensitive)
+		stmtUpper := strings.ToUpper(stmt)
+
+		// Detect performance issues per statement
+		violations = append(violations, v.detectMissingIndexes(stmtUpper, stmt)...)
+		violations = append(violations, v.detectMissingPrimaryKeys(stmtUpper, stmt)...)
+		// Check foreign keys against the entire SQL content (to catch indexes from previous statements)
+		fkViolations := v.detectMissingForeignKeyIndexes(stmtUpper, stmt, sqlContent)
+		violations = append(violations, fkViolations...)
+	}
 
 	if len(violations) == 0 {
 		return review.NewResult(v.GetName(), true, []review.Violation{})
@@ -55,9 +67,12 @@ func (v *PerformanceValidator) detectMissingIndexes(sqlUpper, sqlContent string)
 
 	// Check for CREATE TABLE statements
 	if matched, _ := regexp.MatchString(`(?i)\bCREATE\s+TABLE\b`, sqlUpper); matched {
-		// Check if table has any indexes defined
-		// Look for INDEX, KEY, PRIMARY KEY, UNIQUE keywords
-		hasIndex := regexp.MustCompile(`(?i)\b(INDEX|KEY|PRIMARY\s+KEY|UNIQUE)\b`).MatchString(sqlContent)
+		// Check if table has any indexes defined (excluding PRIMARY KEY and FOREIGN KEY)
+		// Look for INDEX, KEY (non-primary, non-foreign), UNIQUE keywords
+		// Remove PRIMARY KEY and FOREIGN KEY from content to check for other indexes
+		sqlWithoutPK := regexp.MustCompile(`(?i)\bPRIMARY\s+KEY\b`).ReplaceAllString(sqlContent, "")
+		sqlWithoutFK := regexp.MustCompile(`(?i)\bFOREIGN\s+KEY\b`).ReplaceAllString(sqlWithoutPK, "")
+		hasIndex := regexp.MustCompile(`(?i)\b(INDEX|KEY|UNIQUE)\b`).MatchString(sqlWithoutFK)
 
 		if !hasIndex {
 			violations = append(violations, review.NewViolation(
@@ -93,7 +108,8 @@ func (v *PerformanceValidator) detectMissingPrimaryKeys(sqlUpper, sqlContent str
 }
 
 // detectMissingForeignKeyIndexes detects foreign keys without indexes
-func (v *PerformanceValidator) detectMissingForeignKeyIndexes(sqlUpper, sqlContent string) []review.Violation {
+// fullSQLContent is used to check for indexes across multiple statements
+func (v *PerformanceValidator) detectMissingForeignKeyIndexes(sqlUpper, sqlContent, fullSQLContent string) []review.Violation {
 	var violations []review.Violation
 
 	// Check for ALTER TABLE ADD FOREIGN KEY or CREATE TABLE with FOREIGN KEY
@@ -105,11 +121,18 @@ func (v *PerformanceValidator) detectMissingForeignKeyIndexes(sqlUpper, sqlConte
 
 		if len(matches) > 0 {
 			// Check if there's an INDEX or KEY on the foreign key column
-			// This is a simplified check - in practice, we'd need to parse the full SQL
-			// For now, we check if any INDEX/KEY exists in the statement
-			hasIndex := regexp.MustCompile(`(?i)\b(INDEX|KEY)\b`).MatchString(sqlContent)
+			// Use fullSQLContent to check for indexes across statements
+			// Exclude PRIMARY KEY and FOREIGN KEY from this check - we're looking for indexes on FK columns
+			// Count INDEX/KEY occurrences excluding PRIMARY KEY and FOREIGN KEY
+			// First, remove FOREIGN KEY and PRIMARY KEY patterns to avoid false positives
+			sqlWithoutFK := regexp.MustCompile(`(?i)\bFOREIGN\s+KEY\b`).ReplaceAllString(fullSQLContent, "")
+			indexKeyMatches := regexp.MustCompile(`(?i)\b(INDEX|KEY)\b`).FindAllString(sqlWithoutFK, -1)
+			primaryKeyMatches := regexp.MustCompile(`(?i)\bPRIMARY\s+KEY\b`).FindAllString(fullSQLContent, -1)
+			// If there are more INDEX/KEY occurrences than PRIMARY KEY occurrences,
+			// then there are indexes other than PRIMARY KEY
+			hasIndex := len(indexKeyMatches) > len(primaryKeyMatches)
 
-			// If FOREIGN KEY exists but no INDEX/KEY found, warn
+			// If FOREIGN KEY exists but no INDEX/KEY found (excluding PRIMARY KEY), warn
 			// Note: This is a heuristic - the index might be defined elsewhere
 			// In a production system, we'd need full SQL parsing to accurately detect this
 			if !hasIndex {

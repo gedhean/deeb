@@ -40,8 +40,8 @@ func TestChangePlanRepository_Create(t *testing.T) {
 			Title:            "Test Change Plan",
 			Description:      "Test Description",
 			ChangeType:       models.ChangeTypeDDL,
-			SQLContent:        "CREATE TABLE test (id UUID);",
-			AuthorID:          uuid.New(),
+			SQLContent:       "CREATE TABLE test (id UUID);",
+			AuthorID:         uuid.New(),
 		}
 
 		mock.ExpectExec("INSERT INTO change_plans").
@@ -84,8 +84,8 @@ func TestChangePlanRepository_Create(t *testing.T) {
 			Title:            "Test Change Plan",
 			Description:      "Test Description",
 			ChangeType:       models.ChangeTypeDDL,
-			SQLContent:        "CREATE TABLE test (id UUID);",
-			AuthorID:          uuid.New(),
+			SQLContent:       "CREATE TABLE test (id UUID);",
+			AuthorID:         uuid.New(),
 		}
 
 		mock.ExpectExec("INSERT INTO change_plans").
@@ -120,13 +120,13 @@ func TestChangePlanRepository_Create(t *testing.T) {
 		scheduledFor := time.Now().Add(24 * time.Hour)
 		reviewerID := uuid.New()
 		changePlan := &models.ChangePlan{
-			ProjectID:         uuid.New(),
-			TargetDatabaseID:  uuid.New(),
-			Title:             "Test Change Plan",
-			Description:       "Test Description",
-			ChangeType:        models.ChangeTypeDDL,
+			ProjectID:          uuid.New(),
+			TargetDatabaseID:   uuid.New(),
+			Title:              "Test Change Plan",
+			Description:        "Test Description",
+			ChangeType:         models.ChangeTypeDDL,
 			SQLContent:         "CREATE TABLE test (id UUID);",
-			RollbackSQL:       &rollbackSQL,
+			RollbackSQL:        &rollbackSQL,
 			Status:             models.ChangePlanStatusOpen,
 			RiskLevel:          models.RiskLevelHigh,
 			AuthorID:           uuid.New(),
@@ -167,8 +167,8 @@ func TestChangePlanRepository_Create(t *testing.T) {
 			Title:            "Test Change Plan",
 			Description:      "Test Description",
 			ChangeType:       models.ChangeTypeDDL,
-			SQLContent:        "CREATE TABLE test (id UUID);",
-			AuthorID:          uuid.New(),
+			SQLContent:       "CREATE TABLE test (id UUID);",
+			AuthorID:         uuid.New(),
 		}
 
 		mock.ExpectExec("INSERT INTO change_plans").
@@ -266,10 +266,10 @@ func TestChangePlanRepository_Update(t *testing.T) {
 			Title:            "Updated Title",
 			Description:      "Updated Description",
 			ChangeType:       models.ChangeTypeDDL,
-			SQLContent:        "CREATE TABLE updated (id UUID);",
-			Status:            models.ChangePlanStatusOpen,
-			RiskLevel:         models.RiskLevelHigh,
-			AuthorID:          uuid.New(),
+			SQLContent:       "CREATE TABLE updated (id UUID);",
+			Status:           models.ChangePlanStatusOpen,
+			RiskLevel:        models.RiskLevelHigh,
+			AuthorID:         uuid.New(),
 		}
 
 		mock.ExpectExec("UPDATE change_plans").
@@ -306,8 +306,8 @@ func TestChangePlanRepository_Update(t *testing.T) {
 			Title:            "Test",
 			Description:      "Test",
 			ChangeType:       models.ChangeTypeDDL,
-			SQLContent:        "CREATE TABLE test;",
-			AuthorID:          uuid.New(),
+			SQLContent:       "CREATE TABLE test;",
+			AuthorID:         uuid.New(),
 		}
 
 		mock.ExpectExec("UPDATE change_plans").
@@ -345,8 +345,8 @@ func TestChangePlanRepository_Update(t *testing.T) {
 			Title:            "Test",
 			Description:      "Test",
 			ChangeType:       models.ChangeTypeDDL,
-			SQLContent:        "CREATE TABLE test;",
-			AuthorID:          uuid.New(),
+			SQLContent:       "CREATE TABLE test;",
+			AuthorID:         uuid.New(),
 		}
 
 		mock.ExpectExec("UPDATE change_plans").
@@ -546,12 +546,12 @@ func TestChangePlanRepository_ListWithFilters(t *testing.T) {
 			WillReturnRows(rows)
 
 		filters := repository.ChangePlanListFilters{
-			Status:         models.ChangePlanStatusOpen,
-			ProjectID:      projectID,
-			DatabaseID:     databaseID,
-			AuthorID:       authorID,
-			Limit:          10,
-			Offset:         0,
+			Status:     models.ChangePlanStatusOpen,
+			ProjectID:  projectID,
+			DatabaseID: databaseID,
+			AuthorID:   authorID,
+			Limit:      10,
+			Offset:     0,
 		}
 
 		changePlans, err := repo.ListWithFilters(ctx, filters)
@@ -660,4 +660,3 @@ func TestChangePlanRepository_CountWithFilters(t *testing.T) {
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
-

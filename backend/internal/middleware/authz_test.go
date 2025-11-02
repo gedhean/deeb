@@ -19,7 +19,10 @@ type mockProjectMemberRepository struct {
 	getErr  error
 }
 
-func (m *mockProjectMemberRepository) GetMemberRole(ctx context.Context, projectID, userID uuid.UUID) (*models.ProjectMember, error) {
+func (m *mockProjectMemberRepository) GetMemberRole(
+	ctx context.Context,
+	projectID, userID uuid.UUID,
+) (*models.ProjectMember, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
@@ -56,7 +59,11 @@ func (m *mockProjectMemberRepository) GetMembers(ctx context.Context, projectID 
 	return result, nil
 }
 
-func (m *mockProjectMemberRepository) UpdateRole(ctx context.Context, projectID, userID uuid.UUID, role models.ProjectRole) error {
+func (m *mockProjectMemberRepository) UpdateRole(
+	ctx context.Context,
+	projectID, userID uuid.UUID,
+	role models.ProjectRole,
+) error {
 	key := projectID.String() + "-" + userID.String()
 	if member, ok := m.members[key]; ok {
 		member.Role = role
@@ -334,13 +341,13 @@ func TestRequireProjectPermission(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:       "no repository configured returns internal server error",
-			permission: rbac.PermissionChangesRead,
-			userRole:   rbac.OrganizationDeveloper,
-			projectID:  projectID.String(),
-			paramName:  "project_id",
-			setContext: true,
-			hasRepo:    false,
+			name:           "no repository configured returns internal server error",
+			permission:     rbac.PermissionChangesRead,
+			userRole:       rbac.OrganizationDeveloper,
+			projectID:      projectID.String(),
+			paramName:      "project_id",
+			setContext:     true,
+			hasRepo:        false,
 			expectedStatus: http.StatusInternalServerError,
 		},
 		{
@@ -404,14 +411,14 @@ func TestRequireProjectPermission(t *testing.T) {
 			expectedStatus: http.StatusForbidden,
 		},
 		{
-			name:       "not a project member returns forbidden",
-			permission: rbac.PermissionChangesRead,
-			userRole:   rbac.OrganizationDeveloper,
-			projectID:  projectID.String(),
-			paramName:  "project_id",
-			setContext: true,
-			hasRepo:    true,
-			mockErr:    repository.ErrNotFound,
+			name:           "not a project member returns forbidden",
+			permission:     rbac.PermissionChangesRead,
+			userRole:       rbac.OrganizationDeveloper,
+			projectID:      projectID.String(),
+			paramName:      "project_id",
+			setContext:     true,
+			hasRepo:        true,
+			mockErr:        repository.ErrNotFound,
 			expectedStatus: http.StatusForbidden,
 		},
 		{

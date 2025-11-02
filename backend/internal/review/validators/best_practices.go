@@ -94,7 +94,9 @@ func (v *BestPracticesValidator) detectNamingConventionViolations(sqlContent, sq
 	// Check column names in CREATE TABLE or ALTER TABLE ADD COLUMN
 	if matched, _ := regexp.MatchString(`(?i)\b(CREATE\s+TABLE|ALTER\s+TABLE.*ADD\s+COLUMN)\b`, sqlUpper); matched {
 		// Extract column definitions: column_name TYPE
-		columnPattern := regexp.MustCompile(`(?i)\b([a-zA-Z0-9_]+)\s+(INT|VARCHAR|TEXT|CHAR|BIGINT|SMALLINT|DECIMAL|NUMERIC|DATE|TIMESTAMP|BOOLEAN|UUID|SERIAL)`)
+		columnPattern := regexp.MustCompile(
+			`(?i)\b([a-zA-Z0-9_]+)\s+(INT|VARCHAR|TEXT|CHAR|BIGINT|SMALLINT|DECIMAL|NUMERIC|DATE|TIMESTAMP|BOOLEAN|UUID|SERIAL)`,
+		)
 		matches := columnPattern.FindAllStringSubmatch(sqlContent, -1)
 		for _, match := range matches {
 			if len(match) >= 2 {
@@ -131,7 +133,9 @@ func (v *BestPracticesValidator) detectNamingConventionViolations(sqlContent, sq
 	// Check index names: should follow idx_<table>_<column> pattern
 	if matched, _ := regexp.MatchString(`(?i)\b(CREATE\s+INDEX|CREATE\s+UNIQUE\s+INDEX|ADD\s+INDEX|ADD\s+KEY)\b`, sqlUpper); matched {
 		// Extract index name: CREATE INDEX index_name or CREATE INDEX idx_name ON table
-		indexNamePattern := regexp.MustCompile(`(?i)(?:CREATE\s+(?:UNIQUE\s+)?INDEX|ADD\s+(?:UNIQUE\s+)?INDEX|ADD\s+KEY)\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_]+)`)
+		indexNamePattern := regexp.MustCompile(
+			`(?i)(?:CREATE\s+(?:UNIQUE\s+)?INDEX|ADD\s+(?:UNIQUE\s+)?INDEX|ADD\s+KEY)\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_]+)`,
+		)
 		matches := indexNamePattern.FindStringSubmatch(sqlContent)
 		if len(matches) >= 2 {
 			indexName := matches[1]

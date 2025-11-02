@@ -29,17 +29,17 @@ func (r ProjectRole) IsValid() bool {
 
 // ProjectMember represents a user's membership in a project with a specific role
 type ProjectMember struct {
-	ID        uuid.UUID  `json:"id"         db:"id"`
-	ProjectID uuid.UUID  `json:"project_id" db:"project_id"`
-	UserID    uuid.UUID  `json:"user_id"    db:"user_id"`
-	Role      ProjectRole `json:"role"       db:"project_role"`
-	AddedByID uuid.UUID  `json:"added_by_id" db:"added_by_id"`
-	AddedAt   time.Time  `json:"added_at"    db:"added_at"`
+	ID        uuid.UUID   `json:"id"          db:"id"`
+	ProjectID uuid.UUID   `json:"project_id"  db:"project_id"`
+	UserID    uuid.UUID   `json:"user_id"     db:"user_id"`
+	Role      ProjectRole `json:"role"        db:"project_role"`
+	AddedByID uuid.UUID   `json:"added_by_id" db:"added_by_id"`
+	AddedAt   time.Time   `json:"added_at"    db:"added_at"`
 }
 
 // AddProjectMemberRequest represents the request to add a member to a project
 type AddProjectMemberRequest struct {
-	UserID uuid.UUID   `json:"user_id" validate:"required"`
+	UserID uuid.UUID   `json:"user_id"      validate:"required"`
 	Role   ProjectRole `json:"project_role" validate:"required,oneof=ProjectOwner ProjectDeveloper ProjectApprover ProjectViewer"`
 }
 
@@ -56,12 +56,12 @@ func ValidateAddProjectMemberRequest(req *AddProjectMemberRequest) error {
 
 // ProjectMemberResponse represents a project member response
 type ProjectMemberResponse struct {
-	ID        uuid.UUID  `json:"id"`
-	ProjectID uuid.UUID  `json:"project_id"`
-	UserID    uuid.UUID  `json:"user_id"`
+	ID        uuid.UUID   `json:"id"`
+	ProjectID uuid.UUID   `json:"project_id"`
+	UserID    uuid.UUID   `json:"user_id"`
 	Role      ProjectRole `json:"role"`
-	AddedByID uuid.UUID  `json:"added_by_id"`
-	AddedAt   time.Time  `json:"added_at"`
+	AddedByID uuid.UUID   `json:"added_by_id"`
+	AddedAt   time.Time   `json:"added_at"`
 }
 
 // ToResponse converts a ProjectMember to ProjectMemberResponse
@@ -100,4 +100,3 @@ var (
 	ErrProjectMemberInvalidRole       = errors.New("invalid project role")
 	ErrProjectMemberAddedByIDRequired = errors.New("added_by_id is required")
 )
-

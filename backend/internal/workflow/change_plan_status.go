@@ -184,4 +184,3 @@ func CanBeModified(status models.ChangePlanStatus) bool {
 func CanBeDeleted(status models.ChangePlanStatus) bool {
 	return status == models.ChangePlanStatusDraft || status == models.ChangePlanStatusClosed
 }
-
