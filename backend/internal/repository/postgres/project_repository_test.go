@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -10,6 +12,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setupProjectMockDB(t *testing.T) (*sqlx.DB, sqlmock.Sqlmock) {
@@ -22,7 +26,7 @@ func setupProjectMockDB(t *testing.T) (*sqlx.DB, sqlmock.Sqlmock) {
 	return sqlxDB, mock
 }
 
-func TestCreate(t *testing.T) {
+func TestProjectRepository_Create(t *testing.T) {
 	db, mock := setupProjectMockDB(t)
 	defer db.Close()
 
@@ -41,24 +45,50 @@ func TestCreate(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, project)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
+		require.NoError(t, err)
+		assert.NotEqual(t, uuid.Nil, project.ID)
+		assert.False(t, project.CreatedAt.IsZero())
+		assert.False(t, project.UpdatedAt.IsZero())
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("successful creation with nil description", func(t *testing.T) {
+		project := &models.Project{
+			Name:        "Test Project",
+			Description: nil,
+			CreatedByID: uuid.New(),
 		}
 
-		// Verify ID and timestamps were set
-		if project.ID == uuid.Nil {
-			t.Error("Expected ID to be set")
-		}
-		if project.CreatedAt.IsZero() {
-			t.Error("Expected CreatedAt to be set")
-		}
-		if project.UpdatedAt.IsZero() {
-			t.Error("Expected UpdatedAt to be set")
+		mock.ExpectExec("INSERT INTO projects").
+			WithArgs(sqlmock.AnyArg(), project.Name, nil, project.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		err := repo.Create(ctx, project)
+		require.NoError(t, err)
+		assert.NotEqual(t, uuid.Nil, project.ID)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("successful creation with existing ID", func(t *testing.T) {
+		existingID := uuid.New()
+		project := &models.Project{
+			ID:          existingID,
+			Name:        "Test Project",
+			Description: stringPtr("Test Description"),
+			CreatedByID: uuid.New(),
 		}
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		mock.ExpectExec("INSERT INTO projects").
+			WithArgs(existingID, project.Name, project.Description, project.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		err := repo.Create(ctx, project)
+		require.NoError(t, err)
+		assert.Equal(t, existingID, project.ID)
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("validation error - empty name", func(t *testing.T) {
@@ -69,9 +99,7 @@ func TestCreate(t *testing.T) {
 		}
 
 		err := repo.Create(ctx, project)
-		if err != models.ErrProjectNameRequired {
-			t.Errorf("Expected ErrProjectNameRequired, got %v", err)
-		}
+		assert.Equal(t, models.ErrProjectNameRequired, err)
 	})
 
 	t.Run("validation error - name too long", func(t *testing.T) {
@@ -83,9 +111,7 @@ func TestCreate(t *testing.T) {
 		}
 
 		err := repo.Create(ctx, project)
-		if err != models.ErrProjectNameTooLong {
-			t.Errorf("Expected ErrProjectNameTooLong, got %v", err)
-		}
+		assert.Equal(t, models.ErrProjectNameTooLong, err)
 	})
 
 	t.Run("validation error - description too long", func(t *testing.T) {
@@ -97,13 +123,29 @@ func TestCreate(t *testing.T) {
 		}
 
 		err := repo.Create(ctx, project)
-		if err != models.ErrDescriptionTooLong {
-			t.Errorf("Expected ErrDescriptionTooLong, got %v", err)
+		assert.Equal(t, models.ErrDescriptionTooLong, err)
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		project := &models.Project{
+			Name:        "Test Project",
+			Description: stringPtr("Test Description"),
+			CreatedByID: uuid.New(),
 		}
+
+		mock.ExpectExec("INSERT INTO projects").
+			WithArgs(sqlmock.AnyArg(), project.Name, project.Description, project.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WillReturnError(errors.New("database connection error"))
+
+		err := repo.Create(ctx, project)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "database connection error")
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestGetByID(t *testing.T) {
+func TestProjectRepository_GetByID(t *testing.T) {
 	db, mock := setupProjectMockDB(t)
 	defer db.Close()
 
@@ -123,25 +165,36 @@ func TestGetByID(t *testing.T) {
 			WillReturnRows(rows)
 
 		project, err := repo.GetByID(ctx, projectID)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, project)
+		assert.Equal(t, projectID, project.ID)
+		assert.Equal(t, "Test Project", project.Name)
+		assert.NotNil(t, project.Description)
+		assert.Equal(t, "Test Description", *project.Description)
+		assert.Equal(t, createdByID, project.CreatedByID)
 
-		if project == nil {
-			t.Fatal("Expected project to be returned")
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 
-		if project.ID != projectID {
-			t.Errorf("Expected ID %s, got %s", projectID, project.ID)
-		}
+	t.Run("successful retrieval with nil description", func(t *testing.T) {
+		projectID := uuid.New()
+		createdByID := uuid.New()
+		now := time.Now()
 
-		if project.Name != "Test Project" {
-			t.Errorf("Expected name 'Test Project', got %s", project.Name)
-		}
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "created_by_id", "created_at", "updated_at"}).
+			AddRow(projectID, "Test Project", nil, createdByID, now, now)
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		mock.ExpectQuery("SELECT (.+) FROM projects WHERE id =").
+			WithArgs(projectID).
+			WillReturnRows(rows)
+
+		project, err := repo.GetByID(ctx, projectID)
+		require.NoError(t, err)
+		require.NotNil(t, project)
+		assert.Equal(t, projectID, project.ID)
+		assert.Nil(t, project.Description)
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("project not found", func(t *testing.T) {
@@ -149,24 +202,32 @@ func TestGetByID(t *testing.T) {
 
 		mock.ExpectQuery("SELECT (.+) FROM projects WHERE id =").
 			WithArgs(projectID).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "description", "created_by_id", "created_at", "updated_at"}))
+			WillReturnError(sql.ErrNoRows)
 
 		project, err := repo.GetByID(ctx, projectID)
-		if err != repository.ErrNotFound {
-			t.Errorf("Expected ErrNotFound, got %v", err)
-		}
+		assert.Equal(t, repository.ErrNotFound, err)
+		assert.Nil(t, project)
 
-		if project != nil {
-			t.Error("Expected nil project")
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+	t.Run("database error", func(t *testing.T) {
+		projectID := uuid.New()
+
+		mock.ExpectQuery("SELECT (.+) FROM projects WHERE id =").
+			WithArgs(projectID).
+			WillReturnError(errors.New("database connection error"))
+
+		project, err := repo.GetByID(ctx, projectID)
+		require.Error(t, err)
+		assert.Nil(t, project)
+		assert.Contains(t, err.Error(), "database connection error")
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestList(t *testing.T) {
+func TestProjectRepository_List(t *testing.T) {
 	db, mock := setupProjectMockDB(t)
 	defer db.Close()
 
@@ -188,17 +249,14 @@ func TestList(t *testing.T) {
 			WillReturnRows(rows)
 
 		projects, err := repo.List(ctx, 10, 0)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
+		require.Len(t, projects, 2)
+		assert.Equal(t, projectID1, projects[0].ID)
+		assert.Equal(t, "Project 1", projects[0].Name)
+		assert.Equal(t, projectID2, projects[1].ID)
+		assert.Equal(t, "Project 2", projects[1].Name)
 
-		if len(projects) != 2 {
-			t.Errorf("Expected 2 projects, got %d", len(projects))
-		}
-
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("empty list", func(t *testing.T) {
@@ -209,25 +267,47 @@ func TestList(t *testing.T) {
 			WillReturnRows(rows)
 
 		projects, err := repo.List(ctx, 10, 0)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
+		assert.NotNil(t, projects)
+		assert.Len(t, projects, 0)
 
-		if len(projects) != 0 {
-			t.Errorf("Expected 0 projects, got %d", len(projects))
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 
-		if projects == nil {
-			t.Error("Expected empty slice, got nil")
-		}
+	t.Run("list with pagination", func(t *testing.T) {
+		now := time.Now()
+		projectID := uuid.New()
+		createdByID := uuid.New()
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "created_by_id", "created_at", "updated_at"}).
+			AddRow(projectID, "Project", "Description", createdByID, now, now)
+
+		mock.ExpectQuery("SELECT (.+) FROM projects ORDER BY created_at DESC LIMIT").
+			WithArgs(5, 10).
+			WillReturnRows(rows)
+
+		projects, err := repo.List(ctx, 5, 10)
+		require.NoError(t, err)
+		assert.Len(t, projects, 1)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		mock.ExpectQuery("SELECT (.+) FROM projects ORDER BY created_at DESC LIMIT").
+			WithArgs(10, 0).
+			WillReturnError(errors.New("database connection error"))
+
+		projects, err := repo.List(ctx, 10, 0)
+		require.Error(t, err)
+		assert.Nil(t, projects)
+		assert.Contains(t, err.Error(), "database connection error")
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestUpdate(t *testing.T) {
+func TestProjectRepository_Update(t *testing.T) {
 	db, mock := setupProjectMockDB(t)
 	defer db.Close()
 
@@ -236,6 +316,7 @@ func TestUpdate(t *testing.T) {
 
 	t.Run("successful update", func(t *testing.T) {
 		projectID := uuid.New()
+		beforeUpdate := time.Now()
 		project := &models.Project{
 			ID:          projectID,
 			Name:        "Updated Project",
@@ -248,18 +329,30 @@ func TestUpdate(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, project)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
+		require.NoError(t, err)
+		assert.False(t, project.UpdatedAt.IsZero())
+		assert.True(t, project.UpdatedAt.After(beforeUpdate))
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("successful update with nil description", func(t *testing.T) {
+		projectID := uuid.New()
+		project := &models.Project{
+			ID:          projectID,
+			Name:        "Updated Project",
+			Description: nil,
+			CreatedByID: uuid.New(),
 		}
 
-		// Verify UpdatedAt was set
-		if project.UpdatedAt.IsZero() {
-			t.Error("Expected UpdatedAt to be set")
-		}
+		mock.ExpectExec("UPDATE projects").
+			WithArgs(projectID, project.Name, nil, sqlmock.AnyArg()).
+			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		err := repo.Update(ctx, project)
+		require.NoError(t, err)
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("project not found", func(t *testing.T) {
@@ -276,13 +369,9 @@ func TestUpdate(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Update(ctx, project)
-		if err != repository.ErrNotFound {
-			t.Errorf("Expected ErrNotFound, got %v", err)
-		}
+		assert.Equal(t, repository.ErrNotFound, err)
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("validation error - empty name", func(t *testing.T) {
@@ -294,13 +383,57 @@ func TestUpdate(t *testing.T) {
 		}
 
 		err := repo.Update(ctx, project)
-		if err != models.ErrProjectNameRequired {
-			t.Errorf("Expected ErrProjectNameRequired, got %v", err)
+		assert.Equal(t, models.ErrProjectNameRequired, err)
+	})
+
+	t.Run("validation error - name too long", func(t *testing.T) {
+		longName := string(make([]byte, 101))
+		project := &models.Project{
+			ID:          uuid.New(),
+			Name:        longName,
+			Description: stringPtr("Updated Description"),
+			CreatedByID: uuid.New(),
 		}
+
+		err := repo.Update(ctx, project)
+		assert.Equal(t, models.ErrProjectNameTooLong, err)
+	})
+
+	t.Run("validation error - description too long", func(t *testing.T) {
+		longDesc := string(make([]byte, 501))
+		project := &models.Project{
+			ID:          uuid.New(),
+			Name:        "Test Project",
+			Description: &longDesc,
+			CreatedByID: uuid.New(),
+		}
+
+		err := repo.Update(ctx, project)
+		assert.Equal(t, models.ErrDescriptionTooLong, err)
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		projectID := uuid.New()
+		project := &models.Project{
+			ID:          projectID,
+			Name:        "Updated Project",
+			Description: stringPtr("Updated Description"),
+			CreatedByID: uuid.New(),
+		}
+
+		mock.ExpectExec("UPDATE projects").
+			WithArgs(projectID, project.Name, project.Description, sqlmock.AnyArg()).
+			WillReturnError(errors.New("database connection error"))
+
+		err := repo.Update(ctx, project)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "database connection error")
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestDelete(t *testing.T) {
+func TestProjectRepository_Delete(t *testing.T) {
 	db, mock := setupProjectMockDB(t)
 	defer db.Close()
 
@@ -315,13 +448,9 @@ func TestDelete(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Delete(ctx, projectID)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("project not found", func(t *testing.T) {
@@ -332,17 +461,27 @@ func TestDelete(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Delete(ctx, projectID)
-		if err != repository.ErrNotFound {
-			t.Errorf("Expected ErrNotFound, got %v", err)
-		}
+		assert.Equal(t, repository.ErrNotFound, err)
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		projectID := uuid.New()
+
+		mock.ExpectExec("DELETE FROM projects WHERE id").
+			WithArgs(projectID).
+			WillReturnError(errors.New("database connection error"))
+
+		err := repo.Delete(ctx, projectID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "database connection error")
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestCount(t *testing.T) {
+func TestProjectRepository_Count(t *testing.T) {
 	db, mock := setupProjectMockDB(t)
 	defer db.Close()
 
@@ -357,17 +496,10 @@ func TestCount(t *testing.T) {
 			WillReturnRows(rows)
 
 		count, err := repo.Count(ctx)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), count)
 
-		if count != 5 {
-			t.Errorf("Expected count 5, got %d", count)
-		}
-
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("count zero", func(t *testing.T) {
@@ -378,17 +510,36 @@ func TestCount(t *testing.T) {
 			WillReturnRows(rows)
 
 		count, err := repo.Count(ctx)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), count)
 
-		if count != 0 {
-			t.Errorf("Expected count 0, got %d", count)
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+	t.Run("count large number", func(t *testing.T) {
+		rows := sqlmock.NewRows([]string{"count"}).
+			AddRow(1000)
+
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM projects").
+			WillReturnRows(rows)
+
+		count, err := repo.Count(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1000), count)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM projects").
+			WillReturnError(errors.New("database connection error"))
+
+		count, err := repo.Count(ctx)
+		require.Error(t, err)
+		assert.Equal(t, int64(0), count)
+		assert.Contains(t, err.Error(), "database connection error")
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
