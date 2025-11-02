@@ -831,3 +831,219 @@ func TestIntegration_ChangePlan_ManualSQLReview_Unauthorized(t *testing.T) {
 	assert.Contains(t, errorResp["error"].(string), "Not a member", "error message should mention project membership")
 }
 
+// TestIntegration_ChangePlan_ListWithFilters tests filtering functionality
+func TestIntegration_ChangePlan_ListWithFilters(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+
+	ctx := context.Background()
+
+	// Create user
+	user := createTestUser(t, userRepo, fmt.Sprintf("test-%d@example.com", time.Now().Unix()), models.OrganizationRoleAdmin)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add user as project member
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    user.ID,
+		Role:      models.ProjectRoleDeveloper,
+		AddedByID: user.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create multiple change plans with different statuses
+	cp1 := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, user.ID, "CREATE TABLE test1 (id UUID);")
+	cp1.Status = models.ChangePlanStatusDraft
+	changePlanRepo.Update(ctx, cp1)
+
+	cp2 := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, user.ID, "CREATE TABLE test2 (id UUID);")
+	cp2.Status = models.ChangePlanStatusOpen
+	changePlanRepo.Update(ctx, cp2)
+
+	cp3 := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, user.ID, "CREATE TABLE test3 (id UUID);")
+	cp3.Status = models.ChangePlanStatusOpen
+	changePlanRepo.Update(ctx, cp3)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Test 1: Filter by status
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/change-plans?status=Open", nil)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	token := createAuthToken(t, tokenManager, user.ID, user.Email, user.OrganizationRole)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	claims := &auth.Claims{
+		UserID:           user.ID,
+		Email:            user.Email,
+		OrganizationRole: string(user.OrganizationRole),
+		RegisteredClaims: jwt.RegisteredClaims{},
+	}
+	c.Set(string(auth.UserContextKey), claims)
+
+	err = handler.ListChangePlans(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]interface{}
+	err = json.NewDecoder(rec.Body).Decode(&response)
+	require.NoError(t, err)
+	assert.NotNil(t, response["change_plans"])
+	changePlans := response["change_plans"].([]interface{})
+	assert.Equal(t, 2, len(changePlans), "should return 2 Open change plans")
+
+	// Test 2: Filter by project_id
+	req2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans?project_id=%s", project.ID.String()), nil)
+	req2.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req2.Header.Set("Authorization", "Bearer "+token)
+
+	rec2 := httptest.NewRecorder()
+	c2 := e.NewContext(req2, rec2)
+	c2.Set(string(auth.UserContextKey), claims)
+
+	err = handler.ListChangePlans(c2)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec2.Code)
+
+	var response2 map[string]interface{}
+	err = json.NewDecoder(rec2.Body).Decode(&response2)
+	require.NoError(t, err)
+	assert.NotNil(t, response2["change_plans"])
+	changePlans2 := response2["change_plans"].([]interface{})
+	assert.Equal(t, 3, len(changePlans2), "should return 3 change plans for project")
+
+	// Test 3: Combined filters (status + project_id)
+	req3 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans?status=Draft&project_id=%s", project.ID.String()), nil)
+	req3.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req3.Header.Set("Authorization", "Bearer "+token)
+
+	rec3 := httptest.NewRecorder()
+	c3 := e.NewContext(req3, rec3)
+	c3.Set(string(auth.UserContextKey), claims)
+
+	err = handler.ListChangePlans(c3)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec3.Code)
+
+	var response3 map[string]interface{}
+	err = json.NewDecoder(rec3.Body).Decode(&response3)
+	require.NoError(t, err)
+	assert.NotNil(t, response3["change_plans"])
+	changePlans3 := response3["change_plans"].([]interface{})
+	assert.Equal(t, 1, len(changePlans3), "should return 1 Draft change plan")
+
+	// Test 4: Filter by database_id
+	req4 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans?database_id=%s", database.ID.String()), nil)
+	req4.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req4.Header.Set("Authorization", "Bearer "+token)
+
+	rec4 := httptest.NewRecorder()
+	c4 := e.NewContext(req4, rec4)
+	c4.Set(string(auth.UserContextKey), claims)
+
+	err = handler.ListChangePlans(c4)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec4.Code)
+
+	var response4 map[string]interface{}
+	err = json.NewDecoder(rec4.Body).Decode(&response4)
+	require.NoError(t, err)
+	assert.NotNil(t, response4["change_plans"])
+	changePlans4 := response4["change_plans"].([]interface{})
+	assert.Equal(t, 3, len(changePlans4), "should return 3 change plans for database")
+
+	// Test 5: Filter by author_id
+	req5 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans?author_id=%s", user.ID.String()), nil)
+	req5.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req5.Header.Set("Authorization", "Bearer "+token)
+
+	rec5 := httptest.NewRecorder()
+	c5 := e.NewContext(req5, rec5)
+	c5.Set(string(auth.UserContextKey), claims)
+
+	err = handler.ListChangePlans(c5)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec5.Code)
+
+	var response5 map[string]interface{}
+	err = json.NewDecoder(rec5.Body).Decode(&response5)
+	require.NoError(t, err)
+	assert.NotNil(t, response5["change_plans"])
+	changePlans5 := response5["change_plans"].([]interface{})
+	assert.Equal(t, 3, len(changePlans5), "should return 3 change plans by author")
+
+	// Test 6: Combined filters (status + database_id + author_id)
+	req6 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans?status=Open&database_id=%s&author_id=%s", database.ID.String(), user.ID.String()), nil)
+	req6.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req6.Header.Set("Authorization", "Bearer "+token)
+
+	rec6 := httptest.NewRecorder()
+	c6 := e.NewContext(req6, rec6)
+	c6.Set(string(auth.UserContextKey), claims)
+
+	err = handler.ListChangePlans(c6)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec6.Code)
+
+	var response6 map[string]interface{}
+	err = json.NewDecoder(rec6.Body).Decode(&response6)
+	require.NoError(t, err)
+	assert.NotNil(t, response6["change_plans"])
+	changePlans6 := response6["change_plans"].([]interface{})
+	assert.Equal(t, 2, len(changePlans6), "should return 2 Open change plans matching all filters")
+
+	// Test 7: Pagination with filters
+	req7 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans?status=Open&limit=1&offset=0", database.ID.String()), nil)
+	req7.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req7.Header.Set("Authorization", "Bearer "+token)
+
+	rec7 := httptest.NewRecorder()
+	c7 := e.NewContext(req7, rec7)
+	c7.Set(string(auth.UserContextKey), claims)
+
+	err = handler.ListChangePlans(c7)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec7.Code)
+
+	var response7 map[string]interface{}
+	err = json.NewDecoder(rec7.Body).Decode(&response7)
+	require.NoError(t, err)
+	assert.NotNil(t, response7["change_plans"])
+	changePlans7 := response7["change_plans"].([]interface{})
+	assert.Equal(t, 1, len(changePlans7), "should return 1 change plan with limit=1")
+	assert.Equal(t, float64(2), response7["total"], "total should be 2")
+	assert.Equal(t, float64(1), response7["limit"], "limit should be 1")
+	assert.Equal(t, float64(0), response7["offset"], "offset should be 0")
+}
+

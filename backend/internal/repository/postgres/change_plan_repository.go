@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -328,4 +330,123 @@ func (r *ChangePlanRepository) GetByAuthorID(
 	}
 
 	return changePlans, nil
+}
+
+// ListWithFilters retrieves change plans with combined filters
+func (r *ChangePlanRepository) ListWithFilters(ctx context.Context, filters repository.ChangePlanListFilters) ([]*models.ChangePlan, error) {
+	// Build WHERE clause dynamically
+	whereClauses := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	if filters.Status != "" {
+		whereClauses = append(whereClauses, "status = $"+fmt.Sprintf("%d", argIndex))
+		args = append(args, filters.Status)
+		argIndex++
+	}
+
+	if filters.ProjectID != uuid.Nil {
+		whereClauses = append(whereClauses, "project_id = $"+fmt.Sprintf("%d", argIndex))
+		args = append(args, filters.ProjectID)
+		argIndex++
+	}
+
+	if filters.DatabaseID != uuid.Nil {
+		whereClauses = append(whereClauses, "target_database_id = $"+fmt.Sprintf("%d", argIndex))
+		args = append(args, filters.DatabaseID)
+		argIndex++
+	}
+
+	if filters.AuthorID != uuid.Nil {
+		whereClauses = append(whereClauses, "author_id = $"+fmt.Sprintf("%d", argIndex))
+		args = append(args, filters.AuthorID)
+		argIndex++
+	}
+
+	// Build query
+	query := `
+		SELECT id, project_id, target_database_id, title, description, change_type,
+			sql_content, rollback_sql, status, risk_level, author_id,
+			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
+			affected_rows, error_message, created_at, updated_at
+		FROM change_plans
+	`
+
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	// Add pagination
+	if filters.Limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", argIndex)
+		args = append(args, filters.Limit)
+		argIndex++
+	}
+
+	if filters.Offset > 0 {
+		query += fmt.Sprintf(" OFFSET $%d", argIndex)
+		args = append(args, filters.Offset)
+	}
+
+	var changePlans []*models.ChangePlan
+	err := r.db.SelectContext(ctx, &changePlans, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return empty slice instead of nil if no change plans found
+	if changePlans == nil {
+		changePlans = []*models.ChangePlan{}
+	}
+
+	return changePlans, nil
+}
+
+// CountWithFilters returns the total number of change plans matching filters
+func (r *ChangePlanRepository) CountWithFilters(ctx context.Context, filters repository.ChangePlanListFilters) (int64, error) {
+	// Build WHERE clause dynamically
+	whereClauses := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	if filters.Status != "" {
+		whereClauses = append(whereClauses, "status = $"+fmt.Sprintf("%d", argIndex))
+		args = append(args, filters.Status)
+		argIndex++
+	}
+
+	if filters.ProjectID != uuid.Nil {
+		whereClauses = append(whereClauses, "project_id = $"+fmt.Sprintf("%d", argIndex))
+		args = append(args, filters.ProjectID)
+		argIndex++
+	}
+
+	if filters.DatabaseID != uuid.Nil {
+		whereClauses = append(whereClauses, "target_database_id = $"+fmt.Sprintf("%d", argIndex))
+		args = append(args, filters.DatabaseID)
+		argIndex++
+	}
+
+	if filters.AuthorID != uuid.Nil {
+		whereClauses = append(whereClauses, "author_id = $"+fmt.Sprintf("%d", argIndex))
+		args = append(args, filters.AuthorID)
+		argIndex++
+	}
+
+	// Build query
+	query := `SELECT COUNT(*) FROM change_plans`
+
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }

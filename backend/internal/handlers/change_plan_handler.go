@@ -347,14 +347,54 @@ func (h *ChangePlanHandler) ListChangePlans(c echo.Context) error {
 		}
 	}
 
-	// Parse filters
-	statusStr := c.QueryParam("status")
-	projectIDStr := c.QueryParam("project_id")
-	databaseIDStr := c.QueryParam("database_id")
-	authorIDStr := c.QueryParam("author_id")
+	// Parse filter parameters
+	var filters repository.ChangePlanListFilters
+	filters.Limit = limit
+	filters.Offset = offset
 
-	var changePlans []*models.ChangePlan
-	var err error
+	// Parse status filter
+	if statusStr := c.QueryParam("status"); statusStr != "" {
+		status := models.ChangePlanStatus(statusStr)
+		if !status.IsValid() {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid status value",
+			})
+		}
+		filters.Status = status
+	}
+
+	// Parse project_id filter
+	if projectIDStr := c.QueryParam("project_id"); projectIDStr != "" {
+		projectID, err := uuid.Parse(projectIDStr)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid project_id format",
+			})
+		}
+		filters.ProjectID = projectID
+	}
+
+	// Parse database_id filter
+	if databaseIDStr := c.QueryParam("database_id"); databaseIDStr != "" {
+		databaseID, err := uuid.Parse(databaseIDStr)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid database_id format",
+			})
+		}
+		filters.DatabaseID = databaseID
+	}
+
+	// Parse author_id filter
+	if authorIDStr := c.QueryParam("author_id"); authorIDStr != "" {
+		authorID, err := uuid.Parse(authorIDStr)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid author_id format",
+			})
+		}
+		filters.AuthorID = authorID
+	}
 
 	userIDStr, _, organizationRole, ok := rbac.GetUserFromContext(ctx)
 	if !ok {
@@ -372,120 +412,32 @@ func (h *ChangePlanHandler) ListChangePlans(c echo.Context) error {
 
 	// Organization admins can see all change plans
 	// Other users can only see change plans in projects they're members of
-	if organizationRole == rbac.OrganizationAdmin {
-		// Admin: apply filters as requested
-		if statusStr != "" {
-			status := models.ChangePlanStatus(statusStr)
-			if !status.IsValid() {
-				return c.JSON(http.StatusBadRequest, map[string]interface{}{
-					"error": "Invalid status value",
-				})
-			}
-			changePlans, err = h.changePlanRepo.GetByStatus(ctx, status, limit, offset)
-			if err != nil {
-				h.logger.Error("Failed to list change plans by status", zap.Error(err))
-				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-					"error": "Failed to retrieve change plans",
-				})
-			}
-		} else if projectIDStr != "" {
-			projectID, parseErr := uuid.Parse(projectIDStr)
-			if parseErr != nil {
-				return c.JSON(http.StatusBadRequest, map[string]interface{}{
-					"error": "Invalid project_id format",
-				})
-			}
-			changePlans, err = h.changePlanRepo.GetByProjectID(ctx, projectID, limit, offset)
-			if err != nil {
-				h.logger.Error("Failed to list change plans by project", zap.Error(err))
-				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-					"error": "Failed to retrieve change plans",
-				})
-			}
-		} else if databaseIDStr != "" {
-			databaseID, parseErr := uuid.Parse(databaseIDStr)
-			if parseErr != nil {
-				return c.JSON(http.StatusBadRequest, map[string]interface{}{
-					"error": "Invalid database_id format",
-				})
-			}
-			changePlans, err = h.changePlanRepo.GetByDatabaseID(ctx, databaseID, limit, offset)
-			if err != nil {
-				h.logger.Error("Failed to list change plans by database", zap.Error(err))
-				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-					"error": "Failed to retrieve change plans",
-				})
-			}
-		} else if authorIDStr != "" {
-			authorID, parseErr := uuid.Parse(authorIDStr)
-			if parseErr != nil {
-				return c.JSON(http.StatusBadRequest, map[string]interface{}{
-					"error": "Invalid author_id format",
-				})
-			}
-			changePlans, err = h.changePlanRepo.GetByAuthorID(ctx, authorID, limit, offset)
-			if err != nil {
-				h.logger.Error("Failed to list change plans by author", zap.Error(err))
-				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-					"error": "Failed to retrieve change plans",
-				})
-			}
-		} else {
-			// List all change plans
-			changePlans, err = h.changePlanRepo.List(ctx, limit, offset)
-			if err != nil {
-				h.logger.Error("Failed to list change plans", zap.Error(err))
-				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-					"error": "Failed to retrieve change plans",
-				})
-			}
-		}
-	} else {
-		// Non-admin: filter by projects user is member of
-		// For now, we'll filter by author_id (user's own change plans)
+	if organizationRole != rbac.OrganizationAdmin {
+		// For non-admins, get all projects the user is a member of
+		// and filter change plans to only those projects
+		// For MVP, we'll filter by author_id (user's own change plans)
 		// TODO: In future, fetch all projects user is member of and filter by those
-		changePlans, err = h.changePlanRepo.GetByAuthorID(ctx, userID, limit, offset)
-		if err != nil {
-			h.logger.Error("Failed to list change plans", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to retrieve change plans",
-			})
-		}
+		filters.AuthorID = userID // Override author_id filter for non-admins
+	}
 
-		// Apply additional filters if provided
-		if len(changePlans) > 0 {
-			filtered := make([]*models.ChangePlan, 0)
-			for _, cp := range changePlans {
-				match := true
+	// Retrieve change plans with filters
+	changePlans, err := h.changePlanRepo.ListWithFilters(ctx, filters)
+	if err != nil {
+		h.logger.Error("Failed to list change plans", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plans",
+		})
+	}
 
-				if statusStr != "" && cp.Status != models.ChangePlanStatus(statusStr) {
-					match = false
-				}
-				if projectIDStr != "" {
-					projectID, _ := uuid.Parse(projectIDStr)
-					if cp.ProjectID != projectID {
-						match = false
-					}
-				}
-				if databaseIDStr != "" {
-					databaseID, _ := uuid.Parse(databaseIDStr)
-					if cp.TargetDatabaseID != databaseID {
-						match = false
-					}
-				}
-				if authorIDStr != "" {
-					authorID, _ := uuid.Parse(authorIDStr)
-					if cp.AuthorID != authorID {
-						match = false
-					}
-				}
-
-				if match {
-					filtered = append(filtered, cp)
-				}
-			}
-			changePlans = filtered
-		}
+	// Get total count with same filters
+	countFilters := filters
+	countFilters.Limit = 0
+	countFilters.Offset = 0
+	total, err := h.changePlanRepo.CountWithFilters(ctx, countFilters)
+	if err != nil {
+		h.logger.Error("Failed to count change plans", zap.Error(err))
+		// Don't fail the request, just use the current page count
+		total = int64(len(changePlans))
 	}
 
 	// Convert to response format
@@ -496,6 +448,9 @@ func (h *ChangePlanHandler) ListChangePlans(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"change_plans": responses,
+		"total":        total,
+		"limit":        limit,
+		"offset":       offset,
 		"count":        len(responses),
 	})
 }
