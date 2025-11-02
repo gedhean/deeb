@@ -102,7 +102,7 @@ func createTestUser(id string, email string, role string) *models.User {
 		ID:               uid,
 		Email:            email,
 		PasswordHash:     "hashed",
-		OrganizationRole: role,
+		OrganizationRole: models.OrganizationRole(role),
 		TwoFactorEnabled: false,
 		IsActive:         true,
 		CreatedAt:        now,

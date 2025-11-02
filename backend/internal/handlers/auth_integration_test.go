@@ -20,6 +20,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/handlers"
+	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,6 +108,18 @@ func TestIntegration_RegisterAndLogin_Success(t *testing.T) {
 	userRepo := postgres.NewUserRepository(db)
 	logger := zap.NewNop()
 
+	// Create a dummy user first so the test user is not the first user
+	// (first user gets OrganizationAdmin role)
+	ctx := context.Background()
+	dummyUser := &models.User{
+		Email:            fmt.Sprintf("dummy-%d@example.com", time.Now().Unix()),
+		PasswordHash:     "dummy_hash",
+		OrganizationRole: models.OrganizationRoleDeveloper,
+		IsActive:         true,
+	}
+	err := userRepo.Create(ctx, dummyUser)
+	require.NoError(t, err, "failed to create dummy user")
+
 	// Test Registration
 	registerHandler := handlers.NewRegisterHandler(userRepo, logger)
 
@@ -125,19 +138,15 @@ func TestIntegration_RegisterAndLogin_Success(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	err := registerHandler.Register(c)
+	err = registerHandler.Register(c)
 	require.NoError(t, err)
-
-	if rec.Code != http.StatusCreated {
-		t.Logf("Registration failed with status %d, body: %s", rec.Code, rec.Body.String())
-	}
 	require.Equal(t, http.StatusCreated, rec.Code, "registration should succeed")
 
 	var registerResp handlers.RegisterResponse
 	err = json.NewDecoder(rec.Body).Decode(&registerResp)
 	require.NoError(t, err)
 	assert.Equal(t, email, registerResp.User.Email)
-	assert.Equal(t, "OrganizationDeveloper", registerResp.User.OrganizationRole)
+	assert.Equal(t, models.OrganizationRoleDeveloper, registerResp.User.OrganizationRole)
 	assert.True(t, registerResp.User.IsActive)
 
 	// Test Login

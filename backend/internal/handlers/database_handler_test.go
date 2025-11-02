@@ -96,13 +96,78 @@ func (m *mockDatabaseRepository) Delete(ctx context.Context, id uuid.UUID) error
 	return repository.ErrNotFound
 }
 
+func (m *mockDatabaseRepository) Count(ctx context.Context) (int, error) {
+	return len(m.databases), nil
+}
+
+func (m *mockDatabaseRepository) GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+	return m.ListByProject(ctx, projectID, limit, offset)
+}
+
+func (m *mockDatabaseRepository) ListByInstanceID(ctx context.Context, instanceID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+	var filtered []*models.Database
+	for _, db := range m.databases {
+		if db.DatabaseInstanceID == instanceID {
+			filtered = append(filtered, db)
+		}
+	}
+	return filtered, nil
+}
+
+func (m *mockDatabaseRepository) ListByEnvironmentID(ctx context.Context, environmentID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+	var filtered []*models.Database
+	for _, db := range m.databases {
+		if db.EnvironmentID == environmentID {
+			filtered = append(filtered, db)
+		}
+	}
+	return filtered, nil
+}
+
+// Minimal mocks for other repositories
+type mockProjectRepositoryForDB struct{}
+func (m *mockProjectRepositoryForDB) Create(ctx context.Context, project *models.Project) error { return nil }
+func (m *mockProjectRepositoryForDB) GetByID(ctx context.Context, id uuid.UUID) (*models.Project, error) { return &models.Project{ID: id}, nil }
+func (m *mockProjectRepositoryForDB) List(ctx context.Context, limit, offset int) ([]*models.Project, error) { return nil, nil }
+func (m *mockProjectRepositoryForDB) Update(ctx context.Context, project *models.Project) error { return nil }
+func (m *mockProjectRepositoryForDB) Delete(ctx context.Context, id uuid.UUID) error { return nil }
+func (m *mockProjectRepositoryForDB) Count(ctx context.Context) (int64, error) { return 0, nil }
+
+type mockEnvironmentRepositoryForDB struct{}
+func (m *mockEnvironmentRepositoryForDB) Create(ctx context.Context, env *models.Environment) error { return nil }
+func (m *mockEnvironmentRepositoryForDB) GetByID(ctx context.Context, id uuid.UUID) (*models.Environment, error) { return &models.Environment{ID: id}, nil }
+func (m *mockEnvironmentRepositoryForDB) List(ctx context.Context, limit, offset int) ([]*models.Environment, error) { return nil, nil }
+func (m *mockEnvironmentRepositoryForDB) Update(ctx context.Context, env *models.Environment) error { return nil }
+func (m *mockEnvironmentRepositoryForDB) Delete(ctx context.Context, id uuid.UUID) error { return nil }
+func (m *mockEnvironmentRepositoryForDB) Count(ctx context.Context) (int64, error) { return 0, nil }
+
+type mockDatabaseInstanceRepositoryForDB struct{}
+func (m *mockDatabaseInstanceRepositoryForDB) Create(ctx context.Context, instance *models.DatabaseInstance) error { return nil }
+func (m *mockDatabaseInstanceRepositoryForDB) GetByID(ctx context.Context, id uuid.UUID) (*models.DatabaseInstance, error) { return &models.DatabaseInstance{ID: id}, nil }
+func (m *mockDatabaseInstanceRepositoryForDB) List(ctx context.Context, limit, offset int) ([]*models.DatabaseInstance, error) { return nil, nil }
+func (m *mockDatabaseInstanceRepositoryForDB) Update(ctx context.Context, instance *models.DatabaseInstance) error { return nil }
+func (m *mockDatabaseInstanceRepositoryForDB) Delete(ctx context.Context, id uuid.UUID) error { return nil }
+func (m *mockDatabaseInstanceRepositoryForDB) Count(ctx context.Context) (int64, error) { return 0, nil }
+
+type mockChangePlanRepositoryForDB struct{}
+func (m *mockChangePlanRepositoryForDB) Create(ctx context.Context, plan *models.ChangePlan) error { return nil }
+func (m *mockChangePlanRepositoryForDB) GetByID(ctx context.Context, id uuid.UUID) (*models.ChangePlan, error) { return nil, nil }
+func (m *mockChangePlanRepositoryForDB) List(ctx context.Context, limit, offset int) ([]*models.ChangePlan, error) { return nil, nil }
+func (m *mockChangePlanRepositoryForDB) GetByDatabaseID(ctx context.Context, databaseID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) { return nil, nil }
+func (m *mockChangePlanRepositoryForDB) Update(ctx context.Context, plan *models.ChangePlan) error { return nil }
+func (m *mockChangePlanRepositoryForDB) Delete(ctx context.Context, id uuid.UUID) error { return nil }
+func (m *mockChangePlanRepositoryForDB) Count(ctx context.Context) (int64, error) { return 0, nil }
+func (m *mockChangePlanRepositoryForDB) GetByStatus(ctx context.Context, status models.ChangePlanStatus, limit, offset int) ([]*models.ChangePlan, error) { return nil, nil }
+func (m *mockChangePlanRepositoryForDB) GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) { return nil, nil }
+func (m *mockChangePlanRepositoryForDB) GetByAuthorID(ctx context.Context, authorID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) { return nil, nil }
+
 func TestCreateDatabase(t *testing.T) {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
 	t.Run("create database successfully", func(t *testing.T) {
 		repo := &mockDatabaseRepository{}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 		e.Validator = &noOpValidator{}
@@ -111,7 +176,7 @@ func TestCreateDatabase(t *testing.T) {
 		projectID := uuid.New()
 		envID := uuid.New()
 		reqBody := `{
-			"name": "test_database",
+			"database_name": "test_database",
 			"database_instance_id": "` + dbInstanceID.String() + `",
 			"project_id": "` + projectID.String() + `",
 			"environment_id": "` + envID.String() + `"
@@ -135,19 +200,19 @@ func TestCreateDatabase(t *testing.T) {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
 
-		if response.Name != "test_database" {
-			t.Errorf("Expected name 'test_database', got %s", response.Name)
+		if response.DatabaseName != "test_database" {
+			t.Errorf("Expected name 'test_database', got %s", response.DatabaseName)
 		}
 	})
 
 	t.Run("create database with validation error", func(t *testing.T) {
 		repo := &mockDatabaseRepository{}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 
 		reqBody := `{
-			"name": "",
+			"database_name": "",
 			"database_instance_id": "` + uuid.New().String() + `",
 			"project_id": "` + uuid.New().String() + `",
 			"environment_id": "` + uuid.New().String() + `"
@@ -178,21 +243,21 @@ func TestListDatabases(t *testing.T) {
 			databases: []*models.Database{
 				{
 					ID:                 uuid.New(),
-					Name:               "database1",
+					DatabaseName:       "database1",
 					DatabaseInstanceID: uuid.New(),
 					ProjectID:          projectID,
 					EnvironmentID:      uuid.New(),
 				},
 				{
 					ID:                 uuid.New(),
-					Name:               "database2",
+					DatabaseName:       "database2",
 					DatabaseInstanceID: uuid.New(),
 					ProjectID:          projectID,
 					EnvironmentID:      uuid.New(),
 				},
 			},
 		}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 
@@ -226,21 +291,21 @@ func TestListDatabases(t *testing.T) {
 			databases: []*models.Database{
 				{
 					ID:                 uuid.New(),
-					Name:               "database1",
+					DatabaseName:       "database1",
 					DatabaseInstanceID: uuid.New(),
 					ProjectID:          projectID,
 					EnvironmentID:      uuid.New(),
 				},
 				{
 					ID:                 uuid.New(),
-					Name:               "database2",
+					DatabaseName:       "database2",
 					DatabaseInstanceID: uuid.New(),
 					ProjectID:          otherProjectID,
 					EnvironmentID:      uuid.New(),
 				},
 			},
 		}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 
@@ -269,7 +334,7 @@ func TestListDatabases(t *testing.T) {
 
 	t.Run("list databases with invalid project filter", func(t *testing.T) {
 		repo := &mockDatabaseRepository{}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 
@@ -297,14 +362,14 @@ func TestGetDatabase(t *testing.T) {
 			databases: []*models.Database{
 				{
 					ID:                 databaseID,
-					Name:               "test_database",
+					DatabaseName:       "test_database",
 					DatabaseInstanceID: uuid.New(),
 					ProjectID:          uuid.New(),
 					EnvironmentID:      uuid.New(),
 				},
 			},
 		}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 
@@ -334,7 +399,7 @@ func TestGetDatabase(t *testing.T) {
 
 	t.Run("get database not found", func(t *testing.T) {
 		repo := &mockDatabaseRepository{}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 
@@ -365,21 +430,21 @@ func TestListProjectDatabases(t *testing.T) {
 			databases: []*models.Database{
 				{
 					ID:                 uuid.New(),
-					Name:               "database1",
+					DatabaseName:       "database1",
 					DatabaseInstanceID: uuid.New(),
 					ProjectID:          projectID,
 					EnvironmentID:      uuid.New(),
 				},
 				{
 					ID:                 uuid.New(),
-					Name:               "database2",
+					DatabaseName:       "database2",
 					DatabaseInstanceID: uuid.New(),
 					ProjectID:          projectID,
 					EnvironmentID:      uuid.New(),
 				},
 			},
 		}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 
@@ -410,7 +475,7 @@ func TestListProjectDatabases(t *testing.T) {
 
 	t.Run("list project databases with invalid project ID", func(t *testing.T) {
 		repo := &mockDatabaseRepository{}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 
@@ -440,20 +505,20 @@ func TestUpdateDatabase(t *testing.T) {
 			databases: []*models.Database{
 				{
 					ID:                 databaseID,
-					Name:               "original_name",
+					DatabaseName:       "original_name",
 					DatabaseInstanceID: uuid.New(),
 					ProjectID:          uuid.New(),
 					EnvironmentID:      uuid.New(),
 				},
 			},
 		}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 		e.Validator = &noOpValidator{}
 
 		reqBody := `{
-			"name": "updated_name"
+			"database_name": "updated_name"
 		}`
 
 		req := httptest.NewRequest(http.MethodPut, "/api/v1/databases/"+databaseID.String(), strings.NewReader(reqBody))
@@ -476,21 +541,21 @@ func TestUpdateDatabase(t *testing.T) {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
 
-		if response.Name != "updated_name" {
-			t.Errorf("Expected name 'updated_name', got %s", response.Name)
+		if response.DatabaseName != "updated_name" {
+			t.Errorf("Expected name 'updated_name', got %s", response.DatabaseName)
 		}
 	})
 
 	t.Run("update database not found", func(t *testing.T) {
 		repo := &mockDatabaseRepository{}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 		e.Validator = &noOpValidator{}
 
 		databaseID := uuid.New()
 		reqBody := `{
-			"name": "updated_name"
+			"database_name": "updated_name"
 		}`
 
 		req := httptest.NewRequest(http.MethodPut, "/api/v1/databases/"+databaseID.String(), strings.NewReader(reqBody))
@@ -520,14 +585,14 @@ func TestDeleteDatabase(t *testing.T) {
 			databases: []*models.Database{
 				{
 					ID:                 databaseID,
-					Name:               "test_database",
+					DatabaseName:       "test_database",
 					DatabaseInstanceID: uuid.New(),
 					ProjectID:          uuid.New(),
 					EnvironmentID:      uuid.New(),
 				},
 			},
 		}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 
@@ -557,7 +622,7 @@ func TestDeleteDatabase(t *testing.T) {
 
 	t.Run("delete database not found", func(t *testing.T) {
 		repo := &mockDatabaseRepository{}
-		handler := NewDatabaseHandler(repo, logger)
+		handler := NewDatabaseHandler(repo, &mockProjectRepositoryForDB{}, &mockEnvironmentRepositoryForDB{}, &mockDatabaseInstanceRepositoryForDB{}, &mockChangePlanRepositoryForDB{}, logger)
 
 		e := echo.New()
 

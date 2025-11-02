@@ -544,19 +544,19 @@ Create comprehensive unit tests for Database repository including constraint val
 
 ### P02M29: Write integration tests for resource management endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M29
 
 **Goal**
 Create integration tests for Projects, Environments, Database Instances, and Databases endpoints.
 
 **Acceptance Criteria**
-- [ ] Integration tests for all CRUD endpoints
-- [ ] RBAC authorization tests
-- [ ] Connection testing tests
-- [ ] Constraint validation tests
-- [ ] Test database setup using testcontainers
-- [ ] All integration tests passing
+- [x] Integration tests for all CRUD endpoints
+- [x] RBAC authorization tests
+- [x] Connection testing tests
+- [x] Constraint validation tests
+- [x] Test database setup using testcontainers
+- [x] All integration tests passing
 
 ---
 

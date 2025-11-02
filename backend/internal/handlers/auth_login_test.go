@@ -87,7 +87,7 @@ func TestLoginHandler_SuccessfulLogin(t *testing.T) {
 }
 
 func TestLoginHandler_InvalidPassword(t *testing.T) {
-	hashedPassword, _ := auth.HashPassword("correctpassword")
+	hashedPassword, _ := auth.HashPassword("correctpassword", 0)
 	testUser := &models.User{
 		ID:               uuid.New(),
 		Email:            "test@example.com",
@@ -99,7 +99,7 @@ func TestLoginHandler_InvalidPassword(t *testing.T) {
 	mockRepo := new(MockUserRepository)
 	mockRepo.On("GetByEmail", mock.Anything, testUser.Email).Return(testUser, nil)
 
-	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
@@ -133,7 +133,7 @@ func TestLoginHandler_UserNotFound(t *testing.T) {
 	mockRepo := new(MockUserRepository)
 	mockRepo.On("GetByEmail", mock.Anything, "nonexistent@example.com").Return(nil, sql.ErrNoRows)
 
-	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
@@ -164,7 +164,7 @@ func TestLoginHandler_UserNotFound(t *testing.T) {
 }
 
 func TestLoginHandler_RateLimitExceeded(t *testing.T) {
-	hashedPassword, _ := auth.HashPassword("testpassword")
+	hashedPassword, _ := auth.HashPassword("testpassword", 0)
 	testUser := &models.User{
 		ID:               uuid.New(),
 		Email:            "test@example.com",
@@ -176,7 +176,7 @@ func TestLoginHandler_RateLimitExceeded(t *testing.T) {
 	mockRepo := new(MockUserRepository)
 	mockRepo.On("GetByEmail", mock.Anything, testUser.Email).Return(testUser, nil)
 
-	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
@@ -223,7 +223,7 @@ func TestLoginHandler_RateLimitExceeded(t *testing.T) {
 
 func TestLoginHandler_MalformedJSON(t *testing.T) {
 	mockRepo := new(MockUserRepository)
-	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
@@ -249,7 +249,7 @@ func TestLoginHandler_MalformedJSON(t *testing.T) {
 
 func TestLoginHandler_MissingCredentials(t *testing.T) {
 	mockRepo := new(MockUserRepository)
-	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
@@ -292,7 +292,7 @@ func TestLoginHandler_MissingCredentials(t *testing.T) {
 }
 
 func TestLoginHandler_InactiveUser(t *testing.T) {
-	hashedPassword, _ := auth.HashPassword("testpassword")
+	hashedPassword, _ := auth.HashPassword("testpassword", 0)
 	testUser := &models.User{
 		ID:               uuid.New(),
 		Email:            "test@example.com",
@@ -304,7 +304,7 @@ func TestLoginHandler_InactiveUser(t *testing.T) {
 	mockRepo := new(MockUserRepository)
 	mockRepo.On("GetByEmail", mock.Anything, testUser.Email).Return(testUser, nil)
 
-	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
@@ -338,7 +338,7 @@ func TestLoginHandler_DatabaseError(t *testing.T) {
 	mockRepo := new(MockUserRepository)
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, errors.New("database connection error"))
 
-	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
@@ -372,7 +372,7 @@ func TestLoginHandler_DatabaseError(t *testing.T) {
 
 func TestLoginHandler_MethodNotAllowed(t *testing.T) {
 	mockRepo := new(MockUserRepository)
-	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
@@ -396,7 +396,7 @@ func TestLoginHandler_MethodNotAllowed(t *testing.T) {
 
 func TestLoginHandler_SuccessfulLoginResetsRateLimit(t *testing.T) {
 	password := "testpassword123"
-	hashedPassword, _ := auth.HashPassword(password)
+	hashedPassword, _ := auth.HashPassword(password, 0)
 
 	testUser := &models.User{
 		ID:               uuid.New(),
@@ -409,7 +409,7 @@ func TestLoginHandler_SuccessfulLoginResetsRateLimit(t *testing.T) {
 	mockRepo := new(MockUserRepository)
 	mockRepo.On("GetByEmail", mock.Anything, testUser.Email).Return(testUser, nil)
 
-	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long")
+	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()

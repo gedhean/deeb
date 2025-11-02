@@ -78,24 +78,41 @@ func (m *mockDatabaseInstanceRepository) Delete(ctx context.Context, id uuid.UUI
 	return repository.ErrNotFound
 }
 
+func (m *mockDatabaseInstanceRepository) Count(ctx context.Context) (int64, error) {
+	return int64(len(m.instances)), nil
+}
+
+// Mock DatabaseRepository for testing
+type mockDatabaseRepositoryForInstance struct{}
+func (m *mockDatabaseRepositoryForInstance) Create(ctx context.Context, database *models.Database) error { return nil }
+func (m *mockDatabaseRepositoryForInstance) GetByID(ctx context.Context, id uuid.UUID) (*models.Database, error) { return nil, nil }
+func (m *mockDatabaseRepositoryForInstance) List(ctx context.Context, limit, offset int) ([]*models.Database, error) { return nil, nil }
+func (m *mockDatabaseRepositoryForInstance) Count(ctx context.Context) (int, error) { return 0, nil }
+func (m *mockDatabaseRepositoryForInstance) GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) { return nil, nil }
+func (m *mockDatabaseRepositoryForInstance) ListByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) { return nil, nil }
+func (m *mockDatabaseRepositoryForInstance) ListByInstanceID(ctx context.Context, instanceID uuid.UUID, limit, offset int) ([]*models.Database, error) { return nil, nil }
+func (m *mockDatabaseRepositoryForInstance) ListByEnvironmentID(ctx context.Context, environmentID uuid.UUID, limit, offset int) ([]*models.Database, error) { return nil, nil }
+func (m *mockDatabaseRepositoryForInstance) Update(ctx context.Context, database *models.Database) error { return nil }
+func (m *mockDatabaseRepositoryForInstance) Delete(ctx context.Context, id uuid.UUID) error { return nil }
+
 func TestCreateDatabaseInstance(t *testing.T) {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
 	t.Run("create database instance successfully", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 		e.Validator = &noOpValidator{}
 
-		envID := uuid.New()
 		reqBody := `{
 			"name": "Production DB",
 			"host": "prod-db.example.com",
 			"port": 5432,
-			"engine": "postgresql",
-			"environment_id": "` + envID.String() + `"
+			"database_type": "postgresql",
+			"username": "testuser",
+			"password": "testpassword"
 		}`
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/database-instances", strings.NewReader(reqBody))
@@ -120,14 +137,14 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			t.Errorf("Expected name 'Production DB', got %s", response.Name)
 		}
 
-		if response.Engine != models.DatabaseEnginePostgreSQL {
-			t.Errorf("Expected engine 'postgresql', got %s", response.Engine)
+		if response.DatabaseType != models.DatabaseTypePostgreSQL {
+			t.Errorf("Expected database_type 'postgresql', got %s", response.DatabaseType)
 		}
 	})
 
 	t.Run("create database instance with validation error", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -135,7 +152,9 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			"name": "",
 			"host": "prod-db.example.com",
 			"port": 5432,
-			"engine": "postgresql"
+			"database_type": "postgresql",
+			"username": "testuser",
+			"password": "testpassword"
 		}`
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/database-instances", strings.NewReader(reqBody))
@@ -154,7 +173,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 
 	t.Run("create database instance with invalid JSON", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -180,7 +199,6 @@ func TestListDatabaseInstances(t *testing.T) {
 	defer logger.Sync()
 
 	t.Run("list database instances successfully", func(t *testing.T) {
-		envID := uuid.New()
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
@@ -188,20 +206,18 @@ func TestListDatabaseInstances(t *testing.T) {
 					Name:          "Production DB",
 					Host:          "prod-db.example.com",
 					Port:          5432,
-					Engine:        models.DatabaseEnginePostgreSQL,
-					EnvironmentID: envID,
+					DatabaseType:  models.DatabaseTypePostgreSQL,
 				},
 				{
 					ID:            uuid.New(),
 					Name:          "Staging DB",
 					Host:          "staging-db.example.com",
 					Port:          3306,
-					Engine:        models.DatabaseEngineMySQL,
-					EnvironmentID: envID,
+					DatabaseType:  models.DatabaseTypeMySQL,
 				},
 			},
 		}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -230,7 +246,7 @@ func TestListDatabaseInstances(t *testing.T) {
 
 	t.Run("list database instances with pagination", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -267,7 +283,6 @@ func TestGetDatabaseInstance(t *testing.T) {
 
 	t.Run("get database instance successfully", func(t *testing.T) {
 		instanceID := uuid.New()
-		envID := uuid.New()
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
@@ -275,12 +290,11 @@ func TestGetDatabaseInstance(t *testing.T) {
 					Name:          "Production DB",
 					Host:          "prod-db.example.com",
 					Port:          5432,
-					Engine:        models.DatabaseEnginePostgreSQL,
-					EnvironmentID: envID,
+					DatabaseType:  models.DatabaseTypePostgreSQL,
 				},
 			},
 		}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -314,7 +328,7 @@ func TestGetDatabaseInstance(t *testing.T) {
 
 	t.Run("get database instance with invalid ID", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -335,7 +349,7 @@ func TestGetDatabaseInstance(t *testing.T) {
 
 	t.Run("get database instance not found", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -362,7 +376,6 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 
 	t.Run("update database instance successfully", func(t *testing.T) {
 		instanceID := uuid.New()
-		envID := uuid.New()
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
@@ -370,12 +383,11 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 					Name:          "Production DB",
 					Host:          "prod-db.example.com",
 					Port:          5432,
-					Engine:        models.DatabaseEnginePostgreSQL,
-					EnvironmentID: envID,
+					DatabaseType:  models.DatabaseTypePostgreSQL,
 				},
 			},
 		}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 		e.Validator = &noOpValidator{}
@@ -411,7 +423,6 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 
 	t.Run("update database instance with validation error", func(t *testing.T) {
 		instanceID := uuid.New()
-		envID := uuid.New()
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
@@ -419,12 +430,11 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 					Name:          "Production DB",
 					Host:          "prod-db.example.com",
 					Port:          5432,
-					Engine:        models.DatabaseEnginePostgreSQL,
-					EnvironmentID: envID,
+					DatabaseType:  models.DatabaseTypePostgreSQL,
 				},
 			},
 		}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -450,7 +460,7 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 
 	t.Run("update database instance not found", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 		e.Validator = &noOpValidator{}
@@ -478,7 +488,7 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 
 	t.Run("update database instance with invalid ID", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -509,7 +519,6 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 
 	t.Run("delete database instance successfully", func(t *testing.T) {
 		instanceID := uuid.New()
-		envID := uuid.New()
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
@@ -517,12 +526,11 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 					Name:          "Production DB",
 					Host:          "prod-db.example.com",
 					Port:          5432,
-					Engine:        models.DatabaseEnginePostgreSQL,
-					EnvironmentID: envID,
+					DatabaseType:  models.DatabaseTypePostgreSQL,
 				},
 			},
 		}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -552,7 +560,7 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 
 	t.Run("delete database instance not found", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
@@ -574,7 +582,7 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 
 	t.Run("delete database instance with invalid ID", func(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{}
-		handler := NewDatabaseInstanceHandler(repo, logger)
+		handler := NewDatabaseInstanceHandler(repo, &mockDatabaseRepositoryForInstance{}, "12345678901234567890123456789012", logger)
 
 		e := echo.New()
 
