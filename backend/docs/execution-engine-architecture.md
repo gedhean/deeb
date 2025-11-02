@@ -349,53 +349,96 @@ type SchemaSnapshot struct {
 
 ## Concurrency Control Strategy
 
-### Lock Granularity: Database-Level
+### Lock Granularity: Database-Level (Deeb Application-Level)
 
-**Rationale**: Only one Change Plan can execute on a database at a time. Different databases can execute concurrently.
+**Rationale**: Only one Change Plan can execute on a database at a time. Different databases can execute concurrently. **Critical**: The lock is managed at the Deeb application level and does NOT lock the target database itself, allowing applications to continue reading/writing during Change Plan execution.
 
-### Lock Acquisition
+### Lock Mechanism: Application-Level Lock Table
+
+**Key Design Decision**: Locks are stored in Deeb's own PostgreSQL database (not the target database). This ensures:
+- ✅ Applications can continue reading/writing to target databases during execution
+- ✅ No interference with application database connections
+- ✅ Simple, consistent locking mechanism across all database types (MySQL, PostgreSQL)
+- ✅ Easy to monitor and debug lock status
+
+### Execution Locks Table
+
+**Database Schema** (in Deeb's PostgreSQL database):
+```sql
+CREATE TABLE execution_locks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    target_database_id UUID NOT NULL UNIQUE,
+    change_plan_id UUID NOT NULL,
+    executor_id UUID NOT NULL,
+    locked_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    CONSTRAINT fk_execution_locks_change_plan FOREIGN KEY (change_plan_id) REFERENCES change_plans(id) ON DELETE CASCADE,
+    CONSTRAINT fk_execution_locks_database FOREIGN KEY (target_database_id) REFERENCES databases(id) ON DELETE CASCADE,
+    CONSTRAINT fk_execution_locks_executor FOREIGN KEY (executor_id) REFERENCES users(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_execution_locks_database ON execution_locks(target_database_id);
+CREATE INDEX idx_execution_locks_expires_at ON execution_locks(expires_at);
+```
+
+### Lock Acquisition Strategy
+
+**Method**: Use PostgreSQL `SELECT FOR UPDATE` with row-level locking in a transaction.
 
 **Lock Key**: `target_database_id` (UUID of the target database)
 
-**Lock Mechanism**: Database-backed advisory locks (PostgreSQL) or table-level locks (MySQL)
-
-#### PostgreSQL Implementation
-
+**Implementation Pattern**:
 ```sql
--- Acquire advisory lock
-SELECT pg_advisory_lock(hashtext('change_plan_execution_' || target_database_id::text));
+-- Acquire lock (non-blocking attempt)
+BEGIN;
+SELECT * FROM execution_locks 
+WHERE target_database_id = $1 
+FOR UPDATE NOWAIT;
 
--- Release advisory lock
-SELECT pg_advisory_unlock(hashtext('change_plan_execution_' || target_database_id::text));
+-- If no row exists, insert lock record
+INSERT INTO execution_locks (target_database_id, change_plan_id, executor_id, expires_at)
+VALUES ($1, $2, $3, NOW() + INTERVAL '1 hour')
+ON CONFLICT (target_database_id) DO NOTHING
+RETURNING id;
 
--- Try to acquire lock (non-blocking)
-SELECT pg_try_advisory_lock(hashtext('change_plan_execution_' || target_database_id::text));
+-- If insert succeeded, lock acquired
+-- If insert failed (conflict), lock already held by another execution
+COMMIT;
 ```
 
-#### MySQL Implementation
-
+**Non-Blocking Attempt**:
 ```sql
--- Acquire table lock (using GET_LOCK function)
-SELECT GET_LOCK(CONCAT('change_plan_execution_', target_database_id), timeout_seconds);
+-- Try to acquire lock with NOWAIT (immediate failure if locked)
+SELECT * FROM execution_locks 
+WHERE target_database_id = $1 
+FOR UPDATE NOWAIT;
 
--- Release lock
-SELECT RELEASE_LOCK(CONCAT('change_plan_execution_', target_database_id));
-
--- Check if lock is available
-SELECT IS_FREE_LOCK(CONCAT('change_plan_execution_', target_database_id));
+-- If query succeeds (no row or row returned), proceed to insert/update
+-- If query fails with lock error, another execution is in progress
 ```
 
 ### Lock Timeout
 
-- **Default Timeout**: 30 seconds
+- **Default Timeout**: 30 seconds (for lock acquisition attempt)
+- **Lock Expiration**: 1 hour (maximum lock hold time, prevents stale locks)
 - **Behavior**: If lock cannot be acquired within timeout, return `ErrDatabaseLocked`
 - **Error Response**: HTTP 409 Conflict with message "Database is currently locked by another execution"
 
 ### Lock Lifecycle
 
 1. **Lock Acquisition**: Before execution starts
+   - Insert lock record in `execution_locks` table
+   - Set `expires_at` to 1 hour from now
+   - Use `SELECT FOR UPDATE NOWAIT` to prevent concurrent insertions
+
 2. **Lock Hold**: During entire execution (including snapshot capture)
+   - Lock record remains in `execution_locks` table
+   - Other Change Plans attempting to execute on same database will see locked status
+
 3. **Lock Release**: After execution completes (success or failure)
+   - Delete lock record from `execution_locks` table
+   - Ensures next Change Plan can execute
 
 ### Lock Release Strategy
 
@@ -403,7 +446,18 @@ SELECT IS_FREE_LOCK(CONCAT('change_plan_execution_', target_database_id));
 - **Success**: Lock released after successful execution
 - **Failure**: Lock released after failed execution
 - **Panic**: Lock released via defer statement
-- **Timeout**: Lock released on transaction timeout
+- **Timeout**: Lock released on execution timeout
+- **Stale Lock Cleanup**: Background job periodically cleans up expired locks (expires_at < NOW())
+
+### Lock Cleanup Background Job
+
+**Purpose**: Clean up stale locks from crashed or abandoned executions.
+
+**Implementation**:
+- **Frequency**: Run every 5 minutes
+- **Query**: `DELETE FROM execution_locks WHERE expires_at < NOW()`
+- **Result**: Automatically releases locks from crashed executions
+- **Notification**: Log warning when cleaning up stale locks
 
 ### Concurrency Control Implementation
 
@@ -411,24 +465,131 @@ SELECT IS_FREE_LOCK(CONCAT('change_plan_execution_', target_database_id));
 // Lock manager interface
 type ExecutionLockManager interface {
     // AcquireLock acquires execution lock for a database
-    AcquireLock(ctx context.Context, databaseID uuid.UUID, timeout time.Duration) error
+    // Returns error if lock cannot be acquired (database already locked)
+    AcquireLock(ctx context.Context, databaseID uuid.UUID, changePlanID uuid.UUID, executorID uuid.UUID) error
     
     // ReleaseLock releases execution lock for a database
     ReleaseLock(ctx context.Context, databaseID uuid.UUID) error
     
     // IsLocked checks if database is currently locked
-    IsLocked(ctx context.Context, databaseID uuid.UUID) (bool, error)
+    IsLocked(ctx context.Context, databaseID uuid.UUID) (bool, *ExecutionLock, error)
+    
+    // CleanupExpiredLocks removes expired locks (background job)
+    CleanupExpiredLocks(ctx context.Context) (int, error)
 }
 
-// Lock acquisition pattern
+// ExecutionLock represents a lock record
+type ExecutionLock struct {
+    ID              uuid.UUID
+    TargetDatabaseID uuid.UUID
+    ChangePlanID    uuid.UUID
+    ExecutorID      uuid.UUID
+    LockedAt        time.Time
+    ExpiresAt       time.Time
+}
+
+// Lock acquisition implementation
+func (m *executionLockManager) AcquireLock(
+    ctx context.Context,
+    databaseID uuid.UUID,
+    changePlanID uuid.UUID,
+    executorID uuid.UUID,
+) error {
+    // Use transaction with SELECT FOR UPDATE NOWAIT
+    tx, err := m.db.BeginTxx(ctx, nil)
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %w", err)
+    }
+    defer tx.Rollback()
+    
+    // Check if lock exists (non-blocking)
+    var existingLock ExecutionLock
+    err = tx.GetContext(ctx, &existingLock,
+        "SELECT * FROM execution_locks WHERE target_database_id = $1 FOR UPDATE NOWAIT",
+        databaseID,
+    )
+    
+    if err == nil {
+        // Lock exists - check if expired
+        if time.Now().Before(existingLock.ExpiresAt) {
+            return ErrDatabaseLocked
+        }
+        // Lock expired - delete it
+        _, err = tx.ExecContext(ctx,
+            "DELETE FROM execution_locks WHERE target_database_id = $1",
+            databaseID,
+        )
+        if err != nil {
+            return fmt.Errorf("failed to cleanup expired lock: %w", err)
+        }
+    } else if err != sql.ErrNoRows {
+        // Check if error is lock contention (PostgreSQL error code 55P03)
+        if isLockContentionError(err) {
+            return ErrDatabaseLocked
+        }
+        return fmt.Errorf("failed to check lock: %w", err)
+    }
+    
+    // Insert new lock record
+    expiresAt := time.Now().Add(1 * time.Hour)
+    _, err = tx.ExecContext(ctx,
+        `INSERT INTO execution_locks (target_database_id, change_plan_id, executor_id, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+        databaseID, changePlanID, executorID, expiresAt,
+    )
+    if err != nil {
+        // Handle unique constraint violation (race condition)
+        if isUniqueViolationError(err) {
+            return ErrDatabaseLocked
+        }
+        return fmt.Errorf("failed to acquire lock: %w", err)
+    }
+    
+    // Commit transaction
+    if err := tx.Commit(); err != nil {
+        return fmt.Errorf("failed to commit lock: %w", err)
+    }
+    
+    return nil
+}
+
+// Lock release implementation
+func (m *executionLockManager) ReleaseLock(
+    ctx context.Context,
+    databaseID uuid.UUID,
+) error {
+    result, err := m.db.ExecContext(ctx,
+        "DELETE FROM execution_locks WHERE target_database_id = $1",
+        databaseID,
+    )
+    if err != nil {
+        return fmt.Errorf("failed to release lock: %w", err)
+    }
+    
+    rowsAffected, err := result.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to get rows affected: %w", err)
+    }
+    
+    if rowsAffected == 0 {
+        m.logger.Warn("Attempted to release non-existent lock", zap.String("database_id", databaseID.String()))
+    }
+    
+    return nil
+}
+
+// Execute with lock pattern
 func (s *ExecutionService) executeWithLock(
     ctx context.Context,
     changePlan *models.ChangePlan,
+    executorID uuid.UUID,
 ) error {
     // Acquire lock
-    timeout := 30 * time.Second
-    if err := s.lockManager.AcquireLock(ctx, changePlan.TargetDatabaseID, timeout); err != nil {
-        return ErrDatabaseLocked
+    if err := s.lockManager.AcquireLock(ctx, changePlan.TargetDatabaseID, changePlan.ID, executorID); err != nil {
+        if err == ErrDatabaseLocked {
+            return ErrDatabaseLocked
+        }
+        return fmt.Errorf("failed to acquire lock: %w", err)
     }
     
     // Guarantee lock release
@@ -442,6 +603,15 @@ func (s *ExecutionService) executeWithLock(
     return s.executeChangePlan(ctx, changePlan)
 }
 ```
+
+### Benefits of Application-Level Locking
+
+1. **No Application Impact**: Target databases remain fully accessible for reads/writes
+2. **Cross-Database Compatible**: Works identically for MySQL and PostgreSQL targets
+3. **Observable**: Lock status visible in Deeb's database for monitoring/debugging
+4. **Resilient**: Stale locks automatically cleaned up by background job
+5. **Simple**: Uses standard PostgreSQL row-level locking (SELECT FOR UPDATE)
+6. **Fast**: Lock acquisition/release is a simple database operation in Deeb's database
 
 ### Execution Queue (Future Enhancement)
 
@@ -520,8 +690,11 @@ func (s *ExecutionService) Execute(
     }
 
     // Acquire lock (return immediately if locked)
-    if err := s.lockManager.AcquireLock(ctx, changePlan.TargetDatabaseID, 30*time.Second); err != nil {
-        return nil, ErrDatabaseLocked
+    if err := s.lockManager.AcquireLock(ctx, changePlan.TargetDatabaseID, changePlanID, executorID); err != nil {
+        if err == ErrDatabaseLocked {
+            return nil, ErrDatabaseLocked
+        }
+        return nil, fmt.Errorf("failed to acquire lock: %w", err)
     }
     defer s.lockManager.ReleaseLock(ctx, changePlan.TargetDatabaseID)
 
@@ -713,6 +886,28 @@ CREATE INDEX idx_snapshots_database ON schema_snapshots(target_database_id);
 CREATE INDEX idx_snapshots_type ON schema_snapshots(snapshot_type);
 ```
 
+#### execution_locks Table (New)
+
+```sql
+CREATE TABLE execution_locks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    target_database_id UUID NOT NULL UNIQUE,
+    change_plan_id UUID NOT NULL,
+    executor_id UUID NOT NULL,
+    locked_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    CONSTRAINT fk_execution_locks_change_plan FOREIGN KEY (change_plan_id) REFERENCES change_plans(id) ON DELETE CASCADE,
+    CONSTRAINT fk_execution_locks_database FOREIGN KEY (target_database_id) REFERENCES databases(id) ON DELETE CASCADE,
+    CONSTRAINT fk_execution_locks_executor FOREIGN KEY (executor_id) REFERENCES users(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_execution_locks_database ON execution_locks(target_database_id);
+CREATE INDEX idx_execution_locks_expires_at ON execution_locks(expires_at);
+```
+
+**Note**: This table stores application-level locks in Deeb's PostgreSQL database. It does NOT lock the target databases themselves, allowing applications to continue reading/writing during Change Plan execution.
+
 ## Future Enhancements
 
 1. **Execution Queue**: Queue Change Plans when database is locked (P04M19)
@@ -731,5 +926,5 @@ CREATE INDEX idx_snapshots_type ON schema_snapshots(snapshot_type);
 - Error messages should be user-friendly and actionable
 - Logging should be comprehensive for audit purposes
 - Schema snapshots should be compressed to reduce storage requirements
-- Lock management should use database-native locking mechanisms
+- Lock management should use application-level locking in Deeb's database (not target database locks)
 
