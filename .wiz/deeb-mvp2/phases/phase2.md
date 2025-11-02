@@ -562,21 +562,21 @@ Create integration tests for Projects, Environments, Database Instances, and Dat
 
 ### P02M30: Update API documentation (OpenAPI/Swagger)
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M30
 
 **Goal**
 Update OpenAPI specification with all new resource management endpoints including Policy endpoints.
 
 **Acceptance Criteria**
-- [ ] OpenAPI spec updated with Project endpoints
-- [ ] OpenAPI spec updated with Environment endpoints
-- [ ] OpenAPI spec updated with Policy endpoints
-- [ ] OpenAPI spec updated with DatabaseInstance endpoints
-- [ ] OpenAPI spec updated with Database endpoints
-- [ ] OpenAPI spec updated with ProjectMember endpoints
-- [ ] Request/response schemas documented
-- [ ] Swagger UI displays all endpoints correctly
+- [x] OpenAPI spec updated with Project endpoints
+- [x] OpenAPI spec updated with Environment endpoints
+- [x] OpenAPI spec updated with Policy endpoints
+- [x] OpenAPI spec updated with DatabaseInstance endpoints
+- [x] OpenAPI spec updated with Database endpoints
+- [x] OpenAPI spec updated with ProjectMember endpoints
+- [x] Request/response schemas documented
+- [x] Swagger UI displays all endpoints correctly
 
 ---
 
