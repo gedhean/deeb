@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nsxbet/deeb/internal/models"
@@ -308,3 +309,389 @@ func TestStatusHelperFunctions(t *testing.T) {
 	}
 }
 
+func TestValidateTransition_InvalidStatusValues(t *testing.T) {
+	tests := []struct {
+		name        string
+		from        models.ChangePlanStatus
+		to          models.ChangePlanStatus
+		expectError bool
+		errorReason string
+	}{
+		{
+			name:        "invalid source status",
+			from:        models.ChangePlanStatus("invalid"),
+			to:          models.ChangePlanStatusOpen,
+			expectError: true,
+			errorReason: "source status",
+		},
+		{
+			name:        "invalid target status",
+			from:        models.ChangePlanStatusDraft,
+			to:          models.ChangePlanStatus("invalid"),
+			expectError: true,
+			errorReason: "target status",
+		},
+		{
+			name:        "both statuses invalid",
+			from:        models.ChangePlanStatus("invalid1"),
+			to:          models.ChangePlanStatus("invalid2"),
+			expectError: true,
+			errorReason: "source status",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTransition(tt.from, tt.to)
+			if (err != nil) != tt.expectError {
+				t.Errorf("ValidateTransition(%s, %s) error = %v, expectError %v", tt.from, tt.to, err, tt.expectError)
+				return
+			}
+			if tt.expectError && err != nil {
+				if err.Error() == "" {
+					t.Errorf("ValidateTransition(%s, %s) error message is empty", tt.from, tt.to)
+				}
+				// Check error type
+				if _, ok := err.(ErrInvalidStatusTransition); !ok {
+					t.Errorf("ValidateTransition(%s, %s) error type = %T, want ErrInvalidStatusTransition", tt.from, tt.to, err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateTransition_ErrorMessages(t *testing.T) {
+	tests := []struct {
+		name           string
+		from           models.ChangePlanStatus
+		to             models.ChangePlanStatus
+		expectedInMsg  string
+	}{
+		{
+			name:          "invalid transition error message",
+			from:          models.ChangePlanStatusDraft,
+			to:            models.ChangePlanStatusApproved,
+			expectedInMsg: "invalid status transition",
+		},
+		{
+			name:          "invalid source status error message",
+			from:          models.ChangePlanStatus("invalid"),
+			to:            models.ChangePlanStatusOpen,
+			expectedInMsg: "source status",
+		},
+		{
+			name:          "invalid target status error message",
+			from:          models.ChangePlanStatusDraft,
+			to:            models.ChangePlanStatus("invalid"),
+			expectedInMsg: "target status",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTransition(tt.from, tt.to)
+			if err == nil {
+				t.Errorf("ValidateTransition(%s, %s) expected error, got nil", tt.from, tt.to)
+				return
+			}
+			if err.Error() == "" {
+				t.Errorf("ValidateTransition(%s, %s) error message is empty", tt.from, tt.to)
+				return
+			}
+			if !strings.Contains(err.Error(), tt.expectedInMsg) {
+				t.Errorf("ValidateTransition(%s, %s) error message = %q, want to contain %q", tt.from, tt.to, err.Error(), tt.expectedInMsg)
+			}
+		})
+	}
+}
+
+func TestErrInvalidStatusTransition_Error(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      ErrInvalidStatusTransition
+		expected string
+	}{
+		{
+			name: "error with reason",
+			err: ErrInvalidStatusTransition{
+				From:   models.ChangePlanStatusDraft,
+				To:     models.ChangePlanStatusApproved,
+				Reason: "transition not allowed",
+			},
+			expected: "invalid status transition from Draft to Approved: transition not allowed",
+		},
+		{
+			name: "error without reason",
+			err: ErrInvalidStatusTransition{
+				From: models.ChangePlanStatusDraft,
+				To:   models.ChangePlanStatusApproved,
+			},
+			expected: "invalid status transition from Draft to Approved",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := tt.err.Error()
+			if msg != tt.expected {
+				t.Errorf("ErrInvalidStatusTransition.Error() = %q, want %q", msg, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCanTransition_AllStatusCombinations(t *testing.T) {
+	allStatuses := []models.ChangePlanStatus{
+		models.ChangePlanStatusDraft,
+		models.ChangePlanStatusOpen,
+		models.ChangePlanStatusApproved,
+		models.ChangePlanStatusInProgress,
+		models.ChangePlanStatusCompleted,
+		models.ChangePlanStatusFailed,
+		models.ChangePlanStatusClosed,
+		models.ChangePlanStatusCancelled,
+	}
+
+	// Test all combinations
+	for _, from := range allStatuses {
+		for _, to := range allStatuses {
+			if from == to {
+				// Same status should always be valid
+				if !CanTransition(from, to) {
+					t.Errorf("CanTransition(%s, %s) = false, want true (same status)", from, to)
+				}
+				continue
+			}
+
+			// Check if transition is valid
+			result := CanTransition(from, to)
+			validTransitions := GetValidTransitions(from)
+
+			expected := false
+			for _, valid := range validTransitions {
+				if valid == to {
+					expected = true
+					break
+				}
+			}
+
+			if result != expected {
+				t.Errorf("CanTransition(%s, %s) = %v, want %v", from, to, result, expected)
+			}
+		}
+	}
+}
+
+func TestGetValidTransitions_AllStatuses(t *testing.T) {
+	allStatuses := []models.ChangePlanStatus{
+		models.ChangePlanStatusDraft,
+		models.ChangePlanStatusOpen,
+		models.ChangePlanStatusApproved,
+		models.ChangePlanStatusInProgress,
+		models.ChangePlanStatusCompleted,
+		models.ChangePlanStatusFailed,
+		models.ChangePlanStatusClosed,
+		models.ChangePlanStatusCancelled,
+	}
+
+	for _, status := range allStatuses {
+		t.Run(string(status), func(t *testing.T) {
+			transitions := GetValidTransitions(status)
+			// Should always return a slice (may be empty for terminal statuses)
+			if transitions == nil {
+				t.Errorf("GetValidTransitions(%s) = nil, want []", status)
+			}
+
+			// Verify all returned transitions are valid
+			for _, transition := range transitions {
+				if !transition.IsValid() {
+					t.Errorf("GetValidTransitions(%s) returned invalid status: %s", status, transition)
+				}
+			}
+		})
+	}
+}
+
+func TestIsTerminalStatus_AllStatuses(t *testing.T) {
+	terminalStatuses := []models.ChangePlanStatus{
+		models.ChangePlanStatusCompleted,
+		models.ChangePlanStatusFailed,
+		models.ChangePlanStatusClosed,
+		models.ChangePlanStatusCancelled,
+	}
+
+	nonTerminalStatuses := []models.ChangePlanStatus{
+		models.ChangePlanStatusDraft,
+		models.ChangePlanStatusOpen,
+		models.ChangePlanStatusApproved,
+		models.ChangePlanStatusInProgress,
+	}
+
+	for _, status := range terminalStatuses {
+		t.Run(string(status)+" terminal", func(t *testing.T) {
+			if !IsTerminalStatus(status) {
+				t.Errorf("IsTerminalStatus(%s) = false, want true", status)
+			}
+		})
+	}
+
+	for _, status := range nonTerminalStatuses {
+		t.Run(string(status)+" non-terminal", func(t *testing.T) {
+			if IsTerminalStatus(status) {
+				t.Errorf("IsTerminalStatus(%s) = true, want false", status)
+			}
+		})
+	}
+}
+
+func TestCanBeModified_AllStatuses(t *testing.T) {
+	modifiableStatuses := []models.ChangePlanStatus{
+		models.ChangePlanStatusDraft,
+	}
+
+	nonModifiableStatuses := []models.ChangePlanStatus{
+		models.ChangePlanStatusOpen,
+		models.ChangePlanStatusApproved,
+		models.ChangePlanStatusInProgress,
+		models.ChangePlanStatusCompleted,
+		models.ChangePlanStatusFailed,
+		models.ChangePlanStatusClosed,
+		models.ChangePlanStatusCancelled,
+	}
+
+	for _, status := range modifiableStatuses {
+		t.Run(string(status)+" modifiable", func(t *testing.T) {
+			if !CanBeModified(status) {
+				t.Errorf("CanBeModified(%s) = false, want true", status)
+			}
+		})
+	}
+
+	for _, status := range nonModifiableStatuses {
+		t.Run(string(status)+" non-modifiable", func(t *testing.T) {
+			if CanBeModified(status) {
+				t.Errorf("CanBeModified(%s) = true, want false", status)
+			}
+		})
+	}
+}
+
+func TestCanBeDeleted_AllStatuses(t *testing.T) {
+	deletableStatuses := []models.ChangePlanStatus{
+		models.ChangePlanStatusDraft,
+		models.ChangePlanStatusClosed,
+	}
+
+	nonDeletableStatuses := []models.ChangePlanStatus{
+		models.ChangePlanStatusOpen,
+		models.ChangePlanStatusApproved,
+		models.ChangePlanStatusInProgress,
+		models.ChangePlanStatusCompleted,
+		models.ChangePlanStatusFailed,
+		models.ChangePlanStatusCancelled,
+	}
+
+	for _, status := range deletableStatuses {
+		t.Run(string(status)+" deletable", func(t *testing.T) {
+			if !CanBeDeleted(status) {
+				t.Errorf("CanBeDeleted(%s) = false, want true", status)
+			}
+		})
+	}
+
+	for _, status := range nonDeletableStatuses {
+		t.Run(string(status)+" non-deletable", func(t *testing.T) {
+			if CanBeDeleted(status) {
+				t.Errorf("CanBeDeleted(%s) = true, want false", status)
+			}
+		})
+	}
+}
+
+func TestCanTransition_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		from     models.ChangePlanStatus
+		to       models.ChangePlanStatus
+		expected bool
+	}{
+		{"empty string to Draft", models.ChangePlanStatus(""), models.ChangePlanStatusDraft, false},
+		{"Draft to empty string", models.ChangePlanStatusDraft, models.ChangePlanStatus(""), false},
+		{"empty string to empty string", models.ChangePlanStatus(""), models.ChangePlanStatus(""), true}, // Same status
+		{"unknown status", models.ChangePlanStatus("Unknown"), models.ChangePlanStatusDraft, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := CanTransition(tt.from, tt.to)
+			if result != tt.expected {
+				t.Errorf("CanTransition(%s, %s) = %v, want %v", tt.from, tt.to, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestValidateTransition_AllValidTransitions(t *testing.T) {
+	validTransitionTests := []struct {
+		name string
+		from models.ChangePlanStatus
+		to   models.ChangePlanStatus
+	}{
+		{"Draft to Open", models.ChangePlanStatusDraft, models.ChangePlanStatusOpen},
+		{"Draft to Cancelled", models.ChangePlanStatusDraft, models.ChangePlanStatusCancelled},
+		{"Open to Approved", models.ChangePlanStatusOpen, models.ChangePlanStatusApproved},
+		{"Open to Closed", models.ChangePlanStatusOpen, models.ChangePlanStatusClosed},
+		{"Open to Draft", models.ChangePlanStatusOpen, models.ChangePlanStatusDraft},
+		{"Approved to InProgress", models.ChangePlanStatusApproved, models.ChangePlanStatusInProgress},
+		{"Approved to Closed", models.ChangePlanStatusApproved, models.ChangePlanStatusClosed},
+		{"Approved to Cancelled", models.ChangePlanStatusApproved, models.ChangePlanStatusCancelled},
+		{"InProgress to Completed", models.ChangePlanStatusInProgress, models.ChangePlanStatusCompleted},
+		{"InProgress to Failed", models.ChangePlanStatusInProgress, models.ChangePlanStatusFailed},
+	}
+
+	for _, tt := range validTransitionTests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTransition(tt.from, tt.to)
+			if err != nil {
+				t.Errorf("ValidateTransition(%s, %s) = %v, want nil", tt.from, tt.to, err)
+			}
+		})
+	}
+}
+
+func TestValidateTransition_AllInvalidTransitions(t *testing.T) {
+	invalidTransitionTests := []struct {
+		name string
+		from models.ChangePlanStatus
+		to   models.ChangePlanStatus
+	}{
+		{"Draft to Approved", models.ChangePlanStatusDraft, models.ChangePlanStatusApproved},
+		{"Draft to InProgress", models.ChangePlanStatusDraft, models.ChangePlanStatusInProgress},
+		{"Draft to Completed", models.ChangePlanStatusDraft, models.ChangePlanStatusCompleted},
+		{"Open to InProgress", models.ChangePlanStatusOpen, models.ChangePlanStatusInProgress},
+		{"Open to Completed", models.ChangePlanStatusOpen, models.ChangePlanStatusCompleted},
+		{"Approved to Completed", models.ChangePlanStatusApproved, models.ChangePlanStatusCompleted},
+		{"Approved to Failed", models.ChangePlanStatusApproved, models.ChangePlanStatusFailed},
+		{"Completed to Failed", models.ChangePlanStatusCompleted, models.ChangePlanStatusFailed},
+		{"Failed to Completed", models.ChangePlanStatusFailed, models.ChangePlanStatusCompleted},
+		{"Completed to Draft", models.ChangePlanStatusCompleted, models.ChangePlanStatusDraft},
+		{"Failed to Draft", models.ChangePlanStatusFailed, models.ChangePlanStatusDraft},
+		{"Closed to Open", models.ChangePlanStatusClosed, models.ChangePlanStatusOpen},
+		{"Closed to Draft", models.ChangePlanStatusClosed, models.ChangePlanStatusDraft},
+		{"Cancelled to Draft", models.ChangePlanStatusCancelled, models.ChangePlanStatusDraft},
+		{"Cancelled to Open", models.ChangePlanStatusCancelled, models.ChangePlanStatusOpen},
+	}
+
+	for _, tt := range invalidTransitionTests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTransition(tt.from, tt.to)
+			if err == nil {
+				t.Errorf("ValidateTransition(%s, %s) = nil, want error", tt.from, tt.to)
+			}
+			// Verify error type
+			if _, ok := err.(ErrInvalidStatusTransition); !ok {
+				t.Errorf("ValidateTransition(%s, %s) error type = %T, want ErrInvalidStatusTransition", tt.from, tt.to, err)
+			}
+		})
+	}
+}
