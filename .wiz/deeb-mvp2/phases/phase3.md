@@ -314,19 +314,20 @@ Create validator detecting breaking changes (DROP COLUMN, RENAME TABLE, data typ
 
 ### P03M16: Implement best practices validator
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M16
 
 **Goal**
 Create validator checking naming conventions and data type best practices.
 
 **Acceptance Criteria**
-- [ ] Best practices validator created in `backend/internal/review/validators/best_practices.go`
-- [ ] Naming convention checks (table names, column names, index names)
-- [ ] Data type best practices (no TEXT for small strings, proper index types)
-- [ ] Best practice violations reported with severity (Info or Warning)
-- [ ] Configurable rules for naming conventions
-- [ ] Unit tests for best practices validator passing (>85% coverage)
+- [x] Best practices validator created in `backend/internal/review/validators/best_practices.go`
+- [x] Naming convention checks (table names, column names, index names)
+- [x] Data type best practices (no TEXT for small strings, proper index types)
+- [x] Best practice violations reported with severity (Info or Warning)
+- [x] Configurable rules for naming conventions
+- [x] Naming convetions: snake_case for everything (tables: plural, columns: singular) and indexes like `idx_<table><column>` with hardcoded defaults for MVP
+- [x] Unit tests for best practices validator passing (>85% coverage)
 
 ---
 
