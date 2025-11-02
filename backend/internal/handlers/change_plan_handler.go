@@ -315,7 +315,23 @@ func (h *ChangePlanHandler) GetChangePlan(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, changePlan.ToResponse())
+	h.logger.Info("Change plan retrieved successfully",
+		zap.String("change_plan_id", changePlan.ID.String()),
+	)
+
+	// Fetch policy findings for this change plan
+	findings, err := h.policyFindingRepo.GetByChangePlanID(ctx, changePlan.ID)
+	if err != nil {
+		h.logger.Warn("Failed to fetch policy findings", zap.Error(err))
+		// Continue - findings are optional
+		findings = []*models.PolicyFinding{}
+	}
+
+	// Build response with policy findings
+	response := changePlan.ToResponse()
+	response = h.enrichWithPolicyFindings(response, findings)
+
+	return c.JSON(http.StatusOK, response)
 }
 
 // ListChangePlans handles GET /api/v1/change-plans
@@ -1093,6 +1109,371 @@ func (h *ChangePlanHandler) DeleteChangePlan(c echo.Context) error {
 	)
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+// enrichWithPolicyFindings enriches ChangePlanResponse with policy findings
+func (h *ChangePlanHandler) enrichWithPolicyFindings(response *models.ChangePlanResponse, findings []*models.PolicyFinding) *models.ChangePlanResponse {
+	if len(findings) == 0 {
+		response.HasErrors = false
+		response.HasWarnings = false
+		return response
+	}
+
+	// Group findings by severity
+	errors := make([]models.PolicyFindingItem, 0)
+	warnings := make([]models.PolicyFindingItem, 0)
+	infos := make([]models.PolicyFindingItem, 0)
+
+	for _, finding := range findings {
+		item := models.PolicyFindingItem{
+			ValidatorType: finding.ValidatorType,
+			RuleName:      finding.RuleName,
+			Message:       finding.Message,
+			LineNumber:    finding.LineNumber,
+			ColumnNumber:  finding.ColumnNumber,
+		}
+
+		switch finding.Severity {
+		case "Error":
+			errors = append(errors, item)
+		case "Warning":
+			warnings = append(warnings, item)
+		case "Info":
+			infos = append(infos, item)
+		}
+	}
+
+	// Set flags
+	response.HasErrors = len(errors) > 0
+	response.HasWarnings = len(warnings) > 0
+
+	// Create summary
+	response.PolicyFindings = &models.PolicyFindingsSummary{
+		Errors:   errors,
+		Warnings: warnings,
+		Infos:    infos,
+		Counts: models.PolicyFindingCounts{
+			Errors:   len(errors),
+			Warnings: len(warnings),
+			Infos:    len(infos),
+			Total:    len(findings),
+		},
+	}
+
+	return response
+}
+
+// ApproveChangePlan handles POST /api/v1/change-plans/:id/approve
+// Approves a change plan, blocking if SQL Review errors exist
+func (h *ChangePlanHandler) ApproveChangePlan(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Get change plan
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// Check authorization: User must have approval permissions
+	userIDStr, _, organizationRole, ok := rbac.GetUserFromContext(ctx)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Organization admins can approve any change plan
+	if organizationRole != rbac.OrganizationAdmin {
+		// Check if user is a member of the project
+		member, err := h.projectMemberRepo.GetMemberRole(ctx, changePlan.ProjectID, userID)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				return c.JSON(http.StatusForbidden, map[string]interface{}{
+					"error": "Not a member of this project",
+				})
+			}
+			h.logger.Error("Failed to check project membership", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to check project membership",
+			})
+		}
+
+		// Check if user has PermissionChangesApprove
+		projectRole := convertProjectRoleToRBAC(member.Role)
+		checker := rbac.NewCheckerService()
+		if !checker.HasProjectPermission(projectRole, rbac.PermissionChangesApprove) {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "Insufficient permissions to approve change plans",
+			})
+		}
+	}
+
+	// Validate status: Only Open status can be approved
+	if changePlan.Status != models.ChangePlanStatusOpen {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Only Open change plans can be approved",
+			"details": map[string]interface{}{
+				"current_status": changePlan.Status,
+			},
+		})
+	}
+
+	// Check for SQL Review errors
+	severityCounts, err := h.policyFindingRepo.CountBySeverity(ctx, changePlan.ID)
+	if err != nil {
+		h.logger.Warn("Failed to fetch policy findings", zap.Error(err))
+		// Continue - treat as no errors if we can't fetch
+		severityCounts = map[string]int{}
+	}
+
+	errorCount := severityCounts["Error"]
+	if errorCount > 0 {
+		// Fetch error findings to return in response
+		findings, err := h.policyFindingRepo.GetByChangePlanID(ctx, changePlan.ID)
+		if err != nil {
+			h.logger.Warn("Failed to fetch policy findings", zap.Error(err))
+			findings = []*models.PolicyFinding{}
+		}
+
+		// Filter only errors
+		errorFindings := make([]models.PolicyFindingItem, 0)
+		for _, finding := range findings {
+			if finding.Severity == "Error" {
+				errorFindings = append(errorFindings, models.PolicyFindingItem{
+					ValidatorType: finding.ValidatorType,
+					RuleName:      finding.RuleName,
+					Message:       finding.Message,
+					LineNumber:    finding.LineNumber,
+					ColumnNumber:  finding.ColumnNumber,
+				})
+			}
+		}
+
+		h.logger.Info("Change plan approval blocked due to SQL Review errors",
+			zap.String("change_plan_id", changePlan.ID.String()),
+			zap.Int("error_count", errorCount),
+		)
+
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Cannot approve change plan with SQL Review errors",
+			"details": map[string]interface{}{
+				"error_count": errorCount,
+				"errors":      errorFindings,
+			},
+		})
+	}
+
+	// Validate transition
+	if err := workflow.ValidateTransition(changePlan.Status, models.ChangePlanStatusApproved); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	// Update status to Approved
+	changePlan.Status = models.ChangePlanStatusApproved
+	if err := h.changePlanRepo.Update(ctx, changePlan); err != nil {
+		h.logger.Error("Failed to approve change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to approve change plan",
+		})
+	}
+
+	h.logger.Info("Change plan approved successfully",
+		zap.String("change_plan_id", changePlan.ID.String()),
+		zap.String("approved_by", userID.String()),
+	)
+
+	return c.JSON(http.StatusOK, changePlan.ToResponse())
+}
+
+// ExecuteChangePlan handles POST /api/v1/change-plans/:id/execute
+// Executes a change plan, blocking if SQL Review errors exist (safety check)
+func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Get change plan
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// Check authorization: User must have execution permissions
+	userIDStr, _, organizationRole, ok := rbac.GetUserFromContext(ctx)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Organization admins can execute any change plan
+	if organizationRole != rbac.OrganizationAdmin {
+		// Check if user is a member of the project
+		member, err := h.projectMemberRepo.GetMemberRole(ctx, changePlan.ProjectID, userID)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				return c.JSON(http.StatusForbidden, map[string]interface{}{
+					"error": "Not a member of this project",
+				})
+			}
+			h.logger.Error("Failed to check project membership", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to check project membership",
+			})
+		}
+
+		// Check if user has PermissionChangesExecute (or approve permission)
+		projectRole := convertProjectRoleToRBAC(member.Role)
+		checker := rbac.NewCheckerService()
+		if !checker.HasProjectPermission(projectRole, rbac.PermissionChangesExecute) &&
+			!checker.HasProjectPermission(projectRole, rbac.PermissionChangesApprove) {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "Insufficient permissions to execute change plans",
+			})
+		}
+	}
+
+	// Validate status: Only Approved status can be executed
+	if changePlan.Status != models.ChangePlanStatusApproved {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Only Approved change plans can be executed",
+			"details": map[string]interface{}{
+				"current_status": changePlan.Status,
+			},
+		})
+	}
+
+	// Safety check: Verify no SQL Review errors exist
+	severityCounts, err := h.policyFindingRepo.CountBySeverity(ctx, changePlan.ID)
+	if err != nil {
+		h.logger.Warn("Failed to fetch policy findings", zap.Error(err))
+		// Continue - treat as no errors if we can't fetch
+		severityCounts = map[string]int{}
+	}
+
+	errorCount := severityCounts["Error"]
+	if errorCount > 0 {
+		// Fetch error findings to return in response
+		findings, err := h.policyFindingRepo.GetByChangePlanID(ctx, changePlan.ID)
+		if err != nil {
+			h.logger.Warn("Failed to fetch policy findings", zap.Error(err))
+			findings = []*models.PolicyFinding{}
+		}
+
+		// Filter only errors
+		errorFindings := make([]models.PolicyFindingItem, 0)
+		for _, finding := range findings {
+			if finding.Severity == "Error" {
+				errorFindings = append(errorFindings, models.PolicyFindingItem{
+					ValidatorType: finding.ValidatorType,
+					RuleName:      finding.RuleName,
+					Message:       finding.Message,
+					LineNumber:    finding.LineNumber,
+					ColumnNumber:  finding.ColumnNumber,
+				})
+			}
+		}
+
+		h.logger.Warn("Change plan execution blocked due to SQL Review errors (safety check)",
+			zap.String("change_plan_id", changePlan.ID.String()),
+			zap.Int("error_count", errorCount),
+		)
+
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Cannot execute change plan with SQL Review errors",
+			"details": map[string]interface{}{
+				"error_count": errorCount,
+				"errors":      errorFindings,
+			},
+		})
+	}
+
+	// Validate transition
+	if err := workflow.ValidateTransition(changePlan.Status, models.ChangePlanStatusInProgress); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	// Update status to InProgress
+	changePlan.Status = models.ChangePlanStatusInProgress
+	if err := h.changePlanRepo.Update(ctx, changePlan); err != nil {
+		h.logger.Error("Failed to execute change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to execute change plan",
+		})
+	}
+
+	h.logger.Info("Change plan execution started",
+		zap.String("change_plan_id", changePlan.ID.String()),
+		zap.String("executed_by", userID.String()),
+	)
+
+	return c.JSON(http.StatusOK, changePlan.ToResponse())
 }
 
 // convertProjectRoleToRBAC converts models.ProjectRole to rbac.ProjectRole

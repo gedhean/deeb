@@ -433,4 +433,6 @@ func setupChangePlanRoutes(
 	changePlansGroup.PUT("/:id", changePlanHandler.UpdateChangePlan, authMiddleware.Authenticate, statusTransitionMiddleware.ValidateStatusTransition)
 	changePlansGroup.DELETE("/:id", changePlanHandler.DeleteChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/review", changePlanHandler.TriggerSQLReview, authMiddleware.Authenticate)
+	changePlansGroup.POST("/:id/approve", changePlanHandler.ApproveChangePlan, authMiddleware.Authenticate)
+	changePlansGroup.POST("/:id/execute", changePlanHandler.ExecuteChangePlan, authMiddleware.Authenticate)
 }

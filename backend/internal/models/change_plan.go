@@ -120,6 +120,35 @@ type ChangePlanResponse struct {
 	ErrorMessage        *string          `json:"error_message,omitempty"`
 	CreatedAt           time.Time        `json:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"`
+	// SQL Review results
+	PolicyFindings *PolicyFindingsSummary `json:"policy_findings,omitempty"`
+	HasErrors      bool                   `json:"has_errors"`
+	HasWarnings    bool                   `json:"has_warnings"`
+}
+
+// PolicyFindingsSummary groups policy findings by severity
+type PolicyFindingsSummary struct {
+	Errors   []PolicyFindingItem `json:"errors"`
+	Warnings []PolicyFindingItem `json:"warnings"`
+	Infos    []PolicyFindingItem `json:"infos"`
+	Counts   PolicyFindingCounts `json:"counts"`
+}
+
+// PolicyFindingItem represents a single policy finding
+type PolicyFindingItem struct {
+	ValidatorType string `json:"validator_type"`
+	RuleName      string `json:"rule_name"`
+	Message       string `json:"message"`
+	LineNumber    *int   `json:"line_number,omitempty"`
+	ColumnNumber  *int   `json:"column_number,omitempty"`
+}
+
+// PolicyFindingCounts represents the count of findings by severity
+type PolicyFindingCounts struct {
+	Errors   int `json:"errors"`
+	Warnings int `json:"warnings"`
+	Infos    int `json:"infos"`
+	Total    int `json:"total"`
 }
 
 // ToResponse converts a ChangePlan to ChangePlanResponse

@@ -443,36 +443,36 @@ Add validation middleware that prevents invalid status transitions at API level.
 
 ### P03M23: Add SQL Review results to Change Plan response
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M23
 
 **Goal**
 Include policy findings in Change Plan detail response with severity summary.
 
 **Acceptance Criteria**
-- [ ] Change Plan detail response includes policy findings
-- [ ] Findings grouped by severity (Error, Warning, Info)
-- [ ] Finding count summary included
-- [ ] Response includes has_errors flag
-- [ ] Response includes has_warnings flag
-- [ ] Integration test updated
+- [x] Change Plan detail response includes policy findings
+- [x] Findings grouped by severity (Error, Warning, Info)
+- [x] Finding count summary included
+- [x] Response includes has_errors flag
+- [x] Response includes has_warnings flag
+- [x] Integration test updated
 
 ---
 
 ### P03M24: Verify SQL Review errors block approval
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M24
 
 **Goal**
 Ensure Change Plans with SQL Review errors cannot be approved or executed.
 
 **Acceptance Criteria**
-- [ ] Approval endpoint checks for SQL Review errors
-- [ ] Change Plans with errors cannot transition to Approved
-- [ ] Error response returned with list of errors
-- [ ] Execution endpoint checks for errors (safety check)
-- [ ] Integration tests for error blocking passing
+- [x] Approval endpoint checks for SQL Review errors
+- [x] Change Plans with errors cannot transition to Approved
+- [x] Error response returned with list of errors
+- [x] Execution endpoint checks for errors (safety check)
+- [x] Integration tests for error blocking passing
 
 ---
 

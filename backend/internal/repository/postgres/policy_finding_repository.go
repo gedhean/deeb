@@ -2,15 +2,12 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/nsxbet/deeb/internal/models"
-	"github.com/nsxbet/deeb/internal/repository"
 )
 
 // PolicyFindingRepository is the PostgreSQL implementation of repository.PolicyFindingRepository
