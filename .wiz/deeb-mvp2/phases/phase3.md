@@ -478,18 +478,18 @@ Ensure Change Plans with SQL Review errors cannot be approved or executed.
 
 ### P03M25: Verify SQL Review warnings don't block
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M25
 
 **Goal**
 Ensure Change Plans with only warnings can be approved and executed.
 
 **Acceptance Criteria**
-- [ ] Approval endpoint allows approval when only warnings exist
-- [ ] Warnings displayed but don't prevent approval
-- [ ] Change Plans with warnings can transition to Approved
-- [ ] Warnings logged but execution proceeds
-- [ ] Integration tests for warning handling passing
+- [x] Approval endpoint allows approval when only warnings exist
+- [x] Warnings displayed but don't prevent approval
+- [x] Change Plans with warnings can transition to Approved
+- [x] Warnings logged but execution proceeds
+- [x] Integration tests for warning handling passing
 
 ---
 
