@@ -126,7 +126,9 @@ func TestMySQLConnection(ctx context.Context, params ConnectionTestParams) error
 
 		return fmt.Errorf("%w: MySQL connection failed to %s:%d - %v", ErrConnectionFailed, params.Host, params.Port, err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	// Test connection with ping
 	if err := db.PingContext(testCtx); err != nil {
@@ -212,7 +214,9 @@ func TestPostgreSQLConnection(ctx context.Context, params ConnectionTestParams) 
 
 		return fmt.Errorf("%w: PostgreSQL connection failed to %s:%d - %v", ErrConnectionFailed, params.Host, params.Port, err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	// Test connection with ping
 	if err := db.PingContext(testCtx); err != nil {

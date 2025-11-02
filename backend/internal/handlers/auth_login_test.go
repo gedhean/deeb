@@ -37,6 +37,7 @@ func TestLoginHandler_SuccessfulLogin(t *testing.T) {
 	// Setup mocks
 	mockRepo := new(MockUserRepository)
 	mockRepo.On("GetByEmail", mock.Anything, testUser.Email).Return(testUser, nil)
+	mockRepo.On("UpdateLastLogin", mock.Anything, testUser.ID).Return(nil)
 
 	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	assert.NoError(t, err)
@@ -408,6 +409,7 @@ func TestLoginHandler_SuccessfulLoginResetsRateLimit(t *testing.T) {
 
 	mockRepo := new(MockUserRepository)
 	mockRepo.On("GetByEmail", mock.Anything, testUser.Email).Return(testUser, nil)
+	mockRepo.On("UpdateLastLogin", mock.Anything, testUser.ID).Return(nil)
 
 	tokenManager, _ := auth.NewTokenManager("test-secret-key-minimum-32-characters-long", 0)
 	rateLimiter := NewRateLimiter()

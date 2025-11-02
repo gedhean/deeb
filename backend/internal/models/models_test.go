@@ -435,6 +435,7 @@ func TestValidateCreateDatabaseInstanceRequest(t *testing.T) {
 				Port:         5432,
 				DatabaseType: DatabaseTypePostgreSQL,
 				Username:     "testuser",
+				Password:     "testpassword",
 			},
 			wantErr: nil,
 		},

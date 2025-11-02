@@ -92,7 +92,7 @@ func TestUserRepository_GetByID(t *testing.T) {
 	assert.NotNil(t, user)
 	assert.Equal(t, userID, user.ID)
 	assert.Equal(t, "test@example.com", user.Email)
-	assert.Equal(t, "OrganizationDeveloper", user.OrganizationRole)
+	assert.Equal(t, models.OrganizationRoleDeveloper, user.OrganizationRole)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

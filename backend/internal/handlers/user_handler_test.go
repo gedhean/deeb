@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
@@ -263,6 +264,14 @@ func TestGetUser(t *testing.T) {
 			c := e.NewContext(req, rec)
 			c.SetParamNames("id")
 			c.SetParamValues(tt.userID)
+			
+			// Set authenticated user context
+			userID := uuid.New()
+			c.Set("user", &auth.Claims{
+				UserID:           userID,
+				Email:            "admin@example.com",
+				OrganizationRole: string(models.OrganizationRoleAdmin),
+			})
 
 			// Execute handler
 			err := handler.GetUser(c)

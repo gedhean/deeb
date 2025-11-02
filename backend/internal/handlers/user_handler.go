@@ -169,7 +169,7 @@ func (h *UserHandler) GetUser(c echo.Context) error {
 	// Fetch user from repository
 	user, err := h.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
 			return c.JSON(http.StatusNotFound, map[string]interface{}{
 				"error": "User not found",
 			})

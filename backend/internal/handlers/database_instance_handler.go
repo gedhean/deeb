@@ -82,9 +82,10 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 	// Test database connection before saving
 	// Use a default database name for connection testing (e.g., "mysql" for MySQL, "postgres" for PostgreSQL)
 	testDatabase := ""
-	if req.DatabaseType == models.DatabaseTypeMySQL {
+	switch req.DatabaseType {
+	case models.DatabaseTypeMySQL:
 		testDatabase = "mysql"
-	} else if req.DatabaseType == models.DatabaseTypePostgreSQL {
+	case models.DatabaseTypePostgreSQL:
 		testDatabase = "postgres"
 	}
 
@@ -100,9 +101,10 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 	}
 
 	var connectionErr error
-	if req.DatabaseType == models.DatabaseTypeMySQL {
+	switch req.DatabaseType {
+	case models.DatabaseTypeMySQL:
 		connectionErr = utils.TestMySQLConnection(ctx, connectionParams)
-	} else if req.DatabaseType == models.DatabaseTypePostgreSQL {
+	case models.DatabaseTypePostgreSQL:
 		connectionErr = utils.TestPostgreSQLConnection(ctx, connectionParams)
 	}
 
@@ -332,9 +334,10 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 
 		// Use a default database name for connection testing
 		testDatabase := ""
-		if testDatabaseType == models.DatabaseTypeMySQL {
+		switch testDatabaseType {
+		case models.DatabaseTypeMySQL:
 			testDatabase = "mysql"
-		} else if testDatabaseType == models.DatabaseTypePostgreSQL {
+		case models.DatabaseTypePostgreSQL:
 			testDatabase = "postgres"
 		}
 
@@ -350,9 +353,10 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 		}
 
 		var connectionErr error
-		if testDatabaseType == models.DatabaseTypeMySQL {
+		switch testDatabaseType {
+		case models.DatabaseTypeMySQL:
 			connectionErr = utils.TestMySQLConnection(ctx, connectionParams)
-		} else if testDatabaseType == models.DatabaseTypePostgreSQL {
+		case models.DatabaseTypePostgreSQL:
 			connectionErr = utils.TestPostgreSQLConnection(ctx, connectionParams)
 		}
 

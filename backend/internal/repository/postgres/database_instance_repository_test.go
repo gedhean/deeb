@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
-	"github.com/nsxbet/deeb/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -679,115 +677,5 @@ func TestDatabaseInstanceRepository_Delete(t *testing.T) {
 		assert.Equal(t, "database error", err.Error())
 
 		require.NoError(t, mock.ExpectationsWereMet())
-	})
-}
-
-func TestDatabaseInstanceRepository_EncryptConnectionDetails(t *testing.T) {
-	encryptionKey := "12345678901234567890123456789012" // Exactly 32 bytes
-	repo := &DatabaseInstanceRepository{
-		encryptionKey: encryptionKey,
-	}
-
-	t.Run("successful encryption", func(t *testing.T) {
-		password := "test-password-123"
-
-		encrypted, err := repo.encryptConnectionDetails(password)
-		require.NoError(t, err)
-		require.NotNil(t, encrypted)
-		assert.NotEmpty(t, *encrypted)
-
-		// Verify it can be decrypted
-		decrypted, err := utils.Decrypt(*encrypted, encryptionKey)
-		require.NoError(t, err)
-
-		var details connectionDetails
-		err = json.Unmarshal([]byte(decrypted), &details)
-		require.NoError(t, err)
-		assert.Equal(t, password, details.Password)
-	})
-
-	t.Run("empty password returns nil", func(t *testing.T) {
-		encrypted, err := repo.encryptConnectionDetails("")
-		require.NoError(t, err)
-		assert.Nil(t, encrypted)
-	})
-
-	t.Run("encryption with special characters", func(t *testing.T) {
-		password := "p@ssw0rd!#$%^&*()"
-
-		encrypted, err := repo.encryptConnectionDetails(password)
-		require.NoError(t, err)
-		require.NotNil(t, encrypted)
-
-		// Verify it can be decrypted
-		decrypted, err := utils.Decrypt(*encrypted, encryptionKey)
-		require.NoError(t, err)
-
-		var details connectionDetails
-		err = json.Unmarshal([]byte(decrypted), &details)
-		require.NoError(t, err)
-		assert.Equal(t, password, details.Password)
-	})
-}
-
-func TestDatabaseInstanceRepository_DecryptConnectionDetails(t *testing.T) {
-	encryptionKey := "12345678901234567890123456789012" // Exactly 32 bytes
-	repo := &DatabaseInstanceRepository{
-		encryptionKey: encryptionKey,
-	}
-
-	t.Run("successful decryption", func(t *testing.T) {
-		password := "test-password-123"
-
-		// First encrypt
-		encrypted, err := repo.encryptConnectionDetails(password)
-		require.NoError(t, err)
-		require.NotNil(t, encrypted)
-
-		// Then decrypt
-		details, err := repo.decryptConnectionDetails(encrypted)
-		require.NoError(t, err)
-		require.NotNil(t, details)
-		assert.Equal(t, password, details.Password)
-	})
-
-	t.Run("nil encrypted returns nil", func(t *testing.T) {
-		details, err := repo.decryptConnectionDetails(nil)
-		require.NoError(t, err)
-		assert.Nil(t, details)
-	})
-
-	t.Run("empty encrypted string returns nil", func(t *testing.T) {
-		emptyStr := ""
-		details, err := repo.decryptConnectionDetails(&emptyStr)
-		require.NoError(t, err)
-		assert.Nil(t, details)
-	})
-
-	t.Run("invalid encrypted data returns error", func(t *testing.T) {
-		invalidEncrypted := "invalid-encrypted-data"
-
-		details, err := repo.decryptConnectionDetails(&invalidEncrypted)
-		require.Error(t, err)
-		assert.Nil(t, details)
-	})
-
-	t.Run("decryption with wrong key returns error", func(t *testing.T) {
-		password := "test-password-123"
-
-		// Encrypt with correct key
-		encrypted, err := repo.encryptConnectionDetails(password)
-		require.NoError(t, err)
-		require.NotNil(t, encrypted)
-
-		// Try to decrypt with wrong key (also exactly 32 bytes)
-		wrongKey := "98765432109876543210987654321098"
-		wrongRepo := &DatabaseInstanceRepository{
-			encryptionKey: wrongKey,
-		}
-
-		details, err := wrongRepo.decryptConnectionDetails(encrypted)
-		require.Error(t, err)
-		assert.Nil(t, details)
 	})
 }

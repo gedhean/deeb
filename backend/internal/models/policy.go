@@ -38,7 +38,7 @@ func (pc *PolicyConfig) UnmarshalJSON(data []byte) error {
 
 // Value implements driver.Valuer for PolicyConfig (for writing to database)
 func (pc PolicyConfig) Value() (driver.Value, error) {
-	if pc == nil || len(pc) == 0 {
+	if len(pc) == 0 {
 		return []byte("{}"), nil
 	}
 	return json.Marshal(pc)
@@ -166,7 +166,7 @@ func (p *Policy) Validate() error {
 	}
 
 	// Validate config
-	if p.PolicyConfig == nil || len(p.PolicyConfig) == 0 {
+	if len(p.PolicyConfig) == 0 {
 		return ErrPolicyConfigRequired
 	}
 
@@ -204,7 +204,7 @@ func ValidateCreatePolicyRequest(req *CreatePolicyRequest) error {
 	}
 
 	// Validate config
-	if req.PolicyConfig == nil || len(req.PolicyConfig) == 0 {
+	if len(req.PolicyConfig) == 0 {
 		return ErrPolicyConfigRequired
 	}
 

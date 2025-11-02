@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
@@ -186,6 +187,14 @@ func TestCreateDatabase(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.CreateDatabase(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -222,6 +231,14 @@ func TestCreateDatabase(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.CreateDatabase(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -264,6 +281,14 @@ func TestListDatabases(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/databases", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.ListDatabases(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -312,6 +337,14 @@ func TestListDatabases(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/databases?project_id="+projectID.String(), nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.ListDatabases(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -326,7 +359,10 @@ func TestListDatabases(t *testing.T) {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
 
-		databases := response["databases"].([]interface{})
+		databases, ok := response["databases"].([]interface{})
+		if !ok {
+			t.Fatalf("Expected databases array, got %v", response)
+		}
 		if len(databases) != 1 {
 			t.Errorf("Expected 1 database, got %d", len(databases))
 		}
@@ -341,6 +377,14 @@ func TestListDatabases(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/databases?project_id=invalid", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.ListDatabases(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -378,6 +422,14 @@ func TestGetDatabase(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetParamNames("id")
 		c.SetParamValues(databaseID.String())
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.GetDatabase(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -409,6 +461,14 @@ func TestGetDatabase(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetParamNames("id")
 		c.SetParamValues(databaseID.String())
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.GetDatabase(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -453,6 +513,14 @@ func TestListProjectDatabases(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetParamNames("project_id")
 		c.SetParamValues(projectID.String())
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.ListProjectDatabases(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -467,7 +535,10 @@ func TestListProjectDatabases(t *testing.T) {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
 
-		databases := response["databases"].([]interface{})
+		databases, ok := response["databases"].([]interface{})
+		if !ok {
+			t.Fatalf("Expected databases array, got %v", response)
+		}
 		if len(databases) != 2 {
 			t.Errorf("Expected 2 databases, got %d", len(databases))
 		}
@@ -484,6 +555,14 @@ func TestListProjectDatabases(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetParamNames("project_id")
 		c.SetParamValues("invalid")
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.ListProjectDatabases(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -527,6 +606,14 @@ func TestUpdateDatabase(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetParamNames("id")
 		c.SetParamValues(databaseID.String())
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.UpdateDatabase(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -564,6 +651,14 @@ func TestUpdateDatabase(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetParamNames("id")
 		c.SetParamValues(databaseID.String())
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.UpdateDatabase(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -601,6 +696,14 @@ func TestDeleteDatabase(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetParamNames("id")
 		c.SetParamValues(databaseID.String())
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.DeleteDatabase(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -632,6 +735,14 @@ func TestDeleteDatabase(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetParamNames("id")
 		c.SetParamValues(databaseID.String())
+		
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(models.OrganizationRoleAdmin),
+		})
 
 		if err := handler.DeleteDatabase(c); err != nil {
 			t.Errorf("Expected no error, got %v", err)

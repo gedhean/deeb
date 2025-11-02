@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
-	"github.com/nsxbet/deeb/internal/utils"
 )
 
 // DatabaseInstanceRepository is the PostgreSQL implementation of repository.DatabaseInstanceRepository
@@ -26,53 +24,6 @@ func NewDatabaseInstanceRepository(db *sqlx.DB, encryptionKey string) *DatabaseI
 		db:            db,
 		encryptionKey: encryptionKey,
 	}
-}
-
-// connectionDetails represents the JSON structure for encrypted connection details
-type connectionDetails struct {
-	Password string `json:"password"`
-}
-
-// encryptConnectionDetails encrypts connection details (password) into a JSON string
-func (r *DatabaseInstanceRepository) encryptConnectionDetails(password string) (*string, error) {
-	if password == "" {
-		return nil, nil
-	}
-
-	details := connectionDetails{
-		Password: password,
-	}
-
-	jsonData, err := json.Marshal(details)
-	if err != nil {
-		return nil, err
-	}
-
-	encrypted, err := utils.Encrypt(string(jsonData), r.encryptionKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return &encrypted, nil
-}
-
-// decryptConnectionDetails decrypts connection details from encrypted JSON string
-func (r *DatabaseInstanceRepository) decryptConnectionDetails(encrypted *string) (*connectionDetails, error) {
-	if encrypted == nil || *encrypted == "" {
-		return nil, nil
-	}
-
-	decrypted, err := utils.Decrypt(*encrypted, r.encryptionKey)
-	if err != nil {
-		return nil, err
-	}
-
-	var details connectionDetails
-	if err := json.Unmarshal([]byte(decrypted), &details); err != nil {
-		return nil, err
-	}
-
-	return &details, nil
 }
 
 // Create creates a new database instance in the database

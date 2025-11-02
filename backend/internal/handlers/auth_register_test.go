@@ -111,7 +111,7 @@ func TestRegisterHandler_ServeHTTP_Success(t *testing.T) {
 	assert.NotNil(t, resp.User)
 	assert.NotEqual(t, uuid.Nil, resp.User.ID)
 	assert.Equal(t, "test@example.com", resp.User.Email)
-	assert.Equal(t, "OrganizationDeveloper", resp.User.OrganizationRole)
+	assert.Equal(t, models.OrganizationRoleDeveloper, resp.User.OrganizationRole)
 
 	mockRepo.AssertExpectations(t)
 }
@@ -154,7 +154,7 @@ func TestRegisterHandler_ServeHTTP_CustomOrganizationRole(t *testing.T) {
 	var resp RegisterResponse
 	err := json.NewDecoder(rec.Body).Decode(&resp)
 	assert.NoError(t, err)
-	assert.Equal(t, "OrganizationAdmin", resp.User.OrganizationRole)
+	assert.Equal(t, models.OrganizationRoleAdmin, resp.User.OrganizationRole)
 
 	mockRepo.AssertExpectations(t)
 }
@@ -536,7 +536,7 @@ func TestRegisterHandler_ServeHTTP_FirstUserBecomesAdmin(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, resp.User)
 	assert.Equal(t, "first@example.com", resp.User.Email)
-	assert.Equal(t, "OrganizationAdmin", resp.User.OrganizationRole)
+	assert.Equal(t, models.OrganizationRoleAdmin, resp.User.OrganizationRole)
 
 	mockRepo.AssertExpectations(t)
 }
@@ -587,7 +587,7 @@ func TestRegisterHandler_ServeHTTP_SecondUserGetsDeveloperRole(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, resp.User)
 	assert.Equal(t, "second@example.com", resp.User.Email)
-	assert.Equal(t, "OrganizationDeveloper", resp.User.OrganizationRole)
+	assert.Equal(t, models.OrganizationRoleDeveloper, resp.User.OrganizationRole)
 
 	mockRepo.AssertExpectations(t)
 }
