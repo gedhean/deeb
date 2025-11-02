@@ -10,17 +10,19 @@ import (
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/workflow"
 	"go.uber.org/zap"
 )
 
 // ChangePlanHandler handles HTTP requests for change plan operations
 type ChangePlanHandler struct {
-	changePlanRepo    repository.ChangePlanRepository
-	projectRepo       repository.ProjectRepository
-	databaseRepo      repository.DatabaseRepository
-	projectMemberRepo repository.ProjectMemberRepository
-	logger            *zap.Logger
+	changePlanRepo      repository.ChangePlanRepository
+	projectRepo         repository.ProjectRepository
+	databaseRepo        repository.DatabaseRepository
+	projectMemberRepo   repository.ProjectMemberRepository
+	riskAssessmentSvc  *services.RiskAssessmentService
+	logger              *zap.Logger
 }
 
 // NewChangePlanHandler creates a new change plan handler
@@ -29,14 +31,16 @@ func NewChangePlanHandler(
 	projectRepo repository.ProjectRepository,
 	databaseRepo repository.DatabaseRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
+	riskAssessmentSvc *services.RiskAssessmentService,
 	logger *zap.Logger,
 ) *ChangePlanHandler {
 	return &ChangePlanHandler{
-		changePlanRepo:    changePlanRepo,
-		projectRepo:       projectRepo,
-		databaseRepo:      databaseRepo,
-		projectMemberRepo: projectMemberRepo,
-		logger:            logger,
+		changePlanRepo:     changePlanRepo,
+		projectRepo:        projectRepo,
+		databaseRepo:       databaseRepo,
+		projectMemberRepo:  projectMemberRepo,
+		riskAssessmentSvc: riskAssessmentSvc,
+		logger:             logger,
 	}
 }
 
@@ -159,8 +163,19 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		SQLContent:       req.SQLContent,
 		RollbackSQL:      req.RollbackSQL,
 		Status:           models.ChangePlanStatusDraft,
-		RiskLevel:        models.RiskLevelMedium, // Default, will be calculated later
+		RiskLevel:        models.RiskLevelMedium, // Default, will be calculated
 		AuthorID:         claims.UserID,
+	}
+
+	// Assess risk level based on SQL content, environment, and database type
+	if h.riskAssessmentSvc != nil {
+		riskLevel, err := h.riskAssessmentSvc.AssessRisk(ctx, req.SQLContent, req.ChangeType, req.TargetDatabaseID)
+		if err != nil {
+			h.logger.Warn("Failed to assess risk level, using default", zap.Error(err))
+			// Continue with default Medium risk level
+		} else {
+			changePlan.RiskLevel = riskLevel
+		}
 	}
 
 	// Validate the change plan model
@@ -614,6 +629,17 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 			})
 		}
 		changePlan.SQLContent = *req.SQLContent
+
+		// Re-assess risk level when SQL content changes
+		if h.riskAssessmentSvc != nil {
+			riskLevel, err := h.riskAssessmentSvc.AssessRisk(ctx, *req.SQLContent, changePlan.ChangeType, changePlan.TargetDatabaseID)
+			if err != nil {
+				h.logger.Warn("Failed to reassess risk level after SQL content change", zap.Error(err))
+				// Continue with existing risk level
+			} else {
+				changePlan.RiskLevel = riskLevel
+			}
+		}
 	}
 
 	if req.RollbackSQL != nil {

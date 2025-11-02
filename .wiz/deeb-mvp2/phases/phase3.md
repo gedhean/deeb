@@ -169,19 +169,19 @@ Implement DELETE endpoint for Change Plans with proper authorization and status 
 
 ### P03M08: Implement automated risk level assignment
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M08
 
 **Goal**
 Create risk assessment logic that assigns risk level based on SQL content, target database, and environment.
 
 **Acceptance Criteria**
-- [ ] Risk assessment service created in `backend/internal/services/risk_assessment.go`
-- [ ] Risk factors analyzed: SQL content (destructive operations), environment (Production = higher risk), database type
-- [ ] Risk level calculation: Low, Medium, High
-- [ ] Risk level assigned on Change Plan creation
-- [ ] Risk level updated on SQL content change
-- [ ] Unit tests for risk assessment passing (>85% coverage)
+- [x] Risk assessment service created in `backend/internal/services/risk_assessment.go`
+- [x] Risk factors analyzed: SQL content (destructive operations), environment (Production = higher risk), database type
+- [x] Risk level calculation: Low, Medium, High
+- [x] Risk level assigned on Change Plan creation
+- [x] Risk level updated on SQL content change
+- [x] Unit tests for risk assessment passing (>85% coverage)
 
 ---
 

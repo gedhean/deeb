@@ -12,6 +12,7 @@ import (
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
+	"github.com/nsxbet/deeb/internal/services"
 )
 
 // Setup registers all application routes including health checks, authentication,
@@ -46,7 +47,7 @@ func Setup(
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager)
 	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, projectMemberRepo, tokenManager)
 	setupIssueRoutes(e, issueRepo, tokenManager)
-	setupChangePlanRoutes(e, changePlanRepo, projectRepo, dbRepo, projectMemberRepo, tokenManager)
+	setupChangePlanRoutes(e, changePlanRepo, projectRepo, dbRepo, envRepo, dbInstanceRepo, projectMemberRepo, tokenManager)
 
 	// Setup Swagger documentation
 	SetupSwaggerRoutes(e)
@@ -357,10 +358,27 @@ func setupChangePlanRoutes(
 	changePlanRepo repository.ChangePlanRepository,
 	projectRepo repository.ProjectRepository,
 	databaseRepo repository.DatabaseRepository,
+	environmentRepo repository.EnvironmentRepository,
+	databaseInstanceRepo repository.DatabaseInstanceRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
 	tokenManager *auth.TokenManager,
 ) {
-	changePlanHandler := handlers.NewChangePlanHandler(changePlanRepo, projectRepo, databaseRepo, projectMemberRepo, logger.Get())
+	// Initialize risk assessment service
+	riskAssessmentSvc := services.NewRiskAssessmentService(
+		databaseRepo,
+		environmentRepo,
+		databaseInstanceRepo,
+		logger.Get(),
+	)
+
+	changePlanHandler := handlers.NewChangePlanHandler(
+		changePlanRepo,
+		projectRepo,
+		databaseRepo,
+		projectMemberRepo,
+		riskAssessmentSvc,
+		logger.Get(),
+	)
 	changePlansGroup := e.Group("/api/v1/change-plans")
 
 	// Authentication middleware for protected routes
