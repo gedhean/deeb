@@ -261,19 +261,19 @@ Create MySQL syntax validator using a SQL parser library (e.g., github.com/xwb19
 
 ### P03M13: Implement security validator
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M13
 
 **Goal**
 Create validator detecting destructive operations and security risks (DROP TABLE, DROP DATABASE, TRUNCATE, etc.).
 
 **Acceptance Criteria**
-- [ ] Security validator created in `backend/internal/review/validators/security.go`
-- [ ] Destructive operations detected: DROP TABLE, DROP DATABASE, TRUNCATE TABLE, DROP COLUMN
-- [ ] DROP operations on tables with data detected (higher risk)
-- [ ] Security violations reported with severity (Error or Warning)
-- [ ] Specific security rules implemented (e.g., no DROP without backup)
-- [ ] Unit tests for security validator passing (>85% coverage)
+- [x] Security validator created in `backend/internal/review/validators/security.go`
+- [x] Destructive operations detected: DROP TABLE, DROP DATABASE, TRUNCATE TABLE, DROP COLUMN
+- [x] DROP operations on tables with data detected (higher risk)
+- [x] Security violations reported with severity (Error or Warning)
+- [x] Specific security rules implemented (e.g., no DROP without backup)
+- [x] Unit tests for security validator passing (>85% coverage)
 
 ---
 
