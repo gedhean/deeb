@@ -17,6 +17,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.39.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.39.0
+	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.43.0
 	golang.org/x/oauth2 v0.32.0
