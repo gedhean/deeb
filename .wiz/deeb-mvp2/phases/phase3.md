@@ -279,19 +279,19 @@ Create validator detecting destructive operations and security risks (DROP TABLE
 
 ### P03M14: Implement performance validator
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M14
 
 **Goal**
 Create validator detecting performance issues (missing indexes, tables without primary keys, etc.).
 
 **Acceptance Criteria**
-- [ ] Performance validator created in `backend/internal/review/validators/performance.go`
-- [ ] Missing indexes detected (CREATE TABLE without indexes)
-- [ ] Tables without primary keys detected
-- [ ] Large tables without indexes on foreign keys detected
-- [ ] Performance violations reported with severity (Warning)
-- [ ] Unit tests for performance validator passing (>85% coverage)
+- [x] Performance validator created in `backend/internal/review/validators/performance.go`
+- [x] Missing indexes detected (CREATE TABLE without indexes)
+- [x] Tables without primary keys detected
+- [x] Large tables without indexes on foreign keys detected
+- [x] Performance violations reported with severity (Warning)
+- [x] Unit tests for performance validator passing (>85% coverage)
 
 ---
 
