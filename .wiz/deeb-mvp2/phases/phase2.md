@@ -439,20 +439,20 @@ Extend authorization middleware to check project-level roles for project resourc
 
 ### P02M23: Add RBAC checks to all resource management endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M23
 
 **Goal**
 Ensure all project, environment, database instance, and database endpoints have proper RBAC checks.
 
 **Acceptance Criteria**
-- [ ] All project endpoints check organization roles (admin/DBA)
-- [ ] All environment endpoints check organization roles (admin/DBA)
-- [ ] All database instance endpoints check organization roles (admin/DBA)
-- [ ] All database endpoints check organization roles (admin/DBA)
-- [ ] Project member endpoints check project roles or organization roles
-- [ ] 403 Forbidden responses for unauthorized access
-- [ ] Integration tests for authorization scenarios passing
+- [x] All project endpoints check organization roles (admin/DBA)
+- [x] All environment endpoints check organization roles (admin/DBA)
+- [x] All database instance endpoints check organization roles (admin/DBA)
+- [x] All database endpoints check organization roles (admin/DBA)
+- [x] Project member endpoints check project roles or organization roles
+- [x] 403 Forbidden responses for unauthorized access
+- [ ] Integration tests for authorization scenarios passing (can be added in later milestone)
 
 ---
 

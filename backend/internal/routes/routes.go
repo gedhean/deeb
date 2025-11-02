@@ -44,7 +44,7 @@ func Setup(
 	setupEnvironmentRoutes(e, envRepo, db, tokenManager)
 	setupPolicyRoutes(e, policyRepo, envRepo, tokenManager)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager)
-	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, tokenManager)
+	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, projectMemberRepo, tokenManager)
 	setupIssueRoutes(e, issueRepo, tokenManager)
 
 	// Setup Swagger documentation
@@ -169,7 +169,7 @@ func setupProjectRoutes(
 	// GET endpoints require authentication
 	// List all projects requires admin role
 	projectsGroup.GET("", projectHandler.ListProjects, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	projectsGroup.GET("/:id", projectHandler.GetProject, authMiddleware.Authenticate)
+	projectsGroup.GET("/:id", projectHandler.GetProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionProjectsRead))
 
 	// PUT and DELETE require admin role
 	projectsGroup.PUT(
@@ -185,11 +185,11 @@ func setupProjectRoutes(
 		authzMiddleware.RequireOrganizationAdmin(),
 	)
 
-	// Project member routes require authentication
-	projectsGroup.POST("/:id/members", projectHandler.AddProjectMember, authMiddleware.Authenticate)
-	projectsGroup.GET("/:id/members", projectHandler.ListProjectMembers, authMiddleware.Authenticate)
-	projectsGroup.DELETE("/:id/members/:user_id", projectHandler.RemoveProjectMember, authMiddleware.Authenticate)
-	projectsGroup.PUT("/:id/members/:user_id", projectHandler.UpdateProjectMemberRole, authMiddleware.Authenticate)
+	// Project member routes require authentication and project-level permissions
+	projectsGroup.POST("/:id/members", projectHandler.AddProjectMember, authMiddleware.Authenticate, authzMiddleware.RequireProjectPermission(rbac.PermissionProjectMembersCreate))
+	projectsGroup.GET("/:id/members", projectHandler.ListProjectMembers, authMiddleware.Authenticate, authzMiddleware.RequireProjectPermission(rbac.PermissionProjectMembersRead))
+	projectsGroup.DELETE("/:id/members/:user_id", projectHandler.RemoveProjectMember, authMiddleware.Authenticate, authzMiddleware.RequireProjectPermission(rbac.PermissionProjectMembersDelete))
+	projectsGroup.PUT("/:id/members/:user_id", projectHandler.UpdateProjectMemberRole, authMiddleware.Authenticate, authzMiddleware.RequireProjectPermission(rbac.PermissionProjectMembersUpdate))
 }
 
 // setupEnvironmentRoutes registers environment management routes
@@ -287,8 +287,8 @@ func setupDatabaseInstanceRoutes(
 		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationAdmin(),
 	)
-	dbInstancesGroup.GET("", dbInstanceHandler.ListDatabaseInstances, authMiddleware.Authenticate)
-	dbInstancesGroup.GET("/:id", dbInstanceHandler.GetDatabaseInstance, authMiddleware.Authenticate)
+	dbInstancesGroup.GET("", dbInstanceHandler.ListDatabaseInstances, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead))
+	dbInstancesGroup.GET("/:id", dbInstanceHandler.GetDatabaseInstance, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead))
 	dbInstancesGroup.PUT(
 		"/:id",
 		dbInstanceHandler.UpdateDatabaseInstance,
@@ -311,6 +311,7 @@ func setupDatabaseRoutes(
 	envRepo repository.EnvironmentRepository,
 	dbInstanceRepo repository.DatabaseInstanceRepository,
 	changePlanRepo repository.ChangePlanRepository,
+	projectMemberRepo repository.ProjectMemberRepository,
 	tokenManager *auth.TokenManager,
 ) {
 	dbHandler := handlers.NewDatabaseHandler(dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, logger.Get())
@@ -318,19 +319,20 @@ func setupDatabaseRoutes(
 
 	// Authentication and authorization middleware
 	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
-	authzMiddleware := middleware.NewAuthzMiddleware()
+	authzMiddleware := middleware.NewAuthzMiddlewareWithRepo(projectMemberRepo)
 
 	// POST requires admin role
 	databasesGroup.POST("", dbHandler.CreateDatabase, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	// GET endpoints require authentication
-	databasesGroup.GET("", dbHandler.ListDatabases, authMiddleware.Authenticate)
-	databasesGroup.GET("/:id", dbHandler.GetDatabase, authMiddleware.Authenticate)
+	// GET endpoints require authentication and read permission
+	databasesGroup.GET("", dbHandler.ListDatabases, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead))
+	databasesGroup.GET("/:id", dbHandler.GetDatabase, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead))
 	// PUT and DELETE require admin role
 	databasesGroup.PUT("/:id", dbHandler.UpdateDatabase, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 	databasesGroup.DELETE("/:id", dbHandler.DeleteDatabase, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 
-	// Project-scoped database routes require authentication
-	e.GET("/api/v1/projects/:project_id/databases", dbHandler.ListProjectDatabases, authMiddleware.Authenticate)
+	// Project-scoped database routes require organization-level read permission
+	// (Organization admins, DBAs, and Developers have PermissionDatabasesRead)
+	e.GET("/api/v1/projects/:project_id/databases", dbHandler.ListProjectDatabases, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead))
 }
 
 // setupIssueRoutes registers issue management routes
