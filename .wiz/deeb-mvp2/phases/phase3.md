@@ -426,18 +426,18 @@ Add filtering support for status, project, database, author in Change Plan list 
 
 ### P03M22: Implement Change Plan status transition validation middleware
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M22
 
 **Goal**
 Add validation middleware that prevents invalid status transitions at API level.
 
 **Acceptance Criteria**
-- [ ] Status transition validation middleware created
-- [ ] Middleware validates status transitions on PUT requests
-- [ ] Invalid transitions return 400 Bad Request with clear error
-- [ ] Middleware integrated with Change Plan routes
-- [ ] Unit tests for middleware passing
+- [x] Status transition validation middleware created
+- [x] Middleware validates status transitions on PUT requests
+- [x] Invalid transitions return 400 Bad Request with clear error
+- [x] Middleware integrated with Change Plan routes
+- [x] Unit tests for middleware passing
 
 ---
 

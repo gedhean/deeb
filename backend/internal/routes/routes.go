@@ -423,11 +423,14 @@ func setupChangePlanRoutes(
 	// RBAC checks are done in handlers since project_id is in request body
 	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
 
+	// Status transition validation middleware
+	statusTransitionMiddleware := middleware.NewChangePlanStatusTransitionMiddleware(changePlanRepo)
+
 	// All change plan routes require authentication
 	changePlansGroup.POST("", changePlanHandler.CreateChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.GET("/:id", changePlanHandler.GetChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.GET("", changePlanHandler.ListChangePlans, authMiddleware.Authenticate)
-	changePlansGroup.PUT("/:id", changePlanHandler.UpdateChangePlan, authMiddleware.Authenticate)
+	changePlansGroup.PUT("/:id", changePlanHandler.UpdateChangePlan, authMiddleware.Authenticate, statusTransitionMiddleware.ValidateStatusTransition)
 	changePlansGroup.DELETE("/:id", changePlanHandler.DeleteChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/review", changePlanHandler.TriggerSQLReview, authMiddleware.Authenticate)
 }
