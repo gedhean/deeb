@@ -19,6 +19,7 @@ type DatabaseHandler struct {
 	projectRepo       repository.ProjectRepository
 	environmentRepo   repository.EnvironmentRepository
 	databaseInstanceRepo repository.DatabaseInstanceRepository
+	changePlanRepo    repository.ChangePlanRepository
 	logger            *zap.Logger
 }
 
@@ -28,6 +29,7 @@ func NewDatabaseHandler(
 	projectRepo repository.ProjectRepository,
 	environmentRepo repository.EnvironmentRepository,
 	databaseInstanceRepo repository.DatabaseInstanceRepository,
+	changePlanRepo repository.ChangePlanRepository,
 	logger *zap.Logger,
 ) *DatabaseHandler {
 	return &DatabaseHandler{
@@ -35,6 +37,7 @@ func NewDatabaseHandler(
 		projectRepo:          projectRepo,
 		environmentRepo:      environmentRepo,
 		databaseInstanceRepo: databaseInstanceRepo,
+		changePlanRepo:       changePlanRepo,
 		logger:               logger,
 	}
 }
@@ -367,6 +370,21 @@ func (h *DatabaseHandler) ListProjectDatabases(c echo.Context) error {
 func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 	ctx := c.Request().Context()
 
+	// Authorization check - admin only
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Check if user is admin (this should be enforced by middleware, but double-check)
+	if claims.OrganizationRole != string(models.OrganizationRoleAdmin) {
+		return c.JSON(http.StatusForbidden, map[string]interface{}{
+			"error": "Admin access required",
+		})
+	}
+
 	// Parse ID parameter
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
@@ -407,6 +425,33 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 		})
 	}
 
+	// Validate that project/environment constraints are maintained
+	// (The database must belong to exactly one project and one environment)
+	// This is enforced by the schema, but we verify the related entities exist
+	if _, err := h.projectRepo.GetByID(ctx, database.ProjectID); err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Database project not found",
+			})
+		}
+		h.logger.Error("Failed to validate project", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to validate project",
+		})
+	}
+
+	if _, err := h.environmentRepo.GetByID(ctx, database.EnvironmentID); err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Database environment not found",
+			})
+		}
+		h.logger.Error("Failed to validate environment", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to validate environment",
+		})
+	}
+
 	// Apply updates
 	if req.DatabaseName != nil {
 		database.DatabaseName = *req.DatabaseName
@@ -432,12 +477,27 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 	}
 
 	h.logger.Info("Database updated", zap.String("id", database.ID.String()))
-	return c.JSON(http.StatusOK, database.ToResponse())
+	return c.JSON(http.StatusOK, h.ToResponseWithDetails(ctx, database))
 }
 
 // DeleteDatabase handles DELETE /api/v1/databases/:id
 func (h *DatabaseHandler) DeleteDatabase(c echo.Context) error {
 	ctx := c.Request().Context()
+
+	// Authorization check - admin only
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Check if user is admin (this should be enforced by middleware, but double-check)
+	if claims.OrganizationRole != string(models.OrganizationRoleAdmin) {
+		return c.JSON(http.StatusForbidden, map[string]interface{}{
+			"error": "Admin access required",
+		})
+	}
 
 	// Parse ID parameter
 	idStr := c.Param("id")
@@ -445,6 +505,36 @@ func (h *DatabaseHandler) DeleteDatabase(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"error": "Invalid database ID",
+		})
+	}
+
+	// Check if database exists
+	database, err := h.databaseRepo.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Database not found",
+			})
+		}
+		h.logger.Error("Failed to get database", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to get database",
+		})
+	}
+
+	// Check if Change Plans exist for this database
+	// Use a small limit to just check existence
+	changePlans, err := h.changePlanRepo.GetByDatabaseID(ctx, id, 1, 0)
+	if err != nil {
+		h.logger.Error("Failed to check for change plans", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to check for change plans",
+		})
+	}
+
+	if len(changePlans) > 0 {
+		return c.JSON(http.StatusConflict, map[string]interface{}{
+			"error": "Cannot delete database: Change plans exist for this database",
 		})
 	}
 
@@ -461,7 +551,7 @@ func (h *DatabaseHandler) DeleteDatabase(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Database deleted", zap.String("id", id.String()))
+	h.logger.Info("Database deleted", zap.String("id", id.String()), zap.String("name", database.DatabaseName))
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Database deleted successfully",
 	})

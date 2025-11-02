@@ -32,6 +32,7 @@ func Setup(
 	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, cfg.Security.EncryptionKey)
 	dbRepo := postgres.NewDatabaseRepository(db)
 	issueRepo := postgres.NewIssueRepository(db.DB)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
 
 	// Setup API routes
 	setupHealthRoute(e, db, version)
@@ -42,7 +43,7 @@ func Setup(
 	setupEnvironmentRoutes(e, envRepo, db, tokenManager)
 	setupPolicyRoutes(e, policyRepo, envRepo, tokenManager)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager)
-	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, tokenManager)
+	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, tokenManager)
 	setupIssueRoutes(e, issueRepo, tokenManager)
 
 	// Setup Swagger documentation
@@ -300,9 +301,10 @@ func setupDatabaseRoutes(
 	projectRepo repository.ProjectRepository,
 	envRepo repository.EnvironmentRepository,
 	dbInstanceRepo repository.DatabaseInstanceRepository,
+	changePlanRepo repository.ChangePlanRepository,
 	tokenManager *auth.TokenManager,
 ) {
-	dbHandler := handlers.NewDatabaseHandler(dbRepo, projectRepo, envRepo, dbInstanceRepo, logger.Get())
+	dbHandler := handlers.NewDatabaseHandler(dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, logger.Get())
 	databasesGroup := e.Group("/api/v1/databases")
 
 	// Authentication and authorization middleware
@@ -314,8 +316,9 @@ func setupDatabaseRoutes(
 	// GET endpoints require authentication
 	databasesGroup.GET("", dbHandler.ListDatabases, authMiddleware.Authenticate)
 	databasesGroup.GET("/:id", dbHandler.GetDatabase, authMiddleware.Authenticate)
-	databasesGroup.PUT("/:id", dbHandler.UpdateDatabase)
-	databasesGroup.DELETE("/:id", dbHandler.DeleteDatabase)
+	// PUT and DELETE require admin role
+	databasesGroup.PUT("/:id", dbHandler.UpdateDatabase, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	databasesGroup.DELETE("/:id", dbHandler.DeleteDatabase, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 
 	// Project-scoped database routes require authentication
 	e.GET("/api/v1/projects/:project_id/databases", dbHandler.ListProjectDatabases, authMiddleware.Authenticate)

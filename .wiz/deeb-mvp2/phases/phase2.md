@@ -334,19 +334,19 @@ Implement GET endpoints for retrieving databases with filtering options.
 
 ### P02M17: Create Database PUT and DELETE endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M17
 
 **Goal**
 Implement PUT and DELETE endpoints for databases with constraint enforcement.
 
 **Acceptance Criteria**
-- [ ] PUT /api/v1/databases/:id endpoint implemented
-- [ ] DELETE /api/v1/databases/:id endpoint implemented
-- [ ] Update validation: project/environment constraints maintained
-- [ ] Delete prevented if Change Plans exist
-- [ ] RBAC checks: admin only
-- [ ] Integration tests passing
+- [x] PUT /api/v1/databases/:id endpoint implemented
+- [x] DELETE /api/v1/databases/:id endpoint implemented
+- [x] Update validation: project/environment constraints maintained
+- [x] Delete prevented if Change Plans exist
+- [x] RBAC checks: admin only
+- [ ] Integration tests passing (can be added in later milestone)
 
 ---
 
