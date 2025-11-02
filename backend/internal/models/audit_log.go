@@ -10,23 +10,23 @@ import (
 
 // AuditLog represents an audit log entry
 type AuditLog struct {
-	ID           uuid.UUID       `json:"id"           db:"id"`
-	UserID       uuid.UUID       `json:"user_id"      db:"user_id"`
-	Action       string          `json:"action"       db:"action"`
-	ResourceType string          `json:"resource_type" db:"resource_type"`
-	ResourceID   uuid.UUID       `json:"resource_id"   db:"resource_id"`
-	Details      json.RawMessage `json:"details,omitempty" db:"details"`
+	ID           uuid.UUID       `json:"id"                   db:"id"`
+	UserID       uuid.UUID       `json:"user_id"              db:"user_id"`
+	Action       string          `json:"action"               db:"action"`
+	ResourceType string          `json:"resource_type"        db:"resource_type"`
+	ResourceID   uuid.UUID       `json:"resource_id"          db:"resource_id"`
+	Details      json.RawMessage `json:"details,omitempty"    db:"details"`
 	IPAddress    *net.IP         `json:"ip_address,omitempty" db:"ip_address"`
 	UserAgent    *string         `json:"user_agent,omitempty" db:"user_agent"`
-	Timestamp    time.Time       `json:"timestamp"    db:"timestamp"`
+	Timestamp    time.Time       `json:"timestamp"            db:"timestamp"`
 }
 
 // CreateAuditLogRequest represents the request to create a new audit log entry
 type CreateAuditLogRequest struct {
-	UserID       uuid.UUID       `json:"user_id"       validate:"required"`
-	Action       string          `json:"action"        validate:"required,max=100"`
-	ResourceType string          `json:"resource_type" validate:"required,max=100"`
-	ResourceID   uuid.UUID       `json:"resource_id"   validate:"required"`
+	UserID       uuid.UUID       `json:"user_id"              validate:"required"`
+	Action       string          `json:"action"               validate:"required,max=100"`
+	ResourceType string          `json:"resource_type"        validate:"required,max=100"`
+	ResourceID   uuid.UUID       `json:"resource_id"          validate:"required"`
 	Details      json.RawMessage `json:"details,omitempty"`
 	IPAddress    *net.IP         `json:"ip_address,omitempty"`
 	UserAgent    *string         `json:"user_agent,omitempty"`

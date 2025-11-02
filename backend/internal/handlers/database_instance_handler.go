@@ -17,9 +17,9 @@ import (
 // DatabaseInstanceHandler handles HTTP requests for database instances
 type DatabaseInstanceHandler struct {
 	dbInstanceRepo repository.DatabaseInstanceRepository
-	databaseRepo    repository.DatabaseRepository // For cascade delete checks
-	encryptionKey   string
-	logger          *zap.Logger
+	databaseRepo   repository.DatabaseRepository // For cascade delete checks
+	encryptionKey  string
+	logger         *zap.Logger
 }
 
 // NewDatabaseInstanceHandler creates a new database instance handler
@@ -31,9 +31,9 @@ func NewDatabaseInstanceHandler(
 ) *DatabaseInstanceHandler {
 	return &DatabaseInstanceHandler{
 		dbInstanceRepo: dbInstanceRepo,
-		databaseRepo:    databaseRepo,
-		encryptionKey:   encryptionKey,
-		logger:          logger,
+		databaseRepo:   databaseRepo,
+		encryptionKey:  encryptionKey,
+		logger:         logger,
 	}
 }
 
@@ -90,12 +90,12 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 
 	connectionParams := utils.ConnectionTestParams{
 		DatabaseType:             string(req.DatabaseType),
-		Host:                    req.Host,
-		Port:                    req.Port,
-		Username:                req.Username,
-		Password:                req.Password,
-		Database:                testDatabase,
-		UseSSL:                  req.RequireSSL,
+		Host:                     req.Host,
+		Port:                     req.Port,
+		Username:                 req.Username,
+		Password:                 req.Password,
+		Database:                 testDatabase,
+		UseSSL:                   req.RequireSSL,
 		ConnectionTimeoutSeconds: 10,
 	}
 
@@ -107,7 +107,12 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 	}
 
 	if connectionErr != nil {
-		h.logger.Warn("Database connection test failed", zap.Error(connectionErr), zap.String("host", req.Host), zap.Int("port", req.Port))
+		h.logger.Warn(
+			"Database connection test failed",
+			zap.Error(connectionErr),
+			zap.String("host", req.Host),
+			zap.Int("port", req.Port),
+		)
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"error":   "Database connection test failed",
 			"details": connectionErr.Error(),
@@ -135,7 +140,7 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 		UseRDSIAMAuth:              req.UseRDSIAMAuth,
 		RequireSSL:                 req.RequireSSL,
 		Status:                     models.DatabaseInstanceStatusActive,
-		CreatedByID:                 claims.UserID,
+		CreatedByID:                claims.UserID,
 	}
 
 	// Save to repository
@@ -146,7 +151,11 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Database instance created successfully", zap.String("database_instance_id", instance.ID.String()), zap.String("name", instance.Name))
+	h.logger.Info(
+		"Database instance created successfully",
+		zap.String("database_instance_id", instance.ID.String()),
+		zap.String("name", instance.Name),
+	)
 	return c.JSON(http.StatusCreated, instance.ToResponse())
 }
 
@@ -348,7 +357,12 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 		}
 
 		if connectionErr != nil {
-			h.logger.Warn("Database connection test failed", zap.Error(connectionErr), zap.String("host", testHost), zap.Int("port", testPort))
+			h.logger.Warn(
+				"Database connection test failed",
+				zap.Error(connectionErr),
+				zap.String("host", testHost),
+				zap.Int("port", testPort),
+			)
 			return c.JSON(http.StatusBadRequest, map[string]interface{}{
 				"error":   "Database connection test failed",
 				"details": connectionErr.Error(),

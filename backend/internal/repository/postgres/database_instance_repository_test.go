@@ -146,8 +146,10 @@ func TestDatabaseInstanceGetByID(t *testing.T) {
 		now := time.Now()
 		description := "Test instance"
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "database_type", "host", "port", "username",
-			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at"}).
+		rows := sqlmock.NewRows([]string{
+			"id", "name", "description", "database_type", "host", "port", "username",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+		}).
 			AddRow(instanceID, "Test Instance", description, "postgresql", "localhost", 5432, "postgres",
 				"encrypted-data", false, true, "Active", createdByID, now, now)
 
@@ -182,8 +184,10 @@ func TestDatabaseInstanceGetByID(t *testing.T) {
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances WHERE id =").
 			WithArgs(instanceID).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "description", "database_type", "host", "port", "username",
-				"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at"}))
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "name", "description", "database_type", "host", "port", "username",
+				"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+			}))
 
 		instance, err := repo.GetByID(ctx, instanceID)
 		if err != repository.ErrNotFound {
@@ -213,8 +217,10 @@ func TestDatabaseInstanceList(t *testing.T) {
 		instanceID2 := uuid.New()
 		createdByID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "database_type", "host", "port", "username",
-			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at"}).
+		rows := sqlmock.NewRows([]string{
+			"id", "name", "description", "database_type", "host", "port", "username",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+		}).
 			AddRow(instanceID1, "Instance 1", nil, "postgresql", "localhost", 5432, "postgres",
 				"encrypted-data", false, true, "Active", createdByID, now, now).
 			AddRow(instanceID2, "Instance 2", nil, "mysql", "localhost", 3306, "root",
@@ -239,8 +245,10 @@ func TestDatabaseInstanceList(t *testing.T) {
 	})
 
 	t.Run("empty list", func(t *testing.T) {
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "database_type", "host", "port", "username",
-			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at"})
+		rows := sqlmock.NewRows([]string{
+			"id", "name", "description", "database_type", "host", "port", "username",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+		})
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).

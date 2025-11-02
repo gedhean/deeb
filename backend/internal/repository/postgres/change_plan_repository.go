@@ -207,7 +207,11 @@ func (r *ChangePlanRepository) Count(ctx context.Context) (int64, error) {
 }
 
 // GetByStatus retrieves change plans filtered by status
-func (r *ChangePlanRepository) GetByStatus(ctx context.Context, status models.ChangePlanStatus, limit, offset int) ([]*models.ChangePlan, error) {
+func (r *ChangePlanRepository) GetByStatus(
+	ctx context.Context,
+	status models.ChangePlanStatus,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	query := `
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
@@ -234,7 +238,11 @@ func (r *ChangePlanRepository) GetByStatus(ctx context.Context, status models.Ch
 }
 
 // GetByProjectID retrieves change plans filtered by project ID
-func (r *ChangePlanRepository) GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) {
+func (r *ChangePlanRepository) GetByProjectID(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	query := `
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
@@ -261,7 +269,11 @@ func (r *ChangePlanRepository) GetByProjectID(ctx context.Context, projectID uui
 }
 
 // GetByDatabaseID retrieves change plans filtered by database ID
-func (r *ChangePlanRepository) GetByDatabaseID(ctx context.Context, databaseID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) {
+func (r *ChangePlanRepository) GetByDatabaseID(
+	ctx context.Context,
+	databaseID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	query := `
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
@@ -288,7 +300,11 @@ func (r *ChangePlanRepository) GetByDatabaseID(ctx context.Context, databaseID u
 }
 
 // GetByAuthorID retrieves change plans filtered by author ID
-func (r *ChangePlanRepository) GetByAuthorID(ctx context.Context, authorID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) {
+func (r *ChangePlanRepository) GetByAuthorID(
+	ctx context.Context,
+	authorID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	query := `
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,

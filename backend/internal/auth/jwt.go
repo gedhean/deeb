@@ -45,8 +45,8 @@ type Claims struct {
 
 // TokenManager handles JWT token generation and validation
 type TokenManager struct {
-	jwtSecret   []byte
-	expiration  time.Duration
+	jwtSecret  []byte
+	expiration time.Duration
 }
 
 // NewTokenManager creates a new TokenManager with the provided JWT secret and expiration.

@@ -16,7 +16,7 @@ import (
 
 // DatabaseInstanceRepository is the PostgreSQL implementation of repository.DatabaseInstanceRepository
 type DatabaseInstanceRepository struct {
-	db           *sqlx.DB
+	db            *sqlx.DB
 	encryptionKey string
 }
 

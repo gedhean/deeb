@@ -13,11 +13,11 @@ func TestDecryptPassword(t *testing.T) {
 	encryptionKey := "12345678901234567890123456789012" // 32 bytes
 
 	tests := []struct {
-		name           string
-		encrypted      *string
-		encryptionKey  string
-		wantErr        bool
-		wantPassword   string
+		name          string
+		encrypted     *string
+		encryptionKey string
+		wantErr       bool
+		wantPassword  string
 	}{
 		{
 			name:          "nil encrypted password",
@@ -71,8 +71,8 @@ func TestTestMySQLConnection_InvalidParams(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name   string
-		params ConnectionTestParams
+		name    string
+		params  ConnectionTestParams
 		wantErr bool
 	}{
 		{
@@ -125,8 +125,8 @@ func TestTestPostgreSQLConnection_InvalidParams(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name   string
-		params ConnectionTestParams
+		name    string
+		params  ConnectionTestParams
 		wantErr bool
 	}{
 		{
@@ -224,7 +224,7 @@ func TestTestMySQLConnection_EncryptedPassword(t *testing.T) {
 		Host:                     "192.0.2.0",
 		Port:                     3306,
 		Username:                 "test",
-		EncryptedPassword:       encrypted,
+		EncryptedPassword:        encrypted,
 		EncryptionKey:            encryptionKey,
 		Database:                 "testdb",
 		ConnectionTimeoutSeconds: 1,
@@ -248,7 +248,7 @@ func TestTestPostgreSQLConnection_EncryptedPassword(t *testing.T) {
 		Host:                     "192.0.2.0",
 		Port:                     5432,
 		Username:                 "test",
-		EncryptedPassword:       encrypted,
+		EncryptedPassword:        encrypted,
 		EncryptionKey:            encryptionKey,
 		Database:                 "testdb",
 		ConnectionTimeoutSeconds: 1,
@@ -283,4 +283,3 @@ func encryptPasswordForTest(t *testing.T, encryptionKey, password string) *strin
 
 	return &encrypted
 }
-

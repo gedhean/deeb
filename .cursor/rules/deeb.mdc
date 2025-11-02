@@ -1,0 +1,52 @@
+---
+description: Project guidelines and development workflows for Deeb database change management tool
+globs: []
+alwaysApply: true
+---
+
+# Deeb Project Guidelines
+
+This file provides guidance when working with code in this repository.
+
+## Project Overview
+
+Deeb is a secure database change management tool that enables developers to manage database changes without requiring direct database access. The system provides:
+
+## Architecture
+
+The system follows a centralized architecture:
+
+- **Web UI**: Interface for engineers to create and manage database change requests
+- **REST API**: Central service that manages change lifecycle and database operations
+
+Refer to [docs/project.md](docs/project.md) for project details.
+Refer to [docs/mvp.md](docs/mvp.md) for MVP scope.
+
+## Development Workflow
+
+**ALWAYS follow these steps after making code changes**:
+
+### After Go Code Changes
+
+- **Run backend tests**: Run relevant tests before committing with `make -C backend test`
+- **Run backend linting**: `make -C backend lint`
+- **Run backend autofix**: `make -C backend lint-fix`
+- **Run backend formatting**: `make -C backend format`
+
+### After Frontend Code Changes
+
+- **Run frontend tests**: Run relevant tests before committing with `pnpm --dir frontend run test`
+- **Run frontend linting**: `pnpm --dir frontend run lint`
+- **Run frontend autofix**: `pnpm --dir frontend run lint-fix`
+- **Run frontend formatting**: `pnpm --dir frontend run format`
+
+### Start the Development Servers
+
+- **Start the Frontend**: `pnpm --dir frontend run dev`
+- **Start the Backend**: `make -C backend run`
+
+
+## Development Status
+
+- Use github.com/labstack/echo backend server routing and middleware
+- Save general docs at docs/ folder and specific docs at frontend/docs/ or backend/docs/

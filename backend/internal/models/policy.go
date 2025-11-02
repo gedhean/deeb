@@ -37,27 +37,27 @@ func (pc *PolicyConfig) UnmarshalJSON(data []byte) error {
 
 // Policy represents a policy configuration (SQL_REVIEW type and future types)
 type Policy struct {
-	ID           uuid.UUID    `json:"id"          db:"id"`
-	Name         string       `json:"name"        db:"name"`
+	ID           uuid.UUID    `json:"id"                    db:"id"`
+	Name         string       `json:"name"                  db:"name"`
 	Description  *string      `json:"description,omitempty" db:"description"`
-	Type         PolicyType   `json:"type"       db:"type"`
-	PolicyConfig PolicyConfig `json:"policy_config" db:"policy_config"`
-	CreatedByID  uuid.UUID    `json:"created_by_id" db:"created_by_id"`
-	CreatedAt    time.Time    `json:"created_at"  db:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"  db:"updated_at"`
+	Type         PolicyType   `json:"type"                  db:"type"`
+	PolicyConfig PolicyConfig `json:"policy_config"         db:"policy_config"`
+	CreatedByID  uuid.UUID    `json:"created_by_id"         db:"created_by_id"`
+	CreatedAt    time.Time    `json:"created_at"            db:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"            db:"updated_at"`
 }
 
 // CreatePolicyRequest represents the request to create a new policy
 type CreatePolicyRequest struct {
-	Name         string       `json:"name"        validate:"required,max=100"`
+	Name         string       `json:"name"                  validate:"required,max=100"`
 	Description  *string      `json:"description,omitempty"`
-	Type         PolicyType   `json:"type"       validate:"required,oneof=SQL_REVIEW"`
-	PolicyConfig PolicyConfig `json:"policy_config" validate:"required"`
+	Type         PolicyType   `json:"type"                  validate:"required,oneof=SQL_REVIEW"`
+	PolicyConfig PolicyConfig `json:"policy_config"         validate:"required"`
 }
 
 // UpdatePolicyRequest represents the request to update a policy
 type UpdatePolicyRequest struct {
-	Name         *string       `json:"name,omitempty"        validate:"omitempty,max=100"`
+	Name         *string       `json:"name,omitempty"          validate:"omitempty,max=100"`
 	Description  *string       `json:"description,omitempty"`
 	PolicyConfig *PolicyConfig `json:"policy_config,omitempty"`
 }
@@ -88,12 +88,12 @@ func (p *Policy) ToResponse() *PolicyResponse {
 
 // Validation errors
 var (
-	ErrPolicyNameRequired     = errors.New("policy name is required")
-	ErrPolicyNameTooLong      = errors.New("policy name must not exceed 100 characters")
+	ErrPolicyNameRequired       = errors.New("policy name is required")
+	ErrPolicyNameTooLong        = errors.New("policy name must not exceed 100 characters")
 	ErrPolicyDescriptionTooLong = errors.New("description must not exceed 500 characters")
-	ErrPolicyTypeRequired     = errors.New("policy type is required")
-	ErrPolicyTypeInvalid      = errors.New("policy type must be SQL_REVIEW")
-	ErrPolicyConfigRequired   = errors.New("policy config is required")
+	ErrPolicyTypeRequired       = errors.New("policy type is required")
+	ErrPolicyTypeInvalid        = errors.New("policy type must be SQL_REVIEW")
+	ErrPolicyConfigRequired     = errors.New("policy config is required")
 )
 
 // Validate validates the policy model

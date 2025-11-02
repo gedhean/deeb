@@ -111,7 +111,11 @@ func (r *PolicyRepository) Count(ctx context.Context) (int64, error) {
 }
 
 // GetByType retrieves all policies of a specific type with pagination
-func (r *PolicyRepository) GetByType(ctx context.Context, policyType models.PolicyType, limit, offset int) ([]*models.Policy, error) {
+func (r *PolicyRepository) GetByType(
+	ctx context.Context,
+	policyType models.PolicyType,
+	limit, offset int,
+) ([]*models.Policy, error) {
 	query := `
 		SELECT id, name, description, type, policy_config, created_by_id, created_at, updated_at
 		FROM policies
@@ -201,4 +205,3 @@ func (r *PolicyRepository) Delete(ctx context.Context, id uuid.UUID) error {
 
 	return nil
 }
-

@@ -229,7 +229,11 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 				"error": "Environment not found",
 			})
 		}
-		h.logger.Error("Failed to get environment for update", zap.Error(err), zap.String("environment_id", environmentID.String()))
+		h.logger.Error(
+			"Failed to get environment for update",
+			zap.Error(err),
+			zap.String("environment_id", environmentID.String()),
+		)
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "Failed to retrieve environment",
 		})
@@ -279,7 +283,11 @@ func (h *EnvironmentHandler) DeleteEnvironment(c echo.Context) error {
 				"error": "Environment not found",
 			})
 		}
-		h.logger.Error("Failed to get environment for deletion", zap.Error(err), zap.String("environment_id", environmentID.String()))
+		h.logger.Error(
+			"Failed to get environment for deletion",
+			zap.Error(err),
+			zap.String("environment_id", environmentID.String()),
+		)
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "Failed to retrieve environment",
 		})
@@ -298,4 +306,3 @@ func (h *EnvironmentHandler) DeleteEnvironment(c echo.Context) error {
 		"message": "Environment deleted successfully",
 	})
 }
-

@@ -113,15 +113,45 @@ func setupUserRoutes(e *echo.Echo, userRepo repository.UserRepository, tokenMana
 	authzMiddleware := middleware.NewAuthzMiddleware()
 
 	// All user management routes require authentication and admin role
-	usersGroup.GET("", userHandler.ListUsers, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersRead))
-	usersGroup.GET("/:id", userHandler.GetUser, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersRead))
-	usersGroup.POST("", userHandler.CreateUser, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersCreate))
-	usersGroup.PUT("/:id", userHandler.UpdateUser, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersUpdate))
-	usersGroup.DELETE("/:id", userHandler.DeleteUser, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersDelete))
+	usersGroup.GET(
+		"",
+		userHandler.ListUsers,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersRead),
+	)
+	usersGroup.GET(
+		"/:id",
+		userHandler.GetUser,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersRead),
+	)
+	usersGroup.POST(
+		"",
+		userHandler.CreateUser,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersCreate),
+	)
+	usersGroup.PUT(
+		"/:id",
+		userHandler.UpdateUser,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersUpdate),
+	)
+	usersGroup.DELETE(
+		"/:id",
+		userHandler.DeleteUser,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersDelete),
+	)
 }
 
 // setupProjectRoutes registers project management routes
-func setupProjectRoutes(e *echo.Echo, projectRepo repository.ProjectRepository, databaseRepo repository.DatabaseRepository, tokenManager *auth.TokenManager) {
+func setupProjectRoutes(
+	e *echo.Echo,
+	projectRepo repository.ProjectRepository,
+	databaseRepo repository.DatabaseRepository,
+	tokenManager *auth.TokenManager,
+) {
 	projectHandler := handlers.NewProjectHandler(projectRepo, databaseRepo, logger.Get())
 	projectsGroup := e.Group("/api/v1/projects")
 
@@ -138,12 +168,27 @@ func setupProjectRoutes(e *echo.Echo, projectRepo repository.ProjectRepository, 
 	projectsGroup.GET("/:id", projectHandler.GetProject, authMiddleware.Authenticate)
 
 	// PUT and DELETE require admin role
-	projectsGroup.PUT("/:id", projectHandler.UpdateProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	projectsGroup.DELETE("/:id", projectHandler.DeleteProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	projectsGroup.PUT(
+		"/:id",
+		projectHandler.UpdateProject,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
+	projectsGroup.DELETE(
+		"/:id",
+		projectHandler.DeleteProject,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
 }
 
 // setupEnvironmentRoutes registers environment management routes
-func setupEnvironmentRoutes(e *echo.Echo, envRepo repository.EnvironmentRepository, db *sqlx.DB, tokenManager *auth.TokenManager) {
+func setupEnvironmentRoutes(
+	e *echo.Echo,
+	envRepo repository.EnvironmentRepository,
+	db *sqlx.DB,
+	tokenManager *auth.TokenManager,
+) {
 	envHandler := handlers.NewEnvironmentHandler(envRepo, db, logger.Get())
 	environmentsGroup := e.Group("/api/v1/environments")
 
@@ -152,15 +197,45 @@ func setupEnvironmentRoutes(e *echo.Echo, envRepo repository.EnvironmentReposito
 	authzMiddleware := middleware.NewAuthzMiddleware()
 
 	// All environment routes require admin role
-	environmentsGroup.POST("", envHandler.CreateEnvironment, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	environmentsGroup.GET("", envHandler.ListEnvironments, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	environmentsGroup.GET("/:id", envHandler.GetEnvironment, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	environmentsGroup.PUT("/:id", envHandler.UpdateEnvironment, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	environmentsGroup.DELETE("/:id", envHandler.DeleteEnvironment, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	environmentsGroup.POST(
+		"",
+		envHandler.CreateEnvironment,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
+	environmentsGroup.GET(
+		"",
+		envHandler.ListEnvironments,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
+	environmentsGroup.GET(
+		"/:id",
+		envHandler.GetEnvironment,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
+	environmentsGroup.PUT(
+		"/:id",
+		envHandler.UpdateEnvironment,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
+	environmentsGroup.DELETE(
+		"/:id",
+		envHandler.DeleteEnvironment,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
 }
 
 // setupPolicyRoutes registers policy management routes
-func setupPolicyRoutes(e *echo.Echo, policyRepo repository.PolicyRepository, envRepo repository.EnvironmentRepository, tokenManager *auth.TokenManager) {
+func setupPolicyRoutes(
+	e *echo.Echo,
+	policyRepo repository.PolicyRepository,
+	envRepo repository.EnvironmentRepository,
+	tokenManager *auth.TokenManager,
+) {
 	policyHandler := handlers.NewPolicyHandler(policyRepo, envRepo, logger.Get())
 	policiesGroup := e.Group("/api/v1/policies")
 
@@ -173,11 +248,22 @@ func setupPolicyRoutes(e *echo.Echo, policyRepo repository.PolicyRepository, env
 	policiesGroup.GET("", policyHandler.ListPolicies, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 	policiesGroup.GET("/:id", policyHandler.GetPolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
 	policiesGroup.PUT("/:id", policyHandler.UpdatePolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	policiesGroup.DELETE("/:id", policyHandler.DeletePolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	policiesGroup.DELETE(
+		"/:id",
+		policyHandler.DeletePolicy,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
 }
 
 // setupDatabaseInstanceRoutes registers database instance management routes
-func setupDatabaseInstanceRoutes(e *echo.Echo, dbInstanceRepo repository.DatabaseInstanceRepository, databaseRepo repository.DatabaseRepository, encryptionKey string, tokenManager *auth.TokenManager) {
+func setupDatabaseInstanceRoutes(
+	e *echo.Echo,
+	dbInstanceRepo repository.DatabaseInstanceRepository,
+	databaseRepo repository.DatabaseRepository,
+	encryptionKey string,
+	tokenManager *auth.TokenManager,
+) {
 	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(dbInstanceRepo, databaseRepo, encryptionKey, logger.Get())
 	dbInstancesGroup := e.Group("/api/v1/database-instances")
 
@@ -185,11 +271,26 @@ func setupDatabaseInstanceRoutes(e *echo.Echo, dbInstanceRepo repository.Databas
 	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
 	authzMiddleware := middleware.NewAuthzMiddleware()
 
-	dbInstancesGroup.POST("", dbInstanceHandler.CreateDatabaseInstance, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	dbInstancesGroup.POST(
+		"",
+		dbInstanceHandler.CreateDatabaseInstance,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
 	dbInstancesGroup.GET("", dbInstanceHandler.ListDatabaseInstances, authMiddleware.Authenticate)
 	dbInstancesGroup.GET("/:id", dbInstanceHandler.GetDatabaseInstance, authMiddleware.Authenticate)
-	dbInstancesGroup.PUT("/:id", dbInstanceHandler.UpdateDatabaseInstance, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	dbInstancesGroup.DELETE("/:id", dbInstanceHandler.DeleteDatabaseInstance, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	dbInstancesGroup.PUT(
+		"/:id",
+		dbInstanceHandler.UpdateDatabaseInstance,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
+	dbInstancesGroup.DELETE(
+		"/:id",
+		dbInstanceHandler.DeleteDatabaseInstance,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
 }
 
 // setupDatabaseRoutes registers database management routes

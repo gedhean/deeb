@@ -33,4 +33,3 @@ type PolicyRepository interface {
 	// Delete deletes a policy by its ID
 	Delete(ctx context.Context, id uuid.UUID) error
 }
-

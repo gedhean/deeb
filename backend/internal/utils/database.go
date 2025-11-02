@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
 
@@ -24,7 +24,7 @@ var (
 
 // ConnectionTestParams represents parameters for testing a database connection
 type ConnectionTestParams struct {
-	DatabaseType             string  // "mysql" or "postgresql"
+	DatabaseType             string // "mysql" or "postgresql"
 	Host                     string
 	Port                     int
 	Username                 string
@@ -109,7 +109,13 @@ func TestMySQLConnection(ctx context.Context, params ConnectionTestParams) error
 
 		// Provide clear error messages
 		if err.Error() == "Access denied for user" {
-			return fmt.Errorf("%w: MySQL authentication failed for user '%s' at %s:%d", ErrInvalidCredentials, params.Username, params.Host, params.Port)
+			return fmt.Errorf(
+				"%w: MySQL authentication failed for user '%s' at %s:%d",
+				ErrInvalidCredentials,
+				params.Username,
+				params.Host,
+				params.Port,
+			)
 		}
 
 		return fmt.Errorf("%w: MySQL connection failed to %s:%d - %v", ErrConnectionFailed, params.Host, params.Port, err)
@@ -189,7 +195,13 @@ func TestPostgreSQLConnection(ctx context.Context, params ConnectionTestParams) 
 
 		// Provide clear error messages
 		if err.Error() == "pq: password authentication failed for user" {
-			return fmt.Errorf("%w: PostgreSQL authentication failed for user '%s' at %s:%d", ErrInvalidCredentials, params.Username, params.Host, params.Port)
+			return fmt.Errorf(
+				"%w: PostgreSQL authentication failed for user '%s' at %s:%d",
+				ErrInvalidCredentials,
+				params.Username,
+				params.Host,
+				params.Port,
+			)
 		}
 
 		return fmt.Errorf("%w: PostgreSQL connection failed to %s:%d - %v", ErrConnectionFailed, params.Host, params.Port, err)
@@ -206,4 +218,3 @@ func TestPostgreSQLConnection(ctx context.Context, params ConnectionTestParams) 
 
 	return nil
 }
-

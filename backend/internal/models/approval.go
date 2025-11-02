@@ -16,19 +16,19 @@ const (
 
 // Approval represents an approval/rejection record for a change plan
 type Approval struct {
-	ID           uuid.UUID      `json:"id"           db:"id"`
-	ChangePlanID uuid.UUID      `json:"change_plan_id" db:"change_plan_id"`
-	ApproverID   uuid.UUID      `json:"approver_id"   db:"approver_id"`
-	Status       ApprovalStatus `json:"status"       db:"status"`
-	Comments     *string        `json:"comments,omitempty" db:"comments"`
+	ID           uuid.UUID      `json:"id"                    db:"id"`
+	ChangePlanID uuid.UUID      `json:"change_plan_id"        db:"change_plan_id"`
+	ApproverID   uuid.UUID      `json:"approver_id"           db:"approver_id"`
+	Status       ApprovalStatus `json:"status"                db:"status"`
+	Comments     *string        `json:"comments,omitempty"    db:"comments"`
 	ApprovedAt   *time.Time     `json:"approved_at,omitempty" db:"approved_at"`
-	CreatedAt    time.Time      `json:"created_at"  db:"created_at"`
+	CreatedAt    time.Time      `json:"created_at"            db:"created_at"`
 }
 
 // CreateApprovalRequest represents the request to create a new approval
 type CreateApprovalRequest struct {
-	ChangePlanID uuid.UUID      `json:"change_plan_id" validate:"required"`
-	Status       ApprovalStatus `json:"status"        validate:"required,oneof=Approved Rejected"`
+	ChangePlanID uuid.UUID      `json:"change_plan_id"     validate:"required"`
+	Status       ApprovalStatus `json:"status"             validate:"required,oneof=Approved Rejected"`
 	Comments     *string        `json:"comments,omitempty"`
 }
 

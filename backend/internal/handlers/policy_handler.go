@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -21,7 +20,11 @@ type PolicyHandler struct {
 }
 
 // NewPolicyHandler creates a new policy handler
-func NewPolicyHandler(policyRepo repository.PolicyRepository, envRepo repository.EnvironmentRepository, logger *zap.Logger) *PolicyHandler {
+func NewPolicyHandler(
+	policyRepo repository.PolicyRepository,
+	envRepo repository.EnvironmentRepository,
+	logger *zap.Logger,
+) *PolicyHandler {
 	return &PolicyHandler{
 		policyRepo: policyRepo,
 		envRepo:    envRepo,
@@ -293,4 +296,3 @@ func (h *PolicyHandler) DeletePolicy(c echo.Context) error {
 		"message": "Policy deleted successfully",
 	})
 }
-

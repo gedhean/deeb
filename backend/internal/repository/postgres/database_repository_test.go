@@ -36,7 +36,7 @@ func TestDatabaseCreate(t *testing.T) {
 		createdByID := uuid.New()
 		description := "Test database description"
 		database := &models.Database{
-			DatabaseName:        "test_database",
+			DatabaseName:       "test_database",
 			DatabaseInstanceID: dbInstanceID,
 			ProjectID:          projectID,
 			EnvironmentID:      envID,
@@ -74,7 +74,7 @@ func TestDatabaseCreate(t *testing.T) {
 
 	t.Run("validation error - empty name", func(t *testing.T) {
 		database := &models.Database{
-			DatabaseName:        "",
+			DatabaseName:       "",
 			DatabaseInstanceID: uuid.New(),
 			ProjectID:          uuid.New(),
 			EnvironmentID:      uuid.New(),
@@ -90,7 +90,7 @@ func TestDatabaseCreate(t *testing.T) {
 
 	t.Run("validation error - nil database instance ID", func(t *testing.T) {
 		database := &models.Database{
-			DatabaseName:        "test_database",
+			DatabaseName:       "test_database",
 			DatabaseInstanceID: uuid.Nil,
 			ProjectID:          uuid.New(),
 			EnvironmentID:      uuid.New(),
@@ -106,7 +106,7 @@ func TestDatabaseCreate(t *testing.T) {
 
 	t.Run("validation error - nil project ID", func(t *testing.T) {
 		database := &models.Database{
-			DatabaseName:        "test_database",
+			DatabaseName:       "test_database",
 			DatabaseInstanceID: uuid.New(),
 			ProjectID:          uuid.Nil,
 			EnvironmentID:      uuid.New(),
@@ -137,8 +137,10 @@ func TestDatabaseGetByID(t *testing.T) {
 		description := "Test database description"
 		now := time.Now()
 
-		rows := sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
-			"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}).
+		rows := sqlmock.NewRows([]string{
+			"id", "project_id", "database_instance_id", "environment_id",
+			"database_name", "description", "status", "created_by_id", "created_at", "updated_at",
+		}).
 			AddRow(databaseID, projectID, dbInstanceID, envID, "test_database", description, "Active", createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases WHERE id =").
@@ -172,8 +174,10 @@ func TestDatabaseGetByID(t *testing.T) {
 
 		mock.ExpectQuery("SELECT (.+) FROM databases WHERE id =").
 			WithArgs(databaseID).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
-				"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}))
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "project_id", "database_instance_id", "environment_id",
+				"database_name", "description", "status", "created_by_id", "created_at", "updated_at",
+			}))
 
 		database, err := repo.GetByID(ctx, databaseID)
 		if err != repository.ErrNotFound {
@@ -206,8 +210,10 @@ func TestDatabaseList(t *testing.T) {
 		envID := uuid.New()
 		createdByID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
-			"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}).
+		rows := sqlmock.NewRows([]string{
+			"id", "project_id", "database_instance_id", "environment_id",
+			"database_name", "description", "status", "created_by_id", "created_at", "updated_at",
+		}).
 			AddRow(databaseID1, projectID, dbInstanceID, envID, "database1", nil, "Active", createdByID, now, now).
 			AddRow(databaseID2, projectID, dbInstanceID, envID, "database2", nil, "Active", createdByID, now, now)
 
@@ -231,8 +237,10 @@ func TestDatabaseList(t *testing.T) {
 
 	t.Run("empty list", func(t *testing.T) {
 		rows := sqlmock.NewRows(
-			[]string{"id", "project_id", "database_instance_id", "environment_id",
-				"database_name", "description", "status", "created_by_id", "created_at", "updated_at"},
+			[]string{
+				"id", "project_id", "database_instance_id", "environment_id",
+				"database_name", "description", "status", "created_by_id", "created_at", "updated_at",
+			},
 		)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases ORDER BY created_at DESC LIMIT").
@@ -324,8 +332,10 @@ func TestDatabaseGetByProjectID(t *testing.T) {
 		envID := uuid.New()
 		createdByID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
-			"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}).
+		rows := sqlmock.NewRows([]string{
+			"id", "project_id", "database_instance_id", "environment_id",
+			"database_name", "description", "status", "created_by_id", "created_at", "updated_at",
+		}).
 			AddRow(databaseID1, projectID, dbInstanceID, envID, "database1", nil, "Active", createdByID, now, now).
 			AddRow(databaseID2, projectID, dbInstanceID, envID, "database2", nil, "Active", createdByID, now, now)
 
@@ -364,8 +374,10 @@ func TestDatabaseListByProject(t *testing.T) {
 		envID := uuid.New()
 		createdByID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "project_id", "database_instance_id", "environment_id",
-			"database_name", "description", "status", "created_by_id", "created_at", "updated_at"}).
+		rows := sqlmock.NewRows([]string{
+			"id", "project_id", "database_instance_id", "environment_id",
+			"database_name", "description", "status", "created_by_id", "created_at", "updated_at",
+		}).
 			AddRow(databaseID1, projectID, dbInstanceID, envID, "database1", nil, "Active", createdByID, now, now).
 			AddRow(databaseID2, projectID, dbInstanceID, envID, "database2", nil, "Active", createdByID, now, now)
 
@@ -390,8 +402,10 @@ func TestDatabaseListByProject(t *testing.T) {
 	t.Run("empty list by project", func(t *testing.T) {
 		projectID := uuid.New()
 		rows := sqlmock.NewRows(
-			[]string{"id", "project_id", "database_instance_id", "environment_id",
-				"database_name", "description", "status", "created_by_id", "created_at", "updated_at"},
+			[]string{
+				"id", "project_id", "database_instance_id", "environment_id",
+				"database_name", "description", "status", "created_by_id", "created_at", "updated_at",
+			},
 		)
 
 		mock.ExpectQuery("SELECT (.+) FROM databases WHERE project_id = (.+) ORDER BY created_at DESC LIMIT").

@@ -18,32 +18,32 @@ const (
 
 // Database represents an individual database within a database instance
 type Database struct {
-	ID                 uuid.UUID      `json:"id"                   db:"id"`
+	ID                 uuid.UUID      `json:"id"                    db:"id"`
 	ProjectID          uuid.UUID      `json:"project_id"            db:"project_id"`
 	DatabaseInstanceID uuid.UUID      `json:"database_instance_id"  db:"database_instance_id"`
 	EnvironmentID      uuid.UUID      `json:"environment_id"        db:"environment_id"`
-	DatabaseName       string         `json:"database_name"        db:"database_name"`
+	DatabaseName       string         `json:"database_name"         db:"database_name"`
 	Description        *string        `json:"description,omitempty" db:"description"`
-	Status             DatabaseStatus `json:"status"               db:"status"`
-	CreatedByID        uuid.UUID      `json:"created_by_id"        db:"created_by_id"`
+	Status             DatabaseStatus `json:"status"                db:"status"`
+	CreatedByID        uuid.UUID      `json:"created_by_id"         db:"created_by_id"`
 	CreatedAt          time.Time      `json:"created_at"            db:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"            db:"updated_at"`
 }
 
 // CreateDatabaseRequest represents the request to create a new database
 type CreateDatabaseRequest struct {
-	ProjectID          uuid.UUID `json:"project_id"           validate:"required"`
-	DatabaseInstanceID uuid.UUID `json:"database_instance_id" validate:"required"`
-	EnvironmentID      uuid.UUID `json:"environment_id"       validate:"required"`
-	DatabaseName       string    `json:"database_name"        validate:"required,max=255"`
+	ProjectID          uuid.UUID `json:"project_id"            validate:"required"`
+	DatabaseInstanceID uuid.UUID `json:"database_instance_id"  validate:"required"`
+	EnvironmentID      uuid.UUID `json:"environment_id"        validate:"required"`
+	DatabaseName       string    `json:"database_name"         validate:"required,max=255"`
 	Description        *string   `json:"description,omitempty"`
 }
 
 // UpdateDatabaseRequest represents the request to update a database
 type UpdateDatabaseRequest struct {
-	DatabaseName *string         `json:"database_name,omitempty"        validate:"omitempty,max=255"`
+	DatabaseName *string         `json:"database_name,omitempty" validate:"omitempty,max=255"`
 	Description  *string         `json:"description,omitempty"`
-	Status       *DatabaseStatus `json:"status,omitempty"            validate:"omitempty,oneof=Active Inactive"`
+	Status       *DatabaseStatus `json:"status,omitempty"        validate:"omitempty,oneof=Active Inactive"`
 }
 
 // DatabaseResponse represents a database response

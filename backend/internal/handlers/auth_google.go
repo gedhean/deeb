@@ -179,7 +179,10 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 		if len(users) == 0 {
 			// First user - automatically grant OrganizationAdmin role
 			orgRole = "OrganizationAdmin"
-			h.logger.Info("First user registration via Google OAuth - granting OrganizationAdmin role", zap.String("email", email))
+			h.logger.Info(
+				"First user registration via Google OAuth - granting OrganizationAdmin role",
+				zap.String("email", email),
+			)
 		} else {
 			// Subsequent users - use default role
 			orgRole = "OrganizationDeveloper"

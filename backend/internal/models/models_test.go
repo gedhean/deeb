@@ -247,9 +247,9 @@ func TestValidateUpdateRequest(t *testing.T) {
 // TestDatabaseInstance_Validate tests DatabaseInstance.Validate() method
 func TestDatabaseInstance_Validate(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		instance *DatabaseInstance
-		wantErr error
+		wantErr  error
 	}{
 		{
 			name: "valid MySQL instance",
@@ -601,9 +601,9 @@ func TestValidateUpdateDatabaseInstanceRequest(t *testing.T) {
 // TestDatabase_Validate tests Database.Validate() method
 func TestDatabase_Validate(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		database *Database
-		wantErr error
+		wantErr  error
 	}{
 		{
 			name: "valid database",
@@ -830,4 +830,3 @@ func stringPtr(s string) *string {
 func intPtr(i int) *int {
 	return &i
 }
-

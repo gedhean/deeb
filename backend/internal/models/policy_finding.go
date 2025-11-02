@@ -28,24 +28,24 @@ const (
 
 // PolicyFinding represents a SQL Review finding (result) from policy evaluation
 type PolicyFinding struct {
-	ID            uuid.UUID       `json:"id"             db:"id"`
-	ChangePlanID  uuid.UUID       `json:"change_plan_id"  db:"change_plan_id"`
-	ValidatorType ValidatorType   `json:"validator_type"  db:"validator_type"`
-	Severity      FindingSeverity `json:"severity"      db:"severity"`
-	RuleName      string          `json:"rule_name"       db:"rule_name"`
-	Message       string          `json:"message"        db:"message"`
-	LineNumber    *int            `json:"line_number,omitempty" db:"line_number"`
+	ID            uuid.UUID       `json:"id"                      db:"id"`
+	ChangePlanID  uuid.UUID       `json:"change_plan_id"          db:"change_plan_id"`
+	ValidatorType ValidatorType   `json:"validator_type"          db:"validator_type"`
+	Severity      FindingSeverity `json:"severity"                db:"severity"`
+	RuleName      string          `json:"rule_name"               db:"rule_name"`
+	Message       string          `json:"message"                 db:"message"`
+	LineNumber    *int            `json:"line_number,omitempty"   db:"line_number"`
 	ColumnNumber  *int            `json:"column_number,omitempty" db:"column_number"`
-	CreatedAt     time.Time       `json:"created_at"     db:"created_at"`
+	CreatedAt     time.Time       `json:"created_at"              db:"created_at"`
 }
 
 // CreatePolicyFindingRequest represents the request to create a new policy finding
 type CreatePolicyFindingRequest struct {
-	ChangePlanID  uuid.UUID       `json:"change_plan_id"  validate:"required"`
-	ValidatorType ValidatorType   `json:"validator_type"  validate:"required"`
-	Severity      FindingSeverity `json:"severity"      validate:"required,oneof=Error Warning Info"`
-	RuleName      string          `json:"rule_name"       validate:"required,max=255"`
-	Message       string          `json:"message"        validate:"required"`
+	ChangePlanID  uuid.UUID       `json:"change_plan_id"          validate:"required"`
+	ValidatorType ValidatorType   `json:"validator_type"          validate:"required"`
+	Severity      FindingSeverity `json:"severity"                validate:"required,oneof=Error Warning Info"`
+	RuleName      string          `json:"rule_name"               validate:"required,max=255"`
+	Message       string          `json:"message"                 validate:"required"`
 	LineNumber    *int            `json:"line_number,omitempty"`
 	ColumnNumber  *int            `json:"column_number,omitempty"`
 }

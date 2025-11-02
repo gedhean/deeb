@@ -14,17 +14,21 @@ import (
 
 // ProjectHandler handles project management endpoints
 type ProjectHandler struct {
-	projectRepo repository.ProjectRepository
+	projectRepo  repository.ProjectRepository
 	databaseRepo repository.DatabaseRepository
-	logger      *zap.Logger
+	logger       *zap.Logger
 }
 
 // NewProjectHandler creates a new project handler
-func NewProjectHandler(projectRepo repository.ProjectRepository, databaseRepo repository.DatabaseRepository, logger *zap.Logger) *ProjectHandler {
+func NewProjectHandler(
+	projectRepo repository.ProjectRepository,
+	databaseRepo repository.DatabaseRepository,
+	logger *zap.Logger,
+) *ProjectHandler {
 	return &ProjectHandler{
-		projectRepo: projectRepo,
+		projectRepo:  projectRepo,
 		databaseRepo: databaseRepo,
-		logger:      logger,
+		logger:       logger,
 	}
 }
 

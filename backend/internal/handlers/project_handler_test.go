@@ -127,7 +127,11 @@ func (m *mockDatabaseRepository) List(ctx context.Context, limit, offset int) ([
 	return nil, nil
 }
 
-func (m *mockDatabaseRepository) ListByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error) {
+func (m *mockDatabaseRepository) ListByProject(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.Database, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
