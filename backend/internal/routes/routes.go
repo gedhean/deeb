@@ -33,13 +33,14 @@ func Setup(
 	dbRepo := postgres.NewDatabaseRepository(db)
 	issueRepo := postgres.NewIssueRepository(db.DB)
 	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
 
 	// Setup API routes
 	setupHealthRoute(e, db, version)
 	setupSetupRoutes(e, userRepo)
 	setupAuthRoutes(e, cfg, userRepo, tokenManager, loginRateLimiter)
 	setupUserRoutes(e, userRepo, tokenManager)
-	setupProjectRoutes(e, projectRepo, dbRepo, tokenManager)
+	setupProjectRoutes(e, projectRepo, dbRepo, projectMemberRepo, userRepo, tokenManager)
 	setupEnvironmentRoutes(e, envRepo, db, tokenManager)
 	setupPolicyRoutes(e, policyRepo, envRepo, tokenManager)
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager)
@@ -151,9 +152,11 @@ func setupProjectRoutes(
 	e *echo.Echo,
 	projectRepo repository.ProjectRepository,
 	databaseRepo repository.DatabaseRepository,
+	projectMemberRepo repository.ProjectMemberRepository,
+	userRepo repository.UserRepository,
 	tokenManager *auth.TokenManager,
 ) {
-	projectHandler := handlers.NewProjectHandler(projectRepo, databaseRepo, logger.Get())
+	projectHandler := handlers.NewProjectHandler(projectRepo, databaseRepo, projectMemberRepo, userRepo, logger.Get())
 	projectsGroup := e.Group("/api/v1/projects")
 
 	// Authentication and authorization middleware
@@ -181,6 +184,12 @@ func setupProjectRoutes(
 		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationAdmin(),
 	)
+
+	// Project member routes require authentication
+	projectsGroup.POST("/:id/members", projectHandler.AddProjectMember, authMiddleware.Authenticate)
+	projectsGroup.GET("/:id/members", projectHandler.ListProjectMembers, authMiddleware.Authenticate)
+	projectsGroup.DELETE("/:id/members/:user_id", projectHandler.RemoveProjectMember, authMiddleware.Authenticate)
+	projectsGroup.PUT("/:id/members/:user_id", projectHandler.UpdateProjectMemberRole, authMiddleware.Authenticate)
 }
 
 // setupEnvironmentRoutes registers environment management routes
