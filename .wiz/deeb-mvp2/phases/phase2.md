@@ -422,18 +422,18 @@ Implement PUT endpoint for updating project member roles.
 
 ### P02M22: Enhance authorization middleware for project resources
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M22
 
 **Goal**
 Extend authorization middleware to check project-level roles for project resource access.
 
 **Acceptance Criteria**
-- [ ] Authorization middleware updated in `backend/internal/middleware/authz.go`
-- [ ] Project role checking implemented (requires project context from URL or request body)
-- [ ] Permission checking helper functions for project roles
-- [ ] Organization role fallback logic
-- [ ] Unit tests for authorization logic passing
+- [x] Authorization middleware updated in `backend/internal/middleware/authz.go`
+- [x] Project role checking implemented (requires project context from URL or request body)
+- [x] Permission checking helper functions for project roles
+- [x] Organization role fallback logic
+- [x] Unit tests for authorization logic passing
 
 ---
 

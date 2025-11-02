@@ -161,7 +161,7 @@ func setupProjectRoutes(
 
 	// Authentication and authorization middleware
 	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
-	authzMiddleware := middleware.NewAuthzMiddleware()
+	authzMiddleware := middleware.NewAuthzMiddlewareWithRepo(projectMemberRepo)
 
 	// POST requires Admin or DBA role
 	projectsGroup.POST("", projectHandler.CreateProject, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationDBA())

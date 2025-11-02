@@ -268,7 +268,7 @@ func TestAuthenticate_ExpiredToken(t *testing.T) {
 
 func TestAuthenticate_WrongSecret(t *testing.T) {
 	// Create token with one secret
-	tm1, err := auth.NewTokenManager(testJWTSecret)
+	tm1, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
 	token, err := tm1.GenerateToken(uuid.New(), "test@example.com", "OrganizationDeveloper")
@@ -392,7 +392,7 @@ func TestAuthenticate_MultipleRequests(t *testing.T) {
 }
 
 func BenchmarkAuthenticate(b *testing.B) {
-	tm, _ := auth.NewTokenManager(testJWTSecret)
+	tm, _ := auth.NewTokenManager(testJWTSecret, 0)
 	middleware := NewAuthMiddleware(tm)
 
 	token, _ := tm.GenerateToken(uuid.New(), "test@example.com", "OrganizationDeveloper")
