@@ -16,9 +16,9 @@ type MySQLSyntaxValidator struct {
 	review.BaseValidator
 }
 
-// errorLineRegex matches MySQL error messages with line numbers
+// mysqlErrorLineRegex matches MySQL error messages with line numbers
 // Format: "syntax error at line X" or "near '...' at line X"
-var errorLineRegex = regexp.MustCompile(`(?i)(?:line|at line)\s+(\d+)`)
+var mysqlErrorLineRegex = regexp.MustCompile(`(?i)(?:line|at line)\s+(\d+)`)
 
 // NewMySQLSyntaxValidator creates a new MySQL syntax validator
 func NewMySQLSyntaxValidator() *MySQLSyntaxValidator {
@@ -69,7 +69,7 @@ func (v *MySQLSyntaxValidator) Validate(ctx context.Context, sqlContent string, 
 
 // extractLineNumber extracts line number from MySQL error message
 func (v *MySQLSyntaxValidator) extractLineNumber(errorMsg string) int {
-	matches := errorLineRegex.FindStringSubmatch(errorMsg)
+	matches := mysqlErrorLineRegex.FindStringSubmatch(errorMsg)
 	if len(matches) >= 2 {
 		if lineNum, err := strconv.Atoi(matches[1]); err == nil {
 			return lineNum

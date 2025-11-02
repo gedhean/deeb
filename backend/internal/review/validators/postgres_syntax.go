@@ -16,9 +16,9 @@ type PostgreSQLSyntaxValidator struct {
 	review.BaseValidator
 }
 
-// errorLineRegex matches PostgreSQL error messages with line numbers
+// postgresErrorLineRegex matches PostgreSQL error messages with line numbers
 // Format: "syntax error at or near \"...\" at character X" or "LINE X: ..."
-var errorLineRegex = regexp.MustCompile(`(?i)(?:line|at character)\s+(\d+)`)
+var postgresErrorLineRegex = regexp.MustCompile(`(?i)(?:line|at character)\s+(\d+)`)
 
 // NewPostgreSQLSyntaxValidator creates a new PostgreSQL syntax validator
 func NewPostgreSQLSyntaxValidator() *PostgreSQLSyntaxValidator {
@@ -69,7 +69,7 @@ func (v *PostgreSQLSyntaxValidator) Validate(ctx context.Context, sqlContent str
 
 // extractLineNumber extracts line number from PostgreSQL error message
 func (v *PostgreSQLSyntaxValidator) extractLineNumber(errorMsg string) int {
-	matches := errorLineRegex.FindStringSubmatch(errorMsg)
+	matches := postgresErrorLineRegex.FindStringSubmatch(errorMsg)
 	if len(matches) >= 2 {
 		if lineNum, err := strconv.Atoi(matches[1]); err == nil {
 			return lineNum
