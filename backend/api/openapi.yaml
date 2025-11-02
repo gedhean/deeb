@@ -46,6 +46,8 @@ tags:
     description: Database management operations
   - name: Project Members
     description: Project membership management operations
+  - name: Change Plans
+    description: Change plan management and SQL review operations
 paths:
   /health:
     get:
@@ -1522,6 +1524,351 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /api/v1/change-plans:
+    post:
+      tags: [Change Plans]
+      summary: Create a new change plan
+      description: |
+        Create a new change plan for database changes. Requires Project Developer role.
+        SQL Review runs automatically when status changes from Draft to Open.
+      operationId: createChangePlan
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChangePlanRequest'
+            example:
+              project_id: 123e4567-e89b-12d3-a456-426614174000
+              target_database_id: 223e4567-e89b-12d3-a456-426614174001
+              title: Add user table
+              description: Create users table with email and password fields
+              change_type: DDL
+              sql_content: CREATE TABLE users (id UUID PRIMARY KEY, email VARCHAR(255) UNIQUE, password_hash VARCHAR(255));
+              rollback_sql: DROP TABLE IF EXISTS users;
+      responses:
+        '201':
+          description: Change plan created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags: [Change Plans]
+      summary: List change plans
+      description: |
+        Retrieve a paginated list of change plans with optional filtering by status, project_id, database_id, and author_id.
+        Requires authentication and project membership.
+      operationId: listChangePlans
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+            enum: [Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled]
+        - name: project_id
+          in: query
+          description: Filter by project ID
+          schema:
+            type: string
+            format: uuid
+        - name: database_id
+          in: query
+          description: Filter by target database ID
+          schema:
+            type: string
+            format: uuid
+        - name: author_id
+          in: query
+          description: Filter by author ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of items to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of change plans
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePlanListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/change-plans/{id}:
+    get:
+      tags: [Change Plans]
+      summary: Get change plan by ID
+      description: |
+        Retrieve detailed information about a specific change plan, including SQL Review results.
+      operationId: getChangePlan
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Change plan details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Change Plans]
+      summary: Update change plan
+      description: |
+        Update change plan information. Status transitions are validated according to workflow rules.
+        Only Draft status change plans can be modified. Requires Project Developer role.
+      operationId: updateChangePlan
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateChangePlanRequest'
+      responses:
+        '200':
+          description: Change plan updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Change Plans]
+      summary: Delete change plan
+      description: |
+        Delete a change plan. Only Draft or Closed status change plans can be deleted.
+        Requires Project Developer role and must be the author.
+      operationId: deleteChangePlan
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Change plan deleted successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/change-plans/{id}/review:
+    post:
+      tags: [Change Plans]
+      summary: Trigger SQL Review manually
+      description: |
+        Manually trigger SQL Review for a change plan. This runs all enabled validators
+        and stores the findings. Requires Project Developer role.
+      operationId: triggerSQLReview
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: SQL Review completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SQLReviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/change-plans/{id}/approve:
+    post:
+      tags: [Change Plans]
+      summary: Approve change plan
+      description: |
+        Approve a change plan. Only Open status change plans can be approved.
+        SQL Review errors block approval. Requires Project Approver role.
+      operationId: approveChangePlan
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Change plan approved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/change-plans/{id}/execute:
+    post:
+      tags: [Change Plans]
+      summary: Execute change plan
+      description: |
+        Execute a change plan. Only Approved status change plans can be executed.
+        SQL Review errors block execution. Requires Project Approver or Executor role.
+      operationId: executeChangePlan
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Change plan executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/change-plans/{id}/resubmit:
+    post:
+      tags: [Change Plans]
+      summary: Resubmit change plan
+      description: |
+        Resubmit a change plan by moving it from Open back to Draft status.
+        Clears existing policy findings. Only the author can resubmit.
+      operationId: resubmitChangePlan
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Change plan resubmitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 components:
   securitySchemes:
     cookieAuth:
@@ -2334,6 +2681,283 @@ components:
           type: integer
           description: Number of items skipped
           example: 0
+    CreateChangePlanRequest:
+      type: object
+      required: [project_id, target_database_id, title, description, change_type, sql_content]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+          description: Project ID
+          example: 123e4567-e89b-12d3-a456-426614174000
+        target_database_id:
+          type: string
+          format: uuid
+          description: Target database ID
+          example: 223e4567-e89b-12d3-a456-426614174001
+        title:
+          type: string
+          maxLength: 255
+          description: Change plan title
+          example: Add user table
+        description:
+          type: string
+          description: Change plan description
+          example: Create users table with email and password fields
+        change_type:
+          type: string
+          enum: [DDL, DML]
+          description: Type of database change
+          example: DDL
+        sql_content:
+          type: string
+          description: SQL content to execute
+          example: CREATE TABLE users (id UUID PRIMARY KEY, email VARCHAR(255) UNIQUE, password_hash VARCHAR(255));
+        rollback_sql:
+          type: string
+          nullable: true
+          description: Optional rollback SQL
+          example: DROP TABLE IF EXISTS users;
+    UpdateChangePlanRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 255
+          description: Change plan title
+          example: Updated title
+        description:
+          type: string
+          description: Change plan description
+          example: Updated description
+        sql_content:
+          type: string
+          description: SQL content to execute
+          example: CREATE TABLE users (id UUID PRIMARY KEY, email VARCHAR(255) UNIQUE);
+        rollback_sql:
+          type: string
+          nullable: true
+          description: Optional rollback SQL
+          example: DROP TABLE IF EXISTS users;
+        status:
+          type: string
+          enum: [Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled]
+          description: Change plan status
+          example: Open
+        risk_level:
+          type: string
+          enum: [Low, Medium, High]
+          description: Risk level
+          example: Medium
+        assigned_reviewer_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Assigned reviewer ID
+          example: 323e4567-e89b-12d3-a456-426614174002
+    ChangePlanResponse:
+      type: object
+      required: [id, project_id, target_database_id, title, description, change_type, sql_content, status, risk_level, author_id, created_at, updated_at, has_errors, has_warnings]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique change plan identifier
+          example: 123e4567-e89b-12d3-a456-426614174000
+        project_id:
+          type: string
+          format: uuid
+          description: Project ID
+          example: 223e4567-e89b-12d3-a456-426614174001
+        target_database_id:
+          type: string
+          format: uuid
+          description: Target database ID
+          example: 323e4567-e89b-12d3-a456-426614174002
+        title:
+          type: string
+          description: Change plan title
+          example: Add user table
+        description:
+          type: string
+          description: Change plan description
+          example: Create users table with email and password fields
+        change_type:
+          type: string
+          enum: [DDL, DML]
+          description: Type of database change
+          example: DDL
+        sql_content:
+          type: string
+          description: SQL content to execute
+          example: CREATE TABLE users (id UUID PRIMARY KEY, email VARCHAR(255) UNIQUE, password_hash VARCHAR(255));
+        rollback_sql:
+          type: string
+          nullable: true
+          description: Optional rollback SQL
+          example: DROP TABLE IF EXISTS users;
+        status:
+          type: string
+          enum: [Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled]
+          description: Change plan status
+          example: Draft
+        risk_level:
+          type: string
+          enum: [Low, Medium, High]
+          description: Risk level
+          example: Medium
+        author_id:
+          type: string
+          format: uuid
+          description: Author user ID
+          example: 423e4567-e89b-12d3-a456-426614174003
+        assigned_reviewer_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Assigned reviewer ID
+          example: 523e4567-e89b-12d3-a456-426614174004
+        scheduled_for:
+          type: string
+          format: date-time
+          nullable: true
+          description: Scheduled execution time
+          example: '2025-01-27T10:00:00Z'
+        executed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Actual execution time
+          example: '2025-01-27T10:05:00Z'
+        execution_duration_ms:
+          type: integer
+          nullable: true
+          description: Execution duration in milliseconds
+          example: 150
+        affected_rows:
+          type: integer
+          nullable: true
+          description: Number of affected rows
+          example: 1
+        error_message:
+          type: string
+          nullable: true
+          description: Error message if execution failed
+          example: Connection timeout
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when change plan was created
+          example: '2025-01-26T12:00:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when change plan was last updated
+          example: '2025-01-26T12:30:00Z'
+        policy_findings:
+          $ref: '#/components/schemas/PolicyFindingsSummary'
+          nullable: true
+          description: SQL Review policy findings summary
+        has_errors:
+          type: boolean
+          description: Whether SQL Review found errors
+          example: false
+        has_warnings:
+          type: boolean
+          description: Whether SQL Review found warnings
+          example: true
+    PolicyFindingsSummary:
+      type: object
+      required: [errors, warnings, infos, counts]
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyFindingItem'
+          description: Error-level findings
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyFindingItem'
+          description: Warning-level findings
+        infos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyFindingItem'
+          description: Info-level findings
+        counts:
+          $ref: '#/components/schemas/PolicyFindingCounts'
+          description: Counts by severity
+    PolicyFindingItem:
+      type: object
+      required: [validator_type, rule_name, message]
+      properties:
+        validator_type:
+          type: string
+          description: Validator type (e.g., syntax_error, security, performance)
+          example: syntax_error
+        rule_name:
+          type: string
+          description: Rule name
+          example: PostgreSQL Syntax Check
+        message:
+          type: string
+          description: Finding message
+          example: Syntax error at line 1, column 25
+        line_number:
+          type: integer
+          nullable: true
+          description: Line number where issue was found
+          example: 1
+        column_number:
+          type: integer
+          nullable: true
+          description: Column number where issue was found
+          example: 25
+    PolicyFindingCounts:
+      type: object
+      required: [errors, warnings, infos]
+      properties:
+        errors:
+          type: integer
+          description: Number of error-level findings
+          example: 0
+        warnings:
+          type: integer
+          description: Number of warning-level findings
+          example: 2
+        infos:
+          type: integer
+          description: Number of info-level findings
+          example: 1
+    ChangePlanListResponse:
+      type: object
+      required: [change_plans, total]
+      properties:
+        change_plans:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChangePlanResponse'
+          description: List of change plans
+        total:
+          type: integer
+          description: Total number of change plans matching filters
+          example: 42
+    SQLReviewResponse:
+      type: object
+      required: [policy_findings, has_errors, has_warnings]
+      properties:
+        policy_findings:
+          $ref: '#/components/schemas/PolicyFindingsSummary'
+          description: SQL Review policy findings summary
+        has_errors:
+          type: boolean
+          description: Whether SQL Review found errors
+          example: false
+        has_warnings:
+          type: boolean
+          description: Whether SQL Review found warnings
+          example: true
   responses:
     BadRequest:
       description: Bad Request - Invalid request parameters

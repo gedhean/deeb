@@ -792,18 +792,20 @@ Create integration tests for Change Plan filtering functionality.
 
 ### P03M39: Update API documentation for Change Plans
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M39
 
 **Goal**
 Update OpenAPI specification with all Change Plan endpoints and SQL Review endpoints.
 
 **Acceptance Criteria**
-- [ ] OpenAPI spec updated with Change Plan CRUD endpoints
-- [ ] OpenAPI spec updated with SQL Review endpoint
-- [ ] Request/response schemas documented
-- [ ] Policy finding schema documented
-- [ ] Swagger UI displays all endpoints correctly
+- [x] OpenAPI spec updated with Change Plan CRUD endpoints
+- [x] OpenAPI spec updated with SQL Review endpoint
+- [x] Request/response schemas documented
+- [x] Policy finding schema documented
+- [x] Swagger UI displays all endpoints correctly
+
+**Note:** All Change Plan endpoints (POST, GET, PUT, DELETE), SQL Review endpoint (POST /review), approval/execution endpoints, and resubmit endpoint have been documented with complete request/response schemas including PolicyFinding schemas.
 
 ---
 
