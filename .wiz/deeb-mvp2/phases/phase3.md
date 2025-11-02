@@ -752,37 +752,41 @@ Create integration tests for all Change Plan endpoints using testcontainers.
 
 ### P03M37: Write integration tests for SQL Review flow
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M37
 
 **Goal**
 Create integration tests for automatic and manual SQL Review workflows.
 
 **Acceptance Criteria**
-- [ ] Integration test for automatic SQL Review on submission passing
-- [ ] Integration test for manual SQL Review trigger passing
-- [ ] Integration test for error blocking approval passing
-- [ ] Integration test for warning handling passing
-- [ ] Policy finding storage tests passing
-- [ ] All integration tests passing
+- [x] Integration test for automatic SQL Review on submission passing
+- [x] Integration test for manual SQL Review trigger passing
+- [x] Integration test for error blocking approval passing
+- [x] Integration test for warning handling passing
+- [x] Policy finding storage tests passing
+- [x] All integration tests passing
+
+**Note:** These tests were implemented as part of P03M19, P03M20, P03M24, and P03M25. All acceptance criteria are met.
 
 ---
 
 ### P03M38: Write integration tests for Change Plan filtering
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M38
 
 **Goal**
 Create integration tests for Change Plan filtering functionality.
 
 **Acceptance Criteria**
-- [ ] Integration test for status filtering passing
-- [ ] Integration test for project filtering passing
-- [ ] Integration test for database filtering passing
-- [ ] Integration test for author filtering passing
-- [ ] Integration test for combined filters passing
-- [ ] All integration tests passing
+- [x] Integration test for status filtering passing
+- [x] Integration test for project filtering passing
+- [x] Integration test for database filtering passing
+- [x] Integration test for author filtering passing
+- [x] Integration test for combined filters passing
+- [x] All integration tests passing
+
+**Note:** These tests were implemented as part of P03M21. All acceptance criteria are met.
 
 ---
 
