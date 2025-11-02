@@ -651,3 +651,606 @@ func TestRiskAssessmentService_calculateRiskLevel(t *testing.T) {
 	}
 }
 
+func TestRiskAssessmentService_AssessRisk_ErrorHandling(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	ctx := context.Background()
+
+	t.Run("handles database not found error", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		targetDatabaseID := uuid.New()
+		mockDBRepo.On("GetByID", ctx, targetDatabaseID).Return(nil, assert.AnError)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		riskLevel, err := service.AssessRisk(ctx, "SELECT * FROM users", models.ChangeTypeDML, targetDatabaseID)
+
+		assert.Error(t, err)
+		assert.Equal(t, models.RiskLevelMedium, riskLevel) // Returns Medium on error
+
+		mockDBRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles environment not found error", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		targetDatabaseID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, targetDatabaseID).Return(&models.Database{
+			ID:                 targetDatabaseID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(nil, assert.AnError)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		riskLevel, err := service.AssessRisk(ctx, "SELECT * FROM users", models.ChangeTypeDML, targetDatabaseID)
+
+		assert.Error(t, err)
+		assert.Equal(t, models.RiskLevelMedium, riskLevel) // Returns Medium on error
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles database instance not found error", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		targetDatabaseID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, targetDatabaseID).Return(&models.Database{
+			ID:                 targetDatabaseID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Development",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(nil, assert.AnError)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		riskLevel, err := service.AssessRisk(ctx, "SELECT * FROM users", models.ChangeTypeDML, targetDatabaseID)
+
+		assert.Error(t, err)
+		assert.Equal(t, models.RiskLevelMedium, riskLevel) // Returns Medium on error
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+}
+
+func TestRiskAssessmentService_EdgeCases(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	ctx := context.Background()
+
+	t.Run("handles empty SQL content", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Development",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		riskLevel, err := service.AssessRisk(ctx, "", models.ChangeTypeDML, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelLow, riskLevel) // Empty SQL = low risk
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles whitespace-only SQL content", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Development",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		riskLevel, err := service.AssessRisk(ctx, "   \n\t  ", models.ChangeTypeDML, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelLow, riskLevel) // Whitespace-only SQL = low risk
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles SQL with comments", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Production",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		// SQL with comments should still detect DROP TABLE
+		riskLevel, err := service.AssessRisk(ctx, "-- Drop users table\nDROP TABLE users", models.ChangeTypeDDL, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelHigh, riskLevel) // DROP TABLE in Production = high risk
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles case-insensitive SQL matching", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Production",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		// Lowercase SQL should still be detected
+		riskLevel, err := service.AssessRisk(ctx, "drop table users", models.ChangeTypeDDL, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelHigh, riskLevel) // DROP TABLE in Production = high risk
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles multiple destructive operations (takes first)", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Staging",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		// Multiple destructive operations - should detect first one
+		riskLevel, err := service.AssessRisk(ctx, "DROP TABLE users; TRUNCATE TABLE orders", models.ChangeTypeDDL, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelHigh, riskLevel) // DROP TABLE (score 7) + Staging (1) = 8 = High
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles complex SQL statements", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Development",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		// Complex ALTER TABLE with multiple operations
+		complexSQL := `ALTER TABLE users
+			ADD COLUMN email VARCHAR(255),
+			ADD COLUMN phone VARCHAR(20),
+			ALTER COLUMN name TYPE VARCHAR(100)`
+
+		riskLevel, err := service.AssessRisk(ctx, complexSQL, models.ChangeTypeDDL, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelMedium, riskLevel) // ALTER TABLE (score 3) + Dev (0) = 3 = Medium
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles environment name variations", func(t *testing.T) {
+		testCases := []struct {
+			name         string
+			envName      string
+			expectedRisk models.RiskLevel
+		}{
+			{"Production", "Production", models.RiskLevelHigh},   // ALTER TABLE (3) + Production (3) = 6 = High
+			{"Prod", "Prod", models.RiskLevelHigh},               // ALTER TABLE (3) + Prod (3) = 6 = High
+			{"PRODUCTION", "PRODUCTION", models.RiskLevelHigh},   // ALTER TABLE (3) + PRODUCTION (3) = 6 = High
+			{"prod", "prod", models.RiskLevelHigh},               // ALTER TABLE (3) + prod (3) = 6 = High
+			{"Staging", "Staging", models.RiskLevelMedium},       // ALTER TABLE (3) + Staging (1) = 4 = Medium
+			{"Stage", "Stage", models.RiskLevelMedium},           // ALTER TABLE (3) + Stage (1) = 4 = Medium
+			{"Development", "Development", models.RiskLevelMedium}, // ALTER TABLE (3) + Dev (0) = 3 = Medium
+			{"Dev", "Dev", models.RiskLevelMedium},               // ALTER TABLE (3) + Dev (0) = 3 = Medium
+			{"Test", "Test", models.RiskLevelMedium},             // ALTER TABLE (3) + Test (0) = 3 = Medium
+			{"Local", "Local", models.RiskLevelMedium},           // ALTER TABLE (3) + Local (0) = 3 = Medium
+			{"QA", "QA", models.RiskLevelMedium},                 // ALTER TABLE (3) + Unknown (1) = 4 = Medium
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				mockDBRepo := new(MockDatabaseRepository)
+				mockEnvRepo := new(MockEnvironmentRepository)
+				mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+				dbID := uuid.New()
+				envID := uuid.New()
+				instanceID := uuid.New()
+
+				mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+					ID:                 dbID,
+					EnvironmentID:      envID,
+					DatabaseInstanceID: instanceID,
+				}, nil)
+
+				mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+					ID:   envID,
+					Name: tc.envName,
+				}, nil)
+
+				mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+					ID:           instanceID,
+					DatabaseType: models.DatabaseTypePostgreSQL,
+				}, nil)
+
+				service := NewRiskAssessmentService(
+					mockDBRepo,
+					mockEnvRepo,
+					mockInstanceRepo,
+					logger,
+				)
+
+				// Use ALTER TABLE which gives score 3
+				riskLevel, err := service.AssessRisk(ctx, "ALTER TABLE users ADD COLUMN email VARCHAR(255)", models.ChangeTypeDDL, dbID)
+
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedRisk, riskLevel)
+
+				mockDBRepo.AssertExpectations(t)
+				mockEnvRepo.AssertExpectations(t)
+				mockInstanceRepo.AssertExpectations(t)
+			})
+		}
+	})
+
+	t.Run("handles combined risk scenarios", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Production",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		// DROP TABLE (score 7) + Production (score 3) = 10 = High
+		riskLevel, err := service.AssessRisk(ctx, "DROP TABLE users", models.ChangeTypeDDL, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelHigh, riskLevel)
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles UPDATE with WHERE clause correctly", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Development",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		// UPDATE with WHERE should have lower risk than UPDATE without WHERE
+		riskLevel, err := service.AssessRisk(ctx, "UPDATE users SET status = 'active' WHERE id = 1", models.ChangeTypeDML, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelLow, riskLevel) // UPDATE with WHERE (1) + Dev (0) = 1 = Low
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles DROP INDEX operations", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Production",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		// DROP INDEX is high risk
+		riskLevel, err := service.AssessRisk(ctx, "DROP INDEX idx_users_email", models.ChangeTypeDDL, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelHigh, riskLevel) // DROP INDEX (7) + Production (3) = 10 = High
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles TRUNCATE with CASCADE", func(t *testing.T) {
+		mockDBRepo := new(MockDatabaseRepository)
+		mockEnvRepo := new(MockEnvironmentRepository)
+		mockInstanceRepo := new(MockDatabaseInstanceRepository)
+
+		dbID := uuid.New()
+		envID := uuid.New()
+		instanceID := uuid.New()
+
+		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
+			ID:                 dbID,
+			EnvironmentID:      envID,
+			DatabaseInstanceID: instanceID,
+		}, nil)
+
+		mockEnvRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+			ID:   envID,
+			Name: "Staging",
+		}, nil)
+
+		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
+			ID:           instanceID,
+			DatabaseType: models.DatabaseTypePostgreSQL,
+		}, nil)
+
+		service := NewRiskAssessmentService(
+			mockDBRepo,
+			mockEnvRepo,
+			mockInstanceRepo,
+			logger,
+		)
+
+		// TRUNCATE with CASCADE should still be detected
+		riskLevel, err := service.AssessRisk(ctx, "TRUNCATE TABLE users CASCADE", models.ChangeTypeDDL, dbID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, models.RiskLevelHigh, riskLevel) // TRUNCATE (7) + Staging (1) = 8 = High
+
+		mockDBRepo.AssertExpectations(t)
+		mockEnvRepo.AssertExpectations(t)
+		mockInstanceRepo.AssertExpectations(t)
+	})
+}
+

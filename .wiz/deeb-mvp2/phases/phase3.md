@@ -678,19 +678,27 @@ Create comprehensive unit tests for validator orchestration and result aggregati
 
 ### P03M34: Write unit tests for risk level assignment
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M34
 
 **Goal**
 Create comprehensive unit tests for automated risk level calculation.
 
 **Acceptance Criteria**
-- [ ] Unit tests for risk assessment service (>85% coverage)
-- [ ] Risk level calculation test cases
-- [ ] Environment-based risk tests
-- [ ] SQL content-based risk tests
-- [ ] Edge cases covered
-- [ ] All tests passing
+- [x] Unit tests for risk assessment service (>85% coverage)
+- [x] Risk level calculation test cases
+- [x] Environment-based risk tests
+- [x] SQL content-based risk tests
+- [x] Edge cases covered
+- [x] All tests passing
+
+**Notes:**
+- Enhanced risk assessment service tests with comprehensive coverage
+- Added error handling tests: database not found, environment not found, instance not found
+- Added edge cases: empty SQL, whitespace-only SQL, SQL with comments, case-insensitive matching
+- Added tests for multiple destructive operations, complex SQL statements, environment name variations
+- Added tests for combined risk scenarios, UPDATE with WHERE clause, DROP INDEX, TRUNCATE with CASCADE
+- All acceptance criteria met
 
 ---
 
