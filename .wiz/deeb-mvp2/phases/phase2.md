@@ -527,18 +527,18 @@ Create comprehensive unit tests for DatabaseInstance repository including encryp
 
 ### P02M28: Write unit tests for Database repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M28
 
 **Goal**
 Create comprehensive unit tests for Database repository including constraint validation.
 
 **Acceptance Criteria**
-- [ ] Unit tests for all CRUD operations
-- [ ] Project/environment constraint tests
-- [ ] Test coverage >85%
-- [ ] Edge cases covered
-- [ ] All tests passing
+- [x] Unit tests for all CRUD operations
+- [x] Project/environment constraint tests
+- [x] Test coverage >85%
+- [x] Edge cases covered
+- [x] All tests passing
 
 ---
 
