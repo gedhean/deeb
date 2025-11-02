@@ -492,36 +492,36 @@ Create comprehensive unit tests for Environment repository operations including 
 
 ### P02M26: Write unit tests for Policy repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M26
 
 **Goal**
 Create comprehensive unit tests for Policy repository operations including policy config JSONB handling and type filtering.
 
 **Acceptance Criteria**
-- [ ] Unit tests for all CRUD operations
-- [ ] Policy type filtering tests
-- [ ] Policy config JSONB handling tests
-- [ ] Test coverage >85%
-- [ ] Edge cases covered
-- [ ] All tests passing
+- [x] Unit tests for all CRUD operations
+- [x] Policy type filtering tests
+- [x] Policy config JSONB handling tests
+- [x] Test coverage >85%
+- [x] Edge cases covered
+- [x] All tests passing
 
 ---
 
 ### P02M27: Write unit tests for DatabaseInstance repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M27
 
 **Goal**
 Create comprehensive unit tests for DatabaseInstance repository including encryption/decryption.
 
 **Acceptance Criteria**
-- [ ] Unit tests for all CRUD operations
-- [ ] Credential encryption/decryption tests
-- [ ] Test coverage >85%
-- [ ] Edge cases covered
-- [ ] All tests passing
+- [x] Unit tests for all CRUD operations
+- [x] Credential encryption/decryption tests
+- [x] Test coverage >85%
+- [x] Edge cases covered
+- [x] All tests passing
 
 ---
 

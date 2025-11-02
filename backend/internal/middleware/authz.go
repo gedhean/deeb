@@ -14,7 +14,7 @@ import (
 // AuthzMiddleware provides authorization middleware functions.
 // It checks user permissions at both organization and project levels.
 type AuthzMiddleware struct {
-	checker          *rbac.CheckerService
+	checker           *rbac.CheckerService
 	projectMemberRepo repository.ProjectMemberRepository
 }
 
@@ -29,7 +29,7 @@ func NewAuthzMiddleware() *AuthzMiddleware {
 // and project member repository for project-level permission checks.
 func NewAuthzMiddlewareWithRepo(projectMemberRepo repository.ProjectMemberRepository) *AuthzMiddleware {
 	return &AuthzMiddleware{
-		checker:          rbac.NewCheckerService(),
+		checker:           rbac.NewCheckerService(),
 		projectMemberRepo: projectMemberRepo,
 	}
 }

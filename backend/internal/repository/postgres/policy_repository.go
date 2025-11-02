@@ -156,6 +156,7 @@ func (r *PolicyRepository) Update(ctx context.Context, policy *models.Policy) er
 	// Update timestamp
 	policy.UpdatedAt = time.Now()
 
+
 	query := `
 		UPDATE policies
 		SET name = $2, description = $3, policy_config = $4, updated_at = $5

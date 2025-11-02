@@ -2,6 +2,9 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -10,23 +13,25 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/utils"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setupDatabaseInstanceMockDB(t *testing.T) (*sqlx.DB, sqlmock.Sqlmock) {
 	mockDB, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock database: %v", err)
-	}
+	require.NoError(t, err)
 
 	sqlxDB := sqlx.NewDb(mockDB, "sqlmock")
 	return sqlxDB, mock
 }
 
-func TestDatabaseInstanceCreate(t *testing.T) {
+func TestDatabaseInstanceRepository_Create(t *testing.T) {
 	db, mock := setupDatabaseInstanceMockDB(t)
 	defer db.Close()
 
-	repo := NewDatabaseInstanceRepository(db, "test-encryption-key-32-bytes-long!!")
+	encryptionKey := "test-encryption-key-32-bytes-long!!"
+	repo := NewDatabaseInstanceRepository(db, encryptionKey)
 	ctx := context.Background()
 
 	t.Run("successful creation", func(t *testing.T) {
@@ -55,24 +60,78 @@ func TestDatabaseInstanceCreate(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, instance)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
+		require.NoError(t, err)
+		assert.NotEqual(t, uuid.Nil, instance.ID)
+		assert.False(t, instance.CreatedAt.IsZero())
+		assert.False(t, instance.UpdatedAt.IsZero())
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("successful creation with nil description", func(t *testing.T) {
+		createdByID := uuid.New()
+		encryptedDetails := "encrypted-password-data"
+		instance := &models.DatabaseInstance{
+			Name:                       "Test Instance",
+			Description:                nil,
+			Host:                       "localhost",
+			Port:                       5432,
+			DatabaseType:               models.DatabaseTypePostgreSQL,
+			Username:                   "postgres",
+			ConnectionDetailsEncrypted: &encryptedDetails,
+			UseRDSIAMAuth:              false,
+			RequireSSL:                 true,
+			Status:                     models.DatabaseInstanceStatusActive,
+			CreatedByID:                createdByID,
 		}
 
-		// Verify ID and timestamps were set
-		if instance.ID == uuid.Nil {
-			t.Error("Expected ID to be set")
-		}
-		if instance.CreatedAt.IsZero() {
-			t.Error("Expected CreatedAt to be set")
-		}
-		if instance.UpdatedAt.IsZero() {
-			t.Error("Expected UpdatedAt to be set")
+		mock.ExpectExec("INSERT INTO database_instances").
+			WithArgs(sqlmock.AnyArg(), instance.Name, nil, instance.DatabaseType,
+				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.CreatedByID,
+				sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		err := repo.Create(ctx, instance)
+		require.NoError(t, err)
+		assert.NotEqual(t, uuid.Nil, instance.ID)
+		assert.Nil(t, instance.Description)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("successful creation with existing ID", func(t *testing.T) {
+		existingID := uuid.New()
+		createdByID := uuid.New()
+		description := "Test instance"
+		encryptedDetails := "encrypted-password-data"
+		instance := &models.DatabaseInstance{
+			ID:                         existingID,
+			Name:                       "Test Instance",
+			Description:                &description,
+			Host:                       "localhost",
+			Port:                       5432,
+			DatabaseType:               models.DatabaseTypePostgreSQL,
+			Username:                   "postgres",
+			ConnectionDetailsEncrypted: &encryptedDetails,
+			UseRDSIAMAuth:              false,
+			RequireSSL:                 true,
+			Status:                     models.DatabaseInstanceStatusActive,
+			CreatedByID:                createdByID,
 		}
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		mock.ExpectExec("INSERT INTO database_instances").
+			WithArgs(existingID, instance.Name, instance.Description, instance.DatabaseType,
+				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.CreatedByID,
+				sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		err := repo.Create(ctx, instance)
+		require.NoError(t, err)
+		assert.Equal(t, existingID, instance.ID)
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("validation error - empty name", func(t *testing.T) {
@@ -89,9 +148,7 @@ func TestDatabaseInstanceCreate(t *testing.T) {
 		}
 
 		err := repo.Create(ctx, instance)
-		if err != models.ErrDatabaseInstanceNameRequired {
-			t.Errorf("Expected ErrDatabaseInstanceNameRequired, got %v", err)
-		}
+		assert.Equal(t, models.ErrDatabaseInstanceNameRequired, err)
 	})
 
 	t.Run("validation error - invalid port", func(t *testing.T) {
@@ -108,9 +165,7 @@ func TestDatabaseInstanceCreate(t *testing.T) {
 		}
 
 		err := repo.Create(ctx, instance)
-		if err != models.ErrPortInvalid {
-			t.Errorf("Expected ErrPortInvalid, got %v", err)
-		}
+		assert.Equal(t, models.ErrPortInvalid, err)
 	})
 
 	t.Run("validation error - invalid database type", func(t *testing.T) {
@@ -127,17 +182,48 @@ func TestDatabaseInstanceCreate(t *testing.T) {
 		}
 
 		err := repo.Create(ctx, instance)
-		if err != models.ErrDatabaseTypeInvalid {
-			t.Errorf("Expected ErrDatabaseTypeInvalid, got %v", err)
+		assert.Equal(t, models.ErrDatabaseTypeInvalid, err)
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		createdByID := uuid.New()
+		description := "Test instance"
+		encryptedDetails := "encrypted-password-data"
+		instance := &models.DatabaseInstance{
+			Name:                       "Test Instance",
+			Description:                &description,
+			Host:                       "localhost",
+			Port:                       5432,
+			DatabaseType:               models.DatabaseTypePostgreSQL,
+			Username:                   "postgres",
+			ConnectionDetailsEncrypted: &encryptedDetails,
+			UseRDSIAMAuth:              false,
+			RequireSSL:                 true,
+			Status:                     models.DatabaseInstanceStatusActive,
+			CreatedByID:                createdByID,
 		}
+
+		mock.ExpectExec("INSERT INTO database_instances").
+			WithArgs(sqlmock.AnyArg(), instance.Name, instance.Description, instance.DatabaseType,
+				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.CreatedByID,
+				sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WillReturnError(errors.New("database error"))
+
+		err := repo.Create(ctx, instance)
+		require.Error(t, err)
+		assert.Equal(t, "database error", err.Error())
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestDatabaseInstanceGetByID(t *testing.T) {
+func TestDatabaseInstanceRepository_GetByID(t *testing.T) {
 	db, mock := setupDatabaseInstanceMockDB(t)
 	defer db.Close()
 
-	repo := NewDatabaseInstanceRepository(db, "test-encryption-key-32-bytes-long!!")
+	encryptionKey := "test-encryption-key-32-bytes-long!!"
+	repo := NewDatabaseInstanceRepository(db, encryptionKey)
 	ctx := context.Background()
 
 	t.Run("successful retrieval", func(t *testing.T) {
@@ -145,38 +231,62 @@ func TestDatabaseInstanceGetByID(t *testing.T) {
 		createdByID := uuid.New()
 		now := time.Now()
 		description := "Test instance"
+		encryptedDetails := "encrypted-data"
 
 		rows := sqlmock.NewRows([]string{
 			"id", "name", "description", "database_type", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID, "Test Instance", description, "postgresql", "localhost", 5432, "postgres",
-				"encrypted-data", false, true, "Active", createdByID, now, now)
+				encryptedDetails, false, true, "Active", createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances WHERE id =").
 			WithArgs(instanceID).
 			WillReturnRows(rows)
 
 		instance, err := repo.GetByID(ctx, instanceID)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, instance)
+		assert.Equal(t, instanceID, instance.ID)
+		assert.Equal(t, "Test Instance", instance.Name)
+		assert.Equal(t, &description, instance.Description)
+		assert.Equal(t, models.DatabaseTypePostgreSQL, instance.DatabaseType)
+		assert.Equal(t, "localhost", instance.Host)
+		assert.Equal(t, 5432, instance.Port)
+		assert.Equal(t, "postgres", instance.Username)
+		assert.Equal(t, &encryptedDetails, instance.ConnectionDetailsEncrypted)
+		assert.False(t, instance.UseRDSIAMAuth)
+		assert.True(t, instance.RequireSSL)
+		assert.Equal(t, models.DatabaseInstanceStatusActive, instance.Status)
+		assert.Equal(t, createdByID, instance.CreatedByID)
 
-		if instance == nil {
-			t.Fatal("Expected instance to be returned")
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 
-		if instance.ID != instanceID {
-			t.Errorf("Expected ID %s, got %s", instanceID, instance.ID)
-		}
+	t.Run("successful retrieval with nil description", func(t *testing.T) {
+		instanceID := uuid.New()
+		createdByID := uuid.New()
+		now := time.Now()
+		encryptedDetails := "encrypted-data"
 
-		if instance.Name != "Test Instance" {
-			t.Errorf("Expected name 'Test Instance', got %s", instance.Name)
-		}
+		rows := sqlmock.NewRows([]string{
+			"id", "name", "description", "database_type", "host", "port", "username",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+		}).
+			AddRow(instanceID, "Test Instance", nil, "mysql", "localhost", 3306, "root",
+				encryptedDetails, true, false, "Active", createdByID, now, now)
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		mock.ExpectQuery("SELECT (.+) FROM database_instances WHERE id =").
+			WithArgs(instanceID).
+			WillReturnRows(rows)
+
+		instance, err := repo.GetByID(ctx, instanceID)
+		require.NoError(t, err)
+		require.NotNil(t, instance)
+		assert.Nil(t, instance.Description)
+		assert.Equal(t, models.DatabaseTypeMySQL, instance.DatabaseType)
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("instance not found", func(t *testing.T) {
@@ -184,31 +294,37 @@ func TestDatabaseInstanceGetByID(t *testing.T) {
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances WHERE id =").
 			WithArgs(instanceID).
-			WillReturnRows(sqlmock.NewRows([]string{
-				"id", "name", "description", "database_type", "host", "port", "username",
-				"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
-			}))
+			WillReturnError(sql.ErrNoRows)
 
 		instance, err := repo.GetByID(ctx, instanceID)
-		if err != repository.ErrNotFound {
-			t.Errorf("Expected ErrNotFound, got %v", err)
-		}
+		assert.Equal(t, repository.ErrNotFound, err)
+		assert.Nil(t, instance)
 
-		if instance != nil {
-			t.Error("Expected nil instance")
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+	t.Run("database error", func(t *testing.T) {
+		instanceID := uuid.New()
+
+		mock.ExpectQuery("SELECT (.+) FROM database_instances WHERE id =").
+			WithArgs(instanceID).
+			WillReturnError(errors.New("database error"))
+
+		instance, err := repo.GetByID(ctx, instanceID)
+		require.Error(t, err)
+		assert.Nil(t, instance)
+		assert.Equal(t, "database error", err.Error())
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestDatabaseInstanceList(t *testing.T) {
+func TestDatabaseInstanceRepository_List(t *testing.T) {
 	db, mock := setupDatabaseInstanceMockDB(t)
 	defer db.Close()
 
-	repo := NewDatabaseInstanceRepository(db, "test-encryption-key-32-bytes-long!!")
+	encryptionKey := "test-encryption-key-32-bytes-long!!"
+	repo := NewDatabaseInstanceRepository(db, encryptionKey)
 	ctx := context.Background()
 
 	t.Run("successful list with results", func(t *testing.T) {
@@ -216,32 +332,28 @@ func TestDatabaseInstanceList(t *testing.T) {
 		instanceID1 := uuid.New()
 		instanceID2 := uuid.New()
 		createdByID := uuid.New()
+		encryptedDetails := "encrypted-data"
 
 		rows := sqlmock.NewRows([]string{
 			"id", "name", "description", "database_type", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID1, "Instance 1", nil, "postgresql", "localhost", 5432, "postgres",
-				"encrypted-data", false, true, "Active", createdByID, now, now).
+				encryptedDetails, false, true, "Active", createdByID, now, now).
 			AddRow(instanceID2, "Instance 2", nil, "mysql", "localhost", 3306, "root",
-				"encrypted-data", false, false, "Active", createdByID, now, now)
+				encryptedDetails, false, false, "Active", createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
 		instances, err := repo.List(ctx, 10, 0)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
+		assert.Len(t, instances, 2)
+		assert.Equal(t, instanceID1, instances[0].ID)
+		assert.Equal(t, instanceID2, instances[1].ID)
 
-		if len(instances) != 2 {
-			t.Errorf("Expected 2 instances, got %d", len(instances))
-		}
-
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("empty list", func(t *testing.T) {
@@ -255,29 +367,111 @@ func TestDatabaseInstanceList(t *testing.T) {
 			WillReturnRows(rows)
 
 		instances, err := repo.List(ctx, 10, 0)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
+		assert.Len(t, instances, 0)
+		assert.NotNil(t, instances) // Should return empty slice, not nil
 
-		if len(instances) != 0 {
-			t.Errorf("Expected 0 instances, got %d", len(instances))
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 
-		if instances == nil {
-			t.Error("Expected empty slice, got nil")
-		}
+	t.Run("list with pagination", func(t *testing.T) {
+		now := time.Now()
+		instanceID := uuid.New()
+		createdByID := uuid.New()
+		encryptedDetails := "encrypted-data"
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		rows := sqlmock.NewRows([]string{
+			"id", "name", "description", "database_type", "host", "port", "username",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+		}).
+			AddRow(instanceID, "Instance 1", nil, "postgresql", "localhost", 5432, "postgres",
+				encryptedDetails, false, true, "Active", createdByID, now, now)
+
+		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
+			WithArgs(5, 10).
+			WillReturnRows(rows)
+
+		instances, err := repo.List(ctx, 5, 10)
+		require.NoError(t, err)
+		assert.Len(t, instances, 1)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
+			WithArgs(10, 0).
+			WillReturnError(errors.New("database error"))
+
+		instances, err := repo.List(ctx, 10, 0)
+		require.Error(t, err)
+		assert.Nil(t, instances)
+		assert.Equal(t, "database error", err.Error())
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestDatabaseInstanceUpdate(t *testing.T) {
+func TestDatabaseInstanceRepository_Count(t *testing.T) {
 	db, mock := setupDatabaseInstanceMockDB(t)
 	defer db.Close()
 
-	repo := NewDatabaseInstanceRepository(db, "test-encryption-key-32-bytes-long!!")
+	encryptionKey := "test-encryption-key-32-bytes-long!!"
+	repo := NewDatabaseInstanceRepository(db, encryptionKey)
+	ctx := context.Background()
+
+	t.Run("successful count", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM database_instances").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
+
+		count, err := repo.Count(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), count)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("count zero", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM database_instances").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+		count, err := repo.Count(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), count)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("count large number", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM database_instances").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1000))
+
+		count, err := repo.Count(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1000), count)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM database_instances").
+			WillReturnError(errors.New("database error"))
+
+		count, err := repo.Count(ctx)
+		require.Error(t, err)
+		assert.Equal(t, int64(0), count)
+		assert.Equal(t, "database error", err.Error())
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestDatabaseInstanceRepository_Update(t *testing.T) {
+	db, mock := setupDatabaseInstanceMockDB(t)
+	defer db.Close()
+
+	encryptionKey := "test-encryption-key-32-bytes-long!!"
+	repo := NewDatabaseInstanceRepository(db, encryptionKey)
 	ctx := context.Background()
 
 	t.Run("successful update", func(t *testing.T) {
@@ -307,18 +501,42 @@ func TestDatabaseInstanceUpdate(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, instance)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
+		require.NoError(t, err)
+		assert.False(t, instance.UpdatedAt.IsZero())
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("successful update with nil description", func(t *testing.T) {
+		instanceID := uuid.New()
+		createdByID := uuid.New()
+		encryptedDetails := "encrypted-password-data"
+		instance := &models.DatabaseInstance{
+			ID:                         instanceID,
+			Name:                       "Updated Instance",
+			Description:                nil,
+			Host:                       "newhost",
+			Port:                       5433,
+			DatabaseType:               models.DatabaseTypePostgreSQL,
+			Username:                   "postgres",
+			ConnectionDetailsEncrypted: &encryptedDetails,
+			UseRDSIAMAuth:              false,
+			RequireSSL:                 true,
+			Status:                     models.DatabaseInstanceStatusActive,
+			CreatedByID:                createdByID,
 		}
 
-		// Verify UpdatedAt was set
-		if instance.UpdatedAt.IsZero() {
-			t.Error("Expected UpdatedAt to be set")
-		}
+		mock.ExpectExec("UPDATE database_instances").
+			WithArgs(instanceID, instance.Name, nil, instance.DatabaseType,
+				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, sqlmock.AnyArg()).
+			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		err := repo.Update(ctx, instance)
+		require.NoError(t, err)
+		assert.Nil(t, instance.Description)
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("instance not found", func(t *testing.T) {
@@ -343,13 +561,9 @@ func TestDatabaseInstanceUpdate(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Update(ctx, instance)
-		if err != repository.ErrNotFound {
-			t.Errorf("Expected ErrNotFound, got %v", err)
-		}
+		assert.Equal(t, repository.ErrNotFound, err)
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("validation error - empty name", func(t *testing.T) {
@@ -367,17 +581,64 @@ func TestDatabaseInstanceUpdate(t *testing.T) {
 		}
 
 		err := repo.Update(ctx, instance)
-		if err != models.ErrDatabaseInstanceNameRequired {
-			t.Errorf("Expected ErrDatabaseInstanceNameRequired, got %v", err)
+		assert.Equal(t, models.ErrDatabaseInstanceNameRequired, err)
+	})
+
+	t.Run("validation error - invalid port", func(t *testing.T) {
+		encryptedDetails := "encrypted-password-data"
+		instance := &models.DatabaseInstance{
+			ID:                         uuid.New(),
+			Name:                       "Updated Instance",
+			Host:                       "newhost",
+			Port:                       0,
+			DatabaseType:               models.DatabaseTypePostgreSQL,
+			Username:                   "postgres",
+			ConnectionDetailsEncrypted: &encryptedDetails,
+			Status:                     models.DatabaseInstanceStatusActive,
+			CreatedByID:                uuid.New(),
 		}
+
+		err := repo.Update(ctx, instance)
+		assert.Equal(t, models.ErrPortInvalid, err)
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		instanceID := uuid.New()
+		encryptedDetails := "encrypted-password-data"
+		instance := &models.DatabaseInstance{
+			ID:                         instanceID,
+			Name:                       "Updated Instance",
+			Host:                       "newhost",
+			Port:                       5433,
+			DatabaseType:               models.DatabaseTypePostgreSQL,
+			Username:                   "postgres",
+			ConnectionDetailsEncrypted: &encryptedDetails,
+			UseRDSIAMAuth:              false,
+			RequireSSL:                 true,
+			Status:                     models.DatabaseInstanceStatusActive,
+			CreatedByID:                uuid.New(),
+		}
+
+		mock.ExpectExec("UPDATE database_instances").
+			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseType,
+				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, sqlmock.AnyArg()).
+			WillReturnError(errors.New("database error"))
+
+		err := repo.Update(ctx, instance)
+		require.Error(t, err)
+		assert.Equal(t, "database error", err.Error())
+
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestDatabaseInstanceDelete(t *testing.T) {
+func TestDatabaseInstanceRepository_Delete(t *testing.T) {
 	db, mock := setupDatabaseInstanceMockDB(t)
 	defer db.Close()
 
-	repo := NewDatabaseInstanceRepository(db, "test-encryption-key-32-bytes-long!!")
+	encryptionKey := "test-encryption-key-32-bytes-long!!"
+	repo := NewDatabaseInstanceRepository(db, encryptionKey)
 	ctx := context.Background()
 
 	t.Run("successful deletion", func(t *testing.T) {
@@ -388,13 +649,9 @@ func TestDatabaseInstanceDelete(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Delete(ctx, instanceID)
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+		require.NoError(t, err)
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("instance not found", func(t *testing.T) {
@@ -405,12 +662,132 @@ func TestDatabaseInstanceDelete(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Delete(ctx, instanceID)
-		if err != repository.ErrNotFound {
-			t.Errorf("Expected ErrNotFound, got %v", err)
+		assert.Equal(t, repository.ErrNotFound, err)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		instanceID := uuid.New()
+
+		mock.ExpectExec("DELETE FROM database_instances WHERE id").
+			WithArgs(instanceID).
+			WillReturnError(errors.New("database error"))
+
+		err := repo.Delete(ctx, instanceID)
+		require.Error(t, err)
+		assert.Equal(t, "database error", err.Error())
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestDatabaseInstanceRepository_EncryptConnectionDetails(t *testing.T) {
+	encryptionKey := "12345678901234567890123456789012" // Exactly 32 bytes
+	repo := &DatabaseInstanceRepository{
+		encryptionKey: encryptionKey,
+	}
+
+	t.Run("successful encryption", func(t *testing.T) {
+		password := "test-password-123"
+
+		encrypted, err := repo.encryptConnectionDetails(password)
+		require.NoError(t, err)
+		require.NotNil(t, encrypted)
+		assert.NotEmpty(t, *encrypted)
+
+		// Verify it can be decrypted
+		decrypted, err := utils.Decrypt(*encrypted, encryptionKey)
+		require.NoError(t, err)
+
+		var details connectionDetails
+		err = json.Unmarshal([]byte(decrypted), &details)
+		require.NoError(t, err)
+		assert.Equal(t, password, details.Password)
+	})
+
+	t.Run("empty password returns nil", func(t *testing.T) {
+		encrypted, err := repo.encryptConnectionDetails("")
+		require.NoError(t, err)
+		assert.Nil(t, encrypted)
+	})
+
+	t.Run("encryption with special characters", func(t *testing.T) {
+		password := "p@ssw0rd!#$%^&*()"
+
+		encrypted, err := repo.encryptConnectionDetails(password)
+		require.NoError(t, err)
+		require.NotNil(t, encrypted)
+
+		// Verify it can be decrypted
+		decrypted, err := utils.Decrypt(*encrypted, encryptionKey)
+		require.NoError(t, err)
+
+		var details connectionDetails
+		err = json.Unmarshal([]byte(decrypted), &details)
+		require.NoError(t, err)
+		assert.Equal(t, password, details.Password)
+	})
+}
+
+func TestDatabaseInstanceRepository_DecryptConnectionDetails(t *testing.T) {
+	encryptionKey := "12345678901234567890123456789012" // Exactly 32 bytes
+	repo := &DatabaseInstanceRepository{
+		encryptionKey: encryptionKey,
+	}
+
+	t.Run("successful decryption", func(t *testing.T) {
+		password := "test-password-123"
+
+		// First encrypt
+		encrypted, err := repo.encryptConnectionDetails(password)
+		require.NoError(t, err)
+		require.NotNil(t, encrypted)
+
+		// Then decrypt
+		details, err := repo.decryptConnectionDetails(encrypted)
+		require.NoError(t, err)
+		require.NotNil(t, details)
+		assert.Equal(t, password, details.Password)
+	})
+
+	t.Run("nil encrypted returns nil", func(t *testing.T) {
+		details, err := repo.decryptConnectionDetails(nil)
+		require.NoError(t, err)
+		assert.Nil(t, details)
+	})
+
+	t.Run("empty encrypted string returns nil", func(t *testing.T) {
+		emptyStr := ""
+		details, err := repo.decryptConnectionDetails(&emptyStr)
+		require.NoError(t, err)
+		assert.Nil(t, details)
+	})
+
+	t.Run("invalid encrypted data returns error", func(t *testing.T) {
+		invalidEncrypted := "invalid-encrypted-data"
+
+		details, err := repo.decryptConnectionDetails(&invalidEncrypted)
+		require.Error(t, err)
+		assert.Nil(t, details)
+	})
+
+	t.Run("decryption with wrong key returns error", func(t *testing.T) {
+		password := "test-password-123"
+
+		// Encrypt with correct key
+		encrypted, err := repo.encryptConnectionDetails(password)
+		require.NoError(t, err)
+		require.NotNil(t, encrypted)
+
+		// Try to decrypt with wrong key (also exactly 32 bytes)
+		wrongKey := "98765432109876543210987654321098"
+		wrongRepo := &DatabaseInstanceRepository{
+			encryptionKey: wrongKey,
 		}
 
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Errorf("Unfulfilled expectations: %v", err)
-		}
+		details, err := wrongRepo.decryptConnectionDetails(encrypted)
+		require.Error(t, err)
+		assert.Nil(t, details)
 	})
 }

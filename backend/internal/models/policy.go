@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -29,6 +30,44 @@ func (pc PolicyConfig) MarshalJSON() ([]byte, error) {
 func (pc *PolicyConfig) UnmarshalJSON(data []byte) error {
 	var m map[string]interface{}
 	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+	*pc = PolicyConfig(m)
+	return nil
+}
+
+// Value implements driver.Valuer for PolicyConfig (for writing to database)
+func (pc PolicyConfig) Value() (driver.Value, error) {
+	if pc == nil || len(pc) == 0 {
+		return []byte("{}"), nil
+	}
+	return json.Marshal(pc)
+}
+
+// Scan implements sql.Scanner for PolicyConfig (for reading from database)
+func (pc *PolicyConfig) Scan(value interface{}) error {
+	if value == nil {
+		*pc = PolicyConfig{}
+		return nil
+	}
+
+	var bytes []byte
+	switch v := value.(type) {
+	case []byte:
+		bytes = v
+	case string:
+		bytes = []byte(v)
+	default:
+		return errors.New("failed to scan PolicyConfig: unsupported type")
+	}
+
+	if len(bytes) == 0 {
+		*pc = PolicyConfig{}
+		return nil
+	}
+
+	var m map[string]interface{}
+	if err := json.Unmarshal(bytes, &m); err != nil {
 		return err
 	}
 	*pc = PolicyConfig(m)
