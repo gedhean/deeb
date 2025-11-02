@@ -75,108 +75,108 @@ Design single-approval workflow engine architecture for Change Plan approval pro
 
 ### P04M03: Implement approval workflow service
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M03
 
 **Goal**
 Create approval workflow service that handles approval and rejection logic.
 
 **Acceptance Criteria**
-- [ ] Approval service created in `backend/internal/services/approval_service.go`
-- [ ] Approve method implemented (checks SQL Review errors, updates status)
-- [ ] Close method implemented (rejects Change Plan, updates status)
-- [ ] Approval validation logic implemented
-- [ ] Error handling for invalid approvals
-- [ ] Unit tests for approval service passing
+- [x] Approval service created in `backend/internal/services/approval_service.go`
+- [x] Approve method implemented (checks SQL Review errors, updates status)
+- [x] Close method implemented (rejects Change Plan, updates status)
+- [x] Approval validation logic implemented
+- [x] Error handling for invalid approvals
+- [x] Unit tests for approval service passing
 
 ---
 
 ### P04M04: Implement approval POST endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M04
 
 **Goal**
 Implement POST /api/v1/change-plans/:id/approve endpoint for approving Change Plans.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/change-plans/:id/approve endpoint implemented
-- [ ] Request validation (optional comment field)
-- [ ] RBAC check: Project Approver role required
-- [ ] SQL Review errors check (must have no errors)
-- [ ] Change Plan status updated to Approved
-- [ ] Approval record created
-- [ ] Integration test passing
+- [x] POST /api/v1/change-plans/:id/approve endpoint implemented
+- [x] Request validation (optional comment field)
+- [x] RBAC check: Project Approver role required
+- [x] SQL Review errors check (must have no errors)
+- [x] Change Plan status updated to Approved
+- [x] Approval record created
+- [x] Integration test passing
 
 ---
 
 ### P04M05: Implement close/reject POST endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M05
 
 **Goal**
 Implement POST /api/v1/change-plans/:id/close endpoint for rejecting Change Plans.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/change-plans/:id/close endpoint implemented
-- [ ] Request validation (optional comment field)
-- [ ] RBAC check: Project Approver role required
-- [ ] Change Plan status updated to Closed
-- [ ] Approval record created with action "close"
-- [ ] Integration test passing
+- [x] POST /api/v1/change-plans/:id/close endpoint implemented
+- [x] Request validation (optional comment field)
+- [x] RBAC check: Project Approver role required
+- [x] Change Plan status updated to Closed
+- [x] Approval record created with action "close"
+- [x] Integration test passing
 
 ---
 
 ### P04M06: Implement approval history GET endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M06
 
 **Goal**
 Implement GET endpoint for retrieving approval history for a Change Plan.
 
 **Acceptance Criteria**
-- [ ] GET /api/v1/change-plans/:id/approvals endpoint implemented
-- [ ] Returns approval history ordered by created_at DESC
-- [ ] Response includes approver details, action, comment, timestamp
-- [ ] Authorization checks implemented
-- [ ] Integration test passing
+- [x] GET /api/v1/change-plans/:id/approvals endpoint implemented
+- [x] Returns approval history ordered by created_at DESC
+- [x] Response includes approver details, action, comment, timestamp
+- [x] Authorization checks implemented
+- [x] Integration test passing
 
 ---
 
 ### P04M07: Implement optional reviewer assignment
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M07
 
 **Goal**
 Allow Change Plan authors to assign optional reviewers (Project Approvers).
 
 **Acceptance Criteria**
-- [ ] PUT /api/v1/change-plans/:id/reviewer endpoint implemented
-- [ ] Request validation (reviewer_id must be Project Approver)
-- [ ] assigned_reviewer_id field updated
-- [ ] RBAC checks: Author can assign reviewer
-- [ ] Reviewer validation implemented
-- [ ] Integration test passing
+- [x] PUT /api/v1/change-plans/:id/reviewer endpoint implemented
+- [x] Request validation (reviewer_id must be Project Approver)
+- [x] assigned_reviewer_id field updated
+- [x] RBAC checks: Author can assign reviewer
+- [x] Reviewer validation implemented
+- [x] Integration test passing
 
 ---
 
 ### P04M08: Design execution engine architecture
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M08
 
 **Goal**
 Design Change Plan execution engine architecture with transaction management and snapshot capture.
 
 **Acceptance Criteria**
-- [ ] Execution engine architecture designed
-- [ ] Transaction management strategy documented
-- [ ] Schema snapshot capture strategy documented
-- [ ] Concurrency control strategy documented
-- [ ] Error handling strategy documented
+- [x] Execution engine architecture designed
+- [x] Transaction management strategy documented
+- [x] Schema snapshot capture strategy documented
+- [x] Concurrency control strategy documented
+- [x] Error handling strategy documented
 
 ---
 
