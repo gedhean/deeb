@@ -40,19 +40,19 @@ Implement approval workflow system and change execution engine with transaction 
 
 ### P04M01: Create Approval repository interface and implementation
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M01
 
 **Goal**
 Create ApprovalRepository interface and PostgreSQL implementation for storing approval records.
 
 **Acceptance Criteria**
-- [ ] ApprovalRepository interface defined in `backend/internal/repository/approval_repository.go`
-- [ ] Interface methods: Create, GetByChangePlanID, GetByApproverID, GetHistory
-- [ ] PostgreSQL implementation created
-- [ ] All methods implemented with proper SQL queries
-- [ ] Approval history ordering by created_at DESC
-- [ ] Error handling implemented
+- [x] ApprovalRepository interface defined in `backend/internal/repository/approval_repository.go`
+- [x] Interface methods: Create, GetByChangePlanID, GetByApproverID, GetHistory
+- [x] PostgreSQL implementation created
+- [x] All methods implemented with proper SQL queries
+- [x] Approval history ordering by created_at DESC
+- [x] Error handling implemented
 
 ---
 
