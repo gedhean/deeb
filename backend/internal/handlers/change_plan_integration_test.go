@@ -28,6 +28,7 @@ import (
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/review"
 	"github.com/nsxbet/deeb/internal/review/validators"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -236,6 +237,24 @@ func createTestChangePlan(t *testing.T, changePlanRepo *postgres.ChangePlanRepos
 	require.NoError(t, err, "failed to create test change plan")
 
 	return changePlan
+}
+
+// setUserContext sets up the Echo context with user information for RBAC checks and auth claims
+func setUserContext(c echo.Context, userID uuid.UUID, email string, orgRole models.OrganizationRole) {
+	// Set RBAC context in request context
+	ctx := c.Request().Context()
+	ctx = context.WithValue(ctx, rbac.ContextKeyUserID, userID.String())
+	ctx = context.WithValue(ctx, rbac.ContextKeyOrganizationID, "default") // Single-tenant for MVP
+	ctx = context.WithValue(ctx, rbac.ContextKeyOrganizationRole, rbac.OrganizationRole(orgRole))
+	c.SetRequest(c.Request().WithContext(ctx))
+
+	// Set auth claims in Echo context
+	claims := &auth.Claims{
+		UserID:           userID,
+		Email:            email,
+		OrganizationRole: string(orgRole),
+	}
+	c.Set(string(auth.UserContextKey), claims)
 }
 
 // createAuthToken creates a JWT token for testing
@@ -2043,3 +2062,781 @@ func TestIntegration_ChangePlan_Resubmission_InvalidStatus(t *testing.T) {
 	assert.Contains(t, response["error"], "Only Open change plans can be resubmitted")
 }
 
+// TestIntegration_ChangePlan_Create tests POST /api/v1/change-plans
+func TestIntegration_ChangePlan_Create(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+
+	// Create test user
+	author := createTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add user as project member with Developer role
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	err := projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	createReq := handlers.CreateChangePlanRequest{
+		ProjectID:        project.ID.String(),
+		TargetDatabaseID: database.ID.String(),
+		Title:            "Test Change Plan",
+		Description:      "Test description",
+		ChangeType:       "DDL",
+		SQLContent:       "CREATE TABLE users (id UUID PRIMARY KEY, name VARCHAR(255));",
+	}
+
+	body, _ := json.Marshal(createReq)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/change-plans", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.CreateChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, rec.Code)
+
+	// Verify response
+	var response handlers.ChangePlanResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, createReq.Title, response.Title)
+	assert.Equal(t, createReq.Description, response.Description)
+	assert.Equal(t, createReq.SQLContent, response.SQLContent)
+	assert.Equal(t, models.ChangePlanStatusDraft, response.Status)
+	assert.Equal(t, author.ID.String(), response.AuthorID)
+}
+
+// TestIntegration_ChangePlan_Create_Unauthorized tests POST /api/v1/change-plans without authentication
+func TestIntegration_ChangePlan_Create_Unauthorized(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create request without token
+	createReq := handlers.CreateChangePlanRequest{
+		Title:       "Test Change Plan",
+		Description: "Test description",
+		ChangeType:  "DDL",
+		SQLContent:  "CREATE TABLE users (id UUID PRIMARY KEY);",
+	}
+
+	body, _ := json.Marshal(createReq)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/change-plans", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	// Don't set user context - should result in unauthorized
+
+	// Execute
+	err := handler.CreateChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+// TestIntegration_ChangePlan_Create_Forbidden tests POST /api/v1/change-plans with insufficient permissions
+func TestIntegration_ChangePlan_Create_Forbidden(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+
+	// Create test user (not a member of project)
+	user := createTestUser(t, userRepo, "user@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for user (not a project member)
+	token, err := tokenManager.GenerateToken(user.ID.String(), user.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	createReq := handlers.CreateChangePlanRequest{
+		ProjectID:        project.ID.String(),
+		TargetDatabaseID: database.ID.String(),
+		Title:            "Test Change Plan",
+		Description:      "Test description",
+		ChangeType:       "DDL",
+		SQLContent:       "CREATE TABLE users (id UUID PRIMARY KEY);",
+	}
+
+	body, _ := json.Marshal(createReq)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/change-plans", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setUserContext(c, user.ID, user.Email, user.OrganizationRole)
+
+	// Execute
+	err = handler.CreateChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+// TestIntegration_ChangePlan_GetByID tests GET /api/v1/change-plans/:id
+func TestIntegration_ChangePlan_GetByID(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	// Create test user
+	author := createTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add user as project member
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	err := projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan
+	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.GetChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify response
+	var response handlers.ChangePlanResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, changePlan.ID.String(), response.ID)
+	assert.Equal(t, changePlan.Title, response.Title)
+	assert.Equal(t, changePlan.Description, response.Description)
+	assert.Equal(t, changePlan.SQLContent, response.SQLContent)
+	assert.Equal(t, changePlan.Status, response.Status)
+}
+
+// TestIntegration_ChangePlan_GetByID_NotFound tests GET /api/v1/change-plans/:id with non-existent ID
+func TestIntegration_ChangePlan_GetByID_NotFound(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+
+	// Create test user
+	user := createTestUser(t, userRepo, "user@example.com", models.OrganizationRoleDeveloper)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token
+	token, err := tokenManager.GenerateToken(user.ID.String(), user.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request with non-existent ID
+	nonExistentID := uuid.New()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/change-plans/%s", nonExistentID.String()), nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(nonExistentID.String())
+	setUserContext(c, user.ID, user.Email, user.OrganizationRole)
+
+	// Execute
+	err = handler.GetChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// TestIntegration_ChangePlan_List tests GET /api/v1/change-plans
+func TestIntegration_ChangePlan_List(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	// Create test user
+	author := createTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add user as project member
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	err := projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create multiple change plans
+	changePlan1 := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan2 := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE orders (id UUID PRIMARY KEY);")
+	changePlan3 := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE products (id UUID PRIMARY KEY);")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/change-plans", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.ListChangePlans(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	changePlans, ok := response["change_plans"].([]interface{})
+	require.True(t, ok)
+	assert.GreaterOrEqual(t, len(changePlans), 3) // Should include at least the 3 we created
+
+	// Verify total count
+	total, ok := response["total"].(float64)
+	require.True(t, ok)
+	assert.GreaterOrEqual(t, int(total), 3)
+}
+
+// TestIntegration_ChangePlan_Update tests PUT /api/v1/change-plans/:id
+func TestIntegration_ChangePlan_Update(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	// Create test user
+	author := createTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add user as project member
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	err := projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan in Draft status
+	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create update request
+	updateReq := handlers.UpdateChangePlanRequest{
+		Title:       "Updated Change Plan Title",
+		Description: "Updated description",
+		SQLContent:  "CREATE TABLE users (id UUID PRIMARY KEY, email VARCHAR(255));",
+	}
+
+	body, _ := json.Marshal(updateReq)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.UpdateChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify response
+	var response handlers.ChangePlanResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, updateReq.Title, response.Title)
+	assert.Equal(t, updateReq.Description, response.Description)
+	assert.Equal(t, updateReq.SQLContent, response.SQLContent)
+}
+
+// TestIntegration_ChangePlan_Update_Forbidden tests PUT /api/v1/change-plans/:id with insufficient permissions
+func TestIntegration_ChangePlan_Update_Forbidden(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	// Create test users
+	author := createTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+	otherUser := createTestUser(t, userRepo, "other@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add author as project member
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	err := projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan
+	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for other user (not a project member)
+	token, err := tokenManager.GenerateToken(otherUser.ID.String(), otherUser.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create update request
+	updateReq := handlers.UpdateChangePlanRequest{
+		Title: "Updated Title",
+	}
+
+	body, _ := json.Marshal(updateReq)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, otherUser.ID, otherUser.Email, otherUser.OrganizationRole)
+
+	// Execute
+	err = handler.UpdateChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+// TestIntegration_ChangePlan_Delete tests DELETE /api/v1/change-plans/:id
+func TestIntegration_ChangePlan_Delete(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	// Create test user
+	author := createTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add user as project member
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	err := projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan in Draft status (deletable)
+	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.DeleteChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+
+	// Verify change plan was deleted
+	_, err = changePlanRepo.GetByID(ctx, changePlan.ID)
+	assert.Error(t, err) // Should not be found
+}
+
+// TestIntegration_ChangePlan_Delete_Forbidden tests DELETE /api/v1/change-plans/:id with insufficient permissions
+func TestIntegration_ChangePlan_Delete_Forbidden(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	// Create test users
+	author := createTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+	otherUser := createTestUser(t, userRepo, "other@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add author as project member
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	err := projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan
+	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for other user (not a project member)
+	token, err := tokenManager.GenerateToken(otherUser.ID.String(), otherUser.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, otherUser.ID, otherUser.Email, otherUser.OrganizationRole)
+
+	// Execute
+	err = handler.DeleteChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+// TestIntegration_ChangePlan_Delete_InvalidStatus tests DELETE /api/v1/change-plans/:id with non-deletable status
+func TestIntegration_ChangePlan_Delete_InvalidStatus(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	// Create test user
+	author := createTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add user as project member
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	err := projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan in Open status (not deletable)
+	changePlan := createTestChangePlan(t, changePlanRepo, project.ID, database.ID, author.ID, "CREATE TABLE users (id UUID PRIMARY KEY);")
+	changePlan.Status = models.ChangePlanStatusOpen
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.DeleteChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Contains(t, response["error"], "can only be deleted")
+}

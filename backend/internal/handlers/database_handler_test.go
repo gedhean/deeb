@@ -161,6 +161,8 @@ func (m *mockChangePlanRepositoryForDB) Count(ctx context.Context) (int64, error
 func (m *mockChangePlanRepositoryForDB) GetByStatus(ctx context.Context, status models.ChangePlanStatus, limit, offset int) ([]*models.ChangePlan, error) { return nil, nil }
 func (m *mockChangePlanRepositoryForDB) GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) { return nil, nil }
 func (m *mockChangePlanRepositoryForDB) GetByAuthorID(ctx context.Context, authorID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) { return nil, nil }
+func (m *mockChangePlanRepositoryForDB) ListWithFilters(ctx context.Context, filters repository.ChangePlanListFilters) ([]*models.ChangePlan, error) { return nil, nil }
+func (m *mockChangePlanRepositoryForDB) CountWithFilters(ctx context.Context, filters repository.ChangePlanListFilters) (int64, error) { return 0, nil }
 
 func TestCreateDatabase(t *testing.T) {
 	logger, _ := zap.NewProduction()
