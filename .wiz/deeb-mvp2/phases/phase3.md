@@ -333,22 +333,22 @@ Create validator checking naming conventions and data type best practices.
 
 ### P03M17: Implement SQL Review orchestration service
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M17
 
 **Goal**
 Create service that runs all validators and aggregates results into policy findings. Service loads Policy (SQL_REVIEW type) from Environment via Change Plan's target database.
 
 **Acceptance Criteria**
-- [ ] Review service created in `backend/internal/review/service.go`
-- [ ] Review method loads Policy (SQL_REVIEW type) from Environment (via Change Plan's database)
-- [ ] Policy config determines which validators are enabled
-- [ ] Review method runs enabled validators based on policy
-- [ ] Validator results aggregated
-- [ ] Policy findings created from validator results
-- [ ] Review results include summary (errors count, warnings count)
-- [ ] Error handling for validator failures
-- [ ] Unit tests for review orchestration passing
+- [x] Review service created in `backend/internal/review/service.go`
+- [x] Review method loads Policy (SQL_REVIEW type) from Environment (via Change Plan's database)
+- [x] Policy config determines which validators are enabled
+- [x] Review method runs enabled validators based on policy
+- [x] Validator results aggregated
+- [x] Policy findings created from validator results
+- [x] Review results include summary (errors count, warnings count)
+- [x] Error handling for validator failures
+- [x] Unit tests for review orchestration passing
 
 ---
 
