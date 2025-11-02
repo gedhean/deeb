@@ -84,7 +84,10 @@ func (r *schemaSnapshotRepository) GetByID(ctx context.Context, id uuid.UUID) (*
 
 // GetByChangePlanID retrieves all snapshots for a specific change plan
 // Returns snapshots ordered by created_at DESC (most recent first)
-func (r *schemaSnapshotRepository) GetByChangePlanID(ctx context.Context, changePlanID uuid.UUID) ([]*models.SchemaSnapshot, error) {
+func (r *schemaSnapshotRepository) GetByChangePlanID(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+) ([]*models.SchemaSnapshot, error) {
 	snapshots := []*models.SchemaSnapshot{}
 
 	query := `
@@ -123,4 +126,3 @@ func (r *schemaSnapshotRepository) GetByDatabaseID(ctx context.Context, database
 
 	return snapshots, nil
 }
-

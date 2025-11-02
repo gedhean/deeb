@@ -23,4 +23,3 @@ type SchemaSnapshotRepository interface {
 	// Returns snapshots ordered by created_at DESC (most recent first)
 	GetByDatabaseID(ctx context.Context, databaseID uuid.UUID) ([]*models.SchemaSnapshot, error)
 }
-

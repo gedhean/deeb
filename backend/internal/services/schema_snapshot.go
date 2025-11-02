@@ -19,12 +19,12 @@ import (
 
 // SchemaSnapshotService provides schema snapshot capture functionality
 type SchemaSnapshotService struct {
-	snapshotRepo    repository.SchemaSnapshotRepository
-	dbInstanceRepo  repository.DatabaseInstanceRepository
-	databaseRepo    repository.DatabaseRepository
-	connectionMgr   *database.ConnectionManager
-	encryptionKey   string
-	logger          *zap.Logger
+	snapshotRepo   repository.SchemaSnapshotRepository
+	dbInstanceRepo repository.DatabaseInstanceRepository
+	databaseRepo   repository.DatabaseRepository
+	connectionMgr  *database.ConnectionManager
+	encryptionKey  string
+	logger         *zap.Logger
 }
 
 // NewSchemaSnapshotService creates a new schema snapshot service
@@ -129,10 +129,10 @@ func (s *SchemaSnapshotService) CapturePostgreSQL(
 	// Convert output to JSON for storage
 	// Store raw SQL text in snapshot_data_raw
 	snapshotDataRaw := string(output)
-	
+
 	// Wrap raw SQL in JSONB format for snapshot_data
 	snapshotDataJSON, err := json.Marshal(map[string]string{
-		"sql": snapshotDataRaw,
+		"sql":    snapshotDataRaw,
 		"format": "plain",
 	})
 	if err != nil {
@@ -209,7 +209,7 @@ func (s *SchemaSnapshotService) CaptureMySQL(
 		"--port", fmt.Sprintf("%d", dbInstance.Port),
 		"--user", dbInstance.Username,
 		fmt.Sprintf("--password=%s", password),
-		"--skip-comments", // Skip comments for cleaner output
+		"--skip-comments",       // Skip comments for cleaner output
 		"--skip-add-drop-table", // Don't include DROP TABLE statements
 		db.DatabaseName,
 	)
@@ -297,9 +297,8 @@ func (s *SchemaSnapshotService) getDecryptedPassword(dbInstance *models.Database
 // Schema snapshot errors
 var (
 	ErrDatabaseNotFound         = fmt.Errorf("database not found")
-	ErrDatabaseInstanceNotFound  = fmt.Errorf("database instance not found")
-	ErrSnapshotConnectionFailed  = fmt.Errorf("snapshot connection failed")
-	ErrSnapshotPermissionDenied  = fmt.Errorf("snapshot permission denied")
-	ErrSnapshotTimeout           = fmt.Errorf("snapshot timeout")
+	ErrDatabaseInstanceNotFound = fmt.Errorf("database instance not found")
+	ErrSnapshotConnectionFailed = fmt.Errorf("snapshot connection failed")
+	ErrSnapshotPermissionDenied = fmt.Errorf("snapshot permission denied")
+	ErrSnapshotTimeout          = fmt.Errorf("snapshot timeout")
 )
-

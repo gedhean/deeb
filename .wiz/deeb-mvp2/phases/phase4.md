@@ -291,73 +291,73 @@ Capture execution results including success/error status, rows affected, and dur
 
 ### P04M15: Implement Change Plan execution workflow
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M15
 
 **Goal**
 Implement complete execution workflow: snapshot → execute → snapshot → update status.
 
 **Acceptance Criteria**
-- [ ] Execution workflow implemented in execution service
-- [ ] Before snapshot captured
-- [ ] SQL executed in transaction
-- [ ] After snapshot captured on success
-- [ ] Status updated (InProgress → Completed/Failed)
-- [ ] Error handling at each step
-- [ ] Unit tests passing
+- [x] Execution workflow implemented in execution service
+- [x] Before snapshot captured
+- [x] SQL executed in transaction
+- [x] After snapshot captured on success
+- [x] Status updated (InProgress → Completed/Failed)
+- [x] Error handling at each step
+- [x] Unit tests passing
 
 ---
 
 ### P04M16: Implement execution POST endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M16
 
 **Goal**
 Implement POST /api/v1/change-plans/:id/execute endpoint for executing Change Plans.
 
 **Acceptance Criteria**
-- [ ] POST /api/v1/change-plans/:id/execute endpoint implemented
-- [ ] RBAC checks: Organization Admin, Organization DBA, Project Owner, or Change Plan Author
-- [ ] Status validation (only Approved Change Plans can be executed)
-- [ ] Execution workflow triggered
-- [ ] Response includes execution results
-- [ ] Integration test passing
+- [x] POST /api/v1/change-plans/:id/execute endpoint implemented
+- [x] RBAC checks: Organization Admin, Organization DBA, Project Owner, or Change Plan Author
+- [x] Status validation (only Approved Change Plans can be executed)
+- [x] Execution workflow triggered
+- [x] Response includes execution results
+- [x] Integration test passing
 
 ---
 
 ### P04M17: Implement execution permission checking
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M17
 
 **Goal**
 Create authorization middleware or helper for checking execution permissions.
 
 **Acceptance Criteria**
-- [ ] Execution permission checker created in `backend/internal/middleware/execution_auth.go`
-- [ ] Permission check logic: Organization Admin, Organization DBA, Project Owner, or Change Plan Author
-- [ ] Permission checker integrated with execution endpoint
-- [ ] 403 Forbidden response for unauthorized users
-- [ ] Unit tests for permission checking passing
+- [x] Execution permission checker created in `backend/internal/middleware/execution_auth.go`
+- [x] Permission check logic: Organization Admin, Organization DBA, Project Owner, or Change Plan Author
+- [x] Permission checker integrated with execution endpoint
+- [x] 403 Forbidden response for unauthorized users
+- [x] Unit tests for permission checking passing
 
 ---
 
 ### P04M18: Implement concurrency control system
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M18
 
 **Goal**
 Create concurrency control system ensuring one Change Plan executes per database at a time.
 
 **Acceptance Criteria**
-- [ ] Execution lock manager created in `backend/internal/services/execution_lock.go`
-- [ ] Lock acquisition per database implemented
-- [ ] Lock release on completion/failure
-- [ ] Lock timeout handling
-- [ ] Concurrent execution on different databases allowed
-- [ ] Unit tests for locking passing
+- [x] Execution lock manager created in `backend/internal/services/execution_lock.go`
+- [x] Lock acquisition per database implemented
+- [x] Lock release on completion/failure
+- [x] Lock timeout handling
+- [x] Concurrent execution on different databases allowed
+- [x] Unit tests for locking passing
 
 ---
 

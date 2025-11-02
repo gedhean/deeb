@@ -318,4 +318,3 @@ func encryptPasswordForTest(t *testing.T, encryptionKey, password string) *strin
 
 	return &encrypted
 }
-

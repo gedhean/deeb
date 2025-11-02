@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/config"
+	"github.com/nsxbet/deeb/internal/database"
 	"github.com/nsxbet/deeb/internal/handlers"
 	"github.com/nsxbet/deeb/internal/logger"
 	"github.com/nsxbet/deeb/internal/middleware"
@@ -63,6 +64,8 @@ func Setup(
 		policyFindingRepo,
 		policyRepo,
 		approvalRepo,
+		db,
+		cfg.Security.EncryptionKey,
 		tokenManager,
 	)
 
@@ -436,6 +439,8 @@ func setupChangePlanRoutes(
 	policyFindingRepo repository.PolicyFindingRepository,
 	policyRepo repository.PolicyRepository,
 	approvalRepo repository.ApprovalRepository,
+	db *sqlx.DB,
+	encryptionKey string,
 	tokenManager *auth.TokenManager,
 ) {
 	// Initialize risk assessment service
@@ -486,6 +491,34 @@ func setupChangePlanRoutes(
 		logger.Get(),
 	)
 
+	// Initialize schema snapshot repository
+	snapshotRepo := postgres.NewSchemaSnapshotRepository(db)
+
+	// Initialize connection manager
+	connectionMgr := database.NewConnectionManager(encryptionKey, logger.Get())
+
+	// Initialize schema snapshot service
+	snapshotService := services.NewSchemaSnapshotService(
+		snapshotRepo,
+		databaseInstanceRepo,
+		databaseRepo,
+		connectionMgr,
+		encryptionKey,
+		logger.Get(),
+	)
+
+	// Initialize execution service
+	executionService := services.NewExecutionService(
+		changePlanRepo,
+		databaseInstanceRepo,
+		databaseRepo,
+		snapshotService,
+		services.NewExecutionLockManager(db, logger.Get()),
+		connectionMgr,
+		encryptionKey,
+		logger.Get(),
+	)
+
 	changePlanHandler := handlers.NewChangePlanHandler(
 		changePlanRepo,
 		projectRepo,
@@ -496,6 +529,7 @@ func setupChangePlanRoutes(
 		riskAssessmentSvc,
 		reviewService,
 		approvalService,
+		executionService,
 		logger.Get(),
 	)
 	changePlansGroup := e.Group("/api/v1/change-plans")
@@ -527,6 +561,14 @@ func setupChangePlanRoutes(
 	changePlansGroup.POST("/:id/review", changePlanHandler.TriggerSQLReview, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/approve", changePlanHandler.ApproveChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/close", changePlanHandler.CloseChangePlan, authMiddleware.Authenticate)
-	changePlansGroup.POST("/:id/execute", changePlanHandler.ExecuteChangePlan, authMiddleware.Authenticate)
+	// Initialize execution auth middleware
+	executionAuthMiddleware := middleware.NewExecutionAuthMiddleware(changePlanRepo, projectMemberRepo)
+
+	changePlansGroup.POST(
+		"/:id/execute",
+		changePlanHandler.ExecuteChangePlan,
+		authMiddleware.Authenticate,
+		executionAuthMiddleware.RequireExecutionPermission(),
+	)
 	changePlansGroup.POST("/:id/resubmit", changePlanHandler.ResubmitChangePlan, authMiddleware.Authenticate)
 }

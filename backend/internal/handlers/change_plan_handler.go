@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -29,6 +30,7 @@ type ChangePlanHandler struct {
 	riskAssessmentSvc    *services.RiskAssessmentService
 	reviewService        *review.ReviewService
 	approvalService      *services.ApprovalService
+	executionService     *services.ExecutionService
 	logger               *zap.Logger
 }
 
@@ -43,6 +45,7 @@ func NewChangePlanHandler(
 	riskAssessmentSvc *services.RiskAssessmentService,
 	reviewService *review.ReviewService,
 	approvalService *services.ApprovalService,
+	executionService *services.ExecutionService,
 	logger *zap.Logger,
 ) *ChangePlanHandler {
 	return &ChangePlanHandler{
@@ -55,6 +58,7 @@ func NewChangePlanHandler(
 		riskAssessmentSvc:    riskAssessmentSvc,
 		reviewService:        reviewService,
 		approvalService:      approvalService,
+		executionService:     executionService,
 		logger:               logger,
 	}
 }
@@ -1629,7 +1633,7 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 		})
 	}
 
-	// Get change plan
+	// Get change plan (authorization is handled by middleware)
 	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
 	if err != nil {
 		if err == repository.ErrNotFound {
@@ -1643,8 +1647,8 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 		})
 	}
 
-	// Check authorization: User must have execution permissions
-	userIDStr, _, organizationRole, ok := rbac.GetUserFromContext(ctx)
+	// Get user ID for logging (already validated by middleware)
+	userIDStr, _, _, ok := rbac.GetUserFromContext(ctx)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
 			"error": "Authentication required",
@@ -1656,33 +1660,6 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
 			"error": "Invalid user ID",
 		})
-	}
-
-	// Organization admins can execute any change plan
-	if organizationRole != rbac.OrganizationAdmin {
-		// Check if user is a member of the project
-		member, err := h.projectMemberRepo.GetMemberRole(ctx, changePlan.ProjectID, userID)
-		if err != nil {
-			if err == repository.ErrNotFound {
-				return c.JSON(http.StatusForbidden, map[string]interface{}{
-					"error": "Not a member of this project",
-				})
-			}
-			h.logger.Error("Failed to check project membership", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to check project membership",
-			})
-		}
-
-		// Check if user has PermissionChangesExecute (or approve permission)
-		projectRole := convertProjectRoleToRBAC(member.Role)
-		checker := rbac.NewCheckerService()
-		if !checker.HasProjectPermission(projectRole, rbac.PermissionChangesExecute) &&
-			!checker.HasProjectPermission(projectRole, rbac.PermissionChangesApprove) {
-			return c.JSON(http.StatusForbidden, map[string]interface{}{
-				"error": "Insufficient permissions to execute change plans",
-			})
-		}
 	}
 
 	// Validate status: Only Approved status can be executed
@@ -1740,28 +1717,69 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 		})
 	}
 
-	// Validate transition
-	if err := workflow.ValidateTransition(changePlan.Status, models.ChangePlanStatusInProgress); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": err.Error(),
-		})
-	}
-
-	// Update status to InProgress
-	changePlan.Status = models.ChangePlanStatusInProgress
-	if err := h.changePlanRepo.Update(ctx, changePlan); err != nil {
+	// Execute the change plan using ExecutionService
+	// The service handles:
+	// - Lock acquisition (database-level concurrency control)
+	// - Status validation (must be Approved)
+	// - Before snapshot capture
+	// - SQL execution in transaction
+	// - After snapshot capture on success
+	// - Status updates (InProgress → Completed/Failed)
+	// - Execution result capture
+	// - Lock release (guaranteed via defer)
+	result, err := h.executionService.Execute(ctx, changePlanID, userID)
+	if err != nil {
+		// Handle specific error types
+		if err == services.ErrChangePlanNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		if err == services.ErrDatabaseLocked {
+			return c.JSON(http.StatusConflict, map[string]interface{}{
+				"error": "Database is currently locked by another execution",
+			})
+		}
 		h.logger.Error("Failed to execute change plan", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to execute change plan",
+			"error": fmt.Sprintf("Failed to execute change plan: %v", err),
 		})
 	}
 
-	h.logger.Info("Change plan execution started",
-		zap.String("change_plan_id", changePlan.ID.String()),
+	// Get updated change plan to return in response
+	updatedChangePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		h.logger.Error("Failed to get updated change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve execution results",
+		})
+	}
+
+	h.logger.Info("Change plan execution completed",
+		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("executed_by", userID.String()),
+		zap.Bool("success", result.Success),
+		zap.Int("rows_affected", result.RowsAffected),
+		zap.Duration("duration", result.Duration),
 	)
 
-	return c.JSON(http.StatusOK, changePlan.ToResponse())
+	// Build response with execution results
+	executionData := map[string]interface{}{
+		"success":       result.Success,
+		"rows_affected": result.RowsAffected,
+		"duration_ms":   result.Duration.Milliseconds(),
+	}
+
+	if result.ErrorMessage != nil {
+		executionData["error_message"] = *result.ErrorMessage
+	}
+
+	response := map[string]interface{}{
+		"change_plan": updatedChangePlan.ToResponse(),
+		"execution":   executionData,
+	}
+
+	return c.JSON(http.StatusOK, response)
 }
 
 // ResubmitChangePlan handles POST /api/v1/change-plans/:id/resubmit

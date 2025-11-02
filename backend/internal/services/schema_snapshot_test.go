@@ -35,7 +35,10 @@ func (m *MockSchemaSnapshotRepository) GetByID(ctx context.Context, id uuid.UUID
 	return args.Get(0).(*models.SchemaSnapshot), args.Error(1)
 }
 
-func (m *MockSchemaSnapshotRepository) GetByChangePlanID(ctx context.Context, changePlanID uuid.UUID) ([]*models.SchemaSnapshot, error) {
+func (m *MockSchemaSnapshotRepository) GetByChangePlanID(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+) ([]*models.SchemaSnapshot, error) {
 	args := m.Called(ctx, changePlanID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -43,7 +46,10 @@ func (m *MockSchemaSnapshotRepository) GetByChangePlanID(ctx context.Context, ch
 	return args.Get(0).([]*models.SchemaSnapshot), args.Error(1)
 }
 
-func (m *MockSchemaSnapshotRepository) GetByDatabaseID(ctx context.Context, databaseID uuid.UUID) ([]*models.SchemaSnapshot, error) {
+func (m *MockSchemaSnapshotRepository) GetByDatabaseID(
+	ctx context.Context,
+	databaseID uuid.UUID,
+) ([]*models.SchemaSnapshot, error) {
 	args := m.Called(ctx, databaseID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -82,13 +88,13 @@ func TestSchemaSnapshotService_CapturePostgreSQL_InvalidParams(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name          string
-		changePlanID  uuid.UUID
-		databaseID    uuid.UUID
-		snapshotType  models.SnapshotType
-		setupMocks    func(*MockDatabaseRepository, *MockDatabaseInstanceRepository, *MockSchemaSnapshotRepository)
-		wantErr       bool
-		errMsg        string
+		name         string
+		changePlanID uuid.UUID
+		databaseID   uuid.UUID
+		snapshotType models.SnapshotType
+		setupMocks   func(*MockDatabaseRepository, *MockDatabaseInstanceRepository, *MockSchemaSnapshotRepository)
+		wantErr      bool
+		errMsg       string
 	}{
 		{
 			name:         "database not found",
@@ -193,9 +199,9 @@ func TestSchemaSnapshotService_getDecryptedPassword(t *testing.T) {
 	)
 
 	tests := []struct {
-		name      string
+		name       string
 		dbInstance *models.DatabaseInstance
-		wantErr   bool
+		wantErr    bool
 	}{
 		{
 			name: "nil encrypted password",
@@ -286,13 +292,13 @@ func TestSchemaSnapshotService_CaptureMySQL_InvalidParams(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name          string
-		changePlanID  uuid.UUID
-		databaseID    uuid.UUID
-		snapshotType  models.SnapshotType
-		setupMocks    func(*MockDatabaseRepository, *MockDatabaseInstanceRepository, *MockSchemaSnapshotRepository)
-		wantErr       bool
-		errMsg        string
+		name         string
+		changePlanID uuid.UUID
+		databaseID   uuid.UUID
+		snapshotType models.SnapshotType
+		setupMocks   func(*MockDatabaseRepository, *MockDatabaseInstanceRepository, *MockSchemaSnapshotRepository)
+		wantErr      bool
+		errMsg       string
 	}{
 		{
 			name:         "database not found",
@@ -452,4 +458,3 @@ func encryptPasswordForTest(t *testing.T, encryptionKey, password string) *strin
 
 	return &encrypted
 }
-

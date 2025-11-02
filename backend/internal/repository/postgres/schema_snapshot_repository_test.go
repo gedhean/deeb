@@ -206,7 +206,9 @@ func TestSchemaSnapshotRepository_GetByChangePlanID(t *testing.T) {
 	t.Run("empty result", func(t *testing.T) {
 		changePlanID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "database_id", "change_plan_id", "snapshot_type", "snapshot_data", "snapshot_data_raw", "created_at"})
+		rows := sqlmock.NewRows(
+			[]string{"id", "database_id", "change_plan_id", "snapshot_type", "snapshot_data", "snapshot_data_raw", "created_at"},
+		)
 
 		mock.ExpectQuery("SELECT id, database_id, change_plan_id, snapshot_type").
 			WithArgs(changePlanID).
@@ -261,7 +263,9 @@ func TestSchemaSnapshotRepository_GetByDatabaseID(t *testing.T) {
 	t.Run("empty result", func(t *testing.T) {
 		databaseID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "database_id", "change_plan_id", "snapshot_type", "snapshot_data", "snapshot_data_raw", "created_at"})
+		rows := sqlmock.NewRows(
+			[]string{"id", "database_id", "change_plan_id", "snapshot_type", "snapshot_data", "snapshot_data_raw", "created_at"},
+		)
 
 		mock.ExpectQuery("SELECT id, database_id, change_plan_id, snapshot_type").
 			WithArgs(databaseID).
@@ -274,4 +278,3 @@ func TestSchemaSnapshotRepository_GetByDatabaseID(t *testing.T) {
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
-

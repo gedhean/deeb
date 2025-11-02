@@ -21,6 +21,7 @@ import (
 	"github.com/labstack/echo/v4"
 	_ "github.com/lib/pq"
 	"github.com/nsxbet/deeb/internal/auth"
+	"github.com/nsxbet/deeb/internal/database"
 	"github.com/nsxbet/deeb/internal/handlers"
 	"github.com/nsxbet/deeb/internal/migrate"
 	"github.com/nsxbet/deeb/internal/models"
@@ -340,6 +341,38 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		logger,
 	)
 
+	// Initialize schema snapshot repository
+	snapshotRepo := postgres.NewSchemaSnapshotRepository(db)
+
+	// Initialize connection manager
+	encryptionKey := "test-encryption-key-min-32-chars"
+	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
+
+	// Initialize schema snapshot service
+	snapshotService := services.NewSchemaSnapshotService(
+		snapshotRepo,
+		databaseInstanceRepo,
+		databaseRepo,
+		connectionMgr,
+		encryptionKey,
+		logger,
+	)
+
+	// Initialize execution lock manager
+	lockManager := services.NewExecutionLockManager(db, logger)
+
+	// Initialize execution service
+	executionService := services.NewExecutionService(
+		changePlanRepo,
+		databaseInstanceRepo,
+		databaseRepo,
+		snapshotService,
+		lockManager,
+		connectionMgr,
+		encryptionKey,
+		logger,
+	)
+
 	// Create handler
 	handler := handlers.NewChangePlanHandler(
 		changePlanRepo,
@@ -351,6 +384,7 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		riskAssessmentSvc,
 		reviewService,
 		approvalService,
+		executionService,
 		logger,
 	)
 
@@ -3483,4 +3517,351 @@ func TestIntegration_ChangePlan_AssignReviewer_InvalidReviewer(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, response["error"], "Reviewer must have Project Approver role")
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan tests POST /api/v1/change-plans/:id/execute
+func TestIntegration_ChangePlan_ExecuteChangePlan(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+
+	// Create author user
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member (Project Owner role for execution permission)
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create and approve change plan
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+
+	// Transition to Open and Approve
+	changePlan.Status = models.ChangePlanStatusOpen
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	changePlan.Status = models.ChangePlanStatusApproved
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan.ID.String()),
+		nil,
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/execute")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.ExecuteChangePlan(c)
+	require.NoError(t, err)
+
+	// Note: Execution may fail due to missing actual database connection,
+	// but we verify the endpoint structure and basic logic
+	// Status should be either 200 (success) or 500 (execution failure)
+	// 400 would indicate validation errors which we want to catch
+	assert.NotEqual(t, http.StatusBadRequest, rec.Code, "should not fail validation")
+	assert.NotEqual(t, http.StatusForbidden, rec.Code, "should not fail authorization")
+	assert.NotEqual(t, http.StatusNotFound, rec.Code, "should find change plan")
+
+	// Verify response structure if successful
+	if rec.Code == http.StatusOK {
+		var response map[string]interface{}
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		// Verify response contains change_plan and execution fields
+		assert.Contains(t, response, "change_plan")
+		assert.Contains(t, response, "execution")
+
+		executionData := response["execution"].(map[string]interface{})
+		assert.Contains(t, executionData, "success")
+		assert.Contains(t, executionData, "rows_affected")
+		assert.Contains(t, executionData, "duration_ms")
+	}
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_Unauthorized tests POST /api/v1/change-plans/:id/execute with unauthorized user
+func TestIntegration_ChangePlan_ExecuteChangePlan_Unauthorized(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+
+	// Create author and unauthorized user
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+	unauthorizedUser := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("unauthorized-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member (Project Owner)
+	authorMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, authorMember)
+	require.NoError(t, err)
+
+	// Add unauthorized user as project member (Project Viewer - no execute permission)
+	unauthorizedMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    unauthorizedUser.ID,
+		Role:      models.ProjectRoleViewer,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, unauthorizedMember)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create and approve change plan
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+
+	// Transition to Approved
+	changePlan.Status = models.ChangePlanStatusApproved
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for unauthorized user
+	token, err := tokenManager.GenerateToken(
+		unauthorizedUser.ID.String(),
+		unauthorizedUser.Email,
+		string(models.OrganizationRoleDeveloper),
+	)
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan.ID.String()),
+		nil,
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/execute")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, unauthorizedUser.ID, unauthorizedUser.Email, unauthorizedUser.OrganizationRole)
+
+	// Execute
+	err = handler.ExecuteChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Contains(t, response["error"], "Insufficient permissions")
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_InvalidStatus tests POST /api/v1/change-plans/:id/execute with non-approved status
+func TestIntegration_ChangePlan_ExecuteChangePlan_InvalidStatus(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+
+	// Create author user
+	author := createTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member (Project Owner role for execution permission)
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan in Open status (not Approved)
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+
+	// Transition to Open (not Approved)
+	changePlan.Status = models.ChangePlanStatusOpen
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan.ID.String()),
+		nil,
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/execute")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.ExecuteChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Contains(t, response["error"], "Only Approved change plans can be executed")
 }

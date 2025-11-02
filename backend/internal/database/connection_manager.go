@@ -247,4 +247,3 @@ func (cm *ConnectionManager) Connect(ctx context.Context, params ConnectionParam
 		return nil, fmt.Errorf("unsupported database type: %s", params.DatabaseInstance.DatabaseType)
 	}
 }
-
