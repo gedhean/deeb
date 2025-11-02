@@ -46,6 +46,7 @@ func Setup(
 	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager)
 	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, projectMemberRepo, tokenManager)
 	setupIssueRoutes(e, issueRepo, tokenManager)
+	setupChangePlanRoutes(e, changePlanRepo, projectRepo, dbRepo, projectMemberRepo, tokenManager)
 
 	// Setup Swagger documentation
 	SetupSwaggerRoutes(e)
@@ -348,4 +349,28 @@ func setupIssueRoutes(e *echo.Echo, issueRepo repository.IssueRepository, tokenM
 	issuesGroup.GET("/:id", issueHandler.GetIssue, authMiddleware.Authenticate)
 	issuesGroup.GET("", issueHandler.ListIssues, authMiddleware.Authenticate)
 	issuesGroup.PUT("/:id", issueHandler.UpdateIssue, authMiddleware.Authenticate)
+}
+
+// setupChangePlanRoutes registers change plan management routes
+func setupChangePlanRoutes(
+	e *echo.Echo,
+	changePlanRepo repository.ChangePlanRepository,
+	projectRepo repository.ProjectRepository,
+	databaseRepo repository.DatabaseRepository,
+	projectMemberRepo repository.ProjectMemberRepository,
+	tokenManager *auth.TokenManager,
+) {
+	changePlanHandler := handlers.NewChangePlanHandler(changePlanRepo, projectRepo, databaseRepo, projectMemberRepo, logger.Get())
+	changePlansGroup := e.Group("/api/v1/change-plans")
+
+	// Authentication middleware for protected routes
+	// RBAC checks are done in handlers since project_id is in request body
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+
+	// All change plan routes require authentication
+	changePlansGroup.POST("", changePlanHandler.CreateChangePlan, authMiddleware.Authenticate)
+	changePlansGroup.GET("/:id", changePlanHandler.GetChangePlan, authMiddleware.Authenticate)
+	changePlansGroup.GET("", changePlanHandler.ListChangePlans, authMiddleware.Authenticate)
+	changePlansGroup.PUT("/:id", changePlanHandler.UpdateChangePlan, authMiddleware.Authenticate)
+	changePlansGroup.DELETE("/:id", changePlanHandler.DeleteChangePlan, authMiddleware.Authenticate)
 }

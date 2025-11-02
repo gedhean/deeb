@@ -93,76 +93,76 @@ Implement status transition rules and validation: Draft → Open → Approved/Cl
 
 ### P03M04: Implement Change Plan POST endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M04
 
 **Goal**
 Implement POST /api/v1/change-plans endpoint for creating Change Plans (Project Developer role required).
 
 **Acceptance Criteria**
-- [ ] Change Plan handler created in `backend/internal/handlers/change_plan_handler.go`
-- [ ] POST /api/v1/change-plans endpoint implemented
-- [ ] Request validation (title, change_type, sql_content, target_database_id required)
-- [ ] Optional fields: description, rollback_sql
-- [ ] RBAC check: Project Developer role in project
-- [ ] Change Plan created with Draft status
-- [ ] Author ID set from authenticated user
+- [x] Change Plan handler created in `backend/internal/handlers/change_plan_handler.go`
+- [x] POST /api/v1/change-plans endpoint implemented
+- [x] Request validation (title, change_type, sql_content, target_database_id required)
+- [x] Optional fields: description, rollback_sql
+- [x] RBAC check: Project Developer role in project
+- [x] Change Plan created with Draft status
+- [x] Author ID set from authenticated user
 - [ ] Integration test passing
 
 ---
 
 ### P03M05: Implement Change Plan GET endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M05
 
 **Goal**
 Implement GET endpoints for retrieving individual Change Plans and listing with filters.
 
 **Acceptance Criteria**
-- [ ] GET /api/v1/change-plans/:id endpoint implemented
-- [ ] GET /api/v1/change-plans endpoint implemented (list with filters)
-- [ ] Filter parameters: status, project_id, database_id, author_id
-- [ ] 404 Not Found for nonexistent Change Plans
-- [ ] Authorization checks (users can view Change Plans in their projects)
-- [ ] Response includes Change Plan details
+- [x] GET /api/v1/change-plans/:id endpoint implemented
+- [x] GET /api/v1/change-plans endpoint implemented (list with filters)
+- [x] Filter parameters: status, project_id, database_id, author_id
+- [x] 404 Not Found for nonexistent Change Plans
+- [x] Authorization checks (users can view Change Plans in their projects)
+- [x] Response includes Change Plan details
 - [ ] Integration tests passing
 
 ---
 
 ### P03M06: Implement Change Plan PUT endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M06
 
 **Goal**
 Implement PUT endpoint for updating Change Plans with status transition validation.
 
 **Acceptance Criteria**
-- [ ] PUT /api/v1/change-plans/:id endpoint implemented
-- [ ] Update validation (only Draft status can be modified)
-- [ ] Status transition validation on update
-- [ ] RBAC checks: Project Developer role required
-- [ ] Only author can update their Draft Change Plans
-- [ ] SQL content size limit enforced (10MB)
+- [x] PUT /api/v1/change-plans/:id endpoint implemented
+- [x] Update validation (only Draft status can be modified)
+- [x] Status transition validation on update
+- [x] RBAC checks: Project Developer role required
+- [x] Only author can update their Draft Change Plans
+- [x] SQL content size limit enforced (10MB)
 - [ ] Integration test passing
 
 ---
 
 ### P03M07: Implement Change Plan DELETE endpoint
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P03M07
 
 **Goal**
 Implement DELETE endpoint for Change Plans with proper authorization and status checks.
 
 **Acceptance Criteria**
-- [ ] DELETE /api/v1/change-plans/:id endpoint implemented
-- [ ] Delete validation (only Draft or Closed Change Plans can be deleted)
-- [ ] RBAC checks: Project Developer role required
-- [ ] Only author can delete their Change Plans
-- [ ] Cascade deletion of policy findings
+- [x] DELETE /api/v1/change-plans/:id endpoint implemented
+- [x] Delete validation (only Draft or Closed Change Plans can be deleted)
+- [x] RBAC checks: Project Developer role required
+- [x] Only author can delete their Change Plans
+- [x] Cascade deletion of policy findings
 - [ ] Integration test passing
 
 ---
