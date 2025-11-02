@@ -475,18 +475,18 @@ Create comprehensive unit tests for Project repository operations using mocks.
 
 ### P02M25: Write unit tests for Environment repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P02M25
 
 **Goal**
 Create comprehensive unit tests for Environment repository operations including Policy reference handling.
 
 **Acceptance Criteria**
-- [ ] Unit tests for all CRUD operations
-- [ ] Policy ID foreign key handling tests
-- [ ] Test coverage >85%
-- [ ] Edge cases covered
-- [ ] All tests passing
+- [x] Unit tests for all CRUD operations
+- [x] Policy ID foreign key handling tests
+- [x] Test coverage >85%
+- [x] Edge cases covered
+- [x] All tests passing
 
 ---
 
