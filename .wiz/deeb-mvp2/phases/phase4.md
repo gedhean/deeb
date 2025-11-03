@@ -691,18 +691,29 @@ Create integration tests for Change Plan execution including snapshot capture.
 
 ### P04M33: Write integration tests for concurrency control
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M33
 
 **Goal**
 Create integration tests for concurrent execution requests and locking.
 
 **Acceptance Criteria**
-- [ ] Integration test for concurrent execution blocking passing
-- [ ] Integration test for different database concurrent execution passing
-- [ ] Queue handling tests
-- [ ] Lock release tests
-- [ ] All integration tests passing
+- [x] Integration test for concurrent execution blocking passing
+- [x] Integration test for different database concurrent execution passing
+- [x] Queue handling tests
+- [x] Lock release tests
+- [x] All integration tests passing
+
+**Notes**
+- Added comprehensive integration tests for concurrency control:
+  - `TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase`: Tests that concurrent execution requests on the same database are blocked, verifies queueing when lock is acquired, and verifies lock release after execution
+  - `TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases`: Tests that concurrent execution on different databases is allowed and both succeed independently
+  - `TestIntegration_ChangePlan_ExecuteChangePlan_LockRelease`: Tests that locks are properly released after execution completes, allowing subsequent executions
+  - `TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling`: Tests comprehensive queue handling including multiple items in queue, queue positions, and pending count
+- Tests verify actual lock acquisition and release using ExecutionLockManager
+- Tests verify queue operations using ExecutionQueueRepository
+- Tests use goroutines and channels to simulate concurrent execution scenarios
+- All tests verify actual database state changes and queue/lock status
 
 ---
 

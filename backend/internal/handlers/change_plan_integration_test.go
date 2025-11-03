@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -4612,6 +4613,974 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SnapshotCapture(t *testing.T) 
 	assert.False(t, beforeSnapshot.CreatedAt.IsZero())
 	assert.False(t, afterSnapshot.CreatedAt.IsZero())
 	assert.True(t, beforeSnapshot.CreatedAt.Before(afterSnapshot.CreatedAt) || beforeSnapshot.CreatedAt.Equal(afterSnapshot.CreatedAt), "before snapshot should be created before or at same time as after")
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase tests concurrent execution blocking on same database
+func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	// Setup execution target database
+	targetConnStr, cleanupTarget := setupExecutionTargetDB(t)
+	defer cleanupTarget()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	queueRepo := postgres.NewExecutionQueueRepository(db)
+	lockManager := services.NewExecutionLockManager(db, zap.NewNop())
+
+	// Create two author users for concurrent execution
+	author1 := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author1-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+	author2 := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author2-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add authors as project members (Project Owner role for execution permission)
+	member1 := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author1.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author1.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member1)
+	require.NoError(t, err)
+
+	member2 := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author2.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author2.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member2)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Parse target connection string to get host and port
+	targetURL, err := url.Parse(targetConnStr)
+	require.NoError(t, err, "failed to parse target connection string")
+	targetHost := targetURL.Hostname()
+	targetPort, err := strconv.Atoi(targetURL.Port())
+	if err != nil || targetPort == 0 {
+		targetPort = 5432 // Default PostgreSQL port
+	}
+
+	// Encrypt password
+	detailsJSON, err := json.Marshal(map[string]string{"password": "deeb"})
+	require.NoError(t, err)
+	encryptedDetails, err := utils.Encrypt(string(detailsJSON), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	// Create database instance pointing to execution target
+	dbInstance := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       targetHost,
+		Port:                       targetPort,
+		Username:                   "deeb",
+		ConnectionDetailsEncrypted: &encryptedDetails,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author1.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance)
+	require.NoError(t, err)
+
+	// Create database pointing to execution target
+	database := &models.Database{
+		ID:               uuid.New(),
+		ProjectID:        project.ID,
+		EnvironmentID:    env.ID,
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseName:     "execution_target",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	err = dbRepo.Create(ctx, database)
+	require.NoError(t, err)
+
+	// Create two change plans targeting the same database
+	changePlan1 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author1.ID,
+		"CREATE TABLE concurrent_test1 (id UUID PRIMARY KEY);",
+	)
+	changePlan2 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author2.ID,
+		"CREATE TABLE concurrent_test2 (id UUID PRIMARY KEY);",
+	)
+
+	// Transition both to Approved
+	changePlan1.Status = models.ChangePlanStatusApproved
+	changePlan1.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan1)
+	require.NoError(t, err)
+
+	changePlan2.Status = models.ChangePlanStatusApproved
+	changePlan2.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan2)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create tokens for both authors
+	token1, err := tokenManager.GenerateToken(author1.ID, author1.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+	token2, err := tokenManager.GenerateToken(author2.ID, author2.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Execute first change plan (should succeed and acquire lock)
+	e := echo.New()
+	req1 := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan1.ID.String()),
+		nil,
+	)
+	req1.Header.Set(echo.HeaderAuthorization, "Bearer "+token1)
+	rec1 := httptest.NewRecorder()
+	c1 := e.NewContext(req1, rec1)
+	c1.SetPath("/api/v1/change-plans/:id/execute")
+	c1.SetParamNames("id")
+	c1.SetParamValues(changePlan1.ID.String())
+	setUserContext(c1, author1.ID, author1.Email, author1.OrganizationRole)
+
+	// Start first execution in goroutine (will take some time due to snapshot capture)
+	exec1Done := make(chan error, 1)
+	go func() {
+		exec1Done <- handler.ExecuteChangePlan(c1)
+	}()
+
+	// Wait a bit to ensure first execution has acquired the lock
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify lock is acquired
+	isLocked, lock, err := lockManager.IsLocked(ctx, database.ID)
+	require.NoError(t, err)
+	require.True(t, isLocked, "database should be locked")
+	require.NotNil(t, lock)
+	require.Equal(t, changePlan1.ID, lock.ChangePlanID)
+
+	// Try to execute second change plan concurrently (should be blocked/queued)
+	req2 := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan2.ID.String()),
+		nil,
+	)
+	req2.Header.Set(echo.HeaderAuthorization, "Bearer "+token2)
+	rec2 := httptest.NewRecorder()
+	c2 := e.NewContext(req2, rec2)
+	c2.SetPath("/api/v1/change-plans/:id/execute")
+	c2.SetParamNames("id")
+	c2.SetParamValues(changePlan2.ID.String())
+	setUserContext(c2, author2.ID, author2.Email, author2.OrganizationRole)
+
+	err2 := handler.ExecuteChangePlan(c2)
+	require.NoError(t, err2)
+
+	// Second execution should return 200 but with error indicating database locked
+	// OR should have queued the change plan
+	// Check if change plan was queued
+	queueItems, err := queueRepo.GetByChangePlanID(ctx, changePlan2.ID)
+	require.NoError(t, err)
+	require.Len(t, queueItems, 1, "change plan should be queued")
+	require.Equal(t, models.QueueStatusPending, queueItems[0].Status)
+	require.Equal(t, database.ID, queueItems[0].TargetDatabaseID)
+
+	// Wait for first execution to complete
+	err1 := <-exec1Done
+	require.NoError(t, err1)
+	require.Equal(t, http.StatusOK, rec1.Code, "first execution should succeed")
+
+	// Verify first execution completed successfully
+	updatedChangePlan1, err := changePlanRepo.GetByID(ctx, changePlan1.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusCompleted, updatedChangePlan1.Status)
+
+	// Verify lock was released after first execution
+	isLocked, _, err = lockManager.IsLocked(ctx, database.ID)
+	require.NoError(t, err)
+	require.False(t, isLocked, "lock should be released after execution")
+
+	// Verify first change plan SQL was executed
+	targetDBConn, err := sqlx.Connect("postgres", targetConnStr)
+	require.NoError(t, err)
+	defer targetDBConn.Close()
+
+	var table1Exists bool
+	err = targetDBConn.Get(&table1Exists, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public' 
+			AND table_name = 'concurrent_test1'
+		)
+	`)
+	require.NoError(t, err)
+	require.True(t, table1Exists, "concurrent_test1 table should exist")
+
+	// Verify second change plan was NOT executed yet (still in queue)
+	var table2Exists bool
+	err = targetDBConn.Get(&table2Exists, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public' 
+			AND table_name = 'concurrent_test2'
+		)
+	`)
+	require.NoError(t, err)
+	require.False(t, table2Exists, "concurrent_test2 table should not exist yet (still queued)")
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases tests concurrent execution on different databases
+func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	// Setup two execution target databases
+	targetConnStr1, cleanupTarget1 := setupExecutionTargetDB(t)
+	defer cleanupTarget1()
+	targetConnStr2, cleanupTarget2 := setupExecutionTargetDB(t)
+	defer cleanupTarget2()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	lockManager := services.NewExecutionLockManager(db, zap.NewNop())
+
+	// Create two authors
+	author1 := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author1-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+	author2 := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author2-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add authors as project members
+	member1 := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author1.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author1.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member1)
+	require.NoError(t, err)
+
+	member2 := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author2.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author2.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member2)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Setup first database
+	targetURL1, err := url.Parse(targetConnStr1)
+	require.NoError(t, err)
+	targetHost1 := targetURL1.Hostname()
+	targetPort1, err := strconv.Atoi(targetURL1.Port())
+	if err != nil || targetPort1 == 0 {
+		targetPort1 = 5432
+	}
+
+	detailsJSON1, err := json.Marshal(map[string]string{"password": "deeb"})
+	require.NoError(t, err)
+	encryptedDetails1, err := utils.Encrypt(string(detailsJSON1), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	dbInstance1 := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance 1",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       targetHost1,
+		Port:                       targetPort1,
+		Username:                   "deeb",
+		ConnectionDetailsEncrypted: &encryptedDetails1,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author1.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance1)
+	require.NoError(t, err)
+
+	database1 := &models.Database{
+		ID:               uuid.New(),
+		ProjectID:        project.ID,
+		EnvironmentID:    env.ID,
+		DatabaseInstanceID: dbInstance1.ID,
+		DatabaseName:     "execution_target",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	err = dbRepo.Create(ctx, database1)
+	require.NoError(t, err)
+
+	// Setup second database
+	targetURL2, err := url.Parse(targetConnStr2)
+	require.NoError(t, err)
+	targetHost2 := targetURL2.Hostname()
+	targetPort2, err := strconv.Atoi(targetURL2.Port())
+	if err != nil || targetPort2 == 0 {
+		targetPort2 = 5432
+	}
+
+	detailsJSON2, err := json.Marshal(map[string]string{"password": "deeb"})
+	require.NoError(t, err)
+	encryptedDetails2, err := utils.Encrypt(string(detailsJSON2), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	dbInstance2 := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance 2",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       targetHost2,
+		Port:                       targetPort2,
+		Username:                   "deeb",
+		ConnectionDetailsEncrypted: &encryptedDetails2,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author2.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance2)
+	require.NoError(t, err)
+
+	database2 := &models.Database{
+		ID:               uuid.New(),
+		ProjectID:        project.ID,
+		EnvironmentID:    env.ID,
+		DatabaseInstanceID: dbInstance2.ID,
+		DatabaseName:     "execution_target",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	err = dbRepo.Create(ctx, database2)
+	require.NoError(t, err)
+
+	// Create change plans targeting different databases
+	changePlan1 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database1.ID,
+		author1.ID,
+		"CREATE TABLE different_db_test1 (id UUID PRIMARY KEY);",
+	)
+	changePlan2 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database2.ID,
+		author2.ID,
+		"CREATE TABLE different_db_test2 (id UUID PRIMARY KEY);",
+	)
+
+	// Transition both to Approved
+	changePlan1.Status = models.ChangePlanStatusApproved
+	changePlan1.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan1)
+	require.NoError(t, err)
+
+	changePlan2.Status = models.ChangePlanStatusApproved
+	changePlan2.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan2)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create tokens
+	token1, err := tokenManager.GenerateToken(author1.ID, author1.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+	token2, err := tokenManager.GenerateToken(author2.ID, author2.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Execute both change plans concurrently
+	e := echo.New()
+	req1 := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan1.ID.String()),
+		nil,
+	)
+	req1.Header.Set(echo.HeaderAuthorization, "Bearer "+token1)
+	rec1 := httptest.NewRecorder()
+	c1 := e.NewContext(req1, rec1)
+	c1.SetPath("/api/v1/change-plans/:id/execute")
+	c1.SetParamNames("id")
+	c1.SetParamValues(changePlan1.ID.String())
+	setUserContext(c1, author1.ID, author1.Email, author1.OrganizationRole)
+
+	req2 := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan2.ID.String()),
+		nil,
+	)
+	req2.Header.Set(echo.HeaderAuthorization, "Bearer "+token2)
+	rec2 := httptest.NewRecorder()
+	c2 := e.NewContext(req2, rec2)
+	c2.SetPath("/api/v1/change-plans/:id/execute")
+	c2.SetParamNames("id")
+	c2.SetParamValues(changePlan2.ID.String())
+	setUserContext(c2, author2.ID, author2.Email, author2.OrganizationRole)
+
+	// Execute concurrently
+	var wg sync.WaitGroup
+	var err1, err2 error
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		err1 = handler.ExecuteChangePlan(c1)
+	}()
+	go func() {
+		defer wg.Done()
+		err2 = handler.ExecuteChangePlan(c2)
+	}()
+
+	wg.Wait()
+
+	// Both executions should succeed
+	require.NoError(t, err1)
+	require.NoError(t, err2)
+	require.Equal(t, http.StatusOK, rec1.Code, "first execution should succeed")
+	require.Equal(t, http.StatusOK, rec2.Code, "second execution should succeed")
+
+	// Verify both change plans completed
+	updatedChangePlan1, err := changePlanRepo.GetByID(ctx, changePlan1.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusCompleted, updatedChangePlan1.Status)
+
+	updatedChangePlan2, err := changePlanRepo.GetByID(ctx, changePlan2.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusCompleted, updatedChangePlan2.Status)
+
+	// Verify both databases have their tables (concurrent execution succeeded)
+	targetDBConn1, err := sqlx.Connect("postgres", targetConnStr1)
+	require.NoError(t, err)
+	defer targetDBConn1.Close()
+
+	var table1Exists bool
+	err = targetDBConn1.Get(&table1Exists, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public' 
+			AND table_name = 'different_db_test1'
+		)
+	`)
+	require.NoError(t, err)
+	require.True(t, table1Exists, "different_db_test1 table should exist in database 1")
+
+	targetDBConn2, err := sqlx.Connect("postgres", targetConnStr2)
+	require.NoError(t, err)
+	defer targetDBConn2.Close()
+
+	var table2Exists bool
+	err = targetDBConn2.Get(&table2Exists, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public' 
+			AND table_name = 'different_db_test2'
+		)
+	`)
+	require.NoError(t, err)
+	require.True(t, table2Exists, "different_db_test2 table should exist in database 2")
+
+	// Verify locks were released
+	isLocked1, _, err := lockManager.IsLocked(ctx, database1.ID)
+	require.NoError(t, err)
+	require.False(t, isLocked1, "lock for database1 should be released")
+
+	isLocked2, _, err := lockManager.IsLocked(ctx, database2.ID)
+	require.NoError(t, err)
+	require.False(t, isLocked2, "lock for database2 should be released")
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_LockRelease tests lock release after execution
+func TestIntegration_ChangePlan_ExecuteChangePlan_LockRelease(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	// Setup execution target database
+	targetConnStr, cleanupTarget := setupExecutionTargetDB(t)
+	defer cleanupTarget()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	lockManager := services.NewExecutionLockManager(db, zap.NewNop())
+
+	// Create author user
+	author := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Parse target connection string
+	targetURL, err := url.Parse(targetConnStr)
+	require.NoError(t, err, "failed to parse target connection string")
+	targetHost := targetURL.Hostname()
+	targetPort, err := strconv.Atoi(targetURL.Port())
+	if err != nil || targetPort == 0 {
+		targetPort = 5432
+	}
+
+	// Encrypt password
+	detailsJSON, err := json.Marshal(map[string]string{"password": "deeb"})
+	require.NoError(t, err)
+	encryptedDetails, err := utils.Encrypt(string(detailsJSON), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	// Create database instance
+	dbInstance := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       targetHost,
+		Port:                       targetPort,
+		Username:                   "deeb",
+		ConnectionDetailsEncrypted: &encryptedDetails,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance)
+	require.NoError(t, err)
+
+	// Create database
+	database := &models.Database{
+		ID:               uuid.New(),
+		ProjectID:        project.ID,
+		EnvironmentID:    env.ID,
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseName:     "execution_target",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	err = dbRepo.Create(ctx, database)
+	require.NoError(t, err)
+
+	// Create and approve change plan
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE lock_release_test (id UUID PRIMARY KEY);",
+	)
+
+	changePlan.Status = models.ChangePlanStatusApproved
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Verify no lock exists initially
+	isLocked, _, err := lockManager.IsLocked(ctx, database.ID)
+	require.NoError(t, err)
+	require.False(t, isLocked, "database should not be locked initially")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Execute change plan
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan.ID.String()),
+		nil,
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/execute")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	err = handler.ExecuteChangePlan(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code, "execution should succeed")
+
+	// Verify execution completed
+	updatedChangePlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusCompleted, updatedChangePlan.Status)
+
+	// Verify lock was released after execution
+	isLocked, _, err = lockManager.IsLocked(ctx, database.ID)
+	require.NoError(t, err)
+	require.False(t, isLocked, "lock should be released after execution completes")
+
+	// Verify we can acquire lock again (proving it was released)
+	err = lockManager.AcquireLock(ctx, database.ID, uuid.New(), author.ID)
+	require.NoError(t, err, "should be able to acquire lock after previous execution")
+
+	// Cleanup the test lock
+	err = lockManager.ReleaseLock(ctx, database.ID)
+	require.NoError(t, err)
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling tests queue handling for multiple change plans
+func TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	// Setup execution target database
+	targetConnStr, cleanupTarget := setupExecutionTargetDB(t)
+	defer cleanupTarget()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	queueRepo := postgres.NewExecutionQueueRepository(db)
+	lockManager := services.NewExecutionLockManager(db, zap.NewNop())
+
+	// Create three authors for queuing
+	author1 := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author1-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+	author2 := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author2-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+	author3 := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author3-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add authors as project members
+	for _, author := range []*models.User{author1, author2, author3} {
+		member := &models.ProjectMember{
+			ProjectID: project.ID,
+			UserID:    author.ID,
+			Role:      models.ProjectRoleOwner,
+			AddedByID: author.ID,
+		}
+		err = projectMemberRepo.AddMember(ctx, member)
+		require.NoError(t, err)
+	}
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Parse target connection string
+	targetURL, err := url.Parse(targetConnStr)
+	require.NoError(t, err)
+	targetHost := targetURL.Hostname()
+	targetPort, err := strconv.Atoi(targetURL.Port())
+	if err != nil || targetPort == 0 {
+		targetPort = 5432
+	}
+
+	// Encrypt password
+	detailsJSON, err := json.Marshal(map[string]string{"password": "deeb"})
+	require.NoError(t, err)
+	encryptedDetails, err := utils.Encrypt(string(detailsJSON), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	// Create database instance
+	dbInstance := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       targetHost,
+		Port:                       targetPort,
+		Username:                   "deeb",
+		ConnectionDetailsEncrypted: &encryptedDetails,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author1.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance)
+	require.NoError(t, err)
+
+	// Create database
+	database := &models.Database{
+		ID:               uuid.New(),
+		ProjectID:        project.ID,
+		EnvironmentID:    env.ID,
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseName:     "execution_target",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	err = dbRepo.Create(ctx, database)
+	require.NoError(t, err)
+
+	// Create three change plans targeting the same database
+	changePlan1 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author1.ID,
+		"CREATE TABLE queue_test1 (id UUID PRIMARY KEY);",
+	)
+	changePlan2 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author2.ID,
+		"CREATE TABLE queue_test2 (id UUID PRIMARY KEY);",
+	)
+	changePlan3 := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author3.ID,
+		"CREATE TABLE queue_test3 (id UUID PRIMARY KEY);",
+	)
+
+	// Transition all to Approved
+	for _, cp := range []*models.ChangePlan{changePlan1, changePlan2, changePlan3} {
+		cp.Status = models.ChangePlanStatusApproved
+		cp.UpdatedAt = time.Now()
+		err = changePlanRepo.Update(ctx, cp)
+		require.NoError(t, err)
+	}
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Execute first change plan (acquires lock)
+	token1, err := tokenManager.GenerateToken(author1.ID, author1.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	e := echo.New()
+	req1 := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan1.ID.String()),
+		nil,
+	)
+	req1.Header.Set(echo.HeaderAuthorization, "Bearer "+token1)
+	rec1 := httptest.NewRecorder()
+	c1 := e.NewContext(req1, rec1)
+	c1.SetPath("/api/v1/change-plans/:id/execute")
+	c1.SetParamNames("id")
+	c1.SetParamValues(changePlan1.ID.String())
+	setUserContext(c1, author1.ID, author1.Email, author1.OrganizationRole)
+
+	// Start first execution
+	exec1Done := make(chan error, 1)
+	go func() {
+		exec1Done <- handler.ExecuteChangePlan(c1)
+	}()
+
+	// Wait for lock acquisition
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify lock is acquired
+	isLocked, _, err := lockManager.IsLocked(ctx, database.ID)
+	require.NoError(t, err)
+	require.True(t, isLocked, "database should be locked")
+
+	// Try to execute second and third change plans (should be queued)
+	token2, err := tokenManager.GenerateToken(author2.ID, author2.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+	token3, err := tokenManager.GenerateToken(author3.ID, author3.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	req2 := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan2.ID.String()),
+		nil,
+	)
+	req2.Header.Set(echo.HeaderAuthorization, "Bearer "+token2)
+	rec2 := httptest.NewRecorder()
+	c2 := e.NewContext(req2, rec2)
+	c2.SetPath("/api/v1/change-plans/:id/execute")
+	c2.SetParamNames("id")
+	c2.SetParamValues(changePlan2.ID.String())
+	setUserContext(c2, author2.ID, author2.Email, author2.OrganizationRole)
+
+	req3 := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan3.ID.String()),
+		nil,
+	)
+	req3.Header.Set(echo.HeaderAuthorization, "Bearer "+token3)
+	rec3 := httptest.NewRecorder()
+	c3 := e.NewContext(req3, rec3)
+	c3.SetPath("/api/v1/change-plans/:id/execute")
+	c3.SetParamNames("id")
+	c3.SetParamValues(changePlan3.ID.String())
+	setUserContext(c3, author3.ID, author3.Email, author3.OrganizationRole)
+
+	err2 := handler.ExecuteChangePlan(c2)
+	require.NoError(t, err2)
+	err3 := handler.ExecuteChangePlan(c3)
+	require.NoError(t, err3)
+
+	// Verify both change plans were queued
+	queueItems2, err := queueRepo.GetByChangePlanID(ctx, changePlan2.ID)
+	require.NoError(t, err)
+	require.Len(t, queueItems2, 1, "change plan 2 should be queued")
+	require.Equal(t, models.QueueStatusPending, queueItems2[0].Status)
+
+	queueItems3, err := queueRepo.GetByChangePlanID(ctx, changePlan3.ID)
+	require.NoError(t, err)
+	require.Len(t, queueItems3, 1, "change plan 3 should be queued")
+	require.Equal(t, models.QueueStatusPending, queueItems3[0].Status)
+
+	// Verify queue positions (second should be position 1, third should be position 2)
+	position2 := queueItems2[0].Position
+	position3 := queueItems3[0].Position
+	require.Greater(t, position3, position2, "change plan 3 should be after change plan 2 in queue")
+
+	// Verify pending count for database
+	pendingCount, err := queueRepo.GetPendingCount(ctx, database.ID)
+	require.NoError(t, err)
+	require.Equal(t, 2, pendingCount, "should have 2 pending items in queue")
+
+	// Wait for first execution to complete
+	err1 := <-exec1Done
+	require.NoError(t, err1)
+	require.Equal(t, http.StatusOK, rec1.Code)
+
+	// Verify lock was released
+	isLocked, _, err = lockManager.IsLocked(ctx, database.ID)
+	require.NoError(t, err)
+	require.False(t, isLocked, "lock should be released")
+
+	// Verify first change plan completed
+	updatedChangePlan1, err := changePlanRepo.GetByID(ctx, changePlan1.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusCompleted, updatedChangePlan1.Status)
+
+	// Verify queue items still exist (they would be processed by queue processor in real scenario)
+	// For this test, we just verify they were queued correctly
+	queueItems, err := queueRepo.GetByDatabaseID(ctx, database.ID)
+	require.NoError(t, err)
+	require.Len(t, queueItems, 2, "should have 2 queue items")
+	for _, item := range queueItems {
+		require.Equal(t, models.QueueStatusPending, item.Status)
+		require.Equal(t, database.ID, item.TargetDatabaseID)
+	}
 }
 
 // TestIntegration_ChangePlan_CloseChangePlan tests POST /api/v1/change-plans/:id/close
