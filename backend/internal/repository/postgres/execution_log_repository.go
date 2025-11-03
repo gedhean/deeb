@@ -109,7 +109,10 @@ func (r *executionLogRepository) GetByID(ctx context.Context, id uuid.UUID) (*mo
 }
 
 // GetLatestByChangePlanID retrieves the most recent execution log for a change plan
-func (r *executionLogRepository) GetLatestByChangePlanID(ctx context.Context, changePlanID uuid.UUID) (*models.ExecutionLog, error) {
+func (r *executionLogRepository) GetLatestByChangePlanID(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+) (*models.ExecutionLog, error) {
 	var log models.ExecutionLog
 
 	query := `
@@ -132,4 +135,3 @@ func (r *executionLogRepository) GetLatestByChangePlanID(ctx context.Context, ch
 
 	return &log, nil
 }
-

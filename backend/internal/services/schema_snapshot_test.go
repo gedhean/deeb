@@ -480,9 +480,9 @@ func TestSchemaSnapshotService_CapturePostgreSQL_PasswordDecryptionError(t *test
 	dbInstance := &models.DatabaseInstance{
 		ID:                         dbInstanceID,
 		DatabaseType:               models.DatabaseTypePostgreSQL,
-		Host:                        "localhost",
-		Port:                        5432,
-		Username:                    "testuser",
+		Host:                       "localhost",
+		Port:                       5432,
+		Username:                   "testuser",
 		ConnectionDetailsEncrypted: stringPtr("invalid_encrypted_data"),
 	}
 
@@ -542,11 +542,11 @@ func TestSchemaSnapshotService_CapturePostgreSQL_RepositoryError(t *testing.T) {
 	dbInstance := &models.DatabaseInstance{
 		ID:                         dbInstanceID,
 		DatabaseType:               models.DatabaseTypePostgreSQL,
-		Host:                        "localhost",
-		Port:                        5432,
-		Username:                    "testuser",
+		Host:                       "localhost",
+		Port:                       5432,
+		Username:                   "testuser",
 		ConnectionDetailsEncrypted: encryptedPassword,
-		RequireSSL:                  false,
+		RequireSSL:                 false,
 	}
 
 	snapshotRepo := new(MockSchemaSnapshotRepository)
@@ -570,7 +570,6 @@ func TestSchemaSnapshotService_CapturePostgreSQL_RepositoryError(t *testing.T) {
 	// In a real scenario, we'd need to mock exec.CommandContext or use integration tests
 	// For now, we'll test that repository error is handled if we get past pg_dump
 	snapshot, err := service.CapturePostgreSQL(ctx, changePlanID, dbID, models.SnapshotTypeBefore)
-
 	// This test will likely fail at pg_dump execution, not repository
 	// The repository error test is better suited for integration tests
 	// But we can test the error path by checking that if repository fails, we get the error
@@ -686,9 +685,9 @@ func TestSchemaSnapshotService_CaptureMySQL_PasswordDecryptionError(t *testing.T
 	dbInstance := &models.DatabaseInstance{
 		ID:                         dbInstanceID,
 		DatabaseType:               models.DatabaseTypeMySQL,
-		Host:                        "localhost",
-		Port:                        3306,
-		Username:                    "testuser",
+		Host:                       "localhost",
+		Port:                       3306,
+		Username:                   "testuser",
 		ConnectionDetailsEncrypted: stringPtr("invalid_encrypted_data"),
 	}
 
@@ -962,7 +961,7 @@ func TestSchemaSnapshotService_JSONMarshalError(t *testing.T) {
 	// Test that invalid JSON marshaling scenarios are handled
 	// In practice, marshaling a map[string]string should never fail
 	// But we test the error path exists in the code
-	
+
 	// Create a valid snapshot data structure
 	validSQL := "CREATE TABLE test (id INT);"
 	snapshotDataJSON, err := json.Marshal(map[string]string{
@@ -970,13 +969,13 @@ func TestSchemaSnapshotService_JSONMarshalError(t *testing.T) {
 		"format": "plain",
 	})
 	require.NoError(t, err)
-	
+
 	// Verify it can be unmarshaled
 	var snapshotData map[string]string
 	err = json.Unmarshal(snapshotDataJSON, &snapshotData)
 	require.NoError(t, err)
 	assert.Equal(t, validSQL, snapshotData["sql"])
-	
+
 	// The actual JSON marshaling error path in CapturePostgreSQL/CaptureMySQL
 	// would require a scenario where json.Marshal fails, which is extremely rare
 	// (would require invalid data types or memory issues)
@@ -986,28 +985,28 @@ func TestSchemaSnapshotService_JSONMarshalError(t *testing.T) {
 // TestSchemaSnapshotService_SnapshotDataStructure tests snapshot data structure validation
 func TestSchemaSnapshotService_SnapshotDataStructure(t *testing.T) {
 	tests := []struct {
-		name          string
-		snapshotType  models.SnapshotType
-		databaseID    uuid.UUID
-		changePlanID  uuid.UUID
-		snapshotSQL   string
-		expectValid   bool
+		name         string
+		snapshotType models.SnapshotType
+		databaseID   uuid.UUID
+		changePlanID uuid.UUID
+		snapshotSQL  string
+		expectValid  bool
 	}{
 		{
 			name:         "valid before snapshot",
 			snapshotType: models.SnapshotTypeBefore,
-			databaseID:    uuid.New(),
-			changePlanID:  uuid.New(),
-			snapshotSQL:   "CREATE TABLE test (id INT);",
-			expectValid:   true,
+			databaseID:   uuid.New(),
+			changePlanID: uuid.New(),
+			snapshotSQL:  "CREATE TABLE test (id INT);",
+			expectValid:  true,
 		},
 		{
 			name:         "valid after snapshot",
 			snapshotType: models.SnapshotTypeAfter,
-			databaseID:    uuid.New(),
-			changePlanID:  uuid.New(),
-			snapshotSQL:   "CREATE TABLE test (id INT, name VARCHAR(255));",
-			expectValid:   true,
+			databaseID:   uuid.New(),
+			changePlanID: uuid.New(),
+			snapshotSQL:  "CREATE TABLE test (id INT, name VARCHAR(255));",
+			expectValid:  true,
 		},
 	}
 

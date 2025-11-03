@@ -135,7 +135,10 @@ func (r *executionQueueRepository) GetByID(ctx context.Context, id uuid.UUID) (*
 }
 
 // GetByChangePlanID retrieves queue items for a specific change plan
-func (r *executionQueueRepository) GetByChangePlanID(ctx context.Context, changePlanID uuid.UUID) ([]*models.ExecutionQueue, error) {
+func (r *executionQueueRepository) GetByChangePlanID(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+) ([]*models.ExecutionQueue, error) {
 	queueItems := []*models.ExecutionQueue{}
 
 	query := `
@@ -405,4 +408,3 @@ func (r *executionQueueRepository) MarkFailed(ctx context.Context, id uuid.UUID,
 
 	return nil
 }
-

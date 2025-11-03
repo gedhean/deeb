@@ -67,12 +67,12 @@ func TestApprovalRepository_Create(t *testing.T) {
 		approverID := uuid.New()
 		now := time.Now()
 		approval := &models.Approval{
-			ID:            approvalID,
-			ChangePlanID:  changePlanID,
-			ApproverID:    approverID,
-			Status:        models.ApprovalStatusRejected,
-			Comments:      stringPtr("Needs more work"),
-			CreatedAt:     now,
+			ID:           approvalID,
+			ChangePlanID: changePlanID,
+			ApproverID:   approverID,
+			Status:       models.ApprovalStatusRejected,
+			Comments:     stringPtr("Needs more work"),
+			CreatedAt:    now,
 		}
 
 		mock.ExpectExec("INSERT INTO approvals").
@@ -109,8 +109,8 @@ func TestApprovalRepository_Create(t *testing.T) {
 				changePlanID,
 				approverID,
 				models.ApprovalStatusRejected,
-				nil, // comments
-				sql.NullTime{}, // approved_at (nil for Rejected)
+				nil,              // comments
+				sql.NullTime{},   // approved_at (nil for Rejected)
 				sqlmock.AnyArg(), // created_at
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
@@ -368,5 +368,3 @@ func TestApprovalRepository_GetHistory(t *testing.T) {
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }
-
-

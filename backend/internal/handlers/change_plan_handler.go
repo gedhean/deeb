@@ -1765,10 +1765,10 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 			queueStatus, queueErr := h.executionService.GetQueueStatus(ctx, changePlanID)
 			if queueErr == nil && queueStatus != nil {
 				return c.JSON(http.StatusConflict, map[string]interface{}{
-					"error": "Database is currently locked by another execution",
-					"queued": true,
+					"error":          "Database is currently locked by another execution",
+					"queued":         true,
 					"queue_position": queueStatus.Position,
-					"queue_status": queueStatus.Status,
+					"queue_status":   queueStatus.Status,
 				})
 			}
 			return c.JSON(http.StatusConflict, map[string]interface{}{
@@ -1871,10 +1871,10 @@ func (h *ChangePlanHandler) GetQueueStatus(c echo.Context) error {
 		"change_plan_id": changePlanID.String(),
 		"database_id":    changePlan.TargetDatabaseID.String(),
 		"queued":         true,
-		"status":          queueStatus.Status,
+		"status":         queueStatus.Status,
 		"position":       position,
-		"priority":        queueStatus.Priority,
-		"queued_at":       queueStatus.QueuedAt,
+		"priority":       queueStatus.Priority,
+		"queued_at":      queueStatus.QueuedAt,
 	}
 
 	if queueStatus.StartedAt != nil {

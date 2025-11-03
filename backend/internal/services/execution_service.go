@@ -22,17 +22,17 @@ type ConnectionManagerInterface interface {
 
 // ExecutionService provides SQL execution functionality with transaction management
 type ExecutionService struct {
-	changePlanRepo  repository.ChangePlanRepository
-	dbInstanceRepo  repository.DatabaseInstanceRepository
-	databaseRepo    repository.DatabaseRepository
-	snapshotService *SchemaSnapshotService
-	lockManager     ExecutionLockManager
-	queueService    *ExecutionQueueService
+	changePlanRepo   repository.ChangePlanRepository
+	dbInstanceRepo   repository.DatabaseInstanceRepository
+	databaseRepo     repository.DatabaseRepository
+	snapshotService  *SchemaSnapshotService
+	lockManager      ExecutionLockManager
+	queueService     *ExecutionQueueService
 	executionLogRepo repository.ExecutionLogRepository
-	connectionMgr   ConnectionManagerInterface
-	encryptionKey   string
+	connectionMgr    ConnectionManagerInterface
+	encryptionKey    string
 	executionTimeout time.Duration // Timeout for SQL execution (default: 5 minutes)
-	logger          *zap.Logger
+	logger           *zap.Logger
 }
 
 // ExecutionResult represents the result of a SQL execution
@@ -57,19 +57,19 @@ func NewExecutionService(
 	logger *zap.Logger,
 ) *ExecutionService {
 	executionTimeout := 5 * time.Minute // Default: 5 minutes
-	
+
 	return &ExecutionService{
-		changePlanRepo:  changePlanRepo,
-		dbInstanceRepo:  dbInstanceRepo,
-		databaseRepo:    databaseRepo,
-		snapshotService: snapshotService,
-		lockManager:     lockManager,
-		queueService:    queueService,
+		changePlanRepo:   changePlanRepo,
+		dbInstanceRepo:   dbInstanceRepo,
+		databaseRepo:     databaseRepo,
+		snapshotService:  snapshotService,
+		lockManager:      lockManager,
+		queueService:     queueService,
 		executionLogRepo: executionLogRepo,
-		connectionMgr:   connectionMgr,
-		encryptionKey:   encryptionKey,
+		connectionMgr:    connectionMgr,
+		encryptionKey:    encryptionKey,
 		executionTimeout: executionTimeout,
-		logger:          logger,
+		logger:           logger,
 	}
 }
 
@@ -88,17 +88,17 @@ func NewExecutionServiceWithTimeout(
 	logger *zap.Logger,
 ) *ExecutionService {
 	return &ExecutionService{
-		changePlanRepo:  changePlanRepo,
-		dbInstanceRepo:  dbInstanceRepo,
-		databaseRepo:    databaseRepo,
-		snapshotService: snapshotService,
-		lockManager:     lockManager,
-		queueService:    queueService,
+		changePlanRepo:   changePlanRepo,
+		dbInstanceRepo:   dbInstanceRepo,
+		databaseRepo:     databaseRepo,
+		snapshotService:  snapshotService,
+		lockManager:      lockManager,
+		queueService:     queueService,
 		executionLogRepo: executionLogRepo,
-		connectionMgr:   connectionMgr,
-		encryptionKey:   encryptionKey,
+		connectionMgr:    connectionMgr,
+		encryptionKey:    encryptionKey,
 		executionTimeout: executionTimeout,
-		logger:          logger,
+		logger:           logger,
 	}
 }
 
@@ -220,11 +220,11 @@ func (s *ExecutionService) Execute(
 
 	// Step 3: Execute SQL in transaction with timeout
 	executionStartTime := time.Now()
-	
+
 	// Create timeout context for SQL execution
 	execCtx, cancel := context.WithTimeout(ctx, s.executionTimeout)
 	defer cancel()
-	
+
 	result, err := s.executeInTransaction(execCtx, dbInstance, db, changePlan.SQLContent)
 	duration := time.Since(executionStartTime)
 

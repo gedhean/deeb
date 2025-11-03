@@ -22,4 +22,3 @@ type ExecutionLogRepository interface {
 	// GetLatestByChangePlanID retrieves the most recent execution log for a change plan
 	GetLatestByChangePlanID(ctx context.Context, changePlanID uuid.UUID) (*models.ExecutionLog, error)
 }
-

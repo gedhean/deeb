@@ -14,12 +14,12 @@ import (
 
 // QueueProcessor processes queued Change Plan executions in the background
 type QueueProcessor struct {
-	queueRepo       repository.ExecutionQueueRepository
+	queueRepo        repository.ExecutionQueueRepository
 	executionService *ExecutionService
-	logger          *zap.Logger
-	stopChan        chan struct{}
-	wg              sync.WaitGroup
-	pollInterval    time.Duration
+	logger           *zap.Logger
+	stopChan         chan struct{}
+	wg               sync.WaitGroup
+	pollInterval     time.Duration
 }
 
 // NewQueueProcessor creates a new queue processor
@@ -29,11 +29,11 @@ func NewQueueProcessor(
 	logger *zap.Logger,
 ) *QueueProcessor {
 	return &QueueProcessor{
-		queueRepo:       queueRepo,
+		queueRepo:        queueRepo,
 		executionService: executionService,
-		logger:          logger,
-		stopChan:        make(chan struct{}),
-		pollInterval:    5 * time.Second, // Poll every 5 seconds
+		logger:           logger,
+		stopChan:         make(chan struct{}),
+		pollInterval:     5 * time.Second, // Poll every 5 seconds
 	}
 }
 
@@ -136,7 +136,6 @@ func (p *QueueProcessor) processQueueItem(ctx context.Context, queueItem *models
 
 	// Execute the Change Plan
 	result, err := p.executionService.Execute(ctx, queueItem.ChangePlanID, queueItem.ExecutorID)
-
 	if err != nil {
 		// Check if it's a lock error - if so, put it back in pending state
 		if err == ErrDatabaseLocked {
@@ -195,4 +194,3 @@ func (p *QueueProcessor) ProcessDatabase(ctx context.Context, databaseID uuid.UU
 func (p *QueueProcessor) ProcessAll(ctx context.Context) error {
 	return p.processPendingItems(ctx)
 }
-

@@ -35,11 +35,11 @@ func (s *ExecutionQueueService) Enqueue(
 	executorID uuid.UUID,
 ) (*models.ExecutionQueue, error) {
 	queueItem := &models.ExecutionQueue{
-		ChangePlanID:    changePlanID,
+		ChangePlanID:     changePlanID,
 		TargetDatabaseID: databaseID,
-		ExecutorID:      executorID,
-		Status:          models.QueueStatusPending,
-		Priority:        0, // Default priority
+		ExecutorID:       executorID,
+		Status:           models.QueueStatusPending,
+		Priority:         0, // Default priority
 	}
 
 	if err := s.queueRepo.Enqueue(ctx, queueItem); err != nil {
@@ -114,4 +114,3 @@ func (s *ExecutionQueueService) GetPendingCount(
 var (
 	ErrQueueItemNotFound = fmt.Errorf("queue item not found")
 )
-

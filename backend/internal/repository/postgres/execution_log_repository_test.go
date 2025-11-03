@@ -240,4 +240,3 @@ func intPtr(i int) *int {
 func executionLogStringPtr(s string) *string {
 	return &s
 }
-

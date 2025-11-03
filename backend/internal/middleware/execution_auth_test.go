@@ -59,7 +59,10 @@ func (m *mockChangePlanRepository) List(ctx context.Context, limit, offset int) 
 	return nil, nil
 }
 
-func (m *mockChangePlanRepository) ListWithFilters(ctx context.Context, filters repository.ChangePlanListFilters) ([]*models.ChangePlan, error) {
+func (m *mockChangePlanRepository) ListWithFilters(
+	ctx context.Context,
+	filters repository.ChangePlanListFilters,
+) ([]*models.ChangePlan, error) {
 	// Not used in tests
 	return nil, nil
 }
@@ -69,27 +72,46 @@ func (m *mockChangePlanRepository) Count(ctx context.Context) (int64, error) {
 	return 0, nil
 }
 
-func (m *mockChangePlanRepository) CountWithFilters(ctx context.Context, filters repository.ChangePlanListFilters) (int64, error) {
+func (m *mockChangePlanRepository) CountWithFilters(
+	ctx context.Context,
+	filters repository.ChangePlanListFilters,
+) (int64, error) {
 	// Not used in tests
 	return 0, nil
 }
 
-func (m *mockChangePlanRepository) GetByStatus(ctx context.Context, status models.ChangePlanStatus, limit, offset int) ([]*models.ChangePlan, error) {
+func (m *mockChangePlanRepository) GetByStatus(
+	ctx context.Context,
+	status models.ChangePlanStatus,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	// Not used in tests
 	return nil, nil
 }
 
-func (m *mockChangePlanRepository) GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) {
+func (m *mockChangePlanRepository) GetByProjectID(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	// Not used in tests
 	return nil, nil
 }
 
-func (m *mockChangePlanRepository) GetByDatabaseID(ctx context.Context, databaseID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) {
+func (m *mockChangePlanRepository) GetByDatabaseID(
+	ctx context.Context,
+	databaseID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	// Not used in tests
 	return nil, nil
 }
 
-func (m *mockChangePlanRepository) GetByAuthorID(ctx context.Context, authorID uuid.UUID, limit, offset int) ([]*models.ChangePlan, error) {
+func (m *mockChangePlanRepository) GetByAuthorID(
+	ctx context.Context,
+	authorID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
 	// Not used in tests
 	return nil, nil
 }
@@ -308,4 +330,3 @@ func TestNewExecutionAuthMiddleware(t *testing.T) {
 	assert.Equal(t, projectMemberRepo, middleware.projectMemberRepo)
 	assert.NotNil(t, middleware.checker)
 }
-

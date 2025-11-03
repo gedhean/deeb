@@ -123,4 +123,3 @@ func (m *ExecutionAuthMiddleware) RequireExecutionPermission() echo.MiddlewareFu
 		}
 	}
 }
-

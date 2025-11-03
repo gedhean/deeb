@@ -30,12 +30,12 @@ type ExecutionLockManager interface {
 
 // ExecutionLock represents a lock record
 type ExecutionLock struct {
-	ID              uuid.UUID `db:"id"`
+	ID               uuid.UUID `db:"id"`
 	TargetDatabaseID uuid.UUID `db:"target_database_id"`
-	ChangePlanID    uuid.UUID `db:"change_plan_id"`
-	ExecutorID      uuid.UUID `db:"executor_id"`
-	LockedAt        time.Time `db:"locked_at"`
-	ExpiresAt       time.Time `db:"expires_at"`
+	ChangePlanID     uuid.UUID `db:"change_plan_id"`
+	ExecutorID       uuid.UUID `db:"executor_id"`
+	LockedAt         time.Time `db:"locked_at"`
+	ExpiresAt        time.Time `db:"expires_at"`
 }
 
 // executionLockManager implements ExecutionLockManager
@@ -76,7 +76,9 @@ func (m *executionLockManager) AcquireLock(
 
 	// Check if lock exists (non-blocking)
 	var existingLock ExecutionLock
-	err = tx.GetContext(ctx, &existingLock,
+	err = tx.GetContext(
+		ctx,
+		&existingLock,
 		"SELECT id, target_database_id, change_plan_id, executor_id, locked_at, expires_at FROM execution_locks WHERE target_database_id = $1 FOR UPDATE NOWAIT",
 		databaseID,
 	)
@@ -164,7 +166,9 @@ func (m *executionLockManager) ReleaseLock(
 // IsLocked checks if database is currently locked
 func (m *executionLockManager) IsLocked(ctx context.Context, databaseID uuid.UUID) (bool, *ExecutionLock, error) {
 	var lock ExecutionLock
-	err := m.db.GetContext(ctx, &lock,
+	err := m.db.GetContext(
+		ctx,
+		&lock,
 		"SELECT id, target_database_id, change_plan_id, executor_id, locked_at, expires_at FROM execution_locks WHERE target_database_id = $1",
 		databaseID,
 	)
@@ -229,4 +233,3 @@ func isUniqueViolationError(err error) bool {
 var (
 	ErrDatabaseLocked = fmt.Errorf("database is currently locked by another execution")
 )
-

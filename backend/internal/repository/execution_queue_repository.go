@@ -53,4 +53,3 @@ type ExecutionQueueRepository interface {
 	// MarkFailed marks a queue item as failed
 	MarkFailed(ctx context.Context, id uuid.UUID, errorMessage string) error
 }
-

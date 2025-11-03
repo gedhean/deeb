@@ -24,7 +24,12 @@ type MockExecutionLockManager struct {
 	mock.Mock
 }
 
-func (m *MockExecutionLockManager) AcquireLock(ctx context.Context, databaseID uuid.UUID, changePlanID uuid.UUID, executorID uuid.UUID) error {
+func (m *MockExecutionLockManager) AcquireLock(
+	ctx context.Context,
+	databaseID uuid.UUID,
+	changePlanID uuid.UUID,
+	executorID uuid.UUID,
+) error {
 	args := m.Called(ctx, databaseID, changePlanID, executorID)
 	return args.Error(0)
 }
@@ -99,7 +104,12 @@ type MockExecutionQueueService struct {
 	mock.Mock
 }
 
-func (m *MockExecutionQueueService) Enqueue(ctx context.Context, changePlanID uuid.UUID, databaseID uuid.UUID, executorID uuid.UUID) (*models.ExecutionQueue, error) {
+func (m *MockExecutionQueueService) Enqueue(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+	databaseID uuid.UUID,
+	executorID uuid.UUID,
+) (*models.ExecutionQueue, error) {
 	args := m.Called(ctx, changePlanID, databaseID, executorID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -120,7 +130,10 @@ func (m *MockExecutionQueueService) GetQueuePosition(ctx context.Context, change
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockExecutionQueueService) GetQueueItemsForDatabase(ctx context.Context, databaseID uuid.UUID) ([]*models.ExecutionQueue, error) {
+func (m *MockExecutionQueueService) GetQueueItemsForDatabase(
+	ctx context.Context,
+	databaseID uuid.UUID,
+) ([]*models.ExecutionQueue, error) {
 	args := m.Called(ctx, databaseID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -143,7 +156,10 @@ func (m *MockExecutionLogRepository) Create(ctx context.Context, log *models.Exe
 	return args.Error(0)
 }
 
-func (m *MockExecutionLogRepository) GetByChangePlanID(ctx context.Context, changePlanID uuid.UUID) ([]*models.ExecutionLog, error) {
+func (m *MockExecutionLogRepository) GetByChangePlanID(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+) ([]*models.ExecutionLog, error) {
 	args := m.Called(ctx, changePlanID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -159,7 +175,10 @@ func (m *MockExecutionLogRepository) GetByID(ctx context.Context, id uuid.UUID) 
 	return args.Get(0).(*models.ExecutionLog), args.Error(1)
 }
 
-func (m *MockExecutionLogRepository) GetLatestByChangePlanID(ctx context.Context, changePlanID uuid.UUID) (*models.ExecutionLog, error) {
+func (m *MockExecutionLogRepository) GetLatestByChangePlanID(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+) (*models.ExecutionLog, error) {
 	args := m.Called(ctx, changePlanID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -600,10 +619,10 @@ func TestExecutionService_Execute_Success_PostgreSQL(t *testing.T) {
 	lockManager := new(MockExecutionLockManager)
 	queueRepo := new(MockExecutionQueueRepository)
 	executionLogRepo := new(MockExecutionLogRepository)
-	
+
 	// Use real ConnectionManager for SchemaSnapshotService (it will try to execute commands, but we'll handle that)
 	realConnectionMgr := database.NewConnectionManager(encryptionKey, logger)
-	
+
 	// Create real services with mocked repositories
 	snapshotService := NewSchemaSnapshotService(
 		snapshotRepo,
@@ -621,7 +640,7 @@ func TestExecutionService_Execute_Success_PostgreSQL(t *testing.T) {
 	dbInstanceRepo.On("GetByID", ctx, databaseInstanceID).Return(dbInstance, nil)
 	lockManager.On("AcquireLock", ctx, databaseID, changePlanID, executorID).Return(nil)
 	lockManager.On("ReleaseLock", ctx, databaseID).Return(nil)
-	
+
 	// Mock snapshot capture - the service will try to execute pg_dump, but we'll mock the repository save
 	snapshotRepo.On("Create", ctx, mock.MatchedBy(func(ss *models.SchemaSnapshot) bool {
 		return ss.ChangePlanID == changePlanID && ss.DatabaseID == databaseID && ss.SnapshotType == models.SnapshotTypeBefore
@@ -635,18 +654,18 @@ func TestExecutionService_Execute_Success_PostgreSQL(t *testing.T) {
 		ss := args.Get(1).(*models.SchemaSnapshot)
 		ss.ID = afterSnapshot.ID
 	})
-	
+
 	// Mock connection for SQL execution
 	mockDB, sqlMock, err = sqlmock.New()
 	require.NoError(t, err)
 	defer mockDB.Close()
 	dbConn = sqlx.NewDb(mockDB, "sqlmock")
 	defer dbConn.Close()
-	
+
 	// Create a mock connection manager that returns our mocked DB for SQL execution
 	mockConnectionMgr := new(MockConnectionManager)
 	mockConnectionMgr.On("Connect", ctx, mock.Anything).Return(dbConn, nil)
-	
+
 	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
 		return cp.Status == models.ChangePlanStatusInProgress
 	})).Return(nil)
@@ -788,18 +807,18 @@ func TestExecutionService_Execute_Success_MySQL(t *testing.T) {
 		ss := args.Get(1).(*models.SchemaSnapshot)
 		ss.ID = afterSnapshot.ID
 	})
-	
-	// Mock connection for SQL execution  
+
+	// Mock connection for SQL execution
 	mockDB, sqlMock, err = sqlmock.New()
 	require.NoError(t, err)
 	defer mockDB.Close()
 	dbConn = sqlx.NewDb(mockDB, "sqlmock")
 	defer dbConn.Close()
-	
+
 	// Create a mock connection manager that returns our mocked DB for SQL execution
 	mockConnectionMgr := new(MockConnectionManager)
 	mockConnectionMgr.On("Connect", ctx, mock.Anything).Return(dbConn, nil)
-	
+
 	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
 		return cp.Status == models.ChangePlanStatusInProgress
 	})).Return(nil)
@@ -1054,11 +1073,11 @@ func TestExecutionService_Execute_DatabaseLocked_WithQueue(t *testing.T) {
 
 	queueItem := &models.ExecutionQueue{
 		ID:               uuid.New(),
-		ChangePlanID:    changePlanID,
+		ChangePlanID:     changePlanID,
 		TargetDatabaseID: databaseID,
-		ExecutorID:      executorID,
-		Status:          models.QueueStatusPending,
-		Position:        1,
+		ExecutorID:       executorID,
+		Status:           models.QueueStatusPending,
+		Position:         1,
 	}
 
 	changePlanRepo := new(MockChangePlanRepository)
@@ -1342,7 +1361,7 @@ func TestExecutionService_Execute_AfterSnapshotFailure(t *testing.T) {
 	executionLogRepo := new(MockExecutionLogRepository)
 	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
 
-	// Create real services with mocked repositories  
+	// Create real services with mocked repositories
 	snapshotService := NewSchemaSnapshotService(
 		snapshotRepo,
 		dbInstanceRepo,
@@ -1538,10 +1557,10 @@ func TestExecutionService_GetQueueStatus(t *testing.T) {
 
 	changePlanID := uuid.New()
 	queueItem := &models.ExecutionQueue{
-		ID:            uuid.New(),
+		ID:           uuid.New(),
 		ChangePlanID: changePlanID,
-		Status:        models.QueueStatusPending,
-		Position:      1,
+		Status:       models.QueueStatusPending,
+		Position:     1,
 	}
 
 	queueRepo := new(MockExecutionQueueRepository)
@@ -1605,7 +1624,7 @@ func TestExecutionService_GetExecutionLogHistory(t *testing.T) {
 
 	service := &ExecutionService{
 		executionLogRepo: executionLogRepo,
-		logger:          logger,
+		logger:           logger,
 	}
 
 	result, err := service.GetExecutionLogHistory(ctx, changePlanID)
@@ -1626,7 +1645,7 @@ func TestExecutionService_GetExecutionLogHistory_NoRepository(t *testing.T) {
 
 	service := &ExecutionService{
 		executionLogRepo: nil,
-		logger:          logger,
+		logger:           logger,
 	}
 
 	result, err := service.GetExecutionLogHistory(ctx, changePlanID)
