@@ -116,6 +116,7 @@ func TestNewExecutionService(t *testing.T) {
 		snapshotService,
 		&MockExecutionLockManager{},
 		nil, // queueService - nil for this test
+		nil, // executionLogRepo - nil for this test
 		connectionMgr,
 		"test-encryption-key-min-32-chars",
 		logger,
@@ -162,6 +163,7 @@ func TestExecutionService_Execute_ChangePlanNotFound(t *testing.T) {
 		snapshotService,
 		lockManager,
 		nil, // queueService - nil for this test
+		nil, // executionLogRepo - nil for this test
 		connectionMgr,
 		encryptionKey,
 		logger,

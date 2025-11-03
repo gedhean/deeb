@@ -518,6 +518,9 @@ func setupChangePlanRoutes(
 	// Initialize execution queue service
 	queueService := services.NewExecutionQueueService(queueRepo, logger.Get())
 
+	// Initialize execution log repository
+	executionLogRepo := postgres.NewExecutionLogRepository(db)
+
 	// Initialize execution service
 	executionService := services.NewExecutionService(
 		changePlanRepo,
@@ -526,6 +529,7 @@ func setupChangePlanRoutes(
 		snapshotService,
 		lockManager,
 		queueService,
+		executionLogRepo,
 		connectionMgr,
 		encryptionKey,
 		logger.Get(),
@@ -589,5 +593,6 @@ func setupChangePlanRoutes(
 		executionAuthMiddleware.RequireExecutionPermission(),
 	)
 	changePlansGroup.GET("/:id/queue-status", changePlanHandler.GetQueueStatus, authMiddleware.Authenticate)
+	changePlansGroup.GET("/:id/execution-logs", changePlanHandler.GetExecutionLogHistory, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/resubmit", changePlanHandler.ResubmitChangePlan, authMiddleware.Authenticate)
 }

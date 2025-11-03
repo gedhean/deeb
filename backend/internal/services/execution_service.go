@@ -28,6 +28,7 @@ type ExecutionService struct {
 	snapshotService *SchemaSnapshotService
 	lockManager     ExecutionLockManager
 	queueService    *ExecutionQueueService
+	executionLogRepo repository.ExecutionLogRepository
 	connectionMgr   ConnectionManagerInterface
 	encryptionKey   string
 	logger          *zap.Logger
@@ -49,6 +50,7 @@ func NewExecutionService(
 	snapshotService *SchemaSnapshotService,
 	lockManager ExecutionLockManager,
 	queueService *ExecutionQueueService,
+	executionLogRepo repository.ExecutionLogRepository,
 	connectionMgr ConnectionManagerInterface,
 	encryptionKey string,
 	logger *zap.Logger,
@@ -60,6 +62,7 @@ func NewExecutionService(
 		snapshotService: snapshotService,
 		lockManager:     lockManager,
 		queueService:    queueService,
+		executionLogRepo: executionLogRepo,
 		connectionMgr:   connectionMgr,
 		encryptionKey:   encryptionKey,
 		logger:          logger,
@@ -214,6 +217,23 @@ func (s *ExecutionService) Execute(
 			// Don't fail the whole operation if update fails, but log it
 		}
 
+		// Create execution log entry for failed execution
+		if s.executionLogRepo != nil {
+			executionLog := &models.ExecutionLog{
+				ChangePlanID:        changePlanID,
+				ExecutorID:          executorID,
+				Status:              models.ExecutionLogStatusFailed,
+				ExecutionDurationMs: int(duration.Milliseconds()),
+				RowsAffected:        nil,
+				ErrorMessage:        &errorMsg,
+				StartedAt:           executionStartTime,
+				CompletedAt:         time.Now(),
+			}
+			if logErr := s.executionLogRepo.Create(ctx, executionLog); logErr != nil {
+				s.logger.Warn("Failed to create execution log entry", zap.Error(logErr))
+			}
+		}
+
 		return &ExecutionResult{
 			Success:      false,
 			RowsAffected: 0,
@@ -278,6 +298,23 @@ func (s *ExecutionService) Execute(
 		zap.Duration("duration", duration),
 	)
 
+	// Create execution log entry for successful execution
+	if s.executionLogRepo != nil {
+		executionLog := &models.ExecutionLog{
+			ChangePlanID:        changePlanID,
+			ExecutorID:          executorID,
+			Status:              models.ExecutionLogStatusCompleted,
+			ExecutionDurationMs: int(duration.Milliseconds()),
+			RowsAffected:        &result.RowsAffected,
+			ErrorMessage:        nil,
+			StartedAt:           executionStartTime,
+			CompletedAt:         time.Now(),
+		}
+		if logErr := s.executionLogRepo.Create(ctx, executionLog); logErr != nil {
+			s.logger.Warn("Failed to create execution log entry", zap.Error(logErr))
+		}
+	}
+
 	return result, nil
 }
 
@@ -287,6 +324,14 @@ func (s *ExecutionService) GetQueueStatus(ctx context.Context, changePlanID uuid
 		return nil, fmt.Errorf("queue service not available")
 	}
 	return s.queueService.GetQueueStatus(ctx, changePlanID)
+}
+
+// GetExecutionLogHistory returns the execution log history for a Change Plan
+func (s *ExecutionService) GetExecutionLogHistory(ctx context.Context, changePlanID uuid.UUID) ([]*models.ExecutionLog, error) {
+	if s.executionLogRepo == nil {
+		return nil, fmt.Errorf("execution log repository not available")
+	}
+	return s.executionLogRepo.GetByChangePlanID(ctx, changePlanID)
 }
 
 // executeInTransaction executes SQL statements within a SERIALIZABLE transaction

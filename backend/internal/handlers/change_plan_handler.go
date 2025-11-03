@@ -1867,6 +1867,66 @@ func (h *ChangePlanHandler) GetQueueStatus(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
+// GetExecutionLogHistory handles GET /api/v1/change-plans/:id/execution-logs
+// Returns the execution log history for a Change Plan
+func (h *ChangePlanHandler) GetExecutionLogHistory(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Verify change plan exists
+	_, err = h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// Get execution logs
+	logs, err := h.executionService.GetExecutionLogHistory(ctx, changePlanID)
+	if err != nil {
+		h.logger.Error("Failed to get execution logs", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve execution logs",
+		})
+	}
+
+	// Convert to response format
+	logResponses := make([]*models.ExecutionLogResponse, len(logs))
+	for i, log := range logs {
+		logResponses[i] = log.ToResponse()
+	}
+
+	response := map[string]interface{}{
+		"change_plan_id": changePlanID.String(),
+		"total":          len(logResponses),
+		"logs":           logResponses,
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
 // ResubmitChangePlan handles POST /api/v1/change-plans/:id/resubmit
 // Allows authors to move Open Change Plans back to Draft for fixing errors
 func (h *ChangePlanHandler) ResubmitChangePlan(c echo.Context) error {
