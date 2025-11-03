@@ -18,7 +18,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	_ "github.com/lib/pq"
-	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/handlers"
 	"github.com/nsxbet/deeb/internal/models"
@@ -100,7 +99,9 @@ func cleanupTestDB(t *testing.T, db *sqlx.DB) {
 	require.NoError(t, err, "failed to clean up test users")
 
 	// Clean up audit logs table
-	_, err = db.Exec("DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test-%@example.com' OR email = 'test@example.com')")
+	_, err = db.Exec(
+		"DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test-%@example.com' OR email = 'test@example.com')",
+	)
 	require.NoError(t, err, "failed to clean up test audit logs")
 }
 

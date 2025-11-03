@@ -28,7 +28,11 @@ type RegisterHandler struct {
 }
 
 // NewRegisterHandler creates a new RegisterHandler
-func NewRegisterHandler(userRepo repository.UserRepository, auditService *services.AuditLogService, logger *zap.Logger) *RegisterHandler {
+func NewRegisterHandler(
+	userRepo repository.UserRepository,
+	auditService *services.AuditLogService,
+	logger *zap.Logger,
+) *RegisterHandler {
 	return &RegisterHandler{
 		userRepo:     userRepo,
 		auditService: auditService,
@@ -168,9 +172,9 @@ func (h *RegisterHandler) Register(c echo.Context) error {
 	if h.auditService != nil {
 		ctx := c.Request().Context()
 		detailsJSON, _ := json.Marshal(map[string]interface{}{
-			"email":            user.Email,
+			"email":             user.Email,
 			"organization_role": string(user.OrganizationRole),
-			"is_first_user":    len(users) == 0,
+			"is_first_user":     len(users) == 0,
 		})
 
 		if err := h.auditService.LogWithHTTP(ctx, user.ID, services.ActionRegister, services.ResourceTypeUser, user.ID, c.Request(), detailsJSON); err != nil {

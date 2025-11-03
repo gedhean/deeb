@@ -162,7 +162,7 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 		zap.String("database_instance_id", instance.ID.String()),
 		zap.String("name", instance.Name),
 	)
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		detailsJSON, _ := json.Marshal(map[string]interface{}{
@@ -177,7 +177,7 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 			h.logger.Error("Failed to log audit entry for database instance creation", zap.Error(err))
 		}
 	}
-	
+
 	return c.JSON(http.StatusCreated, instance.ToResponse())
 }
 
@@ -449,7 +449,7 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 	}
 
 	h.logger.Info("Database instance updated successfully", zap.String("id", instance.ID.String()))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		claims, ok := auth.GetUserFromEchoContext(c)
@@ -467,7 +467,7 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 			}
 		}
 	}
-	
+
 	return c.JSON(http.StatusOK, instance.ToResponse())
 }
 
@@ -527,7 +527,7 @@ func (h *DatabaseInstanceHandler) DeleteDatabaseInstance(c echo.Context) error {
 	}
 
 	h.logger.Info("Database instance deleted successfully", zap.String("id", id.String()))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		claims, ok := auth.GetUserFromEchoContext(c)
@@ -540,7 +540,7 @@ func (h *DatabaseInstanceHandler) DeleteDatabaseInstance(c echo.Context) error {
 			}
 		}
 	}
-	
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Database instance deleted successfully",
 	})

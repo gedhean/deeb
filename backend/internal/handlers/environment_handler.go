@@ -26,7 +26,12 @@ type EnvironmentHandler struct {
 }
 
 // NewEnvironmentHandler creates a new environment handler
-func NewEnvironmentHandler(envRepo repository.EnvironmentRepository, db *sqlx.DB, auditService *services.AuditLogService, logger *zap.Logger) *EnvironmentHandler {
+func NewEnvironmentHandler(
+	envRepo repository.EnvironmentRepository,
+	db *sqlx.DB,
+	auditService *services.AuditLogService,
+	logger *zap.Logger,
+) *EnvironmentHandler {
 	return &EnvironmentHandler{
 		envRepo:      envRepo,
 		db:           db,
@@ -112,19 +117,19 @@ func (h *EnvironmentHandler) CreateEnvironment(c echo.Context) error {
 	}
 
 	h.logger.Info("Environment created successfully", zap.String("environment_id", environment.ID.String()))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		detailsJSON, _ := json.Marshal(map[string]interface{}{
 			"environment_name": environment.Name,
-			"description":     environment.Description,
-			"policy_id":       environment.PolicyID,
+			"description":      environment.Description,
+			"policy_id":        environment.PolicyID,
 		})
 		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeEnvironment, environment.ID, c.Request(), detailsJSON); err != nil {
 			h.logger.Error("Failed to log audit entry for environment creation", zap.Error(err))
 		}
 	}
-	
+
 	return c.JSON(http.StatusCreated, environment.ToResponse())
 }
 
@@ -276,7 +281,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 	}
 
 	h.logger.Info("Environment updated successfully", zap.String("environment_id", environmentID.String()))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		claims, ok := auth.GetUserFromEchoContext(c)
@@ -291,7 +296,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 			}
 		}
 	}
-	
+
 	return c.JSON(http.StatusOK, environment.ToResponse())
 }
 
@@ -335,7 +340,7 @@ func (h *EnvironmentHandler) DeleteEnvironment(c echo.Context) error {
 	}
 
 	h.logger.Info("Environment deleted successfully", zap.String("environment_id", environmentID.String()))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		claims, ok := auth.GetUserFromEchoContext(c)
@@ -348,7 +353,7 @@ func (h *EnvironmentHandler) DeleteEnvironment(c echo.Context) error {
 			}
 		}
 	}
-	
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Environment deleted successfully",
 	})

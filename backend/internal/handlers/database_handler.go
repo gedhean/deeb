@@ -136,21 +136,21 @@ func (h *DatabaseHandler) CreateDatabase(c echo.Context) error {
 	}
 
 	h.logger.Info("Database created", zap.String("id", database.ID.String()), zap.String("name", database.DatabaseName))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		detailsJSON, _ := json.Marshal(map[string]interface{}{
 			"database_name":        database.DatabaseName,
-			"description":         database.Description,
-			"project_id":          database.ProjectID.String(),
-			"environment_id":      database.EnvironmentID.String(),
+			"description":          database.Description,
+			"project_id":           database.ProjectID.String(),
+			"environment_id":       database.EnvironmentID.String(),
 			"database_instance_id": database.DatabaseInstanceID.String(),
 		})
 		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeDatabase, database.ID, c.Request(), detailsJSON); err != nil {
 			h.logger.Error("Failed to log audit entry for database creation", zap.Error(err))
 		}
 	}
-	
+
 	return c.JSON(http.StatusCreated, database.ToResponse())
 }
 
@@ -497,7 +497,7 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 	}
 
 	h.logger.Info("Database updated", zap.String("id", database.ID.String()))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		detailsJSON, _ := json.Marshal(map[string]interface{}{
@@ -509,7 +509,7 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 			h.logger.Error("Failed to log audit entry for database update", zap.Error(err))
 		}
 	}
-	
+
 	return c.JSON(http.StatusOK, h.ToResponseWithDetails(ctx, database))
 }
 
@@ -585,7 +585,7 @@ func (h *DatabaseHandler) DeleteDatabase(c echo.Context) error {
 	}
 
 	h.logger.Info("Database deleted", zap.String("id", id.String()), zap.String("name", database.DatabaseName))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		detailsJSON, _ := json.Marshal(map[string]interface{}{
@@ -596,7 +596,7 @@ func (h *DatabaseHandler) DeleteDatabase(c echo.Context) error {
 			h.logger.Error("Failed to log audit entry for database deletion", zap.Error(err))
 		}
 	}
-	
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Database deleted successfully",
 	})

@@ -88,7 +88,7 @@ func (h *ProjectHandler) CreateProject(c echo.Context) error {
 	}
 
 	h.logger.Info("Project created successfully", zap.String("project_id", project.ID.String()))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		detailsJSON, _ := json.Marshal(map[string]interface{}{
@@ -99,7 +99,7 @@ func (h *ProjectHandler) CreateProject(c echo.Context) error {
 			h.logger.Error("Failed to log audit entry for project creation", zap.Error(err))
 		}
 	}
-	
+
 	return c.JSON(http.StatusCreated, project.ToResponse())
 }
 
@@ -245,7 +245,7 @@ func (h *ProjectHandler) UpdateProject(c echo.Context) error {
 	}
 
 	h.logger.Info("Project updated successfully", zap.String("project_id", projectID.String()))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		claims, ok := auth.GetUserFromEchoContext(c)
@@ -259,7 +259,7 @@ func (h *ProjectHandler) UpdateProject(c echo.Context) error {
 			}
 		}
 	}
-	
+
 	return c.JSON(http.StatusOK, project.ToResponse())
 }
 
@@ -314,7 +314,7 @@ func (h *ProjectHandler) DeleteProject(c echo.Context) error {
 	}
 
 	h.logger.Info("Project deleted successfully", zap.String("project_id", projectID.String()))
-	
+
 	// Log audit entry
 	if h.auditService != nil {
 		claims, ok := auth.GetUserFromEchoContext(c)
@@ -327,7 +327,7 @@ func (h *ProjectHandler) DeleteProject(c echo.Context) error {
 			}
 		}
 	}
-	
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Project deleted successfully",
 	})
