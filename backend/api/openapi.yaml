@@ -1770,7 +1770,8 @@ paths:
       summary: Approve change plan
       description: |
         Approve a change plan. Only Open status change plans can be approved.
-        SQL Review errors block approval. Requires Project Approver role.
+        SQL Review errors block approval. Requires Project Approver role or higher
+        (Organization Admin, Organization DBA, Project Owner).
       operationId: approveChangePlan
       security:
         - cookieAuth: []
@@ -1782,15 +1783,113 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveChangePlanRequest'
+            example:
+              comments: "Approved - looks good to deploy"
       responses:
         '200':
           description: Change plan approved successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ChangePlanResponse'
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Change plan approved successfully
+                  change_plan_id:
+                    type: string
+                    format: uuid
+                    example: 123e4567-e89b-12d3-a456-426614174000
+              example:
+                message: Change plan approved successfully
+                change_plan_id: 123e4567-e89b-12d3-a456-426614174000
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Bad Request - Invalid status, already approved/closed, or SQL Review errors exist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Cannot approve change plan with SQL Review errors
+                  details:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: SQL Review found 2 errors that must be resolved
+              example:
+                error: Cannot approve change plan with SQL Review errors
+                details:
+                  message: SQL Review found 2 errors that must be resolved
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/change-plans/{id}/close:
+    post:
+      tags: [Change Plans]
+      summary: Close (reject) change plan
+      description: |
+        Close or reject a change plan. Only Open status change plans can be closed.
+        Requires Project Approver role or higher (Organization Admin, Organization DBA, Project Owner).
+        Closed change plans cannot be approved or executed.
+      operationId: closeChangePlan
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseChangePlanRequest'
+            example:
+              comments: "Rejected - needs more testing"
+      responses:
+        '200':
+          description: Change plan closed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Change plan closed successfully
+                  change_plan_id:
+                    type: string
+                    format: uuid
+                    example: 123e4567-e89b-12d3-a456-426614174000
+              example:
+                message: Change plan closed successfully
+                change_plan_id: 123e4567-e89b-12d3-a456-426614174000
+        '400':
+          description: Bad Request - Invalid status or already approved/closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Cannot close change plan that is not in Open status
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1804,8 +1903,21 @@ paths:
       tags: [Change Plans]
       summary: Execute change plan
       description: |
-        Execute a change plan. Only Approved status change plans can be executed.
-        SQL Review errors block execution. Requires Project Approver or Executor role.
+        Execute a change plan against the target database. Only Approved status change plans
+        can be executed. SQL Review errors block execution as a safety check.
+
+        Execution workflow:
+        1. Acquires database-level execution lock (prevents concurrent executions on same database)
+        2. Captures before schema snapshot
+        3. Executes SQL within a SERIALIZABLE transaction with timeout
+        4. On success: captures after schema snapshot, updates status to Completed
+        5. On failure: rolls back transaction, updates status to Failed
+        6. Releases execution lock
+
+        Requires execution permissions (Organization Admin, Organization DBA, Project Owner, or Change Plan Author).
+
+        If the database is locked by another execution, the change plan will be queued and
+        a 409 Conflict response is returned with queue position information.
       operationId: executeChangePlan
       security:
         - cookieAuth: []
@@ -1823,15 +1935,78 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ChangePlanResponse'
+                $ref: '#/components/schemas/ExecuteChangePlanResponse'
+              example:
+                change_plan:
+                  id: 123e4567-e89b-12d3-a456-426614174000
+                  status: completed
+                  title: Add user table
+                  executed_at: '2025-01-26T12:00:00Z'
+                  execution_duration_ms: 1250
+                  affected_rows: 5
+                execution:
+                  success: true
+                  rows_affected: 5
+                  duration_ms: 1250
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Bad Request - Invalid status, SQL Review errors exist, or execution validation failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Cannot execute change plan with SQL Review errors
+                  details:
+                    type: object
+                    properties:
+                      error_count:
+                        type: integer
+                        example: 2
+                      errors:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PolicyFinding'
+              example:
+                error: Cannot execute change plan with SQL Review errors
+                details:
+                  error_count: 2
+                  errors:
+                    - validator_type: syntax
+                      rule_name: PostgreSQL Syntax Check
+                      message: Syntax error at line 1
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict - Database is locked by another execution
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Database is currently locked by another execution
+                  queued:
+                    type: boolean
+                    example: true
+                  queue_position:
+                    type: integer
+                    nullable: true
+                    example: 2
+                  queue_status:
+                    type: string
+                    example: pending
+              example:
+                error: Database is currently locked by another execution
+                queued: true
+                queue_position: 2
+                queue_status: pending
         '500':
           $ref: '#/components/responses/InternalServerError'
   /api/v1/change-plans/{id}/resubmit:
@@ -2958,6 +3133,73 @@ components:
           type: boolean
           description: Whether SQL Review found warnings
           example: true
+    ApproveChangePlanRequest:
+      type: object
+      description: Request body for approving a change plan
+      properties:
+        comments:
+          type: string
+          nullable: true
+          description: Optional approval comments
+          example: "Approved - looks good to deploy"
+      example:
+        comments: "Approved - looks good to deploy"
+    CloseChangePlanRequest:
+      type: object
+      description: Request body for closing (rejecting) a change plan
+      properties:
+        comments:
+          type: string
+          nullable: true
+          description: Optional rejection comments
+          example: "Rejected - needs more testing"
+      example:
+        comments: "Rejected - needs more testing"
+    ExecutionResult:
+      type: object
+      description: Execution result details
+      required: [success, rows_affected, duration_ms]
+      properties:
+        success:
+          type: boolean
+          description: Whether execution succeeded
+          example: true
+        rows_affected:
+          type: integer
+          description: Number of rows affected by the SQL execution
+          example: 5
+        duration_ms:
+          type: integer
+          description: Execution duration in milliseconds
+          example: 1250
+        error_message:
+          type: string
+          nullable: true
+          description: Error message if execution failed
+          example: null
+    ExecuteChangePlanResponse:
+      type: object
+      description: Response for change plan execution
+      required: [change_plan, execution]
+      properties:
+        change_plan:
+          $ref: '#/components/schemas/ChangePlanResponse'
+          description: Updated change plan with execution results
+        execution:
+          $ref: '#/components/schemas/ExecutionResult'
+          description: Execution result details
+      example:
+        change_plan:
+          id: 123e4567-e89b-12d3-a456-426614174000
+          status: completed
+          title: Add user table
+          executed_at: '2025-01-26T12:00:00Z'
+          execution_duration_ms: 1250
+          affected_rows: 5
+        execution:
+          success: true
+          rows_affected: 5
+          duration_ms: 1250
   responses:
     BadRequest:
       description: Bad Request - Invalid request parameters

@@ -421,6 +421,121 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 	return handler
 }
 
+// setupChangePlanHandlerWithTimeout creates a ChangePlanHandler with custom execution timeout
+func setupChangePlanHandlerWithTimeout(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenManager, timeout time.Duration) *handlers.ChangePlanHandler {
+	t.Helper()
+
+	logger := zap.NewNop()
+
+	// Initialize repositories
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	databaseRepo := postgres.NewDatabaseRepository(db)
+	environmentRepo := postgres.NewEnvironmentRepository(db)
+	databaseInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
+	policyRepo := postgres.NewPolicyRepository(db)
+	approvalRepo := postgres.NewApprovalRepository(db)
+
+	// Initialize risk assessment service
+	riskAssessmentSvc := services.NewRiskAssessmentService(
+		databaseRepo,
+		environmentRepo,
+		databaseInstanceRepo,
+		logger,
+	)
+
+	// Initialize SQL Review engine and service
+	reviewEngine := review.NewEngine()
+	reviewService := review.NewReviewService(
+		policyRepo,
+		databaseRepo,
+		reviewEngine,
+		logger,
+	)
+
+	// Register all validators
+	require.NoError(t, reviewService.RegisterValidator(validators.NewPostgreSQLSyntaxValidator()))
+	require.NoError(t, reviewService.RegisterValidator(validators.NewMySQLSyntaxValidator()))
+	require.NoError(t, reviewService.RegisterValidator(validators.NewSecurityValidator()))
+	require.NoError(t, reviewService.RegisterValidator(validators.NewPerformanceValidator()))
+	require.NoError(t, reviewService.RegisterValidator(validators.NewBackwardsCompatibilityValidator()))
+	require.NoError(t, reviewService.RegisterValidator(validators.NewBestPracticesValidator()))
+
+	// Initialize approval service
+	rbacChecker := rbac.NewCheckerService()
+	approvalService := services.NewApprovalService(
+		approvalRepo,
+		changePlanRepo,
+		policyFindingRepo,
+		projectMemberRepo,
+		rbacChecker,
+		logger,
+	)
+
+	// Initialize schema snapshot repository
+	snapshotRepo := postgres.NewSchemaSnapshotRepository(db)
+
+	// Initialize connection manager
+	encryptionKey := "test-encryption-key-min-32-chars"
+	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
+
+	// Initialize schema snapshot service
+	snapshotService := services.NewSchemaSnapshotService(
+		snapshotRepo,
+		databaseInstanceRepo,
+		databaseRepo,
+		connectionMgr,
+		encryptionKey,
+		logger,
+	)
+
+	// Initialize execution lock manager
+	lockManager := services.NewExecutionLockManager(db, logger)
+
+	// Initialize execution queue repository
+	queueRepo := postgres.NewExecutionQueueRepository(db)
+
+	// Initialize execution queue service
+	queueService := services.NewExecutionQueueService(queueRepo, logger)
+
+	// Initialize execution log repository
+	executionLogRepo := postgres.NewExecutionLogRepository(db)
+
+	// Initialize execution service with custom timeout
+	executionService := services.NewExecutionServiceWithTimeout(
+		changePlanRepo,
+		databaseInstanceRepo,
+		databaseRepo,
+		snapshotService,
+		lockManager,
+		queueService,
+		executionLogRepo,
+		connectionMgr,
+		encryptionKey,
+		timeout,
+		logger,
+	)
+
+	// Create handler
+	handler := handlers.NewChangePlanHandler(
+		changePlanRepo,
+		projectRepo,
+		databaseRepo,
+		databaseInstanceRepo,
+		projectMemberRepo,
+		policyFindingRepo,
+		riskAssessmentSvc,
+		reviewService,
+		approvalService,
+		executionService,
+		logger,
+	)
+
+	return handler
+}
+
 // TestIntegration_ChangePlan_AutomaticSQLReview_Success tests that SQL Review is triggered automatically
 // when transitioning from Draft to Open, and the transition succeeds when there are no errors
 func TestIntegration_ChangePlan_AutomaticSQLReview_Success(t *testing.T) {
@@ -4118,13 +4233,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Success(t *testing.T) {
 
 	// Create database pointing to execution target
 	database := &models.Database{
-		ID:               uuid.New(),
-		ProjectID:        project.ID,
-		EnvironmentID:    env.ID,
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: dbInstance.ID,
-		DatabaseName:     targetDB,
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		DatabaseName:       targetDB,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 	err = dbRepo.Create(ctx, database)
 	require.NoError(t, err)
@@ -4318,13 +4433,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Failure(t *testing.T) {
 
 	// Create database pointing to execution target
 	database := &models.Database{
-		ID:               uuid.New(),
-		ProjectID:        project.ID,
-		EnvironmentID:    env.ID,
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: dbInstance.ID,
-		DatabaseName:     "execution_target",
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 	err = dbRepo.Create(ctx, database)
 	require.NoError(t, err)
@@ -4375,7 +4490,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Failure(t *testing.T) {
 	// Execute - should fail
 	err = handler.ExecuteChangePlan(c)
 	require.NoError(t, err)
-	
+
 	// Status should be 500 (internal server error) or 200 with error in response
 	// The execution service returns 200 even on failure, with error details in response
 	assert.NotEqual(t, http.StatusBadRequest, rec.Code, "should not be validation error")
@@ -4414,7 +4529,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Failure(t *testing.T) {
 	snapshots, err := snapshotRepo.GetByChangePlanID(ctx, changePlan.ID)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, len(snapshots), 1, "should have at least before snapshot")
-	
+
 	var hasBeforeSnapshot bool
 	for _, snapshot := range snapshots {
 		if snapshot.SnapshotType == models.SnapshotTypeBefore {
@@ -4509,13 +4624,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SnapshotCapture(t *testing.T) 
 
 	// Create database pointing to execution target
 	database := &models.Database{
-		ID:               uuid.New(),
-		ProjectID:        project.ID,
-		EnvironmentID:    env.ID,
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: dbInstance.ID,
-		DatabaseName:     "execution_target",
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 	err = dbRepo.Create(ctx, database)
 	require.NoError(t, err)
@@ -4716,13 +4831,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase(t *test
 
 	// Create database pointing to execution target
 	database := &models.Database{
-		ID:               uuid.New(),
-		ProjectID:        project.ID,
-		EnvironmentID:    env.ID,
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: dbInstance.ID,
-		DatabaseName:     "execution_target",
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 	err = dbRepo.Create(ctx, database)
 	require.NoError(t, err)
@@ -4965,13 +5080,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases(t
 	require.NoError(t, err)
 
 	database1 := &models.Database{
-		ID:               uuid.New(),
-		ProjectID:        project.ID,
-		EnvironmentID:    env.ID,
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: dbInstance1.ID,
-		DatabaseName:     "execution_target",
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 	err = dbRepo.Create(ctx, database1)
 	require.NoError(t, err)
@@ -5009,13 +5124,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases(t
 	require.NoError(t, err)
 
 	database2 := &models.Database{
-		ID:               uuid.New(),
-		ProjectID:        project.ID,
-		EnvironmentID:    env.ID,
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: dbInstance2.ID,
-		DatabaseName:     "execution_target",
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 	err = dbRepo.Create(ctx, database2)
 	require.NoError(t, err)
@@ -5243,13 +5358,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_LockRelease(t *testing.T) {
 
 	// Create database
 	database := &models.Database{
-		ID:               uuid.New(),
-		ProjectID:        project.ID,
-		EnvironmentID:    env.ID,
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: dbInstance.ID,
-		DatabaseName:     "execution_target",
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 	err = dbRepo.Create(ctx, database)
 	require.NoError(t, err)
@@ -5419,13 +5534,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling(t *testing.T) {
 
 	// Create database
 	database := &models.Database{
-		ID:               uuid.New(),
-		ProjectID:        project.ID,
-		EnvironmentID:    env.ID,
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: dbInstance.ID,
-		DatabaseName:     "execution_target",
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 	err = dbRepo.Create(ctx, database)
 	require.NoError(t, err)
@@ -5581,6 +5696,791 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling(t *testing.T) {
 		require.Equal(t, models.QueueStatusPending, item.Status)
 		require.Equal(t, database.ID, item.TargetDatabaseID)
 	}
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_SQLSyntaxError tests SQL syntax error handling
+func TestIntegration_ChangePlan_ExecuteChangePlan_SQLSyntaxError(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	// Setup execution target database
+	targetConnStr, cleanupTarget := setupExecutionTargetDB(t)
+	defer cleanupTarget()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+
+	// Create author user
+	author := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Parse target connection string
+	targetURL, err := url.Parse(targetConnStr)
+	require.NoError(t, err)
+	targetHost := targetURL.Hostname()
+	targetPort, err := strconv.Atoi(targetURL.Port())
+	if err != nil || targetPort == 0 {
+		targetPort = 5432
+	}
+
+	// Encrypt password
+	detailsJSON, err := json.Marshal(map[string]string{"password": "deeb"})
+	require.NoError(t, err)
+	encryptedDetails, err := utils.Encrypt(string(detailsJSON), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	// Create database instance
+	dbInstance := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       targetHost,
+		Port:                       targetPort,
+		Username:                   "deeb",
+		ConnectionDetailsEncrypted: &encryptedDetails,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance)
+	require.NoError(t, err)
+
+	// Create database
+	database := &models.Database{
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+	err = dbRepo.Create(ctx, database)
+	require.NoError(t, err)
+
+	// Create change plan with SQL syntax error
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE syntax_error_test (id UUID PRIMARY KEY;", // Missing closing parenthesis
+	)
+
+	// Transition to Approved
+	changePlan.Status = models.ChangePlanStatusApproved
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Execute change plan
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan.ID.String()),
+		nil,
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/execute")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	err = handler.ExecuteChangePlan(c)
+	require.NoError(t, err)
+
+	// Execution should fail
+	// Verify change plan status is Failed
+	updatedChangePlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusFailed, updatedChangePlan.Status)
+	require.NotNil(t, updatedChangePlan.ErrorMessage)
+	require.Contains(t, *updatedChangePlan.ErrorMessage, "syntax", "error message should mention syntax error")
+
+	// Verify transaction was rolled back - table should not exist
+	targetDBConn, err := sqlx.Connect("postgres", targetConnStr)
+	require.NoError(t, err)
+	defer targetDBConn.Close()
+
+	var tableExists bool
+	err = targetDBConn.Get(&tableExists, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public' 
+			AND table_name = 'syntax_error_test'
+		)
+	`)
+	require.NoError(t, err)
+	require.False(t, tableExists, "syntax_error_test table should not exist after failed execution (transaction rollback)")
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_Timeout tests execution timeout handling
+func TestIntegration_ChangePlan_ExecuteChangePlan_Timeout(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	// Setup execution target database
+	targetConnStr, cleanupTarget := setupExecutionTargetDB(t)
+	defer cleanupTarget()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+
+	// Create author user
+	author := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Parse target connection string
+	targetURL, err := url.Parse(targetConnStr)
+	require.NoError(t, err)
+	targetHost := targetURL.Hostname()
+	targetPort, err := strconv.Atoi(targetURL.Port())
+	if err != nil || targetPort == 0 {
+		targetPort = 5432
+	}
+
+	// Encrypt password
+	detailsJSON, err := json.Marshal(map[string]string{"password": "deeb"})
+	require.NoError(t, err)
+	encryptedDetails, err := utils.Encrypt(string(detailsJSON), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	// Create database instance
+	dbInstance := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       targetHost,
+		Port:                       targetPort,
+		Username:                   "deeb",
+		ConnectionDetailsEncrypted: &encryptedDetails,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance)
+	require.NoError(t, err)
+
+	// Create database
+	database := &models.Database{
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+	err = dbRepo.Create(ctx, database)
+	require.NoError(t, err)
+
+	// Create change plan with SQL that will timeout (pg_sleep for 3 seconds, timeout set to 1 second)
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"SELECT pg_sleep(3);", // Sleep for 3 seconds
+	)
+
+	// Transition to Approved
+	changePlan.Status = models.ChangePlanStatusApproved
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler with short timeout (1 second)
+	handler := setupChangePlanHandlerWithTimeout(t, db, tokenManager, 1*time.Second)
+
+	// Create token
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Execute change plan
+	startTime := time.Now()
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan.ID.String()),
+		nil,
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/execute")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	err = handler.ExecuteChangePlan(c)
+	require.NoError(t, err)
+	duration := time.Since(startTime)
+
+	// Verify execution timed out (should fail within ~1-2 seconds, not wait for full 3 seconds)
+	require.Less(t, duration, 3*time.Second, "execution should timeout before completing")
+	require.GreaterOrEqual(t, duration, 1*time.Second, "execution should take at least the timeout duration")
+
+	// Verify change plan status is Failed
+	updatedChangePlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusFailed, updatedChangePlan.Status)
+	require.NotNil(t, updatedChangePlan.ErrorMessage)
+	require.Contains(t, *updatedChangePlan.ErrorMessage, "timeout", "error message should mention timeout")
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_ConnectionFailure tests connection failure handling
+func TestIntegration_ChangePlan_ExecuteChangePlan_ConnectionFailure(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+
+	// Create author user
+	author := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance with invalid credentials (will cause connection failure)
+	detailsJSON, err := json.Marshal(map[string]string{"password": "wrong-password"})
+	require.NoError(t, err)
+	encryptedDetails, err := utils.Encrypt(string(detailsJSON), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	dbInstance := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance (Invalid)",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       "localhost",
+		Port:                       5432,
+		Username:                   "invalid_user",
+		ConnectionDetailsEncrypted: &encryptedDetails,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance)
+	require.NoError(t, err)
+
+	// Create database pointing to invalid instance
+	database := &models.Database{
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+	err = dbRepo.Create(ctx, database)
+	require.NoError(t, err)
+
+	// Create change plan
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE connection_test (id UUID PRIMARY KEY);",
+	)
+
+	// Transition to Approved
+	changePlan.Status = models.ChangePlanStatusApproved
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Execute change plan
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan.ID.String()),
+		nil,
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/execute")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	err = handler.ExecuteChangePlan(c)
+	require.NoError(t, err)
+
+	// Execution should fail due to connection error
+	// Verify change plan status is Failed
+	updatedChangePlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusFailed, updatedChangePlan.Status)
+	require.NotNil(t, updatedChangePlan.ErrorMessage)
+	// Connection error should be captured (either in snapshot capture or execution phase)
+	require.NotEmpty(t, *updatedChangePlan.ErrorMessage, "error message should be present")
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_RollbackVerification tests comprehensive rollback verification
+func TestIntegration_ChangePlan_ExecuteChangePlan_RollbackVerification(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	// Setup execution target database
+	targetConnStr, cleanupTarget := setupExecutionTargetDB(t)
+	defer cleanupTarget()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+
+	// Create author user
+	author := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Parse target connection string
+	targetURL, err := url.Parse(targetConnStr)
+	require.NoError(t, err)
+	targetHost := targetURL.Hostname()
+	targetPort, err := strconv.Atoi(targetURL.Port())
+	if err != nil || targetPort == 0 {
+		targetPort = 5432
+	}
+
+	// Encrypt password
+	detailsJSON, err := json.Marshal(map[string]string{"password": "deeb"})
+	require.NoError(t, err)
+	encryptedDetails, err := utils.Encrypt(string(detailsJSON), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	// Create database instance
+	dbInstance := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       targetHost,
+		Port:                       targetPort,
+		Username:                   "deeb",
+		ConnectionDetailsEncrypted: &encryptedDetails,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance)
+	require.NoError(t, err)
+
+	// Create database
+	database := &models.Database{
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+	err = dbRepo.Create(ctx, database)
+	require.NoError(t, err)
+
+	// Create initial table in target database to test rollback of changes
+	targetDBConn, err := sqlx.Connect("postgres", targetConnStr)
+	require.NoError(t, err)
+	defer targetDBConn.Close()
+
+	_, err = targetDBConn.Exec("CREATE TABLE rollback_verification_initial (id UUID PRIMARY KEY, value VARCHAR(100));")
+	require.NoError(t, err)
+	_, err = targetDBConn.Exec("INSERT INTO rollback_verification_initial (id, value) VALUES (gen_random_uuid(), 'initial_value');")
+	require.NoError(t, err)
+
+	// Verify initial state
+	var initialCount int
+	err = targetDBConn.Get(&initialCount, "SELECT COUNT(*) FROM rollback_verification_initial")
+	require.NoError(t, err)
+	require.Equal(t, 1, initialCount, "should have 1 initial row")
+
+	// Create change plan that will fail mid-execution (create table succeeds, insert fails)
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE rollback_verification_new (id UUID PRIMARY KEY); INSERT INTO rollback_verification_new VALUES (gen_random_uuid()); INSERT INTO non_existent_table VALUES (1);",
+	)
+
+	// Transition to Approved
+	changePlan.Status = models.ChangePlanStatusApproved
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Execute change plan
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan.ID.String()),
+		nil,
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/execute")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	err = handler.ExecuteChangePlan(c)
+	require.NoError(t, err)
+
+	// Verify change plan status is Failed
+	updatedChangePlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusFailed, updatedChangePlan.Status)
+
+	// Verify transaction was rolled back completely:
+	// 1. New table should not exist (even though CREATE TABLE succeeded)
+	var newTableExists bool
+	err = targetDBConn.Get(&newTableExists, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public' 
+			AND table_name = 'rollback_verification_new'
+		)
+	`)
+	require.NoError(t, err)
+	require.False(t, newTableExists, "rollback_verification_new table should not exist (transaction rollback)")
+
+	// 2. Initial table should be unchanged
+	var finalCount int
+	err = targetDBConn.Get(&finalCount, "SELECT COUNT(*) FROM rollback_verification_initial")
+	require.NoError(t, err)
+	require.Equal(t, initialCount, finalCount, "initial table should be unchanged")
+}
+
+// TestIntegration_ChangePlan_ExecuteChangePlan_ErrorLogging tests error logging during execution failures
+func TestIntegration_ChangePlan_ExecuteChangePlan_ErrorLogging(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	// Setup execution target database
+	targetConnStr, cleanupTarget := setupExecutionTargetDB(t)
+	defer cleanupTarget()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	executionLogRepo := postgres.NewExecutionLogRepository(db)
+
+	// Create author user
+	author := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Parse target connection string
+	targetURL, err := url.Parse(targetConnStr)
+	require.NoError(t, err)
+	targetHost := targetURL.Hostname()
+	targetPort, err := strconv.Atoi(targetURL.Port())
+	if err != nil || targetPort == 0 {
+		targetPort = 5432
+	}
+
+	// Encrypt password
+	detailsJSON, err := json.Marshal(map[string]string{"password": "deeb"})
+	require.NoError(t, err)
+	encryptedDetails, err := utils.Encrypt(string(detailsJSON), "test-encryption-key-min-32-chars")
+	require.NoError(t, err)
+
+	// Create database instance
+	dbInstance := &models.DatabaseInstance{
+		ID:                         uuid.New(),
+		Name:                       "Test Execution Instance",
+		DatabaseType:               models.DatabaseTypePostgreSQL,
+		Host:                       targetHost,
+		Port:                       targetPort,
+		Username:                   "deeb",
+		ConnectionDetailsEncrypted: &encryptedDetails,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                author.ID,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	err = dbInstanceRepo.Create(ctx, dbInstance)
+	require.NoError(t, err)
+
+	// Create database
+	database := &models.Database{
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		EnvironmentID:      env.ID,
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseName:       "execution_target",
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+	err = dbRepo.Create(ctx, database)
+	require.NoError(t, err)
+
+	// Create change plan with SQL that will fail
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE error_logging_test (id UUID PRIMARY KEY); INSERT INTO non_existent_table VALUES (1);",
+	)
+
+	// Transition to Approved
+	changePlan.Status = models.ChangePlanStatusApproved
+	changePlan.UpdatedAt = time.Now()
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Execute change plan
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlan.ID.String()),
+		nil,
+	)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/execute")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	err = handler.ExecuteChangePlan(c)
+	require.NoError(t, err)
+
+	// Verify change plan status is Failed
+	updatedChangePlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.ChangePlanStatusFailed, updatedChangePlan.Status)
+	require.NotNil(t, updatedChangePlan.ErrorMessage)
+	require.NotEmpty(t, *updatedChangePlan.ErrorMessage, "error message should be logged")
+
+	// Verify execution log entry was created
+	executionLogs, err := executionLogRepo.GetByChangePlanID(ctx, changePlan.ID)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(executionLogs), 1, "should have at least one execution log entry")
+
+	// Find the failed execution log
+	var failedLog *models.ExecutionLog
+	for _, log := range executionLogs {
+		if log.Status == models.ExecutionLogStatusFailed {
+			failedLog = log
+			break
+		}
+	}
+	require.NotNil(t, failedLog, "should have a failed execution log entry")
+	require.NotNil(t, failedLog.ErrorMessage, "execution log should have error message")
+	require.Contains(t, *failedLog.ErrorMessage, "non_existent_table", "execution log should contain error details")
+	require.False(t, failedLog.StartedAt.IsZero(), "execution log should have start time")
+	require.False(t, failedLog.CompletedAt.IsZero(), "execution log should have completion time")
+	require.NotNil(t, failedLog.ExecutionDurationMs, "execution log should have duration")
 }
 
 // TestIntegration_ChangePlan_CloseChangePlan tests POST /api/v1/change-plans/:id/close

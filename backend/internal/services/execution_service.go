@@ -109,17 +109,35 @@ func (s *ExecutionService) Execute(
 	changePlanID uuid.UUID,
 	executorID uuid.UUID,
 ) (*ExecutionResult, error) {
+	// Log execution start
+	overallStartTime := time.Now()
+	s.logger.Info("Execution started",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("executor_id", executorID.String()),
+	)
+
 	// Get change plan
 	changePlan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
 	if err != nil {
 		if err == repository.ErrNotFound {
+			s.logger.Error("Change plan not found",
+				zap.String("change_plan_id", changePlanID.String()),
+			)
 			return nil, ErrChangePlanNotFound
 		}
+		s.logger.Error("Failed to get change plan",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to get change plan: %w", err)
 	}
 
 	// Validate Change Plan is in Approved status
 	if changePlan.Status != models.ChangePlanStatusApproved {
+		s.logger.Error("Change plan not in Approved status",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("current_status", string(changePlan.Status)),
+		)
 		return nil, fmt.Errorf("change plan must be in Approved status to execute, current status: %s", changePlan.Status)
 	}
 
@@ -127,20 +145,51 @@ func (s *ExecutionService) Execute(
 	db, err := s.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
 	if err != nil {
 		if err == repository.ErrNotFound {
+			s.logger.Error("Target database not found",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_id", changePlan.TargetDatabaseID.String()),
+			)
 			return nil, ErrDatabaseNotFound
 		}
+		s.logger.Error("Failed to get database",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("database_id", changePlan.TargetDatabaseID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to get database: %w", err)
 	}
 
 	dbInstance, err := s.dbInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
 	if err != nil {
 		if err == repository.ErrNotFound {
+			s.logger.Error("Database instance not found",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_instance_id", db.DatabaseInstanceID.String()),
+			)
 			return nil, ErrDatabaseInstanceNotFound
 		}
+		s.logger.Error("Failed to get database instance",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("database_instance_id", db.DatabaseInstanceID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
 
+	// Log database context for monitoring
+	sqlContentLength := len(changePlan.SQLContent)
+	s.logger.Info("Execution context loaded",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("database_id", db.ID.String()),
+		zap.String("database_name", db.DatabaseName),
+		zap.String("database_instance_id", dbInstance.ID.String()),
+		zap.String("database_instance_name", dbInstance.Name),
+		zap.String("database_type", string(dbInstance.DatabaseType)),
+		zap.Int("sql_content_length", sqlContentLength),
+	)
+
 	// Step 0: Acquire execution lock for database
+	lockStartTime := time.Now()
 	if err := s.lockManager.AcquireLock(ctx, db.ID, changePlanID, executorID); err != nil {
 		if err == ErrDatabaseLocked {
 			// Database is locked - enqueue the Change Plan
@@ -164,13 +213,33 @@ func (s *ExecutionService) Execute(
 			// No queue service available - return lock error
 			return nil, ErrDatabaseLocked
 		}
+		s.logger.Error("Failed to acquire execution lock",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("database_id", db.ID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to acquire execution lock: %w", err)
 	}
+	lockDuration := time.Since(lockStartTime)
+	s.logger.Info("Execution lock acquired",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("database_id", db.ID.String()),
+		zap.Duration("lock_acquisition_duration", lockDuration),
+	)
 
 	// Guarantee lock release on exit (success or failure)
 	defer func() {
 		if releaseErr := s.lockManager.ReleaseLock(ctx, db.ID); releaseErr != nil {
-			s.logger.Error("Failed to release execution lock", zap.Error(releaseErr))
+			s.logger.Error("Failed to release execution lock",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_id", db.ID.String()),
+				zap.Error(releaseErr),
+			)
+		} else {
+			s.logger.Debug("Execution lock released",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_id", db.ID.String()),
+			)
 		}
 	}()
 
@@ -178,13 +247,22 @@ func (s *ExecutionService) Execute(
 	changePlan.Status = models.ChangePlanStatusInProgress
 	changePlan.UpdatedAt = time.Now()
 	if err := s.changePlanRepo.Update(ctx, changePlan); err != nil {
+		s.logger.Error("Failed to update change plan status to InProgress",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to update change plan status to InProgress: %w", err)
 	}
+	s.logger.Info("Change plan status updated to InProgress",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
 
 	// Step 2: Capture before snapshot
+	snapshotBeforeStartTime := time.Now()
 	s.logger.Info("Capturing before snapshot",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("database_id", db.ID.String()),
+		zap.String("database_type", string(dbInstance.DatabaseType)),
 	)
 
 	var beforeSnapshot *models.SchemaSnapshot
@@ -213,23 +291,37 @@ func (s *ExecutionService) Execute(
 		return nil, fmt.Errorf("failed to capture before snapshot: %w", err)
 	}
 
+	snapshotBeforeDuration := time.Since(snapshotBeforeStartTime)
 	s.logger.Info("Before snapshot captured successfully",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("snapshot_id", beforeSnapshot.ID.String()),
+		zap.Duration("snapshot_capture_duration", snapshotBeforeDuration),
 	)
 
 	// Step 3: Execute SQL in transaction with timeout
 	executionStartTime := time.Now()
+	s.logger.Info("Starting SQL execution",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("database_id", db.ID.String()),
+		zap.String("database_type", string(dbInstance.DatabaseType)),
+		zap.Int("sql_content_length", sqlContentLength),
+		zap.Duration("execution_timeout", s.executionTimeout),
+	)
 
 	// Create timeout context for SQL execution
 	execCtx, cancel := context.WithTimeout(ctx, s.executionTimeout)
 	defer cancel()
 
-	result, err := s.executeInTransaction(execCtx, dbInstance, db, changePlan.SQLContent)
+	result, err := s.executeInTransaction(execCtx, dbInstance, db, changePlan.SQLContent, changePlanID)
 	duration := time.Since(executionStartTime)
 
 	// Check if timeout occurred
 	if err != nil && execCtx.Err() == context.DeadlineExceeded {
+		s.logger.Error("Execution timeout exceeded",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Duration("timeout", s.executionTimeout),
+			zap.Duration("actual_duration", duration),
+		)
 		err = fmt.Errorf("execution timeout after %v: %w", s.executionTimeout, err)
 	}
 
@@ -247,11 +339,21 @@ func (s *ExecutionService) Execute(
 		changePlan.ErrorMessage = &errorMsg
 		changePlan.AffectedRows = nil // No rows affected on error
 
-		s.logger.Error("Execution failed",
+		// Enhanced error context logging
+		sqlPreview := changePlan.SQLContent
+		if len(sqlPreview) > 200 {
+			sqlPreview = sqlPreview[:200] + "... (truncated)"
+		}
+		s.logger.Error("SQL execution failed",
 			zap.String("change_plan_id", changePlanID.String()),
 			zap.String("database_id", db.ID.String()),
+			zap.String("database_name", db.DatabaseName),
+			zap.String("database_instance_name", dbInstance.Name),
+			zap.String("database_type", string(dbInstance.DatabaseType)),
 			zap.Error(err),
-			zap.Duration("duration", duration),
+			zap.Duration("execution_duration", duration),
+			zap.Int("sql_content_length", sqlContentLength),
+			zap.String("sql_preview", sqlPreview),
 		)
 
 		// Update Change Plan with error results
@@ -286,9 +388,18 @@ func (s *ExecutionService) Execute(
 	}
 
 	// Step 5: Execution succeeded - capture after snapshot
+	s.logger.Info("SQL execution completed successfully",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("database_id", db.ID.String()),
+		zap.Int("rows_affected", result.RowsAffected),
+		zap.Duration("execution_duration", duration),
+	)
+
+	snapshotAfterStartTime := time.Now()
 	s.logger.Info("Capturing after snapshot",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("database_id", db.ID.String()),
+		zap.String("database_type", string(dbInstance.DatabaseType)),
 	)
 
 	var afterSnapshot *models.SchemaSnapshot
@@ -318,9 +429,11 @@ func (s *ExecutionService) Execute(
 		return nil, fmt.Errorf("failed to capture after snapshot: %w", err)
 	}
 
+	snapshotAfterDuration := time.Since(snapshotAfterStartTime)
 	s.logger.Info("After snapshot captured successfully",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("snapshot_id", afterSnapshot.ID.String()),
+		zap.Duration("snapshot_capture_duration", snapshotAfterDuration),
 	)
 
 	// Step 6: Update status to Completed
@@ -331,14 +444,26 @@ func (s *ExecutionService) Execute(
 
 	// Update Change Plan with execution results
 	if err := s.changePlanRepo.Update(ctx, changePlan); err != nil {
+		s.logger.Error("Failed to update change plan with execution results",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to update change plan with execution results: %w", err)
 	}
 
+	overallDuration := time.Since(overallStartTime)
 	s.logger.Info("Execution workflow completed successfully",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("database_id", db.ID.String()),
+		zap.String("database_name", db.DatabaseName),
+		zap.String("database_instance_name", dbInstance.Name),
+		zap.String("database_type", string(dbInstance.DatabaseType)),
 		zap.Int("rows_affected", result.RowsAffected),
-		zap.Duration("duration", duration),
+		zap.Duration("sql_execution_duration", duration),
+		zap.Duration("before_snapshot_duration", snapshotBeforeDuration),
+		zap.Duration("after_snapshot_duration", snapshotAfterDuration),
+		zap.Duration("lock_acquisition_duration", lockDuration),
+		zap.Duration("total_execution_duration", overallDuration),
 	)
 
 	// Create execution log entry for successful execution
@@ -383,61 +508,127 @@ func (s *ExecutionService) executeInTransaction(
 	dbInstance *models.DatabaseInstance,
 	db *models.Database,
 	sqlContent string,
+	changePlanID uuid.UUID,
 ) (*ExecutionResult, error) {
 	// Get database connection
+	connectStartTime := time.Now()
 	dbConn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
 		DatabaseInstance: dbInstance,
 		Database:         db,
 	})
 	if err != nil {
+		s.logger.Error("Failed to connect to database",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("database_id", db.ID.String()),
+			zap.String("database_name", db.DatabaseName),
+			zap.String("database_instance_name", dbInstance.Name),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
+	connectDuration := time.Since(connectStartTime)
+	s.logger.Debug("Database connection established",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.Duration("connection_duration", connectDuration),
+	)
+
 	defer func() {
 		if err := dbConn.Close(); err != nil {
-			s.logger.Warn("Failed to close database connection", zap.Error(err))
+			s.logger.Warn("Failed to close database connection",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.Error(err),
+			)
 		}
 	}()
 
 	// Begin transaction with SERIALIZABLE isolation
+	txStartTime := time.Now()
 	tx, err := dbConn.BeginTxx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelSerializable,
 	})
 	if err != nil {
+		s.logger.Error("Failed to begin transaction",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("isolation_level", "SERIALIZABLE"),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
+	txBeginDuration := time.Since(txStartTime)
+	s.logger.Debug("Transaction begun",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("isolation_level", "SERIALIZABLE"),
+		zap.Duration("transaction_begin_duration", txBeginDuration),
+	)
 
 	// Track if we should rollback
 	shouldRollback := true
 	defer func() {
 		if shouldRollback {
+			rollbackStartTime := time.Now()
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				s.logger.Error("Failed to rollback transaction", zap.Error(rollbackErr))
+				s.logger.Error("Failed to rollback transaction",
+					zap.String("change_plan_id", changePlanID.String()),
+					zap.Duration("rollback_duration", time.Since(rollbackStartTime)),
+					zap.Error(rollbackErr),
+				)
+			} else {
+				s.logger.Info("Transaction rolled back",
+					zap.String("change_plan_id", changePlanID.String()),
+					zap.Duration("rollback_duration", time.Since(rollbackStartTime)),
+				)
 			}
 		}
 	}()
 
 	// Execute SQL statements
-	startTime := time.Now()
+	execStartTime := time.Now()
+	s.logger.Debug("Executing SQL statements",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.Int("sql_content_length", len(sqlContent)),
+	)
 	result, err := tx.ExecContext(ctx, sqlContent)
+	execDuration := time.Since(execStartTime)
 	if err != nil {
+		s.logger.Error("SQL execution failed",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Duration("execution_duration", execDuration),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 
 	// Get rows affected
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
+		s.logger.Error("Failed to get rows affected",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
 	// Commit transaction
+	commitStartTime := time.Now()
 	if err := tx.Commit(); err != nil {
+		s.logger.Error("Failed to commit transaction",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Int64("rows_affected", rowsAffected),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
+	commitDuration := time.Since(commitStartTime)
+	s.logger.Debug("Transaction committed successfully",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.Int64("rows_affected", rowsAffected),
+		zap.Duration("commit_duration", commitDuration),
+	)
 
 	// Mark that we don't need to rollback (commit succeeded)
 	shouldRollback = false
 
-	duration := time.Since(startTime)
+	duration := time.Since(execStartTime)
 
 	return &ExecutionResult{
 		Success:      true,

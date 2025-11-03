@@ -316,7 +316,8 @@ func TestExecutionService_executeInTransaction_Success(t *testing.T) {
 	// Mock commit
 	sqlMock.ExpectCommit()
 
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent)
+	changePlanID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.True(t, result.Success)
@@ -373,7 +374,8 @@ func TestExecutionService_executeInTransaction_WithRowsAffected(t *testing.T) {
 	// Mock commit
 	sqlMock.ExpectCommit()
 
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent)
+	changePlanID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.True(t, result.Success)
@@ -430,7 +432,8 @@ func TestExecutionService_executeInTransaction_ExecutionError(t *testing.T) {
 	// Mock rollback
 	sqlMock.ExpectRollback()
 
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent)
+	changePlanID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "execution failed")
@@ -486,7 +489,8 @@ func TestExecutionService_executeInTransaction_CommitError(t *testing.T) {
 	sqlMock.ExpectCommit().
 		WillReturnError(sql.ErrConnDone)
 
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent)
+	changePlanID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "failed to commit transaction")
@@ -537,7 +541,8 @@ func TestExecutionService_executeInTransaction_BeginError(t *testing.T) {
 	sqlMock.ExpectBegin().
 		WillReturnError(sql.ErrConnDone)
 
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent)
+	changePlanID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "failed to begin transaction")
