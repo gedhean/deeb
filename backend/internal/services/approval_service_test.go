@@ -655,6 +655,140 @@ func TestApprovalService_Close(t *testing.T) {
 		assert.Contains(t, err.Error(), "already closed")
 		mockChangePlanRepo.AssertExpectations(t)
 	})
+
+	t.Run("successful close with project approver", func(t *testing.T) {
+		changePlanID := uuid.New()
+		approverID := uuid.New()
+		projectID := uuid.New()
+		comments := "Rejected"
+
+		mockApprovalRepo := new(MockApprovalRepository)
+		mockChangePlanRepo := new(MockChangePlanRepository)
+		mockPolicyFindingRepo := new(MockPolicyFindingRepository)
+		mockProjectMemberRepo := new(MockProjectMemberRepository)
+		rbacChecker := rbac.NewCheckerService()
+
+		changePlan := &models.ChangePlan{
+			ID:        changePlanID,
+			ProjectID: projectID,
+			Status:    models.ChangePlanStatusOpen,
+			UpdatedAt: time.Now(),
+		}
+
+		projectMember := &models.ProjectMember{
+			ProjectID: projectID,
+			UserID:    approverID,
+			Role:      models.ProjectRoleApprover,
+		}
+
+		ctxWithUser := createContextWithUser(approverID, rbac.OrganizationDeveloper)
+
+		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
+		mockProjectMemberRepo.On("GetMemberRole", ctxWithUser, projectID, approverID).Return(projectMember, nil)
+		mockApprovalRepo.On("Create", ctxWithUser, mock.MatchedBy(func(a *models.Approval) bool {
+			return a.ChangePlanID == changePlanID && a.Status == models.ApprovalStatusRejected
+		})).Return(nil)
+		mockChangePlanRepo.On("Update", ctxWithUser, mock.MatchedBy(func(cp *models.ChangePlan) bool {
+			return cp.ID == changePlanID && cp.Status == models.ChangePlanStatusClosed
+		})).Return(nil)
+
+		service := NewApprovalService(
+			mockApprovalRepo,
+			mockChangePlanRepo,
+			mockPolicyFindingRepo,
+			mockProjectMemberRepo,
+			rbacChecker,
+			logger,
+		)
+
+		err := service.Close(ctxWithUser, changePlanID, approverID, &comments)
+
+		assert.NoError(t, err)
+		mockApprovalRepo.AssertExpectations(t)
+		mockChangePlanRepo.AssertExpectations(t)
+		mockProjectMemberRepo.AssertExpectations(t)
+	})
+
+	t.Run("fails when approver lacks permission", func(t *testing.T) {
+		changePlanID := uuid.New()
+		approverID := uuid.New()
+		projectID := uuid.New()
+
+		mockApprovalRepo := new(MockApprovalRepository)
+		mockChangePlanRepo := new(MockChangePlanRepository)
+		mockPolicyFindingRepo := new(MockPolicyFindingRepository)
+		mockProjectMemberRepo := new(MockProjectMemberRepository)
+		rbacChecker := rbac.NewCheckerService()
+
+		changePlan := &models.ChangePlan{
+			ID:        changePlanID,
+			ProjectID: projectID,
+			Status:    models.ChangePlanStatusOpen,
+		}
+
+		ctxWithUser := createContextWithUser(approverID, rbac.OrganizationDeveloper)
+
+		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
+		mockProjectMemberRepo.On("GetMemberRole", ctxWithUser, projectID, approverID).Return(nil, repository.ErrNotFound)
+
+		service := NewApprovalService(
+			mockApprovalRepo,
+			mockChangePlanRepo,
+			mockPolicyFindingRepo,
+			mockProjectMemberRepo,
+			rbacChecker,
+			logger,
+		)
+
+		err := service.Close(ctxWithUser, changePlanID, approverID, nil)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "permission")
+		mockChangePlanRepo.AssertExpectations(t)
+		mockProjectMemberRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles approval repository error", func(t *testing.T) {
+		changePlanID := uuid.New()
+		approverID := uuid.New()
+		projectID := uuid.New()
+		comments := "Rejected"
+
+		mockApprovalRepo := new(MockApprovalRepository)
+		mockChangePlanRepo := new(MockChangePlanRepository)
+		mockPolicyFindingRepo := new(MockPolicyFindingRepository)
+		mockProjectMemberRepo := new(MockProjectMemberRepository)
+		rbacChecker := rbac.NewCheckerService()
+
+		changePlan := &models.ChangePlan{
+			ID:        changePlanID,
+			ProjectID: projectID,
+			Status:    models.ChangePlanStatusOpen,
+			UpdatedAt: time.Now(),
+		}
+
+		ctxWithUser := createContextWithUser(approverID, rbac.OrganizationAdmin)
+
+		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
+		mockApprovalRepo.On("Create", ctxWithUser, mock.MatchedBy(func(a *models.Approval) bool {
+			return a.ChangePlanID == changePlanID && a.Status == models.ApprovalStatusRejected
+		})).Return(errors.New("database error"))
+
+		service := NewApprovalService(
+			mockApprovalRepo,
+			mockChangePlanRepo,
+			mockPolicyFindingRepo,
+			mockProjectMemberRepo,
+			rbacChecker,
+			logger,
+		)
+
+		err := service.Close(ctxWithUser, changePlanID, approverID, &comments)
+
+		assert.Error(t, err)
+		mockApprovalRepo.AssertExpectations(t)
+		mockChangePlanRepo.AssertExpectations(t)
+	})
 }
 
 func TestApprovalService_GetApprovalHistory(t *testing.T) {
@@ -723,6 +857,33 @@ func TestApprovalService_GetApprovalHistory(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Empty(t, result)
+		mockApprovalRepo.AssertExpectations(t)
+	})
+
+	t.Run("handles repository error", func(t *testing.T) {
+		changePlanID := uuid.New()
+
+		mockApprovalRepo := new(MockApprovalRepository)
+		mockChangePlanRepo := new(MockChangePlanRepository)
+		mockPolicyFindingRepo := new(MockPolicyFindingRepository)
+		mockProjectMemberRepo := new(MockProjectMemberRepository)
+		rbacChecker := rbac.NewCheckerService()
+
+		mockApprovalRepo.On("GetHistory", ctx, changePlanID).Return(nil, errors.New("database error"))
+
+		service := NewApprovalService(
+			mockApprovalRepo,
+			mockChangePlanRepo,
+			mockPolicyFindingRepo,
+			mockProjectMemberRepo,
+			rbacChecker,
+			logger,
+		)
+
+		result, err := service.GetApprovalHistory(ctx, changePlanID)
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
 		mockApprovalRepo.AssertExpectations(t)
 	})
 }

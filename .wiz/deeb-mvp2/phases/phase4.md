@@ -503,19 +503,19 @@ Create comprehensive unit tests for Approval repository operations.
 
 ### P04M27: Write unit tests for approval workflow service
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M27
 
 **Goal**
 Create comprehensive unit tests for approval workflow logic.
 
 **Acceptance Criteria**
-- [ ] Unit tests for approve method (>85% coverage)
-- [ ] Unit tests for close method (>85% coverage)
-- [ ] SQL Review error check tests
-- [ ] Status transition tests
-- [ ] Edge cases covered
-- [ ] All tests passing
+- [x] Unit tests for approve method (>85% coverage) - comprehensive tests covering org admin, project approver, not found, invalid status, permission errors, SQL Review errors, warnings allowed
+- [x] Unit tests for close method (>85% coverage) - comprehensive tests covering org admin, project approver, not found, invalid status, permission errors, repository errors
+- [x] SQL Review error check tests - tests for error findings blocking approval, warnings allowed
+- [x] Status transition tests - tests for Open->Approved, Open->Closed transitions
+- [x] Edge cases covered - permission checks, repository errors, empty results
+- [x] All tests passing (1201 tests total, 20 skipped)
 
 ---
 
