@@ -186,9 +186,9 @@ func (s *ExecutionService) Execute(
 	)
 
 	// Step 3: Execute SQL in transaction
-	startTime := time.Now()
+	executionStartTime := time.Now()
 	result, err := s.executeInTransaction(ctx, dbInstance, db, changePlan.SQLContent)
-	duration := time.Since(startTime)
+	duration := time.Since(executionStartTime)
 
 	// Store execution results in Change Plan
 	now := time.Now()
