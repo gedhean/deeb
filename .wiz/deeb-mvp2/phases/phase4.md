@@ -662,19 +662,30 @@ Create integration tests for approval endpoints and workflow.
 
 ### P04M32: Write integration tests for execution workflow
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M32
 
 **Goal**
 Create integration tests for Change Plan execution including snapshot capture.
 
 **Acceptance Criteria**
-- [ ] Integration test for execution endpoint passing
-- [ ] Execution success scenario test
-- [ ] Execution failure scenario test
-- [ ] Snapshot capture tests
-- [ ] Transaction rollback tests
-- [ ] All integration tests passing
+- [x] Integration test for execution endpoint passing
+- [x] Execution success scenario test
+- [x] Execution failure scenario test
+- [x] Snapshot capture tests
+- [x] Transaction rollback tests
+- [x] All integration tests passing
+
+**Notes**
+- Added comprehensive integration tests for execution workflow:
+  - `TestIntegration_ChangePlan_ExecuteChangePlan_Success`: Tests successful execution with real database connection, verifies SQL execution, status updates, and snapshot capture (before and after)
+  - `TestIntegration_ChangePlan_ExecuteChangePlan_Failure`: Tests execution failure scenario with invalid SQL, verifies transaction rollback, error handling, and before snapshot capture
+  - `TestIntegration_ChangePlan_ExecuteChangePlan_SnapshotCapture`: Tests detailed snapshot capture verification, including schema differences between before and after snapshots
+- Tests use testcontainers to create separate PostgreSQL database for execution target
+- Tests verify actual SQL execution by checking database state
+- Tests verify transaction rollback on errors (failed SQL statements don't persist)
+- Tests verify snapshot data contains correct schema information
+- All tests properly encrypt database instance passwords using utils.Encrypt
 
 ---
 
