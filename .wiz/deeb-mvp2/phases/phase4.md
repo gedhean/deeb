@@ -476,11 +476,11 @@ Add timeout handling for SQL execution (5 minutes maximum per PRD).
 Add validation for SQL content size limit (10MB maximum per PRD).
 
 **Acceptance Criteria**
-- [ ] SQL content size validation implemented
-- [ ] 10MB limit enforced
-- [ ] Validation error returned for oversized SQL
-- [ ] Size validation on Change Plan creation and update
-- [ ] Unit tests passing
+- [x] SQL content size validation implemented (using MaxSQLContentSize constant from issue_handler.go)
+- [x] 10MB limit enforced (in validateCreateChangePlanRequest and UpdateChangePlan)
+- [x] Validation error returned for oversized SQL (error message: "sql_content exceeds maximum size of 10MB")
+- [x] Size validation on Change Plan creation and update (both handlers validated)
+- [x] Unit tests passing (integration tests added for Create and Update)
 
 ---
 
