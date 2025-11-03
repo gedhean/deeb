@@ -352,9 +352,8 @@ func (r *executionQueueRepository) MarkInProgress(ctx context.Context, databaseI
 	}
 
 	// Recalculate positions for remaining pending items
-	if err := r.RecalculatePositions(ctx, databaseID); err != nil {
-		// Log error but don't fail - positions will be recalculated on next query
-	}
+	// Ignore error if recalculating fails - positions will be recalculated on next query
+	_ = r.RecalculatePositions(ctx, databaseID)
 
 	return queueItem, nil
 }
@@ -377,9 +376,8 @@ func (r *executionQueueRepository) MarkCompleted(ctx context.Context, id uuid.UU
 	}
 
 	// Recalculate positions for remaining pending items
-	if err := r.RecalculatePositions(ctx, queueItem.TargetDatabaseID); err != nil {
-		// Log error but don't fail
-	}
+	// Ignore error if recalculating fails - positions will be recalculated on next query
+	_ = r.RecalculatePositions(ctx, queueItem.TargetDatabaseID)
 
 	return nil
 }
@@ -402,9 +400,8 @@ func (r *executionQueueRepository) MarkFailed(ctx context.Context, id uuid.UUID,
 	}
 
 	// Recalculate positions for remaining pending items
-	if err := r.RecalculatePositions(ctx, queueItem.TargetDatabaseID); err != nil {
-		// Log error but don't fail
-	}
+	// Ignore error if recalculating fails - positions will be recalculated on next query
+	_ = r.RecalculatePositions(ctx, queueItem.TargetDatabaseID)
 
 	return nil
 }
