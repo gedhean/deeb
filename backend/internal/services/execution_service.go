@@ -27,6 +27,7 @@ type ExecutionService struct {
 	databaseRepo    repository.DatabaseRepository
 	snapshotService *SchemaSnapshotService
 	lockManager     ExecutionLockManager
+	queueService    *ExecutionQueueService
 	connectionMgr   ConnectionManagerInterface
 	encryptionKey   string
 	logger          *zap.Logger
@@ -47,6 +48,7 @@ func NewExecutionService(
 	databaseRepo repository.DatabaseRepository,
 	snapshotService *SchemaSnapshotService,
 	lockManager ExecutionLockManager,
+	queueService *ExecutionQueueService,
 	connectionMgr ConnectionManagerInterface,
 	encryptionKey string,
 	logger *zap.Logger,
@@ -57,6 +59,7 @@ func NewExecutionService(
 		databaseRepo:    databaseRepo,
 		snapshotService: snapshotService,
 		lockManager:     lockManager,
+		queueService:    queueService,
 		connectionMgr:   connectionMgr,
 		encryptionKey:   encryptionKey,
 		logger:          logger,
@@ -104,6 +107,25 @@ func (s *ExecutionService) Execute(
 	// Step 0: Acquire execution lock for database
 	if err := s.lockManager.AcquireLock(ctx, db.ID, changePlanID, executorID); err != nil {
 		if err == ErrDatabaseLocked {
+			// Database is locked - enqueue the Change Plan
+			if s.queueService != nil {
+				queueItem, enqueueErr := s.queueService.Enqueue(ctx, changePlanID, db.ID, executorID)
+				if enqueueErr != nil {
+					s.logger.Error("Failed to enqueue change plan",
+						zap.String("change_plan_id", changePlanID.String()),
+						zap.String("database_id", db.ID.String()),
+						zap.Error(enqueueErr),
+					)
+					return nil, fmt.Errorf("database locked and failed to enqueue: %w", enqueueErr)
+				}
+				s.logger.Info("Change plan enqueued due to database lock",
+					zap.String("change_plan_id", changePlanID.String()),
+					zap.String("database_id", db.ID.String()),
+					zap.Int("position", queueItem.Position),
+				)
+				return nil, ErrDatabaseLocked // Return lock error so caller knows it was queued
+			}
+			// No queue service available - return lock error
 			return nil, ErrDatabaseLocked
 		}
 		return nil, fmt.Errorf("failed to acquire execution lock: %w", err)
@@ -257,6 +279,14 @@ func (s *ExecutionService) Execute(
 	)
 
 	return result, nil
+}
+
+// GetQueueStatus returns the queue status for a Change Plan
+func (s *ExecutionService) GetQueueStatus(ctx context.Context, changePlanID uuid.UUID) (*models.ExecutionQueue, error) {
+	if s.queueService == nil {
+		return nil, fmt.Errorf("queue service not available")
+	}
+	return s.queueService.GetQueueStatus(ctx, changePlanID)
 }
 
 // executeInTransaction executes SQL statements within a SERIALIZABLE transaction

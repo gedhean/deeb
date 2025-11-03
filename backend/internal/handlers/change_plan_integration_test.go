@@ -361,6 +361,12 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 	// Initialize execution lock manager
 	lockManager := services.NewExecutionLockManager(db, logger)
 
+	// Initialize execution queue repository
+	queueRepo := postgres.NewExecutionQueueRepository(db)
+
+	// Initialize execution queue service
+	queueService := services.NewExecutionQueueService(queueRepo, logger)
+
 	// Initialize execution service
 	executionService := services.NewExecutionService(
 		changePlanRepo,
@@ -368,6 +374,7 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		databaseRepo,
 		snapshotService,
 		lockManager,
+		queueService,
 		connectionMgr,
 		encryptionKey,
 		logger,

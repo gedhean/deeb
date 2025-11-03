@@ -2,6 +2,8 @@
 package routes
 
 import (
+	"context"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
@@ -507,17 +509,33 @@ func setupChangePlanRoutes(
 		logger.Get(),
 	)
 
+	// Initialize execution lock manager
+	lockManager := services.NewExecutionLockManager(db, logger.Get())
+
+	// Initialize execution queue repository
+	queueRepo := postgres.NewExecutionQueueRepository(db)
+
+	// Initialize execution queue service
+	queueService := services.NewExecutionQueueService(queueRepo, logger.Get())
+
 	// Initialize execution service
 	executionService := services.NewExecutionService(
 		changePlanRepo,
 		databaseInstanceRepo,
 		databaseRepo,
 		snapshotService,
-		services.NewExecutionLockManager(db, logger.Get()),
+		lockManager,
+		queueService,
 		connectionMgr,
 		encryptionKey,
 		logger.Get(),
 	)
+
+	// Initialize queue processor (background worker)
+	queueProcessor := services.NewQueueProcessor(queueRepo, executionService, logger.Get())
+	// Start the queue processor in background
+	ctx := context.Background()
+	queueProcessor.Start(ctx)
 
 	changePlanHandler := handlers.NewChangePlanHandler(
 		changePlanRepo,
@@ -570,5 +588,6 @@ func setupChangePlanRoutes(
 		authMiddleware.Authenticate,
 		executionAuthMiddleware.RequireExecutionPermission(),
 	)
+	changePlansGroup.GET("/:id/queue-status", changePlanHandler.GetQueueStatus, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/resubmit", changePlanHandler.ResubmitChangePlan, authMiddleware.Authenticate)
 }

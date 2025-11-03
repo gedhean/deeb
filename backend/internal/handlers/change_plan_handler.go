@@ -1736,6 +1736,16 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 			})
 		}
 		if err == services.ErrDatabaseLocked {
+			// Try to get queue position if available
+			queueStatus, queueErr := h.executionService.GetQueueStatus(ctx, changePlanID)
+			if queueErr == nil && queueStatus != nil {
+				return c.JSON(http.StatusConflict, map[string]interface{}{
+					"error": "Database is currently locked by another execution",
+					"queued": true,
+					"queue_position": queueStatus.Position,
+					"queue_status": queueStatus.Status,
+				})
+			}
 			return c.JSON(http.StatusConflict, map[string]interface{}{
 				"error": "Database is currently locked by another execution",
 			})
@@ -1777,6 +1787,81 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 	response := map[string]interface{}{
 		"change_plan": updatedChangePlan.ToResponse(),
 		"execution":   executionData,
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+// GetQueueStatus handles GET /api/v1/change-plans/:id/queue-status
+// Returns the queue status and position for a Change Plan
+func (h *ChangePlanHandler) GetQueueStatus(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Get change plan to verify it exists
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// Get queue status
+	queueStatus, err := h.executionService.GetQueueStatus(ctx, changePlanID)
+	if err != nil {
+		// Queue item not found - Change Plan is not queued
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"change_plan_id": changePlanID.String(),
+			"queued":         false,
+			"message":        "Change plan is not in the execution queue",
+		})
+	}
+
+	// Calculate position
+	position := queueStatus.Position
+
+	response := map[string]interface{}{
+		"change_plan_id": changePlanID.String(),
+		"database_id":    changePlan.TargetDatabaseID.String(),
+		"queued":         true,
+		"status":          queueStatus.Status,
+		"position":       position,
+		"priority":        queueStatus.Priority,
+		"queued_at":       queueStatus.QueuedAt,
+	}
+
+	if queueStatus.StartedAt != nil {
+		response["started_at"] = queueStatus.StartedAt
+	}
+
+	if queueStatus.CompletedAt != nil {
+		response["completed_at"] = queueStatus.CompletedAt
+	}
+
+	if queueStatus.ErrorMessage != nil {
+		response["error_message"] = *queueStatus.ErrorMessage
 	}
 
 	return c.JSON(http.StatusOK, response)
