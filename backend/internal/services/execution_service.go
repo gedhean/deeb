@@ -31,6 +31,7 @@ type ExecutionService struct {
 	executionLogRepo repository.ExecutionLogRepository
 	connectionMgr   ConnectionManagerInterface
 	encryptionKey   string
+	executionTimeout time.Duration // Timeout for SQL execution (default: 5 minutes)
 	logger          *zap.Logger
 }
 
@@ -55,6 +56,8 @@ func NewExecutionService(
 	encryptionKey string,
 	logger *zap.Logger,
 ) *ExecutionService {
+	executionTimeout := 5 * time.Minute // Default: 5 minutes
+	
 	return &ExecutionService{
 		changePlanRepo:  changePlanRepo,
 		dbInstanceRepo:  dbInstanceRepo,
@@ -65,6 +68,36 @@ func NewExecutionService(
 		executionLogRepo: executionLogRepo,
 		connectionMgr:   connectionMgr,
 		encryptionKey:   encryptionKey,
+		executionTimeout: executionTimeout,
+		logger:          logger,
+	}
+}
+
+// NewExecutionServiceWithTimeout creates a new execution service with custom timeout
+func NewExecutionServiceWithTimeout(
+	changePlanRepo repository.ChangePlanRepository,
+	dbInstanceRepo repository.DatabaseInstanceRepository,
+	databaseRepo repository.DatabaseRepository,
+	snapshotService *SchemaSnapshotService,
+	lockManager ExecutionLockManager,
+	queueService *ExecutionQueueService,
+	executionLogRepo repository.ExecutionLogRepository,
+	connectionMgr ConnectionManagerInterface,
+	encryptionKey string,
+	executionTimeout time.Duration,
+	logger *zap.Logger,
+) *ExecutionService {
+	return &ExecutionService{
+		changePlanRepo:  changePlanRepo,
+		dbInstanceRepo:  dbInstanceRepo,
+		databaseRepo:    databaseRepo,
+		snapshotService: snapshotService,
+		lockManager:     lockManager,
+		queueService:    queueService,
+		executionLogRepo: executionLogRepo,
+		connectionMgr:   connectionMgr,
+		encryptionKey:   encryptionKey,
+		executionTimeout: executionTimeout,
 		logger:          logger,
 	}
 }
@@ -185,10 +218,20 @@ func (s *ExecutionService) Execute(
 		zap.String("snapshot_id", beforeSnapshot.ID.String()),
 	)
 
-	// Step 3: Execute SQL in transaction
+	// Step 3: Execute SQL in transaction with timeout
 	executionStartTime := time.Now()
-	result, err := s.executeInTransaction(ctx, dbInstance, db, changePlan.SQLContent)
+	
+	// Create timeout context for SQL execution
+	execCtx, cancel := context.WithTimeout(ctx, s.executionTimeout)
+	defer cancel()
+	
+	result, err := s.executeInTransaction(execCtx, dbInstance, db, changePlan.SQLContent)
 	duration := time.Since(executionStartTime)
+
+	// Check if timeout occurred
+	if err != nil && execCtx.Err() == context.DeadlineExceeded {
+		err = fmt.Errorf("execution timeout after %v: %w", s.executionTimeout, err)
+	}
 
 	// Store execution results in Change Plan
 	now := time.Now()
