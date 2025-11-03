@@ -231,17 +231,28 @@ Add audit logging for Change Plan creation, updates, status transitions, and del
 
 ### P05M08: Add audit logging to approval operations
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M08
 
 **Goal**
 Add audit logging for approval and rejection actions.
 
 **Acceptance Criteria**
-- [ ] Approval actions logged
-- [ ] Rejection/close actions logged
-- [ ] Audit log entries include approver, Change Plan, and comment
-- [ ] Integration tests updated
+- [x] Approval actions logged
+- [x] Rejection/close actions logged
+- [x] Audit log entries include approver, Change Plan, and comment
+- [x] Integration tests updated
+
+**Notes:**
+- Audit logging for approval operations was already implemented in P05M07 in the handler layer (ApproveChangePlan and CloseChangePlan methods log status transitions)
+- Added integration tests to verify audit logging works correctly:
+  - TestIntegration_ChangePlan_AuditLogging_ApproveChangePlan: Verifies audit log entry created for approval with approver ID, change plan ID, comments, and IP address
+  - TestIntegration_ChangePlan_AuditLogging_CloseChangePlan: Verifies audit log entry created for close/rejection with approver ID, change plan ID, comments, and IP address
+- Updated setupChangePlanHandler and setupChangePlanHandlerWithTimeout to initialize auditLogService
+- Added auditLogService to ChangePlanHandler constructor calls in test setup functions
+- Tests verify audit log entries include approver, Change Plan details, and comments
+- Tests verify IP address is logged
+- All tests passing, linting passes (0 issues)
 
 ---
 
