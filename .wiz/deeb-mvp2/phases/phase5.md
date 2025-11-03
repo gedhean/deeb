@@ -203,19 +203,29 @@ Add audit logging for Projects, Environments, Database Instances, and Databases 
 
 ### P05M07: Add audit logging to Change Plan operations
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M07
 
 **Goal**
 Add audit logging for Change Plan creation, updates, status transitions, and deletions.
 
 **Acceptance Criteria**
-- [ ] Change Plan creation logged
-- [ ] Change Plan updates logged
-- [ ] Status transitions logged
-- [ ] Change Plan deletion logged
-- [ ] Audit log entries include Change Plan details
-- [ ] Integration tests updated
+- [x] Change Plan creation logged
+- [x] Change Plan updates logged
+- [x] Status transitions logged
+- [x] Change Plan deletion logged
+- [x] Audit log entries include Change Plan details
+- [x] Integration tests updated
+
+**Notes:**
+- Added auditService field to ChangePlanHandler
+- Updated NewChangePlanHandler constructor to accept auditService parameter
+- Added audit logging calls in CreateChangePlan, UpdateChangePlan, DeleteChangePlan
+- Added status transition logging in ApproveChangePlan (Open → Approved), CloseChangePlan (Open → Closed), ExecuteChangePlan (Approved → Completed/Failed)
+- UpdateChangePlan logs both update action and status transitions when status changes
+- ExecuteChangePlan logs execution action and status transition to final status
+- Updated routes.go to pass auditService to ChangePlanHandler constructor
+- All tests passing, linting passes (0 issues)
 
 ---
 
