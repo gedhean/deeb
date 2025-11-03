@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -2470,6 +2471,88 @@ func TestIntegration_ChangePlan_Create_Forbidden(t *testing.T) {
 	err = handler.CreateChangePlan(c)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+// TestIntegration_ChangePlan_Create_SQLContentTooLarge tests POST /api/v1/change-plans with SQL content exceeding 10MB
+func TestIntegration_ChangePlan_Create_SQLContentTooLarge(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+	tokenManager := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing")
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+
+	// Create test user
+	author := createTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add user as project member with Developer role
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	err := projectMemberRepo.Create(ctx, &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+	})
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID.String(), author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create SQL content larger than 10MB
+	largeSQLContent := strings.Repeat("A", handlers.MaxSQLContentSize+1)
+
+	// Create request with oversized SQL content
+	createReq := handlers.CreateChangePlanRequest{
+		ProjectID:        project.ID.String(),
+		TargetDatabaseID: database.ID.String(),
+		Title:            "Test Change Plan",
+		Description:      "Test description",
+		ChangeType:       "DDL",
+		SQLContent:       largeSQLContent,
+	}
+
+	body, _ := json.Marshal(createReq)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/change-plans", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute
+	err = handler.CreateChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// Verify response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Contains(t, response["error"], "exceeds maximum size")
 }
 
 // TestIntegration_ChangePlan_GetByID tests GET /api/v1/change-plans/:id

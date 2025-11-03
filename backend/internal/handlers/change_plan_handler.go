@@ -234,6 +234,10 @@ func validateCreateChangePlanRequest(req *models.CreateChangePlanRequest) error 
 	if req.SQLContent == "" {
 		return models.ErrInvalidChangePlan("sql_content is required")
 	}
+	// Validate SQL content size limit (10MB max)
+	if len(req.SQLContent) > MaxSQLContentSize {
+		return models.ErrInvalidChangePlan("sql_content exceeds maximum size of 10MB")
+	}
 	if req.ChangeType != models.ChangeTypeDDL && req.ChangeType != models.ChangeTypeDML {
 		return models.ErrInvalidChangePlan("change_type must be DDL or DML")
 	}
