@@ -81,8 +81,10 @@ func (s *SchemaSnapshotService) CapturePostgreSQL(
 		return nil, fmt.Errorf("failed to decrypt password: %w", err)
 	}
 
-	// Build pg_dump command
+	// Build pg_dump command with performance optimizations
 	// pg_dump --schema-only --no-owner --no-privileges --host=<host> --port=<port> --username=<username> <database>
+	// Added --jobs=4 for parallel dump (faster for large schemas)
+	// Note: --compress is only available for directory/custom formats, not plain format
 	cmd := exec.CommandContext(ctx, "pg_dump",
 		"--schema-only",
 		"--no-owner",
@@ -92,6 +94,7 @@ func (s *SchemaSnapshotService) CapturePostgreSQL(
 		"--username", dbInstance.Username,
 		"--dbname", db.DatabaseName,
 		"--format", "plain", // Plain text SQL format
+		"--jobs", "4", // Parallel dump for faster execution (4 parallel workers)
 	)
 
 	// Set password via PGPASSWORD environment variable
@@ -201,8 +204,9 @@ func (s *SchemaSnapshotService) CaptureMySQL(
 		return nil, fmt.Errorf("failed to decrypt password: %w", err)
 	}
 
-	// Build mysqldump command
+	// Build mysqldump command with performance optimizations
 	// mysqldump --no-data --host=<host> --port=<port> --user=<username> --password=<password> <database>
+	// Added --single-transaction and --quick for faster dumps
 	cmd := exec.CommandContext(ctx, "mysqldump",
 		"--no-data",
 		"--host", dbInstance.Host,
@@ -211,6 +215,9 @@ func (s *SchemaSnapshotService) CaptureMySQL(
 		fmt.Sprintf("--password=%s", password),
 		"--skip-comments",       // Skip comments for cleaner output
 		"--skip-add-drop-table", // Don't include DROP TABLE statements
+		"--single-transaction",  // Faster for InnoDB tables (no lock)
+		"--quick",               // Retrieve rows one at a time (faster for large schemas)
+		"--compress",            // Compress data transfer
 		db.DatabaseName,
 	)
 

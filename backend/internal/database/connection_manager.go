@@ -90,23 +90,26 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 		return nil, fmt.Errorf("failed to connect to MySQL database: %w", err)
 	}
 
-	// Configure connection pool
+	// Configure connection pool with optimized settings for concurrent executions
+	// Increased pool sizes to handle concurrent change plan executions
 	maxOpenConns := params.MaxOpenConns
 	if maxOpenConns <= 0 {
-		maxOpenConns = 10 // Default
+		maxOpenConns = 25 // Increased from 10 for better concurrency
 	}
 	maxIdleConns := params.MaxIdleConns
 	if maxIdleConns <= 0 {
-		maxIdleConns = 5 // Default
+		maxIdleConns = 10 // Increased from 5 to reduce connection churn
 	}
 	connMaxLifetime := params.ConnMaxLifetime
 	if connMaxLifetime <= 0 {
-		connMaxLifetime = 5 * time.Minute // Default
+		connMaxLifetime = 15 * time.Minute // Increased from 5min for better reuse
 	}
 
 	db.SetMaxOpenConns(maxOpenConns)
 	db.SetMaxIdleConns(maxIdleConns)
 	db.SetConnMaxLifetime(connMaxLifetime)
+	// Set connection max idle time to reduce stale connections
+	db.SetConnMaxIdleTime(5 * time.Minute)
 
 	// Test connection
 	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -193,23 +196,26 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 		return nil, fmt.Errorf("failed to connect to PostgreSQL database: %w", err)
 	}
 
-	// Configure connection pool
+	// Configure connection pool with optimized settings for concurrent executions
+	// Increased pool sizes to handle concurrent change plan executions
 	maxOpenConns := params.MaxOpenConns
 	if maxOpenConns <= 0 {
-		maxOpenConns = 10 // Default
+		maxOpenConns = 25 // Increased from 10 for better concurrency
 	}
 	maxIdleConns := params.MaxIdleConns
 	if maxIdleConns <= 0 {
-		maxIdleConns = 5 // Default
+		maxIdleConns = 10 // Increased from 5 to reduce connection churn
 	}
 	connMaxLifetime := params.ConnMaxLifetime
 	if connMaxLifetime <= 0 {
-		connMaxLifetime = 5 * time.Minute // Default
+		connMaxLifetime = 15 * time.Minute // Increased from 5min for better reuse
 	}
 
 	db.SetMaxOpenConns(maxOpenConns)
 	db.SetMaxIdleConns(maxIdleConns)
 	db.SetConnMaxLifetime(connMaxLifetime)
+	// Set connection max idle time to reduce stale connections
+	db.SetConnMaxIdleTime(5 * time.Minute)
 
 	// Test connection
 	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
