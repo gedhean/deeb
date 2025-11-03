@@ -138,4 +138,3 @@ func TestExecutionService_PerformanceAnalysis(t *testing.T) {
 		require.Greater(t, len(sqlContent), 1000000, "should handle large SQL files")
 	})
 }
-

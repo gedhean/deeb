@@ -28,32 +28,32 @@ const (
 	ActionDelete = "delete"
 
 	// Change plan actions
-	ActionCreateChangePlan    = "create_change_plan"
-	ActionUpdateChangePlan    = "update_change_plan"
-	ActionDeleteChangePlan    = "delete_change_plan"
-	ActionSubmitChangePlan    = "submit_change_plan"
-	ActionApproveChangePlan   = "approve_change_plan"
-	ActionRejectChangePlan    = "reject_change_plan"
-	ActionCloseChangePlan     = "close_change_plan"
-	ActionExecuteChangePlan   = "execute_change_plan"
-	ActionAssignReviewer      = "assign_reviewer"
-	ActionUnassignReviewer    = "unassign_reviewer"
+	ActionCreateChangePlan  = "create_change_plan"
+	ActionUpdateChangePlan  = "update_change_plan"
+	ActionDeleteChangePlan  = "delete_change_plan"
+	ActionSubmitChangePlan  = "submit_change_plan"
+	ActionApproveChangePlan = "approve_change_plan"
+	ActionRejectChangePlan  = "reject_change_plan"
+	ActionCloseChangePlan   = "close_change_plan"
+	ActionExecuteChangePlan = "execute_change_plan"
+	ActionAssignReviewer    = "assign_reviewer"
+	ActionUnassignReviewer  = "unassign_reviewer"
 
 	// Project actions
-	ActionCreateProject            = "create_project"
-	ActionUpdateProject            = "update_project"
-	ActionDeleteProject            = "delete_project"
-	ActionAddProjectMember         = "add_project_member"
-	ActionRemoveProjectMember      = "remove_project_member"
-	ActionUpdateProjectMemberRole  = "update_project_member_role"
+	ActionCreateProject           = "create_project"
+	ActionUpdateProject           = "update_project"
+	ActionDeleteProject           = "delete_project"
+	ActionAddProjectMember        = "add_project_member"
+	ActionRemoveProjectMember     = "remove_project_member"
+	ActionUpdateProjectMemberRole = "update_project_member_role"
 
 	// Database actions
-	ActionCreateDatabase           = "create_database"
-	ActionUpdateDatabase           = "update_database"
-	ActionDeleteDatabase           = "delete_database"
-	ActionCreateDatabaseInstance   = "create_database_instance"
-	ActionUpdateDatabaseInstance   = "update_database_instance"
-	ActionDeleteDatabaseInstance   = "delete_database_instance"
+	ActionCreateDatabase         = "create_database"
+	ActionUpdateDatabase         = "update_database"
+	ActionDeleteDatabase         = "delete_database"
+	ActionCreateDatabaseInstance = "create_database_instance"
+	ActionUpdateDatabaseInstance = "update_database_instance"
+	ActionDeleteDatabaseInstance = "delete_database_instance"
 
 	// User actions
 	ActionCreateUser     = "create_user"
@@ -69,18 +69,18 @@ const (
 
 // Resource types for audit logging
 const (
-	ResourceTypeUser            = "user"
-	ResourceTypeProject         = "project"
-	ResourceTypeEnvironment     = "environment"
-	ResourceTypeDatabase        = "database"
+	ResourceTypeUser             = "user"
+	ResourceTypeProject          = "project"
+	ResourceTypeEnvironment      = "environment"
+	ResourceTypeDatabase         = "database"
 	ResourceTypeDatabaseInstance = "database_instance"
-	ResourceTypeChangePlan      = "change_plan"
-	ResourceTypeApproval        = "approval"
-	ResourceTypeExecutionLog    = "execution_log"
-	ResourceTypeSchemaSnapshot  = "schema_snapshot"
-	ResourceTypeAuditLog        = "audit_log"
-	ResourceTypePolicy          = "policy"
-	ResourceTypePolicyFinding   = "policy_finding"
+	ResourceTypeChangePlan       = "change_plan"
+	ResourceTypeApproval         = "approval"
+	ResourceTypeExecutionLog     = "execution_log"
+	ResourceTypeSchemaSnapshot   = "schema_snapshot"
+	ResourceTypeAuditLog         = "audit_log"
+	ResourceTypePolicy           = "policy"
+	ResourceTypePolicyFinding    = "policy_finding"
 )
 
 // AuditLogService provides audit logging functionality
@@ -350,4 +350,3 @@ func determineActionFromTransition(resourceType, fromStatus, toStatus string) st
 	// Generic state transition
 	return fmt.Sprintf("%s_%s", ActionUpdate, resourceType)
 }
-

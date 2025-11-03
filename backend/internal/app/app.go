@@ -15,7 +15,9 @@ import (
 	"github.com/nsxbet/deeb/internal/logger"
 	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/migrate"
+	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/routes"
+	"github.com/nsxbet/deeb/internal/services"
 	"go.uber.org/zap"
 )
 
@@ -97,12 +99,16 @@ func New(version string, configPath string) (*App, error) {
 	// Initialize rate limiter for login attempts
 	loginRateLimiter := handlers.NewRateLimiter()
 
+	// Initialize audit log repository and service
+	auditLogRepo := postgres.NewAuditLogRepository(db)
+	auditLogService := services.NewAuditLogService(auditLogRepo, logger.Get())
+
 	// Create Echo instance
 	e := echo.New()
 	e.HideBanner = true
 
-	// Configure middleware
-	middleware.Setup(e, cfg)
+	// Configure middleware (including audit logging)
+	middleware.Setup(e, cfg, auditLogService)
 
 	app := &App{
 		Config:           cfg,

@@ -133,7 +133,12 @@ func cleanupChangePlanTestData(t *testing.T, db *sqlx.DB) {
 }
 
 // createChangePlanTestUser creates a test user and returns it
-func createChangePlanTestUser(t *testing.T, userRepo repository.UserRepository, email string, role models.OrganizationRole) *models.User {
+func createChangePlanTestUser(
+	t *testing.T,
+	userRepo repository.UserRepository,
+	email string,
+	role models.OrganizationRole,
+) *models.User {
 	t.Helper()
 
 	ctx := context.Background()
@@ -422,7 +427,12 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 }
 
 // setupChangePlanHandlerWithTimeout creates a ChangePlanHandler with custom execution timeout
-func setupChangePlanHandlerWithTimeout(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenManager, timeout time.Duration) *handlers.ChangePlanHandler {
+func setupChangePlanHandlerWithTimeout(
+	t *testing.T,
+	db *sqlx.DB,
+	tokenManager *auth.TokenManager,
+	timeout time.Duration,
+) *handlers.ChangePlanHandler {
 	t.Helper()
 
 	logger := zap.NewNop()
@@ -559,7 +569,12 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_Success(t *testing.T) {
 	ctx := context.Background()
 
 	// Create user
-	user := createChangePlanTestUser(t, userRepo, fmt.Sprintf("test-%d@example.com", time.Now().Unix()), models.OrganizationRoleAdmin)
+	user := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleAdmin,
+	)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -673,7 +688,12 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_ErrorsBlockTransition(t *test
 	ctx := context.Background()
 
 	// Create user
-	user := createChangePlanTestUser(t, userRepo, fmt.Sprintf("test-%d@example.com", time.Now().Unix()), models.OrganizationRoleAdmin)
+	user := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleAdmin,
+	)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -788,7 +808,12 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_OnlyWarnings(t *testing.T) {
 	ctx := context.Background()
 
 	// Create user
-	user := createChangePlanTestUser(t, userRepo, fmt.Sprintf("test-%d@example.com", time.Now().Unix()), models.OrganizationRoleAdmin)
+	user := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleAdmin,
+	)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -910,7 +935,12 @@ func TestIntegration_ChangePlan_ManualSQLReview(t *testing.T) {
 	ctx := context.Background()
 
 	// Create user
-	user := createChangePlanTestUser(t, userRepo, fmt.Sprintf("test-%d@example.com", time.Now().Unix()), models.OrganizationRoleAdmin)
+	user := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleAdmin,
+	)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1014,7 +1044,12 @@ func TestIntegration_ChangePlan_ManualSQLReview_Unauthorized(t *testing.T) {
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 
 	// Create user (not a project member)
-	user := createChangePlanTestUser(t, userRepo, fmt.Sprintf("test-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	user := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1089,7 +1124,12 @@ func TestIntegration_ChangePlan_ListWithFilters(t *testing.T) {
 	ctx := context.Background()
 
 	// Create user
-	user := createChangePlanTestUser(t, userRepo, fmt.Sprintf("test-%d@example.com", time.Now().Unix()), models.OrganizationRoleAdmin)
+	user := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleAdmin,
+	)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1317,7 +1357,12 @@ func TestIntegration_ChangePlan_GetWithPolicyFindings(t *testing.T) {
 	ctx := context.Background()
 
 	// Create user
-	user := createChangePlanTestUser(t, userRepo, fmt.Sprintf("test-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	user := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project and add user as member
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -1466,7 +1511,12 @@ func TestIntegration_ChangePlan_GetWithoutPolicyFindings(t *testing.T) {
 	ctx := context.Background()
 
 	// Create user
-	user := createChangePlanTestUser(t, userRepo, fmt.Sprintf("test-%d@example.com", time.Now().Unix()), models.OrganizationRoleDeveloper)
+	user := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
 
 	// Create project and add user as member
 	project := createTestProject(t, projectRepo, "Test Project")
@@ -4727,7 +4777,11 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SnapshotCapture(t *testing.T) 
 	assert.Equal(t, database.ID, afterSnapshot.DatabaseID)
 	assert.False(t, beforeSnapshot.CreatedAt.IsZero())
 	assert.False(t, afterSnapshot.CreatedAt.IsZero())
-	assert.True(t, beforeSnapshot.CreatedAt.Before(afterSnapshot.CreatedAt) || beforeSnapshot.CreatedAt.Equal(afterSnapshot.CreatedAt), "before snapshot should be created before or at same time as after")
+	assert.True(
+		t,
+		beforeSnapshot.CreatedAt.Before(afterSnapshot.CreatedAt) || beforeSnapshot.CreatedAt.Equal(afterSnapshot.CreatedAt),
+		"before snapshot should be created before or at same time as after",
+	)
 }
 
 // TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase tests concurrent execution blocking on same database
@@ -6243,7 +6297,9 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_RollbackVerification(t *testin
 
 	_, err = targetDBConn.Exec("CREATE TABLE rollback_verification_initial (id UUID PRIMARY KEY, value VARCHAR(100));")
 	require.NoError(t, err)
-	_, err = targetDBConn.Exec("INSERT INTO rollback_verification_initial (id, value) VALUES (gen_random_uuid(), 'initial_value');")
+	_, err = targetDBConn.Exec(
+		"INSERT INTO rollback_verification_initial (id, value) VALUES (gen_random_uuid(), 'initial_value');",
+	)
 	require.NoError(t, err)
 
 	// Verify initial state
@@ -6577,7 +6633,11 @@ func TestIntegration_ChangePlan_CloseChangePlan(t *testing.T) {
 	require.NoError(t, err)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/change-plans/%s/close", changePlan.ID.String()), bytes.NewReader(reqBodyJSON))
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/close", changePlan.ID.String()),
+		bytes.NewReader(reqBodyJSON),
+	)
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
 	rec := httptest.NewRecorder()
@@ -6714,7 +6774,11 @@ func TestIntegration_ChangePlan_CloseChangePlan_Unauthorized(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for unauthorized user
-	token, err := tokenManager.GenerateToken(unauthorizedUser.ID, unauthorizedUser.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(
+		unauthorizedUser.ID,
+		unauthorizedUser.Email,
+		string(models.OrganizationRoleDeveloper),
+	)
 	require.NoError(t, err)
 
 	// Create request
@@ -7003,7 +7067,11 @@ func TestIntegration_ChangePlan_ApproveChangePlan_Unauthorized(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for unauthorized user
-	token, err := tokenManager.GenerateToken(unauthorizedUser.ID, unauthorizedUser.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(
+		unauthorizedUser.ID,
+		unauthorizedUser.Email,
+		string(models.OrganizationRoleDeveloper),
+	)
 	require.NoError(t, err)
 
 	// Create request

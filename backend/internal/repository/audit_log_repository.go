@@ -43,4 +43,3 @@ type AuditLogRepository interface {
 	// CountWithFilters returns the total number of audit logs matching filters
 	CountWithFilters(ctx context.Context, filters AuditLogListFilters) (int64, error)
 }
-

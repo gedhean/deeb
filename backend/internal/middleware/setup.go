@@ -6,11 +6,14 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/nsxbet/deeb/internal/config"
+	"github.com/nsxbet/deeb/internal/logger"
+	"github.com/nsxbet/deeb/internal/services"
 )
 
 // Setup configures all Echo middleware in the correct order.
 // Includes recovery, logging, CORS, rate limiting, compression, and security headers.
-func Setup(e *echo.Echo, cfg *config.Config) {
+// auditService is optional - if provided, audit logging middleware will be enabled.
+func Setup(e *echo.Echo, cfg *config.Config, auditService *services.AuditLogService) {
 	// Set custom error handler for consistent JSON error responses
 	e.HTTPErrorHandler = CustomErrorHandler
 
@@ -19,6 +22,12 @@ func Setup(e *echo.Echo, cfg *config.Config) {
 
 	// Custom request logger with Zap integration and correlation IDs
 	e.Use(RequestLogger())
+
+	// Audit logging middleware - logs all requests to audit trail
+	if auditService != nil {
+		auditLogMiddleware := NewAuditLogMiddleware(auditService, logger.Get())
+		e.Use(auditLogMiddleware.AuditLog)
+	}
 
 	// CORS middleware - configure cross-origin requests
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{

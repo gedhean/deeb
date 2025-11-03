@@ -113,19 +113,31 @@ Create audit logging service that logs all user actions with consistent format.
 
 ### P05M04: Implement audit logging middleware
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M04
 
 **Goal**
 Create middleware that automatically logs HTTP requests and responses for audit trail.
 
 **Acceptance Criteria**
-- [ ] Audit logging middleware created in `backend/internal/middleware/audit_log.go`
-- [ ] Middleware captures request details (method, path, user)
-- [ ] Middleware captures response status
-- [ ] Audit log entry created for each request
-- [ ] Middleware integrated with Echo router
-- [ ] Unit tests passing
+- [x] Audit logging middleware created in `backend/internal/middleware/audit_log.go`
+- [x] Middleware captures request details (method, path, user)
+- [x] Middleware captures response status
+- [x] Audit log entry created for each request
+- [x] Middleware integrated with Echo router
+- [x] Unit tests passing
+
+**Notes:**
+- Created `AuditLogMiddleware` in `backend/internal/middleware/audit_log.go`
+- Middleware captures request method, path, user ID (from context), and response status
+- Automatically determines action type (create, read, update, delete, approve, execute) from HTTP method and path
+- Extracts resource type and resource ID from path
+- Skips health check endpoints and static assets
+- Builds details JSON with method, path, status, result (success/failure), and error message
+- Integrated with Echo router in `middleware.Setup()` function
+- Added audit log service initialization in `app.New()`
+- Comprehensive unit tests: 8 test cases covering authenticated/unauthenticated requests, different HTTP methods, resource IDs, error responses, health check skipping, and special actions (approve, execute)
+- All tests passing, linting passes (0 issues)
 
 ---
 

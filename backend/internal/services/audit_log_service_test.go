@@ -7,13 +7,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	"github.com/nsxbet/deeb/internal/models"
-	"github.com/nsxbet/deeb/internal/repository"
 )
 
 // MockAuditLogRepository is a mock implementation of AuditLogRepository
@@ -34,7 +33,11 @@ func (m *MockAuditLogRepository) List(ctx context.Context, limit, offset int) ([
 	return args.Get(0).([]*models.AuditLog), args.Error(1)
 }
 
-func (m *MockAuditLogRepository) GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.AuditLog, error) {
+func (m *MockAuditLogRepository) GetByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+	limit, offset int,
+) ([]*models.AuditLog, error) {
 	args := m.Called(ctx, userID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -50,7 +53,11 @@ func (m *MockAuditLogRepository) GetByAction(ctx context.Context, action string,
 	return args.Get(0).([]*models.AuditLog), args.Error(1)
 }
 
-func (m *MockAuditLogRepository) GetByTargetType(ctx context.Context, resourceType string, limit, offset int) ([]*models.AuditLog, error) {
+func (m *MockAuditLogRepository) GetByTargetType(
+	ctx context.Context,
+	resourceType string,
+	limit, offset int,
+) ([]*models.AuditLog, error) {
 	args := m.Called(ctx, resourceType, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -311,4 +318,3 @@ func TestAuditLogService_ResourceTypes(t *testing.T) {
 	assert.NotEmpty(t, ResourceTypeChangePlan)
 	assert.NotEmpty(t, ResourceTypeDatabase)
 }
-

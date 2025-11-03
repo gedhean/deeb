@@ -120,7 +120,11 @@ func (r *AuditLogRepository) GetByAction(ctx context.Context, action string, lim
 }
 
 // GetByTargetType retrieves audit logs filtered by resource type
-func (r *AuditLogRepository) GetByTargetType(ctx context.Context, resourceType string, limit, offset int) ([]*models.AuditLog, error) {
+func (r *AuditLogRepository) GetByTargetType(
+	ctx context.Context,
+	resourceType string,
+	limit, offset int,
+) ([]*models.AuditLog, error) {
 	query := `
 		SELECT id, user_id, action, resource_type, resource_id,
 			details, ip_address, user_agent, timestamp
@@ -262,4 +266,3 @@ func (r *AuditLogRepository) CountWithFilters(ctx context.Context, filters repos
 
 	return count, nil
 }
-
