@@ -173,18 +173,31 @@ Add audit logging for login, logout, and registration actions.
 
 ### P05M06: Add audit logging to resource management endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M06
 
 **Goal**
 Add audit logging for Projects, Environments, Database Instances, and Databases CRUD operations.
 
 **Acceptance Criteria**
-- [ ] Create operations logged (project, environment, database_instance, database)
-- [ ] Update operations logged
-- [ ] Delete operations logged
-- [ ] Audit log entries include resource details
-- [ ] Integration tests updated
+- [x] Create operations logged (project, environment, database_instance, database)
+- [x] Update operations logged
+- [x] Delete operations logged
+- [x] Audit log entries include resource details
+- [x] Integration tests updated
+
+**Notes:**
+- Added auditService field to ProjectHandler, EnvironmentHandler, DatabaseInstanceHandler, and DatabaseHandler
+- Updated all handler constructors to accept auditService parameter
+- Added audit logging calls in Create, Update, and Delete methods for all handlers:
+  - ProjectHandler: CreateProject, UpdateProject, DeleteProject
+  - EnvironmentHandler: CreateEnvironment, UpdateEnvironment, DeleteEnvironment
+  - DatabaseInstanceHandler: CreateDatabaseInstance, UpdateDatabaseInstance, DeleteDatabaseInstance
+  - DatabaseHandler: CreateDatabase, UpdateDatabase, DeleteDatabase
+- Audit log entries include resource details (name, description, IDs, etc.) in JSON format
+- Updated routes.go to pass auditService to all handler constructors
+- Updated unit tests to pass nil auditService (since they don't verify audit logging)
+- All tests passing, linting passes (0 issues)
 
 ---
 

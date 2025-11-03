@@ -10,6 +10,7 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/utils"
 	"go.uber.org/zap"
 )
@@ -19,6 +20,7 @@ type DatabaseInstanceHandler struct {
 	dbInstanceRepo repository.DatabaseInstanceRepository
 	databaseRepo   repository.DatabaseRepository // For cascade delete checks
 	encryptionKey  string
+	auditService   *services.AuditLogService
 	logger         *zap.Logger
 }
 
@@ -27,12 +29,14 @@ func NewDatabaseInstanceHandler(
 	dbInstanceRepo repository.DatabaseInstanceRepository,
 	databaseRepo repository.DatabaseRepository,
 	encryptionKey string,
+	auditService *services.AuditLogService,
 	logger *zap.Logger,
 ) *DatabaseInstanceHandler {
 	return &DatabaseInstanceHandler{
 		dbInstanceRepo: dbInstanceRepo,
 		databaseRepo:   databaseRepo,
 		encryptionKey:  encryptionKey,
+		auditService:   auditService,
 		logger:         logger,
 	}
 }
@@ -158,6 +162,22 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 		zap.String("database_instance_id", instance.ID.String()),
 		zap.String("name", instance.Name),
 	)
+	
+	// Log audit entry
+	if h.auditService != nil {
+		detailsJSON, _ := json.Marshal(map[string]interface{}{
+			"name":          instance.Name,
+			"description":   instance.Description,
+			"database_type": string(instance.DatabaseType),
+			"host":          instance.Host,
+			"port":          instance.Port,
+			"username":      instance.Username,
+		})
+		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeDatabaseInstance, instance.ID, c.Request(), detailsJSON); err != nil {
+			h.logger.Error("Failed to log audit entry for database instance creation", zap.Error(err))
+		}
+	}
+	
 	return c.JSON(http.StatusCreated, instance.ToResponse())
 }
 
@@ -429,6 +449,25 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 	}
 
 	h.logger.Info("Database instance updated successfully", zap.String("id", instance.ID.String()))
+	
+	// Log audit entry
+	if h.auditService != nil {
+		claims, ok := auth.GetUserFromEchoContext(c)
+		if ok && claims != nil {
+			detailsJSON, _ := json.Marshal(map[string]interface{}{
+				"name":          instance.Name,
+				"description":   instance.Description,
+				"database_type": string(instance.DatabaseType),
+				"host":          instance.Host,
+				"port":          instance.Port,
+				"username":      instance.Username,
+			})
+			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionUpdate, services.ResourceTypeDatabaseInstance, id, c.Request(), detailsJSON); err != nil {
+				h.logger.Error("Failed to log audit entry for database instance update", zap.Error(err))
+			}
+		}
+	}
+	
 	return c.JSON(http.StatusOK, instance.ToResponse())
 }
 
@@ -488,6 +527,20 @@ func (h *DatabaseInstanceHandler) DeleteDatabaseInstance(c echo.Context) error {
 	}
 
 	h.logger.Info("Database instance deleted successfully", zap.String("id", id.String()))
+	
+	// Log audit entry
+	if h.auditService != nil {
+		claims, ok := auth.GetUserFromEchoContext(c)
+		if ok && claims != nil {
+			detailsJSON, _ := json.Marshal(map[string]interface{}{
+				"database_instance_id": id.String(),
+			})
+			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionDelete, services.ResourceTypeDatabaseInstance, id, c.Request(), detailsJSON); err != nil {
+				h.logger.Error("Failed to log audit entry for database instance deletion", zap.Error(err))
+			}
+		}
+	}
+	
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Database instance deleted successfully",
 	})

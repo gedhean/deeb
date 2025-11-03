@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/services"
 	"go.uber.org/zap"
 )
 
@@ -19,6 +21,7 @@ type ProjectHandler struct {
 	databaseRepo      repository.DatabaseRepository
 	projectMemberRepo repository.ProjectMemberRepository
 	userRepo          repository.UserRepository
+	auditService      *services.AuditLogService
 	logger            *zap.Logger
 }
 
@@ -28,6 +31,7 @@ func NewProjectHandler(
 	databaseRepo repository.DatabaseRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
 	userRepo repository.UserRepository,
+	auditService *services.AuditLogService,
 	logger *zap.Logger,
 ) *ProjectHandler {
 	return &ProjectHandler{
@@ -35,6 +39,7 @@ func NewProjectHandler(
 		databaseRepo:      databaseRepo,
 		projectMemberRepo: projectMemberRepo,
 		userRepo:          userRepo,
+		auditService:      auditService,
 		logger:            logger,
 	}
 }
@@ -83,6 +88,18 @@ func (h *ProjectHandler) CreateProject(c echo.Context) error {
 	}
 
 	h.logger.Info("Project created successfully", zap.String("project_id", project.ID.String()))
+	
+	// Log audit entry
+	if h.auditService != nil {
+		detailsJSON, _ := json.Marshal(map[string]interface{}{
+			"project_name": project.Name,
+			"description":  project.Description,
+		})
+		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeProject, project.ID, c.Request(), detailsJSON); err != nil {
+			h.logger.Error("Failed to log audit entry for project creation", zap.Error(err))
+		}
+	}
+	
 	return c.JSON(http.StatusCreated, project.ToResponse())
 }
 
@@ -228,6 +245,21 @@ func (h *ProjectHandler) UpdateProject(c echo.Context) error {
 	}
 
 	h.logger.Info("Project updated successfully", zap.String("project_id", projectID.String()))
+	
+	// Log audit entry
+	if h.auditService != nil {
+		claims, ok := auth.GetUserFromEchoContext(c)
+		if ok && claims != nil {
+			detailsJSON, _ := json.Marshal(map[string]interface{}{
+				"project_name": project.Name,
+				"description":  project.Description,
+			})
+			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionUpdate, services.ResourceTypeProject, projectID, c.Request(), detailsJSON); err != nil {
+				h.logger.Error("Failed to log audit entry for project update", zap.Error(err))
+			}
+		}
+	}
+	
 	return c.JSON(http.StatusOK, project.ToResponse())
 }
 
@@ -282,6 +314,20 @@ func (h *ProjectHandler) DeleteProject(c echo.Context) error {
 	}
 
 	h.logger.Info("Project deleted successfully", zap.String("project_id", projectID.String()))
+	
+	// Log audit entry
+	if h.auditService != nil {
+		claims, ok := auth.GetUserFromEchoContext(c)
+		if ok && claims != nil {
+			detailsJSON, _ := json.Marshal(map[string]interface{}{
+				"project_id": projectID.String(),
+			})
+			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionDelete, services.ResourceTypeProject, projectID, c.Request(), detailsJSON); err != nil {
+				h.logger.Error("Failed to log audit entry for project deletion", zap.Error(err))
+			}
+		}
+	}
+	
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Project deleted successfully",
 	})

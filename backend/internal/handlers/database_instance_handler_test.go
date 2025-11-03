@@ -149,6 +149,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -216,6 +217,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -258,6 +260,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -315,6 +318,7 @@ func TestListDatabaseInstances(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -349,6 +353,7 @@ func TestListDatabaseInstances(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -402,6 +407,7 @@ func TestGetDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -441,6 +447,7 @@ func TestGetDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -467,6 +474,7 @@ func TestGetDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -510,6 +518,7 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -562,6 +571,7 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -593,6 +603,7 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -626,6 +637,7 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -673,6 +685,7 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -708,6 +721,7 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 
@@ -735,6 +749,7 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 			repo,
 			&mockDatabaseRepositoryForInstance{},
 			"12345678901234567890123456789012",
+			nil,
 			logger,
 		)
 

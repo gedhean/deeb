@@ -53,11 +53,11 @@ func Setup(
 	setupSetupRoutes(e, userRepo)
 	setupAuthRoutes(e, cfg, userRepo, tokenManager, loginRateLimiter, auditLogService)
 	setupUserRoutes(e, userRepo, tokenManager)
-	setupProjectRoutes(e, projectRepo, dbRepo, projectMemberRepo, userRepo, tokenManager)
-	setupEnvironmentRoutes(e, envRepo, db, tokenManager)
+	setupProjectRoutes(e, projectRepo, dbRepo, projectMemberRepo, userRepo, tokenManager, auditLogService)
+	setupEnvironmentRoutes(e, envRepo, db, tokenManager, auditLogService)
 	setupPolicyRoutes(e, policyRepo, envRepo, tokenManager)
-	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager)
-	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, projectMemberRepo, tokenManager)
+	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager, auditLogService)
+	setupDatabaseRoutes(e, dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, projectMemberRepo, tokenManager, auditLogService)
 	setupIssueRoutes(e, issueRepo, tokenManager)
 	setupChangePlanRoutes(
 		e,
@@ -184,8 +184,9 @@ func setupProjectRoutes(
 	projectMemberRepo repository.ProjectMemberRepository,
 	userRepo repository.UserRepository,
 	tokenManager *auth.TokenManager,
+	auditLogService *services.AuditLogService,
 ) {
-	projectHandler := handlers.NewProjectHandler(projectRepo, databaseRepo, projectMemberRepo, userRepo, logger.Get())
+	projectHandler := handlers.NewProjectHandler(projectRepo, databaseRepo, projectMemberRepo, userRepo, auditLogService, logger.Get())
 	projectsGroup := e.Group("/api/v1/projects")
 
 	// Authentication and authorization middleware
@@ -252,8 +253,9 @@ func setupEnvironmentRoutes(
 	envRepo repository.EnvironmentRepository,
 	db *sqlx.DB,
 	tokenManager *auth.TokenManager,
+	auditLogService *services.AuditLogService,
 ) {
-	envHandler := handlers.NewEnvironmentHandler(envRepo, db, logger.Get())
+	envHandler := handlers.NewEnvironmentHandler(envRepo, db, auditLogService, logger.Get())
 	environmentsGroup := e.Group("/api/v1/environments")
 
 	// Authentication and authorization middleware
@@ -327,8 +329,9 @@ func setupDatabaseInstanceRoutes(
 	databaseRepo repository.DatabaseRepository,
 	encryptionKey string,
 	tokenManager *auth.TokenManager,
+	auditLogService *services.AuditLogService,
 ) {
-	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(dbInstanceRepo, databaseRepo, encryptionKey, logger.Get())
+	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(dbInstanceRepo, databaseRepo, encryptionKey, auditLogService, logger.Get())
 	dbInstancesGroup := e.Group("/api/v1/database-instances")
 
 	// Authentication and authorization middleware
@@ -377,8 +380,9 @@ func setupDatabaseRoutes(
 	changePlanRepo repository.ChangePlanRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
 	tokenManager *auth.TokenManager,
+	auditLogService *services.AuditLogService,
 ) {
-	dbHandler := handlers.NewDatabaseHandler(dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, logger.Get())
+	dbHandler := handlers.NewDatabaseHandler(dbRepo, projectRepo, envRepo, dbInstanceRepo, changePlanRepo, auditLogService, logger.Get())
 	databasesGroup := e.Group("/api/v1/databases")
 
 	// Authentication and authorization middleware

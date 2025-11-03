@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/services"
 	"go.uber.org/zap"
 )
 
@@ -20,6 +22,7 @@ type DatabaseHandler struct {
 	environmentRepo      repository.EnvironmentRepository
 	databaseInstanceRepo repository.DatabaseInstanceRepository
 	changePlanRepo       repository.ChangePlanRepository
+	auditService         *services.AuditLogService
 	logger               *zap.Logger
 }
 
@@ -30,6 +33,7 @@ func NewDatabaseHandler(
 	environmentRepo repository.EnvironmentRepository,
 	databaseInstanceRepo repository.DatabaseInstanceRepository,
 	changePlanRepo repository.ChangePlanRepository,
+	auditService *services.AuditLogService,
 	logger *zap.Logger,
 ) *DatabaseHandler {
 	return &DatabaseHandler{
@@ -38,6 +42,7 @@ func NewDatabaseHandler(
 		environmentRepo:      environmentRepo,
 		databaseInstanceRepo: databaseInstanceRepo,
 		changePlanRepo:       changePlanRepo,
+		auditService:         auditService,
 		logger:               logger,
 	}
 }
@@ -131,6 +136,21 @@ func (h *DatabaseHandler) CreateDatabase(c echo.Context) error {
 	}
 
 	h.logger.Info("Database created", zap.String("id", database.ID.String()), zap.String("name", database.DatabaseName))
+	
+	// Log audit entry
+	if h.auditService != nil {
+		detailsJSON, _ := json.Marshal(map[string]interface{}{
+			"database_name":        database.DatabaseName,
+			"description":         database.Description,
+			"project_id":          database.ProjectID.String(),
+			"environment_id":      database.EnvironmentID.String(),
+			"database_instance_id": database.DatabaseInstanceID.String(),
+		})
+		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeDatabase, database.ID, c.Request(), detailsJSON); err != nil {
+			h.logger.Error("Failed to log audit entry for database creation", zap.Error(err))
+		}
+	}
+	
 	return c.JSON(http.StatusCreated, database.ToResponse())
 }
 
@@ -477,6 +497,19 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 	}
 
 	h.logger.Info("Database updated", zap.String("id", database.ID.String()))
+	
+	// Log audit entry
+	if h.auditService != nil {
+		detailsJSON, _ := json.Marshal(map[string]interface{}{
+			"database_name": database.DatabaseName,
+			"description":   database.Description,
+			"status":        string(database.Status),
+		})
+		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionUpdate, services.ResourceTypeDatabase, id, c.Request(), detailsJSON); err != nil {
+			h.logger.Error("Failed to log audit entry for database update", zap.Error(err))
+		}
+	}
+	
 	return c.JSON(http.StatusOK, h.ToResponseWithDetails(ctx, database))
 }
 
@@ -552,6 +585,18 @@ func (h *DatabaseHandler) DeleteDatabase(c echo.Context) error {
 	}
 
 	h.logger.Info("Database deleted", zap.String("id", id.String()), zap.String("name", database.DatabaseName))
+	
+	// Log audit entry
+	if h.auditService != nil {
+		detailsJSON, _ := json.Marshal(map[string]interface{}{
+			"database_id":   id.String(),
+			"database_name": database.DatabaseName,
+		})
+		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionDelete, services.ResourceTypeDatabase, id, c.Request(), detailsJSON); err != nil {
+			h.logger.Error("Failed to log audit entry for database deletion", zap.Error(err))
+		}
+	}
+	
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Database deleted successfully",
 	})
