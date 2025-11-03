@@ -381,19 +381,19 @@ Create execution queue system for queuing Change Plans when database is locked.
 
 ### P04M20: Implement execution status updates
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M20
 
 **Goal**
 Update Change Plan status throughout execution lifecycle (Approved → InProgress → Completed/Failed).
 
 **Acceptance Criteria**
-- [ ] Status update logic implemented
-- [ ] Status updated to InProgress on execution start
-- [ ] Status updated to Completed on success
-- [ ] Status updated to Failed on error
-- [ ] Status updates atomic and consistent
-- [ ] Unit tests passing
+- [x] Status update logic implemented (in ExecutionService.Execute)
+- [x] Status updated to InProgress on execution start
+- [x] Status updated to Completed on success
+- [x] Status updated to Failed on error
+- [x] Status updates atomic and consistent (using repository.Update)
+- [x] Unit tests passing
 
 ---
 
