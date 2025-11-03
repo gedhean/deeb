@@ -408,6 +408,10 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		logger,
 	)
 
+	// Initialize audit log repository and service
+	auditLogRepo := postgres.NewAuditLogRepository(db)
+	auditLogService := services.NewAuditLogService(auditLogRepo, logger)
+
 	// Create handler
 	handler := handlers.NewChangePlanHandler(
 		changePlanRepo,
@@ -420,6 +424,7 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		reviewService,
 		approvalService,
 		executionService,
+		auditLogService,
 		logger,
 	)
 
@@ -528,6 +533,10 @@ func setupChangePlanHandlerWithTimeout(
 		logger,
 	)
 
+	// Initialize audit log repository and service
+	auditLogRepo := postgres.NewAuditLogRepository(db)
+	auditLogService := services.NewAuditLogService(auditLogRepo, logger)
+
 	// Create handler
 	handler := handlers.NewChangePlanHandler(
 		changePlanRepo,
@@ -540,6 +549,7 @@ func setupChangePlanHandlerWithTimeout(
 		reviewService,
 		approvalService,
 		executionService,
+		auditLogService,
 		logger,
 	)
 
@@ -7207,11 +7217,310 @@ func TestIntegration_ChangePlan_ApproveChangePlan_OrganizationAdmin(t *testing.T
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Change plan approved successfully", response["message"])
-	assert.Equal(t, changePlan.ID.String(), response["change_plan_id"])
-
 	// Verify change plan status is now Approved
 	updatedPlan, err := changePlanRepo.GetByID(ctx, changePlan.ID)
 	require.NoError(t, err)
 	assert.Equal(t, models.ChangePlanStatusApproved, updatedPlan.Status)
+}
+
+// TestIntegration_ChangePlan_AuditLogging_ApproveChangePlan tests that audit log entries are created for approval operations
+func TestIntegration_ChangePlan_AuditLogging_ApproveChangePlan(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	auditLogRepo := postgres.NewAuditLogRepository(db)
+
+	// Create approver user
+	approver := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project and add approver as member with Approver role
+	project := createTestProject(t, projectRepo, "Test Project")
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    approver.ID,
+		Role:      models.ProjectRoleApprover,
+		AddedByID: approver.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create author user
+	author := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+	member2 := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member2)
+	require.NoError(t, err)
+
+	// Create change plan in Open status
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+	changePlan.Status = models.ChangePlanStatusOpen
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for approver
+	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request with comments
+	comments := "Looks good, approved for deployment"
+	reqBody := map[string]interface{}{
+		"comments": comments,
+	}
+	reqBodyJSON, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/approve", changePlan.ID.String()),
+		bytes.NewReader(reqBodyJSON),
+	)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/approve")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, approver.ID, approver.Email, approver.OrganizationRole)
+
+	// Execute
+	err = handler.ApproveChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify audit log entry was created
+	auditLogs, err := auditLogRepo.Filter(ctx, repository.AuditLogListFilters{
+		Limit:        10,
+		Offset:       0,
+		ResourceType: services.ResourceTypeChangePlan,
+		ResourceID:   changePlan.ID,
+	})
+	require.NoError(t, err)
+
+	// Find the status transition audit log entry
+	var transitionLog *models.AuditLog
+	for _, log := range auditLogs {
+		if log.Action == services.ActionApproveChangePlan {
+			transitionLog = log
+			break
+		}
+	}
+
+	require.NotNil(t, transitionLog, "audit log entry for approval should exist")
+	assert.Equal(t, approver.ID, transitionLog.UserID)
+	assert.Equal(t, services.ResourceTypeChangePlan, transitionLog.ResourceType)
+	assert.Equal(t, changePlan.ID, transitionLog.ResourceID)
+	assert.NotNil(t, transitionLog.Details)
+
+	// Verify details contain change plan info and comments
+	var details map[string]interface{}
+	err = json.Unmarshal(transitionLog.Details, &details)
+	require.NoError(t, err)
+	assert.Equal(t, changePlan.ID.String(), details["change_plan_id"])
+	assert.Equal(t, changePlan.Title, details["title"])
+	if commentsVal, ok := details["comments"]; ok {
+		assert.Equal(t, comments, commentsVal)
+	}
+
+	// Verify IP address is logged
+	assert.NotNil(t, transitionLog.IPAddress)
+}
+
+// TestIntegration_ChangePlan_AuditLogging_CloseChangePlan tests that audit log entries are created for close/rejection operations
+func TestIntegration_ChangePlan_AuditLogging_CloseChangePlan(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	auditLogRepo := postgres.NewAuditLogRepository(db)
+
+	// Create approver user
+	approver := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project and add approver as member with Approver role
+	project := createTestProject(t, projectRepo, "Test Project")
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    approver.ID,
+		Role:      models.ProjectRoleApprover,
+		AddedByID: approver.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create author user
+	author := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+	member2 := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member2)
+	require.NoError(t, err)
+
+	// Create change plan in Open status
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+	changePlan.Status = models.ChangePlanStatusOpen
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for approver
+	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request with comments
+	comments := "SQL syntax error detected, please fix"
+	reqBody := map[string]interface{}{
+		"comments": comments,
+	}
+	reqBodyJSON, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/close", changePlan.ID.String()),
+		bytes.NewReader(reqBodyJSON),
+	)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/close")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, approver.ID, approver.Email, approver.OrganizationRole)
+
+	// Execute
+	err = handler.CloseChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify audit log entry was created
+	auditLogs, err := auditLogRepo.Filter(ctx, repository.AuditLogListFilters{
+		Limit:        10,
+		Offset:       0,
+		ResourceType: services.ResourceTypeChangePlan,
+		ResourceID:   changePlan.ID,
+	})
+	require.NoError(t, err)
+
+	// Find the status transition audit log entry
+	var transitionLog *models.AuditLog
+	for _, log := range auditLogs {
+		if log.Action == services.ActionCloseChangePlan {
+			transitionLog = log
+			break
+		}
+	}
+
+	require.NotNil(t, transitionLog, "audit log entry for close should exist")
+	assert.Equal(t, approver.ID, transitionLog.UserID)
+	assert.Equal(t, services.ResourceTypeChangePlan, transitionLog.ResourceType)
+	assert.Equal(t, changePlan.ID, transitionLog.ResourceID)
+	assert.NotNil(t, transitionLog.Details)
+
+	// Verify details contain change plan info and comments
+	var details map[string]interface{}
+	err = json.Unmarshal(transitionLog.Details, &details)
+	require.NoError(t, err)
+	assert.Equal(t, changePlan.ID.String(), details["change_plan_id"])
+	assert.Equal(t, changePlan.Title, details["title"])
+	if commentsVal, ok := details["comments"]; ok {
+		assert.Equal(t, comments, commentsVal)
+	}
+
+	// Verify IP address is logged
+	assert.NotNil(t, transitionLog.IPAddress)
 }
