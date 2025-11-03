@@ -486,18 +486,18 @@ Add validation for SQL content size limit (10MB maximum per PRD).
 
 ### P04M26: Write unit tests for Approval repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P04M26
 
 **Goal**
 Create comprehensive unit tests for Approval repository operations.
 
 **Acceptance Criteria**
-- [ ] Unit tests for all Approval repository methods
-- [ ] Test coverage >85%
-- [ ] Edge cases covered
-- [ ] Error scenarios tested
-- [ ] All tests passing
+- [x] Unit tests for all Approval repository methods (Create, GetByChangePlanID, GetByApproverID, GetHistory)
+- [x] Test coverage >85% (comprehensive tests for all methods and edge cases)
+- [x] Edge cases covered (auto-generated ID, existing ID, nil comments, approved_at handling)
+- [x] Error scenarios tested (database errors for all methods)
+- [x] All tests passing (1201 tests total, 20 skipped)
 
 ---
 
