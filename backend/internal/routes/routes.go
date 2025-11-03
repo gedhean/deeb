@@ -44,10 +44,14 @@ func Setup(
 	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
 	approvalRepo := postgres.NewApprovalRepository(db)
 
+	// Initialize audit log repository and service
+	auditLogRepo := postgres.NewAuditLogRepository(db)
+	auditLogService := services.NewAuditLogService(auditLogRepo, logger.Get())
+
 	// Setup API routes
 	setupHealthRoute(e, db, version)
 	setupSetupRoutes(e, userRepo)
-	setupAuthRoutes(e, cfg, userRepo, tokenManager, loginRateLimiter)
+	setupAuthRoutes(e, cfg, userRepo, tokenManager, loginRateLimiter, auditLogService)
 	setupUserRoutes(e, userRepo, tokenManager)
 	setupProjectRoutes(e, projectRepo, dbRepo, projectMemberRepo, userRepo, tokenManager)
 	setupEnvironmentRoutes(e, envRepo, db, tokenManager)
@@ -99,13 +103,14 @@ func setupAuthRoutes(
 	userRepo repository.UserRepository,
 	tokenManager *auth.TokenManager,
 	loginRateLimiter *handlers.RateLimiter,
+	auditLogService *services.AuditLogService,
 ) {
 	authGroup := e.Group("/api/v1/auth")
 
 	// Initialize handlers
-	registerHandler := handlers.NewRegisterHandler(userRepo, logger.Get())
-	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, loginRateLimiter, logger.Get())
-	logoutHandler := handlers.NewLogoutHandler(logger.Get())
+	registerHandler := handlers.NewRegisterHandler(userRepo, auditLogService, logger.Get())
+	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, loginRateLimiter, auditLogService, logger.Get())
+	logoutHandler := handlers.NewLogoutHandler(auditLogService, logger.Get())
 	meHandler := handlers.NewMeHandler(userRepo, logger.Get())
 	googleHandler := handlers.NewGoogleOAuthHandler(
 		userRepo,

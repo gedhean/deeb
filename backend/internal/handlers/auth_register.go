@@ -2,15 +2,18 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/services"
 	"go.uber.org/zap"
 )
 
@@ -19,15 +22,17 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-
 
 // RegisterHandler handles user registration requests
 type RegisterHandler struct {
-	userRepo repository.UserRepository
-	logger   *zap.Logger
+	userRepo     repository.UserRepository
+	auditService *services.AuditLogService
+	logger       *zap.Logger
 }
 
 // NewRegisterHandler creates a new RegisterHandler
-func NewRegisterHandler(userRepo repository.UserRepository, logger *zap.Logger) *RegisterHandler {
+func NewRegisterHandler(userRepo repository.UserRepository, auditService *services.AuditLogService, logger *zap.Logger) *RegisterHandler {
 	return &RegisterHandler{
-		userRepo: userRepo,
-		logger:   logger,
+		userRepo:     userRepo,
+		auditService: auditService,
+		logger:       logger,
 	}
 }
 
@@ -100,6 +105,21 @@ func (h *RegisterHandler) Register(c echo.Context) error {
 	}
 	if existingUser != nil {
 		h.logger.Debug("Registration attempt with existing email", zap.String("email", req.Email))
+		// Log failed registration attempt (duplicate email)
+		if h.auditService != nil {
+			ctx := c.Request().Context()
+			errorMsg := "email already registered"
+			detailsJSON, _ := json.Marshal(map[string]interface{}{
+				"email":         req.Email,
+				"error_message": errorMsg,
+			})
+
+			if err := h.auditService.LogWithResult(ctx, uuid.Nil, services.ActionRegister, services.ResourceTypeUser, uuid.Nil, "failure", &errorMsg, detailsJSON); err != nil {
+				h.logger.Error("Failed to log audit entry for failed registration",
+					zap.String("email", req.Email),
+					zap.Error(err))
+			}
+		}
 		return c.JSON(http.StatusConflict, ErrorResponse{Error: "email already registered"})
 	}
 
@@ -143,6 +163,22 @@ func (h *RegisterHandler) Register(c echo.Context) error {
 	h.logger.Info("User registered successfully",
 		zap.String("email", user.Email),
 		zap.String("user_id", user.ID.String()))
+
+	// Log successful registration
+	if h.auditService != nil {
+		ctx := c.Request().Context()
+		detailsJSON, _ := json.Marshal(map[string]interface{}{
+			"email":            user.Email,
+			"organization_role": string(user.OrganizationRole),
+			"is_first_user":    len(users) == 0,
+		})
+
+		if err := h.auditService.LogWithHTTP(ctx, user.ID, services.ActionRegister, services.ResourceTypeUser, user.ID, c.Request(), detailsJSON); err != nil {
+			h.logger.Error("Failed to log audit entry for registration",
+				zap.String("user_id", user.ID.String()),
+				zap.Error(err))
+		}
+	}
 
 	// Return success response
 	return c.JSON(http.StatusCreated, RegisterResponse{

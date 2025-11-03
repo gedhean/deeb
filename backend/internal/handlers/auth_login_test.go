@@ -46,7 +46,7 @@ func TestLoginHandler_SuccessfulLogin(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	// Create request
 	loginReq := LoginRequest{
@@ -105,7 +105,7 @@ func TestLoginHandler_InvalidPassword(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	loginReq := LoginRequest{
 		Email:    testUser.Email,
@@ -139,7 +139,7 @@ func TestLoginHandler_UserNotFound(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	loginReq := LoginRequest{
 		Email:    "nonexistent@example.com",
@@ -182,7 +182,7 @@ func TestLoginHandler_RateLimitExceeded(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	loginReq := LoginRequest{
 		Email:    testUser.Email,
@@ -229,7 +229,7 @@ func TestLoginHandler_MalformedJSON(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	// Send invalid JSON
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader([]byte("{invalid json")))
@@ -255,7 +255,7 @@ func TestLoginHandler_MissingCredentials(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	testCases := []struct {
 		name     string
@@ -310,7 +310,7 @@ func TestLoginHandler_InactiveUser(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	loginReq := LoginRequest{
 		Email:    testUser.Email,
@@ -344,7 +344,7 @@ func TestLoginHandler_DatabaseError(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	loginReq := LoginRequest{
 		Email:    "test@example.com",
@@ -378,7 +378,7 @@ func TestLoginHandler_MethodNotAllowed(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	// Test GET request (should be POST only)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/login", nil)
@@ -416,7 +416,7 @@ func TestLoginHandler_SuccessfulLoginResetsRateLimit(t *testing.T) {
 	defer rateLimiter.Stop()
 	logger := zap.NewNop()
 
-	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, logger)
+	handler := NewLoginHandler(mockRepo, tokenManager, rateLimiter, nil, logger)
 
 	// Make 5 failed attempts
 	wrongLoginReq := LoginRequest{

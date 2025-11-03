@@ -143,19 +143,31 @@ Create middleware that automatically logs HTTP requests and responses for audit 
 
 ### P05M05: Add audit logging to authentication endpoints
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M05
 
 **Goal**
 Add audit logging for login, logout, and registration actions.
 
 **Acceptance Criteria**
-- [ ] Login action logged with success/failure
-- [ ] Logout action logged
-- [ ] Registration action logged
-- [ ] Failed login attempts logged
-- [ ] Audit log entries include user ID and IP address
-- [ ] Integration tests updated
+- [x] Login action logged with success/failure
+- [x] Logout action logged
+- [x] Registration action logged
+- [x] Failed login attempts logged
+- [x] Audit log entries include user ID and IP address
+- [x] Integration tests updated
+
+**Notes:**
+- Audit logging already implemented in LoginHandler, LogoutHandler, and RegisterHandler
+- LoginHandler: Logs successful logins with `logAuditLoginSuccess` and failed logins with `logAuditLoginFailure` (covers rate limit, user not found, invalid password, inactive account, database errors)
+- LogoutHandler: Logs logout actions for authenticated users
+- RegisterHandler: Logs successful registrations and failed registrations (duplicate email)
+- All audit log entries include user ID and IP address (via LogWithHTTP which extracts IP from request headers)
+- Updated integration tests to pass auditService to all handlers
+- Added 4 new integration tests: TestIntegration_Auth_AuditLogging_LoginSuccess, TestIntegration_Auth_AuditLogging_LoginFailure, TestIntegration_Auth_AuditLogging_Registration, TestIntegration_Auth_AuditLogging_Logout
+- Tests verify audit log entries are created with correct action, resource type, user ID, IP address, and timestamp
+- Updated unit tests to pass nil auditService (since they don't verify audit logging)
+- All tests passing, linting passes (0 issues)
 
 ---
 

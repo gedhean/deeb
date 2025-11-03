@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/services"
 	"go.uber.org/zap"
 )
 
@@ -16,6 +19,7 @@ type LoginHandler struct {
 	userRepo     repository.UserRepository
 	tokenManager *auth.TokenManager
 	rateLimiter  *RateLimiter
+	auditService *services.AuditLogService
 	logger       *zap.Logger
 }
 
@@ -24,12 +28,14 @@ func NewLoginHandler(
 	userRepo repository.UserRepository,
 	tokenManager *auth.TokenManager,
 	rateLimiter *RateLimiter,
+	auditService *services.AuditLogService,
 	logger *zap.Logger,
 ) *LoginHandler {
 	return &LoginHandler{
 		userRepo:     userRepo,
 		tokenManager: tokenManager,
 		rateLimiter:  rateLimiter,
+		auditService: auditService,
 		logger:       logger,
 	}
 }
@@ -57,6 +63,8 @@ func (h *LoginHandler) Login(c echo.Context) error {
 	if !h.rateLimiter.Allow(req.Email) {
 		h.logger.Warn("Rate limit exceeded for login attempt",
 			zap.String("email", req.Email))
+		// Log failed login attempt (rate limit) - no user ID available)
+		h.logAuditLoginFailure(c, uuid.Nil, req.Email, "rate_limit_exceeded", "too many login attempts")
 		return c.JSON(http.StatusTooManyRequests, ErrorResponse{Error: "too many login attempts, please try again later"})
 	}
 
@@ -70,9 +78,13 @@ func (h *LoginHandler) Login(c echo.Context) error {
 			h.logger.Error("Database error during login",
 				zap.String("email", req.Email),
 				zap.Error(err))
+			// Log audit entry for database error
+			h.logAuditLoginFailure(c, uuid.Nil, req.Email, "database_error", err.Error())
 		} else {
 			h.logger.Info("Failed login attempt - user not found",
 				zap.String("email", req.Email))
+			// Log audit entry for user not found
+			h.logAuditLoginFailure(c, uuid.Nil, req.Email, "user_not_found", "invalid email or password")
 		}
 		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "invalid email or password"})
 	}
@@ -83,6 +95,8 @@ func (h *LoginHandler) Login(c echo.Context) error {
 		h.logger.Info("Failed login attempt - invalid password",
 			zap.String("email", req.Email),
 			zap.String("user_id", user.ID.String()))
+		// Log audit entry for invalid password
+		h.logAuditLoginFailure(c, user.ID, req.Email, "invalid_password", "invalid email or password")
 		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "invalid email or password"})
 	}
 
@@ -91,6 +105,8 @@ func (h *LoginHandler) Login(c echo.Context) error {
 		h.logger.Info("Login attempt by inactive user",
 			zap.String("email", req.Email),
 			zap.String("user_id", user.ID.String()))
+		// Log audit entry for inactive user
+		h.logAuditLoginFailure(c, user.ID, req.Email, "inactive_account", "account is inactive")
 		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "account is inactive"})
 	}
 
@@ -130,7 +146,54 @@ func (h *LoginHandler) Login(c echo.Context) error {
 	}
 	c.SetCookie(cookie)
 
+	// Log successful login
+	h.logAuditLoginSuccess(c, user.ID, req.Email)
+
 	return c.JSON(http.StatusOK, LoginResponse{
 		User: user.ToResponse(),
 	})
+}
+
+// logAuditLoginSuccess logs a successful login attempt
+func (h *LoginHandler) logAuditLoginSuccess(c echo.Context, userID uuid.UUID, email string) {
+	if h.auditService == nil {
+		return
+	}
+
+	ctx := c.Request().Context()
+	detailsJSON, _ := json.Marshal(map[string]interface{}{
+		"email": email,
+	})
+
+	if err := h.auditService.LogWithHTTP(ctx, userID, services.ActionLogin, services.ResourceTypeUser, userID, c.Request(), detailsJSON); err != nil {
+		h.logger.Error("Failed to log audit entry for successful login",
+			zap.String("user_id", userID.String()),
+			zap.Error(err))
+	}
+}
+
+// logAuditLoginFailure logs a failed login attempt
+func (h *LoginHandler) logAuditLoginFailure(c echo.Context, userID uuid.UUID, email, reason, errorMessage string) {
+	if h.auditService == nil {
+		return
+	}
+
+	ctx := c.Request().Context()
+	detailsJSON, _ := json.Marshal(map[string]interface{}{
+		"email":          email,
+		"failure_reason": reason,
+		"error_message":  errorMessage,
+	})
+
+	// Use system UUID if user not found (to track failed attempts)
+	logUserID := userID
+	if userID == uuid.Nil {
+		logUserID = uuid.Nil // System user for failed attempts
+	}
+
+	if err := h.auditService.LogWithResult(ctx, logUserID, services.ActionLogin, services.ResourceTypeUser, uuid.Nil, "failure", &errorMessage, detailsJSON); err != nil {
+		h.logger.Error("Failed to log audit entry for failed login",
+			zap.String("email", email),
+			zap.Error(err))
+	}
 }
