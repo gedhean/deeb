@@ -339,6 +339,27 @@ func (h *ChangePlanHandler) GetChangePlan(c echo.Context) error {
 	response := changePlan.ToResponse()
 	response = h.enrichWithPolicyFindings(response, findings)
 
+	// Fetch execution logs and enrich response
+	executionLogs, err := h.executionService.GetExecutionLogHistory(ctx, changePlan.ID)
+	if err != nil {
+		h.logger.Warn("Failed to fetch execution logs", zap.Error(err))
+		// Continue - execution logs are optional
+		executionLogs = []*models.ExecutionLog{}
+	}
+
+	// Convert execution logs to response format
+	if len(executionLogs) > 0 {
+		logResponses := make([]*models.ExecutionLogResponse, len(executionLogs))
+		for i, log := range executionLogs {
+			logResponses[i] = log.ToResponse()
+		}
+		response.ExecutionLogs = logResponses
+
+		// Set last execution status from the most recent log (first in the list)
+		lastStatus := executionLogs[0].Status
+		response.LastExecutionStatus = &lastStatus
+	}
+
 	return c.JSON(http.StatusOK, response)
 }
 

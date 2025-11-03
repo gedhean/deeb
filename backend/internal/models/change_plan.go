@@ -124,6 +124,9 @@ type ChangePlanResponse struct {
 	PolicyFindings *PolicyFindingsSummary `json:"policy_findings,omitempty"`
 	HasErrors      bool                   `json:"has_errors"`
 	HasWarnings    bool                   `json:"has_warnings"`
+	// Execution results
+	LastExecutionStatus *ExecutionLogStatus `json:"last_execution_status,omitempty"`
+	ExecutionLogs       []*ExecutionLogResponse `json:"execution_logs,omitempty"`
 }
 
 // PolicyFindingsSummary groups policy findings by severity
