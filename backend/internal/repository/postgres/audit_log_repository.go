@@ -174,6 +174,18 @@ func (r *AuditLogRepository) Filter(ctx context.Context, filters repository.Audi
 		argIndex++
 	}
 
+	if filters.StartDate != nil {
+		whereConditions = append(whereConditions, fmt.Sprintf("timestamp >= $%d", argIndex))
+		args = append(args, *filters.StartDate)
+		argIndex++
+	}
+
+	if filters.EndDate != nil {
+		whereConditions = append(whereConditions, fmt.Sprintf("timestamp <= $%d", argIndex))
+		args = append(args, *filters.EndDate)
+		argIndex++
+	}
+
 	// Build query
 	query := `
 		SELECT id, user_id, action, resource_type, resource_id,
@@ -249,6 +261,18 @@ func (r *AuditLogRepository) CountWithFilters(ctx context.Context, filters repos
 	if filters.ResourceID != uuid.Nil {
 		whereConditions = append(whereConditions, fmt.Sprintf("resource_id = $%d", argIndex))
 		args = append(args, filters.ResourceID)
+		argIndex++
+	}
+
+	if filters.StartDate != nil {
+		whereConditions = append(whereConditions, fmt.Sprintf("timestamp >= $%d", argIndex))
+		args = append(args, *filters.StartDate)
+		argIndex++
+	}
+
+	if filters.EndDate != nil {
+		whereConditions = append(whereConditions, fmt.Sprintf("timestamp <= $%d", argIndex))
+		args = append(args, *filters.EndDate)
 	}
 
 	// Build query

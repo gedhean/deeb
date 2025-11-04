@@ -87,6 +87,7 @@ func Setup(
 		tokenManager,
 		auditLogService,
 	)
+	setupAuditLogRoutes(e, auditLogRepo, tokenManager)
 
 	// Setup Swagger documentation
 	SetupSwaggerRoutes(e)
@@ -642,4 +643,20 @@ func setupChangePlanRoutes(
 	changePlansGroup.GET("/:id/queue-status", changePlanHandler.GetQueueStatus, authMiddleware.Authenticate)
 	changePlansGroup.GET("/:id/execution-logs", changePlanHandler.GetExecutionLogHistory, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/resubmit", changePlanHandler.ResubmitChangePlan, authMiddleware.Authenticate)
+}
+
+// setupAuditLogRoutes registers audit log querying routes
+func setupAuditLogRoutes(
+	e *echo.Echo,
+	auditLogRepo repository.AuditLogRepository,
+	tokenManager *auth.TokenManager,
+) {
+	auditLogHandler := handlers.NewAuditLogHandler(auditLogRepo, logger.Get())
+	auditLogsGroup := e.Group("/api/v1/audit-logs")
+
+	// Authentication middleware for protected routes
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+
+	// All audit log routes require authentication and admin role
+	auditLogsGroup.GET("", auditLogHandler.ListAuditLogs, authMiddleware.Authenticate)
 }

@@ -319,19 +319,40 @@ Implement detailed change history tracking for Change Plans including all modifi
 
 ### P05M11: Implement audit log querying and filtering
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M11
 
 **Goal**
 Implement GET endpoint for querying audit logs with filtering options.
 
 **Acceptance Criteria**
-- [ ] GET /api/v1/audit-logs endpoint implemented
-- [ ] Filter parameters: user_id, action, target_type, target_id, start_date, end_date
-- [ ] Pagination support implemented
-- [ ] Filtering implemented in repository layer
-- [ ] RBAC checks: admin only
-- [ ] Integration test passing
+- [x] GET /api/v1/audit-logs endpoint implemented
+- [x] Filter parameters: user_id, action, target_type, target_id, start_date, end_date
+- [x] Pagination support implemented
+- [x] Filtering implemented in repository layer
+- [x] RBAC checks: admin only
+- [x] Integration test passing
+
+**Notes:**
+- Added StartDate and EndDate filters to AuditLogListFilters in repository interface
+- Updated Filter and CountWithFilters methods in PostgreSQL repository to support date filters
+- Created AuditLogHandler with ListAuditLogs method that handles GET /api/v1/audit-logs
+- Handler parses query parameters: user_id, action, target_type, target_id, start_date, end_date, limit, offset
+- RBAC check enforced: only OrganizationRoleAdmin can access audit logs
+- Added setupAuditLogRoutes function in routes.go to register the endpoint
+- Endpoint returns paginated results with total count
+- Added comprehensive integration test TestIntegration_AuditLogs_ListAuditLogs covering:
+  - Admin access success
+  - Developer access forbidden
+  - Filter by user_id
+  - Filter by action
+  - Filter by resource_type (target_type)
+  - Filter by resource_id (target_id)
+  - Filter by date range (start_date, end_date)
+  - Pagination (limit, offset)
+  - Invalid date format handling
+  - Invalid UUID handling
+- All tests passing, linting passes (0 issues)
 
 ---
 

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
@@ -9,12 +10,14 @@ import (
 
 // AuditLogListFilters defines filtering options for listing audit logs
 type AuditLogListFilters struct {
-	Limit        int       // Maximum number of results to return
-	Offset       int       // Number of results to skip
-	UserID       uuid.UUID // Filter by user ID (Nil for all)
-	Action       string    // Filter by action (empty for all)
-	ResourceType string    // Filter by resource type (empty for all)
-	ResourceID   uuid.UUID // Filter by resource ID (Nil for all)
+	Limit        int        // Maximum number of results to return
+	Offset       int        // Number of results to skip
+	UserID       uuid.UUID  // Filter by user ID (Nil for all)
+	Action       string     // Filter by action (empty for all)
+	ResourceType string     // Filter by resource type (empty for all)
+	ResourceID   uuid.UUID  // Filter by resource ID (Nil for all)
+	StartDate    *time.Time // Filter by start date (Nil for all)
+	EndDate      *time.Time // Filter by end date (Nil for all)
 }
 
 // AuditLogRepository defines the interface for audit log data operations
