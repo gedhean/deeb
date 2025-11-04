@@ -14,10 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
-	"github.com/nsxbet/deeb/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 // TestIntegration_AuditLogs_ListAuditLogs tests the audit log querying endpoint
@@ -31,7 +29,6 @@ func TestIntegration_AuditLogs_ListAuditLogs(t *testing.T) {
 
 	// Initialize repositories
 	auditLogRepo := postgres.NewAuditLogRepository(db)
-	auditLogService := services.NewAuditLogService(auditLogRepo, zap.NewNop())
 
 	// Create admin user
 	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().Unix())

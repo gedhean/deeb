@@ -28,6 +28,7 @@ import (
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/routes"
+	"github.com/nsxbet/deeb/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -189,7 +190,10 @@ func loginUser(t *testing.T, db *sqlx.DB, email, password string) (string, uuid.
 	rateLimiter := handlers.NewRateLimiter()
 	defer rateLimiter.Stop()
 
-	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, rateLimiter, logger)
+	auditLogRepo := postgres.NewAuditLogRepository(db)
+	auditService := services.NewAuditLogService(auditLogRepo, logger)
+
+	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, rateLimiter, auditService, logger)
 
 	loginReq := handlers.LoginRequest{
 		Email:    email,

@@ -165,8 +165,9 @@ func TestIntegration_RegisterAndLogin_Success(t *testing.T) {
 	rateLimiter := handlers.NewRateLimiter()
 	defer rateLimiter.Stop()
 
-	auditLogRepo := postgres.NewAuditLogRepository(db)
-	auditService := services.NewAuditLogService(auditLogRepo, logger)
+	// auditLogRepo and auditService already declared above
+	auditLogRepo = postgres.NewAuditLogRepository(db)
+	auditService = services.NewAuditLogService(auditLogRepo, logger)
 
 	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, rateLimiter, auditService, logger)
 
@@ -300,8 +301,9 @@ func TestIntegration_Login_InvalidPassword(t *testing.T) {
 	rateLimiter := handlers.NewRateLimiter()
 	defer rateLimiter.Stop()
 
-	auditLogRepo := postgres.NewAuditLogRepository(db)
-	auditService := services.NewAuditLogService(auditLogRepo, logger)
+	// auditLogRepo and auditService already declared above
+	auditLogRepo = postgres.NewAuditLogRepository(db)
+	auditService = services.NewAuditLogService(auditLogRepo, logger)
 
 	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, rateLimiter, auditService, logger)
 
@@ -418,8 +420,9 @@ func TestIntegration_Login_InactiveUser(t *testing.T) {
 	rateLimiter := handlers.NewRateLimiter()
 	defer rateLimiter.Stop()
 
-	auditLogRepo := postgres.NewAuditLogRepository(db)
-	auditService := services.NewAuditLogService(auditLogRepo, logger)
+	// auditLogRepo and auditService already declared above
+	auditLogRepo = postgres.NewAuditLogRepository(db)
+	auditService = services.NewAuditLogService(auditLogRepo, logger)
 
 	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, rateLimiter, auditService, logger)
 
