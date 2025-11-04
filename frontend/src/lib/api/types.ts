@@ -120,6 +120,81 @@ export interface ListResponse<T> {
   page_size: number;
 }
 
+// Change Plan Types
+export type ChangePlanStatus =
+  | 'Draft'
+  | 'Open'
+  | 'Approved'
+  | 'Closed'
+  | 'InProgress'
+  | 'Completed'
+  | 'Failed'
+  | 'Cancelled';
+
+export type ChangeType = 'DDL' | 'DML';
+
+export type RiskLevel = 'Low' | 'Medium' | 'High';
+
+export interface PolicyFindingItem {
+  validator_type: string;
+  rule_name: string;
+  message: string;
+  line_number?: number;
+  column_number?: number;
+}
+
+export interface PolicyFindingCounts {
+  errors: number;
+  warnings: number;
+  infos: number;
+}
+
+export interface PolicyFindingsSummary {
+  errors: PolicyFindingItem[];
+  warnings: PolicyFindingItem[];
+  infos: PolicyFindingItem[];
+  counts: PolicyFindingCounts;
+}
+
+export interface ChangePlan {
+  id: string;
+  project_id: string;
+  target_database_id: string;
+  title: string;
+  description: string;
+  change_type: ChangeType;
+  sql_content: string;
+  rollback_sql?: string;
+  status: ChangePlanStatus;
+  risk_level: RiskLevel;
+  author_id: string;
+  assigned_reviewer_id?: string;
+  scheduled_for?: string;
+  executed_at?: string;
+  execution_duration_ms?: number;
+  affected_rows?: number;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+  policy_findings?: PolicyFindingsSummary;
+  has_errors?: boolean;
+  has_warnings?: boolean;
+}
+
+export interface ChangePlanListResponse {
+  change_plans: ChangePlan[];
+  total: number;
+}
+
+export interface ListChangePlansParams {
+  status?: ChangePlanStatus;
+  project_id?: string;
+  database_id?: string;
+  author_id?: string;
+  limit?: number;
+  offset?: number;
+}
+
 // API Error
 export class APIError extends Error {
   constructor(
