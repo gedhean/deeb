@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
+	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
@@ -36,17 +37,12 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 	// Parse create request
 	var req models.CreateUserRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Invalid request body",
-		})
+		return middleware.HandleValidationError(c, err)
 	}
 
 	// Validate request
 	if err := c.Validate(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error":   "Validation failed",
-			"details": err.Error(),
-		})
+		return middleware.HandleValidationError(c, err)
 	}
 
 	// Normalize email

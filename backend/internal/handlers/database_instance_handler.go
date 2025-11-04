@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
+	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/services"
@@ -69,18 +70,13 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 	var req models.CreateDatabaseInstanceRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error("Failed to bind request", zap.Error(err))
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Invalid request body",
-		})
+		return middleware.HandleValidationError(c, err)
 	}
 
 	// Validate request
 	if err := models.ValidateCreateDatabaseInstanceRequest(&req); err != nil {
 		h.logger.Error("Validation failed", zap.Error(err))
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error":   "Validation failed",
-			"details": err.Error(),
-		})
+		return middleware.HandleValidationError(c, err)
 	}
 
 	// Test database connection before saving
@@ -271,18 +267,13 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 	var req models.UpdateDatabaseInstanceRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error("Failed to bind request", zap.Error(err))
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Invalid request body",
-		})
+		return middleware.HandleValidationError(c, err)
 	}
 
 	// Validate request
 	if err := models.ValidateUpdateDatabaseInstanceRequest(&req); err != nil {
 		h.logger.Error("Validation failed", zap.Error(err))
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error":   "Validation failed",
-			"details": err.Error(),
-		})
+		return middleware.HandleValidationError(c, err)
 	}
 
 	// Fetch existing database instance

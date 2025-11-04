@@ -588,17 +588,46 @@ Add clear error messages for invalid status transition attempts.
 
 ### P05M18: Implement input validation error handling
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M18
 
 **Goal**
 Add consistent error handling for input validation errors across all endpoints.
 
 **Acceptance Criteria**
-- [ ] Input validation errors handled consistently
-- [ ] Error messages include field names and validation rules
-- [ ] Error responses include validation details
-- [ ] Error handling tests passing
+- [x] Input validation errors handled consistently
+- [x] Error messages include field names and validation rules
+- [x] Error responses include validation details
+- [x] Error handling tests passing
+
+**Notes:**
+- Created `ValidationError` type in `backend/internal/middleware/validation_error.go` with support for multiple field-level errors
+- Each field error includes: field name, message, and validation rule (required, max, min, enum, format, etc.)
+- Enhanced `CustomErrorHandler` in `backend/internal/middleware/error_handler.go` to detect and format validation errors consistently
+- Created `HandleValidationError` helper function that standardizes validation error responses
+- Created `ExtractValidationError` function to extract validation errors from various error types (ValidationError, HTTPErrorWithCode, echo.HTTPError)
+- Created `ParseStringValidationError` function to parse string error messages into structured validation errors
+- Updated all handlers to use `HandleValidationError` for consistent validation error handling:
+  - `change_plan_handler.go`: Updated CreateChangePlan and UpdateChangePlan handlers
+  - `user_handler.go`: Updated CreateUser handler
+  - `database_handler.go`: Updated CreateDatabase and UpdateDatabase handlers
+  - `database_instance_handler.go`: Updated CreateDatabaseInstance and UpdateDatabaseInstance handlers
+- Updated validation functions to return `ValidationError` with field-level errors:
+  - `validateCreateChangePlanRequest`: Returns ValidationError with field errors
+  - `validateUpdateChangePlanRequest`: Returns ValidationError with field errors
+- Error responses include structured validation details:
+  - `validation_errors.fields`: Array of field errors with field name, message, and rule
+  - Error code: `VALIDATION_ERROR`
+  - Status code: 400 Bad Request
+- Updated error handler to parse bind errors and validation errors from Echo
+- Created comprehensive unit tests in `backend/internal/middleware/validation_error_test.go` covering:
+  - ValidationError creation and field error management
+  - ExtractValidationError from various error types
+  - ParseStringValidationError for common error message patterns
+  - HandleValidationError for different error scenarios
+  - Rule extraction from error messages
+- Updated handler tests to use error handler for validation error tests
+- All tests passing (1403 tests, 25 skipped), linting passes (0 issues)
 
 ---
 

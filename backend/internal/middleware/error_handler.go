@@ -56,8 +56,21 @@ func CustomErrorHandler(err error, c echo.Context) {
 	errorCode := ""
 	var errorDetails map[string]interface{}
 
-	// Check if it's an HTTPErrorWithCode
-	if hec, ok := err.(*HTTPErrorWithCode); ok {
+	// Check for validation errors first
+	if ve, ok := ExtractValidationError(err); ok {
+		code = http.StatusBadRequest
+		message = "Validation failed"
+		errorCode = ErrorCodeValidationError
+		errorDetail = ve.Error()
+
+		// Build validation details with field errors
+		errorDetails = map[string]interface{}{
+			"validation_errors": map[string]interface{}{
+				"fields": ve.Fields,
+			},
+		}
+	} else if hec, ok := err.(*HTTPErrorWithCode); ok {
+		// Check if it's an HTTPErrorWithCode
 		code = hec.HTTPError.Code
 		message = hec.Message
 		errorDetail = hec.Message
@@ -80,10 +93,36 @@ func CustomErrorHandler(err error, c echo.Context) {
 		// Note: Echo's Internal field is an error, but we can check if the error message
 		// contains structured data or use a custom error type
 		if he.Internal != nil {
-			// For now, we'll extract details from HTTPErrorWithCode if it's wrapped
-			if hecInternal, ok := he.Internal.(*HTTPErrorWithCode); ok {
+			// Check if internal error is a ValidationError
+			if ve, ok := he.Internal.(*ValidationError); ok {
+				code = http.StatusBadRequest
+				message = "Validation failed"
+				errorCode = ErrorCodeValidationError
+				errorDetail = ve.Error()
+				errorDetails = map[string]interface{}{
+					"validation_errors": map[string]interface{}{
+						"fields": ve.Fields,
+					},
+				}
+			} else if hecInternal, ok := he.Internal.(*HTTPErrorWithCode); ok {
+				// For now, we'll extract details from HTTPErrorWithCode if it's wrapped
 				errorCode = hecInternal.Code
 				errorDetails = hecInternal.Details
+			}
+		}
+
+		// Check if this is a bind error (400 Bad Request)
+		if code == http.StatusBadRequest && he.Internal != nil {
+			// Try to parse bind error as validation error
+			if ve := ParseStringValidationError(he.Internal); ve != nil && len(ve.Fields) > 0 {
+				message = "Validation failed"
+				errorCode = ErrorCodeValidationError
+				errorDetail = ve.Error()
+				errorDetails = map[string]interface{}{
+					"validation_errors": map[string]interface{}{
+						"fields": ve.Fields,
+					},
+				}
 			}
 		}
 	}

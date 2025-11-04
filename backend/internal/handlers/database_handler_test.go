@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
+	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
@@ -343,6 +344,7 @@ func TestCreateDatabase(t *testing.T) {
 		)
 
 		e := echo.New()
+		e.HTTPErrorHandler = middleware.CustomErrorHandler
 
 		reqBody := `{
 			"database_name": "",
@@ -364,12 +366,14 @@ func TestCreateDatabase(t *testing.T) {
 			OrganizationRole: string(models.OrganizationRoleAdmin),
 		})
 
-		if err := handler.CreateDatabase(c); err != nil {
-			t.Errorf("Expected no error, got %v", err)
+		err := handler.CreateDatabase(c)
+		if err != nil {
+			// Error handler should have written the response
+			e.HTTPErrorHandler(err, c)
 		}
 
 		if rec.Code != http.StatusBadRequest {
-			t.Errorf("Expected status 400, got %d", rec.Code)
+			t.Errorf("Expected status 400, got %d. Response: %s", rec.Code, rec.Body.String())
 		}
 	})
 }

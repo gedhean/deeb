@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
+	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
@@ -87,17 +88,13 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 	var req models.CreateChangePlanRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error("Failed to bind request", zap.Error(err))
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Invalid request body",
-		})
+		return middleware.HandleValidationError(c, err)
 	}
 
 	// Validate request
 	if err := validateCreateChangePlanRequest(&req); err != nil {
 		h.logger.Error("Validation failed", zap.Error(err))
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": err.Error(),
-		})
+		return middleware.HandleValidationError(c, err)
 	}
 
 	// Validate that project exists
@@ -243,33 +240,75 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 	return c.JSON(http.StatusCreated, changePlan.ToResponse())
 }
 
+// validateUpdateChangePlanRequest validates the update change plan request
+func validateUpdateChangePlanRequest(req *models.UpdateChangePlanRequest) *middleware.ValidationError {
+	ve := &middleware.ValidationError{}
+
+	if req.Title != nil {
+		if *req.Title == "" {
+			ve.AddField("title", "title cannot be empty", "required")
+		} else if len(*req.Title) > 255 {
+			ve.AddField("title", "title must not exceed 255 characters", "max")
+		}
+	}
+
+	if req.Description != nil {
+		if *req.Description == "" {
+			ve.AddField("description", "description cannot be empty", "required")
+		}
+	}
+
+	if req.SQLContent != nil {
+		if *req.SQLContent == "" {
+			ve.AddField("sql_content", "sql_content cannot be empty", "required")
+		} else if len(*req.SQLContent) > MaxSQLContentSize {
+			ve.AddField("sql_content", "sql_content exceeds maximum size of 10MB", "max")
+		}
+	}
+
+	if len(ve.Fields) > 0 {
+		return ve
+	}
+
+	return nil
+}
+
 // validateCreateChangePlanRequest validates the create change plan request
 func validateCreateChangePlanRequest(req *models.CreateChangePlanRequest) error {
+	ve := &middleware.ValidationError{}
+
 	if req.Title == "" {
-		return models.ErrInvalidChangePlan("title is required")
+		ve.AddField("title", "title is required", "required")
+	} else if len(req.Title) > 255 {
+		ve.AddField("title", "title must not exceed 255 characters", "max")
 	}
-	if len(req.Title) > 255 {
-		return models.ErrInvalidChangePlan("title must not exceed 255 characters")
-	}
+
 	if req.Description == "" {
-		return models.ErrInvalidChangePlan("description is required")
+		ve.AddField("description", "description is required", "required")
 	}
+
 	if req.SQLContent == "" {
-		return models.ErrInvalidChangePlan("sql_content is required")
+		ve.AddField("sql_content", "sql_content is required", "required")
+	} else if len(req.SQLContent) > MaxSQLContentSize {
+		ve.AddField("sql_content", "sql_content exceeds maximum size of 10MB", "max")
 	}
-	// Validate SQL content size limit (10MB max)
-	if len(req.SQLContent) > MaxSQLContentSize {
-		return models.ErrInvalidChangePlan("sql_content exceeds maximum size of 10MB")
-	}
+
 	if req.ChangeType != models.ChangeTypeDDL && req.ChangeType != models.ChangeTypeDML {
-		return models.ErrInvalidChangePlan("change_type must be DDL or DML")
+		ve.AddField("change_type", "change_type must be DDL or DML", "enum")
 	}
+
 	if req.ProjectID == uuid.Nil {
-		return models.ErrInvalidChangePlan("project_id is required")
+		ve.AddField("project_id", "project_id is required", "required")
 	}
+
 	if req.TargetDatabaseID == uuid.Nil {
-		return models.ErrInvalidChangePlan("target_database_id is required")
+		ve.AddField("target_database_id", "target_database_id is required", "required")
 	}
+
+	if len(ve.Fields) > 0 {
+		return ve
+	}
+
 	return nil
 }
 
@@ -625,47 +664,26 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 	var req models.UpdateChangePlanRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error("Failed to bind request", zap.Error(err))
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Invalid request body",
-		})
+		return middleware.HandleValidationError(c, err)
+	}
+
+	// Validate update request
+	ve := validateUpdateChangePlanRequest(&req)
+	if ve != nil {
+		h.logger.Error("Validation failed", zap.Error(ve))
+		return middleware.HandleValidationError(c, ve)
 	}
 
 	// Update fields if provided
 	if req.Title != nil {
-		if *req.Title == "" {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "title cannot be empty",
-			})
-		}
-		if len(*req.Title) > 255 {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "title must not exceed 255 characters",
-			})
-		}
 		changePlan.Title = *req.Title
 	}
 
 	if req.Description != nil {
-		if *req.Description == "" {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "description cannot be empty",
-			})
-		}
 		changePlan.Description = *req.Description
 	}
 
 	if req.SQLContent != nil {
-		if *req.SQLContent == "" {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "sql_content cannot be empty",
-			})
-		}
-		// Validate SQL content size limit (10MB)
-		if len(*req.SQLContent) > MaxSQLContentSize {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "sql_content exceeds maximum size of 10MB",
-			})
-		}
 		changePlan.SQLContent = *req.SQLContent
 
 		// Re-assess risk level when SQL content changes
@@ -1715,16 +1733,17 @@ func (h *ChangePlanHandler) AssignReviewer(c echo.Context) error {
 	var req AssignReviewerRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error("Failed to bind request", zap.Error(err))
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Invalid request body",
-		})
+		return middleware.HandleValidationError(c, err)
 	}
 
 	// Validate reviewer_id is provided
+	ve := &middleware.ValidationError{}
 	if req.ReviewerID == uuid.Nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "reviewer_id is required",
-		})
+		ve.AddField("reviewer_id", "reviewer_id is required", "required")
+	}
+
+	if len(ve.Fields) > 0 {
+		return middleware.HandleValidationError(c, ve)
 	}
 
 	// Validate that reviewer is a Project Approver in the project
