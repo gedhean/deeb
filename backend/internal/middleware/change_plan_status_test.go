@@ -310,8 +310,16 @@ func TestValidateStatusTransition_InvalidTransition(t *testing.T) {
 	var errorResp map[string]interface{}
 	err = json.NewDecoder(rec.Body).Decode(&errorResp)
 	require.NoError(t, err)
-	assert.Contains(t, errorResp["error"].(string), "invalid status transition")
+	// Verify error message explains why transition is invalid
+	assert.Contains(t, errorResp["error"].(string), "Cannot transition")
+	assert.Contains(t, errorResp["error"].(string), "Draft")
+	assert.Contains(t, errorResp["error"].(string), "Approved")
+	// Verify error response includes current status and attempted transition
 	assert.NotNil(t, errorResp["details"])
+	details, ok := errorResp["details"].(map[string]interface{})
+	require.True(t, ok, "details should be a map")
+	assert.Equal(t, "Draft", details["current_status"])
+	assert.Equal(t, "Approved", details["attempted_status"])
 }
 
 func TestValidateStatusTransition_InvalidStatusValue(t *testing.T) {
