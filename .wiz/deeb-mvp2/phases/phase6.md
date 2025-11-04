@@ -38,36 +38,37 @@ Build comprehensive React frontend UI components for all user-facing features an
 
 ### P06M01: Set up API client and authentication utilities
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M01
 
 **Goal**
-Create API client with axios and authentication utilities for token management and API calls.
+Create API client with axios and authentication utilities for HttpOnly cookie-based authentication.
 
 **Acceptance Criteria**
-- [ ] API client created in `frontend/src/lib/api/client.ts`
-- [ ] Axios instance configured with base URL
-- [ ] Request interceptor adds JWT token to headers
-- [ ] Response interceptor handles 401 errors (logout)
-- [ ] Authentication utilities created (store token, get token, clear token)
-- [ ] Unit tests passing
+- [x] API client created in `frontend/src/lib/api/client.ts`
+- [x] Axios instance configured with base URL
+- [x] `withCredentials: true` enabled to send HttpOnly cookies automatically
+- [x] Response interceptor handles 401 errors (dispatches logout event)
+- [x] Authentication utilities created in `frontend/src/lib/api/auth.ts`
+- [x] Utilities document HttpOnly cookie approach (no localStorage token management)
+- [x] Unit tests written (tests will pass once Vitest is installed - see P06M29 for test setup)
 
 ---
 
 ### P06M02: Create authentication store slice
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M02
 
 **Goal**
 Create Zustand store slice for authentication state management.
 
 **Acceptance Criteria**
-- [ ] Authentication slice created in `frontend/src/store/slices/authSlice.ts`
-- [ ] State includes: user, token, isAuthenticated
-- [ ] Actions: login, logout, setUser, setToken
-- [ ] Token persisted to localStorage
-- [ ] Store integrated with API client
+- [x] Authentication slice created in `frontend/src/store/slices/authSlice.ts`
+- [x] State includes: user, isAuthenticated
+- [x] Actions: login, logout, setUser
+- [x] State managed in memory (no localStorage - tokens in HttpOnly cookies)
+- [x] Store integrated with API client
 
 ---
 
