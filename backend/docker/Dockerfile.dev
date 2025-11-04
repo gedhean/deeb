@@ -1,8 +1,8 @@
 # Development Dockerfile with Air for live reload
 FROM golang:1.25-alpine
 
-# Install build dependencies and Air
-RUN apk add --no-cache git ca-certificates && \
+# Install build dependencies (including gcc, musl-dev for CGO) and Air
+RUN apk add --no-cache git ca-certificates gcc musl-dev && \
     go install github.com/air-verse/air@latest
 
 # Set working directory

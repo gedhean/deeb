@@ -30,3 +30,9 @@ docker-down-dev:
 	@echo
 	@echo "Stopping and removing development docker containers..."
 	@PROJECT_NAME=${PROJECT_NAME}-dev docker compose -p ${PROJECT_NAME}-dev -f docker/docker-compose.dev.yaml down
+
+.PHONY: docker-wipe
+docker-down-wipe:
+	@echo
+	@echo "Stopping and removing development docker containers and volumes..."
+	@PROJECT_NAME=${PROJECT_NAME}-dev docker compose -p ${PROJECT_NAME}-dev -f docker/docker-compose.dev.yaml down -v

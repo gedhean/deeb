@@ -2,8 +2,8 @@
 # Stage 1: Build the Go application
 FROM golang:1.25-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates
+# Install build dependencies (including gcc, musl-dev for CGO)
+RUN apk add --no-cache git ca-certificates gcc musl-dev
 
 # Set working directory
 WORKDIR /app
@@ -18,13 +18,14 @@ RUN go mod download
 COPY . .
 
 # Build the main deeb binary (with Cobra commands)
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o deeb main.go
+# CGO is enabled for pg_query_go library
+RUN CGO_ENABLED=1 GOOS=linux go build -a -o deeb main.go
 
 # Stage 2: Create minimal runtime image
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS and timezone data
-RUN apk --no-cache add ca-certificates tzdata
+# Install ca-certificates for HTTPS, timezone data, and libc for CGO binaries
+RUN apk --no-cache add ca-certificates tzdata libc6-compat
 
 # Create non-root user
 RUN addgroup -g 1000 deeb && \
