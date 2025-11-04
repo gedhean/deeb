@@ -148,20 +148,20 @@ Create Dashboard page with overview of open/recent Change Plans, pending approva
 
 ### P06M07: Create Projects management UI
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M07
 
 **Goal**
 Implement Projects CRUD UI for administrators (admin only).
 
 **Acceptance Criteria**
-- [ ] Projects list page created in `frontend/src/pages/ProjectsPage.tsx`
-- [ ] Create Project form implemented
-- [ ] Edit Project form implemented
-- [ ] Delete Project confirmation dialog
-- [ ] RBAC: admin only visibility
-- [ ] API integration working
-- [ ] Responsive design working
+- [x] Projects list page created in `frontend/src/pages/ProjectsPage.tsx`
+- [x] Create Project form implemented
+- [x] Edit Project form implemented
+- [x] Delete Project confirmation dialog
+- [x] RBAC: admin only visibility
+- [x] API integration working
+- [x] Responsive design working
 
 ---
 
