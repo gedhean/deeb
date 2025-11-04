@@ -187,23 +187,23 @@ Implement Environments CRUD UI for administrators (admin only) with Policy assig
 
 ### P06M09: Create Policy management UI
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M09
 
 **Goal**
 Implement Policy CRUD UI for administrators (admin only), supporting SQL_REVIEW type and filtering by type.
 
 **Acceptance Criteria**
-- [ ] Policy list page created in `frontend/src/pages/PoliciesPage.tsx`
-- [ ] Create Policy form implemented (name, description, type (SQL_REVIEW), policy_config JSON editor)
-- [ ] Edit Policy form implemented
-- [ ] Delete Policy confirmation dialog (with validation: prevent deletion if referenced by Environments)
-- [ ] Policy config JSON editor with validation
-- [ ] Policy config schema validation (validators enabled/disabled settings for SQL_REVIEW type)
-- [ ] Filter by type (SQL_REVIEW) in list view
-- [ ] RBAC: admin only visibility
-- [ ] API integration working
-- [ ] Responsive design working
+- [x] Policy list page created in `frontend/src/pages/PoliciesPage.tsx`
+- [x] Create Policy form implemented (name, description, type (SQL_REVIEW), policy_config JSON editor)
+- [x] Edit Policy form implemented
+- [x] Delete Policy confirmation dialog (with validation: prevent deletion if referenced by Environments)
+- [x] Policy config JSON editor with validation
+- [x] Policy config schema validation (validators enabled/disabled settings for SQL_REVIEW type)
+- [x] Filter by type (SQL_REVIEW) in list view
+- [x] RBAC: admin only visibility
+- [x] API integration working
+- [x] Responsive design working
 
 ---
 

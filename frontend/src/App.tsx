@@ -9,6 +9,7 @@ import { RegisterPage } from '@/pages/RegisterPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ProjectsPage } from '@/pages/ProjectsPage';
 import { EnvironmentsPage } from '@/pages/EnvironmentsPage';
+import { PoliciesPage } from '@/pages/PoliciesPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import './App.css';
 
@@ -45,6 +46,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <EnvironmentsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/policies"
+              element={
+                <ProtectedRoute>
+                  <PoliciesPage />
                 </ProtectedRoute>
               }
             />
