@@ -112,18 +112,18 @@ Create user registration page with email/password form.
 
 ### P06M05: Implement protected route wrapper
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M05
 
 **Goal**
 Create protected route component that enforces authentication and redirects unauthenticated users.
 
 **Acceptance Criteria**
-- [ ] ProtectedRoute component created in `frontend/src/components/ProtectedRoute.tsx`
-- [ ] Authentication check implemented
-- [ ] Redirect to login if not authenticated
-- [ ] Loading state while checking authentication
-- [ ] Integrated with React Router
+- [x] ProtectedRoute component created in `frontend/src/components/protected-route.tsx` (note: uses kebab-case naming consistent with project conventions)
+- [x] Authentication check implemented
+- [x] Redirect to login if not authenticated
+- [x] Loading state while checking authentication
+- [x] Integrated with React Router
 
 ---
 
