@@ -698,8 +698,21 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 	if req.Status != nil {
 		// Validate status transition
 		if err := workflow.ValidateTransition(changePlan.Status, *req.Status); err != nil {
+			// Check if it's a status transition error to return structured response
+			if transitionErr, ok := err.(workflow.ErrInvalidStatusTransition); ok {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error":   transitionErr.UserMessage(),
+					"details": transitionErr.Details(),
+				})
+			}
+
+			// Fallback for other error types
 			return c.JSON(http.StatusBadRequest, map[string]interface{}{
 				"error": err.Error(),
+				"details": map[string]interface{}{
+					"current_status":   string(changePlan.Status),
+					"attempted_status": string(*req.Status),
+				},
 			})
 		}
 

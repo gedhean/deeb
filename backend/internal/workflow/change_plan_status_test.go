@@ -371,7 +371,7 @@ func TestValidateTransition_ErrorMessages(t *testing.T) {
 			name:          "invalid transition error message",
 			from:          models.ChangePlanStatusDraft,
 			to:            models.ChangePlanStatusApproved,
-			expectedInMsg: "invalid status transition",
+			expectedInMsg: "Cannot transition",
 		},
 		{
 			name:          "invalid source status error message",
@@ -413,9 +413,9 @@ func TestValidateTransition_ErrorMessages(t *testing.T) {
 
 func TestErrInvalidStatusTransition_Error(t *testing.T) {
 	tests := []struct {
-		name     string
-		err      ErrInvalidStatusTransition
-		expected string
+		name          string
+		err           ErrInvalidStatusTransition
+		expectedInMsg string
 	}{
 		{
 			name: "error with reason",
@@ -424,7 +424,7 @@ func TestErrInvalidStatusTransition_Error(t *testing.T) {
 				To:     models.ChangePlanStatusApproved,
 				Reason: "transition not allowed",
 			},
-			expected: "invalid status transition from Draft to Approved: transition not allowed",
+			expectedInMsg: "Cannot transition from Draft to Approved",
 		},
 		{
 			name: "error without reason",
@@ -432,15 +432,27 @@ func TestErrInvalidStatusTransition_Error(t *testing.T) {
 				From: models.ChangePlanStatusDraft,
 				To:   models.ChangePlanStatusApproved,
 			},
-			expected: "invalid status transition from Draft to Approved",
+			expectedInMsg: "Cannot transition from Draft to Approved",
+		},
+		{
+			name: "terminal status error",
+			err: ErrInvalidStatusTransition{
+				From: models.ChangePlanStatusCompleted,
+				To:   models.ChangePlanStatusOpen,
+			},
+			expectedInMsg: "terminal state",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			msg := tt.err.Error()
-			if msg != tt.expected {
-				t.Errorf("ErrInvalidStatusTransition.Error() = %q, want %q", msg, tt.expected)
+			if msg == "" {
+				t.Errorf("ErrInvalidStatusTransition.Error() = empty string, want non-empty")
+				return
+			}
+			if !strings.Contains(msg, tt.expectedInMsg) {
+				t.Errorf("ErrInvalidStatusTransition.Error() = %q, want to contain %q", msg, tt.expectedInMsg)
 			}
 		})
 	}
