@@ -52,25 +52,6 @@ const navMainItems = [
     icon: FolderKanban,
   },
   {
-    title: 'Issues',
-    url: '/issues',
-    icon: FileCheck,
-    items: [
-      {
-        title: 'All Issues',
-        url: '/issues',
-      },
-      {
-        title: 'My Issues',
-        url: '/issues/mine',
-      },
-      {
-        title: 'Create Issue',
-        url: '/issues/new',
-      },
-    ],
-  },
-  {
     title: 'Approvals',
     url: '/approvals',
     icon: CircleCheckBig,

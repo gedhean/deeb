@@ -22,6 +22,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 
 export const EnvironmentsPage: React.FC = () => {
@@ -90,6 +98,7 @@ export const EnvironmentsPage: React.FC = () => {
       setError('');
       const response = await environmentsService.listEnvironments({ limit: 100 });
       setEnvironments(response.items);
+      return response.items;
     } catch (err) {
       if (err instanceof APIError) {
         setError(err.message);
@@ -97,6 +106,7 @@ export const EnvironmentsPage: React.FC = () => {
         setError('Failed to load environments. Please try again.');
       }
       console.error('Failed to load environments:', err);
+      return [];
     } finally {
       setIsLoading(false);
     }
@@ -304,20 +314,18 @@ export const EnvironmentsPage: React.FC = () => {
 
         {/* Environments list */}
         {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i}>
-                <CardHeader>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                <Skeleton className="h-9 w-full" />
+                <div className="space-y-2">
                   <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-48 mt-2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-24 mt-2" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         ) : environments.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
@@ -331,47 +339,53 @@ export const EnvironmentsPage: React.FC = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {environments.map((environment) => (
-              <Card key={environment.id}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{environment.name}</CardTitle>
-                  <CardDescription className="line-clamp-2">
-                    {environment.description || 'No description'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Policy:</span>{' '}
-                      {getPolicyName(environment.policy_id)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Created {formatDate(environment.created_at)}
-                    </div>
-                    <div className="flex items-center justify-end gap-2 pt-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditForm(environment)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteConfirmation(environment)}
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Policy</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {environments.map((environment) => (
+                    <TableRow key={environment.id}>
+                      <TableCell className="font-medium">{environment.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {environment.description || '-'}
+                      </TableCell>
+                      <TableCell>{getPolicyName(environment.policy_id)}</TableCell>
+                      <TableCell>{formatDate(environment.created_at)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditForm(environment)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDeleteConfirmation(environment)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         )}
 
         {/* Create Environment Sheet */}
