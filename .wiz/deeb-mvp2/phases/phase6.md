@@ -209,21 +209,21 @@ Implement Policy CRUD UI for administrators (admin only), supporting SQL_REVIEW 
 
 ### P06M10: Create Database Instances management UI
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M10
 
 **Goal**
 Implement Database Instances CRUD UI with connection testing (admin only).
 
 **Acceptance Criteria**
-- [ ] Database Instances list page created in `frontend/src/pages/DatabaseInstancesPage.tsx`
-- [ ] Create Database Instance form implemented (name, type, host, port, credentials)
-- [ ] Connection test button implemented
-- [ ] Connection test results displayed
-- [ ] Edit Database Instance form implemented
-- [ ] Delete confirmation dialog
-- [ ] RBAC: admin only visibility
-- [ ] API integration working
+- [x] Database Instances list page created in `frontend/src/pages/DatabaseInstancesPage.tsx`
+- [x] Create Database Instance form implemented (name, type, host, port, credentials)
+- [x] Connection test button implemented
+- [x] Connection test results displayed
+- [x] Edit Database Instance form implemented
+- [x] Delete confirmation dialog
+- [x] RBAC: admin only visibility
+- [x] API integration working
 
 ---
 

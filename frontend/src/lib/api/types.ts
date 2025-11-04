@@ -68,26 +68,41 @@ export interface UpdateProjectRequest {
 export interface DatabaseInstance {
   id: string;
   name: string;
+  description?: string;
+  database_type: 'mysql' | 'postgresql';
   host: string;
   port: number;
-  engine: 'mysql' | 'postgresql';
-  environment_id: string;
+  username: string;
+  use_rds_iam_auth: boolean;
+  require_ssl: boolean;
+  status: 'Active' | 'Inactive' | 'Maintenance';
   created_at: string;
   updated_at: string;
 }
 
 export interface CreateDatabaseInstanceRequest {
   name: string;
+  description?: string;
+  database_type: 'mysql' | 'postgresql';
   host: string;
   port: number;
-  engine: 'mysql' | 'postgresql';
-  environment_id: string;
+  username: string;
+  password: string;
+  use_rds_iam_auth?: boolean;
+  require_ssl?: boolean;
 }
 
 export interface UpdateDatabaseInstanceRequest {
   name?: string;
+  description?: string;
+  database_type?: 'mysql' | 'postgresql';
   host?: string;
   port?: number;
+  username?: string;
+  password?: string;
+  use_rds_iam_auth?: boolean;
+  require_ssl?: boolean;
+  status?: 'Active' | 'Inactive' | 'Maintenance';
 }
 
 // Database Types
