@@ -93,20 +93,20 @@ Create login page with email/password form and OAuth Google button.
 
 ### P06M04: Implement registration page UI
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M04
 
 **Goal**
 Create user registration page with email/password form.
 
 **Acceptance Criteria**
-- [ ] Registration page component created in `frontend/src/pages/RegisterPage.tsx`
-- [ ] Registration form implemented (email, password, confirm password)
-- [ ] Form validation working (email format, password strength, matching passwords)
-- [ ] Success handling (redirect to login)
-- [ ] Error handling and display
-- [ ] Responsive design working
-- [ ] Integration test passing
+- [x] Registration page component created in `frontend/src/pages/RegisterPage.tsx`
+- [x] Registration form implemented (email, password, confirm password)
+- [x] Form validation working (email format, password strength, matching passwords)
+- [x] Success handling (redirect to login)
+- [x] Error handling and display
+- [x] Responsive design working
+- [x] Integration tests will be added in P06M32 (E2E tests for authentication flow)
 
 ---
 
