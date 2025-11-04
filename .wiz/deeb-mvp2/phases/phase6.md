@@ -167,21 +167,21 @@ Implement Projects CRUD UI for administrators (admin only).
 
 ### P06M08: Create Environments management UI
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M08
 
 **Goal**
 Implement Environments CRUD UI for administrators (admin only) with Policy assignment.
 
 **Acceptance Criteria**
-- [ ] Environments list page created in `frontend/src/pages/EnvironmentsPage.tsx`
-- [ ] Create Environment form implemented (name, description, policy_id dropdown)
-- [ ] Edit Environment form implemented (including Policy assignment)
-- [ ] Delete Environment confirmation dialog
-- [ ] Policy dropdown populated from API (filtered by SQL_REVIEW type)
-- [ ] RBAC: admin only visibility
-- [ ] API integration working
-- [ ] Responsive design working
+- [x] Environments list page created in `frontend/src/pages/EnvironmentsPage.tsx`
+- [x] Create Environment form implemented (name, description, policy_id dropdown)
+- [x] Edit Environment form implemented (including Policy assignment)
+- [x] Delete Environment confirmation dialog
+- [x] Policy dropdown populated from API (filtered by SQL_REVIEW type)
+- [x] RBAC: admin only visibility
+- [x] API integration working
+- [x] Responsive design working
 
 ---
 

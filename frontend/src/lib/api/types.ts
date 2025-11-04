@@ -112,6 +112,52 @@ export interface UpdateDatabaseRequest {
   name?: string;
 }
 
+// Environment Types
+export interface Environment {
+  id: string;
+  name: string;
+  description?: string;
+  policy_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateEnvironmentRequest {
+  name: string;
+  description?: string;
+  policy_id?: string;
+}
+
+export interface UpdateEnvironmentRequest {
+  name?: string;
+  description?: string;
+  policy_id?: string;
+}
+
+// Policy Types
+export interface Policy {
+  id: string;
+  name: string;
+  description?: string;
+  type: 'SQL_REVIEW';
+  policy_config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePolicyRequest {
+  name: string;
+  description?: string;
+  type: 'SQL_REVIEW';
+  policy_config: Record<string, unknown>;
+}
+
+export interface UpdatePolicyRequest {
+  name?: string;
+  description?: string;
+  policy_config?: Record<string, unknown>;
+}
+
 // List Response with Pagination
 export interface ListResponse<T> {
   items: T[];
