@@ -467,18 +467,34 @@ Define consistent error response structure across all API endpoints.
 
 ### P05M15: Implement SQL execution error handling
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M15
 
 **Goal**
 Add comprehensive error handling for SQL execution failures with full context logging.
 
 **Acceptance Criteria**
-- [ ] SQL execution errors captured with full context
-- [ ] Error logging includes: SQL content, database, error message, stack trace
-- [ ] Error responses include helpful error messages
-- [ ] Sensitive information masked in error responses
-- [ ] Error handling tests passing
+- [x] SQL execution errors captured with full context
+- [x] Error logging includes: SQL content, database, error message, stack trace
+- [x] Error responses include helpful error messages
+- [x] Sensitive information masked in error responses
+- [x] Error handling tests passing
+
+**Notes:**
+- Created `SQLExecutionError` type in `backend/internal/services/sql_execution_error.go` to capture database-specific error details
+- `SQLExecutionError` includes: database type/name/ID/instance, SQL content, database error code/message/detail/hint/position, stack trace, and user-friendly message
+- Enhanced `executeInTransaction` in `backend/internal/services/execution_service.go` to create `SQLExecutionError` when SQL execution fails
+- Comprehensive error logging added with all database-specific fields (error code, message, detail, hint, position)
+- SQL content masking implemented via `MaskSQLContent` function to mask passwords, credit cards, SSNs, and API keys
+- User-friendly error messages generated based on PostgreSQL and MySQL error codes (e.g., unique violations, foreign key violations, syntax errors)
+- Enhanced `ExecuteChangePlan` error handling to use `SQLExecutionError` and return user-friendly messages
+- Created comprehensive unit tests in `backend/internal/services/sql_execution_error_test.go` covering:
+  - PostgreSQL error handling (extracts error code, message, detail, hint, position)
+  - MySQL error handling (extracts error number and message)
+  - Generic error handling
+  - User message generation for common error codes
+  - SQL content masking
+- All tests passing, linting passes (0 issues)
 
 ---
 
