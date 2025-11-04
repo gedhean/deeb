@@ -13,6 +13,7 @@ import { PoliciesPage } from '@/pages/PoliciesPage';
 import { DatabaseInstancesPage } from '@/pages/DatabaseInstancesPage';
 import { DatabasesPage } from '@/pages/DatabasesPage';
 import { UsersPage } from '@/pages/UsersPage';
+import { ChangePlanCreatePage } from '@/pages/ChangePlanCreatePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import './App.css';
 
@@ -81,6 +82,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <UsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/change-plans/create"
+              element={
+                <ProtectedRoute>
+                  <ChangePlanCreatePage />
                 </ProtectedRoute>
               }
             />

@@ -124,10 +124,6 @@ export const DatabaseInstancesPage: React.FC = () => {
       errors.username = 'Username is required';
     }
 
-    if (!formData.password && !formData.use_rds_iam_auth) {
-      errors.password = 'Password is required unless using RDS IAM auth';
-    }
-
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -669,7 +665,7 @@ export const DatabaseInstancesPage: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <label htmlFor="create-password" className="text-sm font-medium">
-                  Password {formData.use_rds_iam_auth ? '(optional)' : '*'}
+                  Password (optional)
                 </label>
                 <Input
                   id="create-password"
@@ -869,8 +865,7 @@ export const DatabaseInstancesPage: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <label htmlFor="edit-password" className="text-sm font-medium">
-                  Password{' '}
-                  {formData.use_rds_iam_auth ? '(optional, leave blank to keep current)' : '*'}
+                  Password (optional, leave blank to keep current)
                 </label>
                 <Input
                   id="edit-password"

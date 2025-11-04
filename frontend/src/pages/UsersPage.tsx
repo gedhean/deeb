@@ -115,13 +115,10 @@ export const UsersPage: React.FC = () => {
 
   // Validate edit form (password is optional for edit)
   const validateEditForm = (): boolean => {
-    const errors: { email?: string; organization_role?: string } = {};
+    const errors: { organization_role?: string } = {};
 
-    if (selectedUser && !formData.email.trim()) {
-      errors.email = 'Email is required';
-    } else if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
-      errors.email = 'Invalid email format';
-    }
+    // Email is not editable, so no validation needed
+    // Organization role is always set, so no validation needed either
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;

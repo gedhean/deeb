@@ -1,5 +1,10 @@
 import { apiClient } from '../client';
-import type { ChangePlan, ChangePlanListResponse, ListChangePlansParams } from '../types';
+import type {
+  ChangePlan,
+  ChangePlanListResponse,
+  CreateChangePlanRequest,
+  ListChangePlansParams,
+} from '../types';
 
 export const changePlanService = {
   /**
@@ -39,6 +44,14 @@ export const changePlanService = {
    */
   async getChangePlan(id: string): Promise<ChangePlan> {
     const response = await apiClient.get<ChangePlan>(`/api/v1/change-plans/${id}`);
+    return response;
+  },
+
+  /**
+   * Create a new change plan
+   */
+  async createChangePlan(data: CreateChangePlanRequest): Promise<ChangePlan> {
+    const response = await apiClient.post<ChangePlan>('/api/v1/change-plans', data);
     return response;
   },
 };

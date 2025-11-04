@@ -276,6 +276,16 @@ export interface ListChangePlansParams {
   offset?: number;
 }
 
+export interface CreateChangePlanRequest {
+  project_id: string;
+  target_database_id: string;
+  title: string;
+  description: string;
+  change_type: ChangeType;
+  sql_content: string;
+  rollback_sql?: string;
+}
+
 // API Error
 export class APIError extends Error {
   constructor(

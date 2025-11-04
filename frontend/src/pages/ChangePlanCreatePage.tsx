@@ -1,0 +1,417 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { DefaultLayout } from '@/components/layouts';
+import { changePlanService } from '@/lib/api/services/changePlans';
+import { projectsService } from '@/lib/api/services/projects';
+import { databasesService } from '@/lib/api/services/databases';
+import type { CreateChangePlanRequest, Project, Database, ChangeType } from '@/lib/api/types';
+import { APIError } from '@/lib/api/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
+
+export const ChangePlanCreatePage: React.FC = () => {
+  const navigate = useNavigate();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [databases, setDatabases] = useState<Database[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [isLoadingDatabases, setIsLoadingDatabases] = useState(false);
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Form state
+  const [formData, setFormData] = useState<CreateChangePlanRequest>({
+    project_id: '',
+    target_database_id: '',
+    title: '',
+    description: '',
+    change_type: 'DDL',
+    sql_content: '',
+    rollback_sql: '',
+  });
+  const [formErrors, setFormErrors] = useState<{
+    project_id?: string;
+    target_database_id?: string;
+    title?: string;
+    description?: string;
+    change_type?: string;
+    sql_content?: string;
+  }>({});
+
+  // Load projects
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  // Load databases when project is selected
+  useEffect(() => {
+    if (formData.project_id) {
+      loadDatabases(formData.project_id);
+    } else {
+      setDatabases([]);
+      setFormData((prev) => ({ ...prev, target_database_id: '' }));
+    }
+  }, [formData.project_id]);
+
+  const loadProjects = async () => {
+    try {
+      setIsLoadingProjects(true);
+      setError('');
+      const response = await projectsService.listProjects({ limit: 100 });
+      setProjects(response.items);
+    } catch (err) {
+      if (err instanceof APIError) {
+        setError(err.message);
+      } else {
+        setError('Failed to load projects. Please try again.');
+      }
+      console.error('Failed to load projects:', err);
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  };
+
+  const loadDatabases = async (projectId: string) => {
+    try {
+      setIsLoadingDatabases(true);
+      const response = await databasesService.listDatabases({
+        project_id: projectId,
+        limit: 100,
+      });
+      setDatabases(response.items);
+    } catch (err) {
+      console.error('Failed to load databases:', err);
+      setDatabases([]);
+    } finally {
+      setIsLoadingDatabases(false);
+    }
+  };
+
+  // Validate form
+  const validateForm = (): boolean => {
+    const errors: {
+      project_id?: string;
+      target_database_id?: string;
+      title?: string;
+      description?: string;
+      change_type?: string;
+      sql_content?: string;
+    } = {};
+
+    if (!formData.project_id) {
+      errors.project_id = 'Project is required';
+    }
+
+    if (!formData.target_database_id) {
+      errors.target_database_id = 'Target database is required';
+    }
+
+    if (!formData.title.trim()) {
+      errors.title = 'Title is required';
+    } else if (formData.title.trim().length > 255) {
+      errors.title = 'Title must be 255 characters or less';
+    }
+
+    if (!formData.description.trim()) {
+      errors.description = 'Description is required';
+    }
+
+    if (!formData.change_type) {
+      errors.change_type = 'Change type is required';
+    }
+
+    if (!formData.sql_content.trim()) {
+      errors.sql_content = 'SQL content is required';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Handle submit
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const createData: CreateChangePlanRequest = {
+        project_id: formData.project_id,
+        target_database_id: formData.target_database_id,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        change_type: formData.change_type,
+        sql_content: formData.sql_content.trim(),
+        rollback_sql: formData.rollback_sql?.trim() || undefined,
+      };
+
+      const createdChangePlan = await changePlanService.createChangePlan(createData);
+
+      // Redirect to dashboard (detail page will be created in P06M15)
+      navigate('/dashboard', {
+        state: {
+          message: `Change Plan "${createdChangePlan.title}" created successfully`,
+          createdChangePlanId: createdChangePlan.id,
+        },
+      });
+    } catch (err) {
+      if (err instanceof APIError) {
+        setError(err.message);
+      } else {
+        setError('Failed to create change plan. Please try again.');
+      }
+      console.error('Failed to create change plan:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <DefaultLayout
+      breadcrumbs={[
+        { label: 'Change Plans', url: '/change-plans' },
+        { label: 'Create', isCurrentPage: true },
+      ]}
+    >
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Create Change Plan</h1>
+            <p className="text-muted-foreground mt-1">
+              Create a new database change plan with SQL content and optional rollback
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+        </div>
+
+        {/* Error message */}
+        {error && (
+          <Card className="border-destructive">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm">{error}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Form */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Change Plan Details</CardTitle>
+            <CardDescription>
+              Fill in the details for your database change plan. All fields marked with * are
+              required.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Project */}
+              <div className="space-y-2">
+                <label htmlFor="project_id" className="text-sm font-medium">
+                  Project *
+                </label>
+                {isLoadingProjects ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <select
+                    id="project_id"
+                    value={formData.project_id}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        project_id: e.target.value,
+                        target_database_id: '', // Reset database when project changes
+                      })
+                    }
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-invalid={!!formErrors.project_id}
+                  >
+                    <option value="">Select a project</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {formErrors.project_id && (
+                  <p className="text-sm text-destructive">{formErrors.project_id}</p>
+                )}
+              </div>
+
+              {/* Target Database */}
+              <div className="space-y-2">
+                <label htmlFor="target_database_id" className="text-sm font-medium">
+                  Target Database *
+                </label>
+                {isLoadingDatabases ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <select
+                    id="target_database_id"
+                    value={formData.target_database_id}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        target_database_id: e.target.value,
+                      })
+                    }
+                    disabled={!formData.project_id || databases.length === 0}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-invalid={!!formErrors.target_database_id}
+                  >
+                    <option value="">
+                      {!formData.project_id
+                        ? 'Select a project first'
+                        : databases.length === 0
+                          ? 'No databases available'
+                          : 'Select a database'}
+                    </option>
+                    {databases.map((database) => (
+                      <option key={database.id} value={database.id}>
+                        {database.database_name}
+                        {database.environment
+                          ? ` (${database.environment.name || database.environment_id})`
+                          : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {formErrors.target_database_id && (
+                  <p className="text-sm text-destructive">{formErrors.target_database_id}</p>
+                )}
+              </div>
+
+              {/* Title */}
+              <div className="space-y-2">
+                <label htmlFor="title" className="text-sm font-medium">
+                  Title *
+                </label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="e.g., Add users table"
+                  maxLength={255}
+                  aria-invalid={!!formErrors.title}
+                />
+                {formErrors.title && <p className="text-sm text-destructive">{formErrors.title}</p>}
+              </div>
+
+              {/* Change Type */}
+              <div className="space-y-2">
+                <label htmlFor="change_type" className="text-sm font-medium">
+                  Change Type *
+                </label>
+                <select
+                  id="change_type"
+                  value={formData.change_type}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      change_type: e.target.value as ChangeType,
+                    })
+                  }
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-invalid={!!formErrors.change_type}
+                >
+                  <option value="DDL">DDL (Data Definition Language)</option>
+                  <option value="DML">DML (Data Manipulation Language)</option>
+                </select>
+                {formErrors.change_type && (
+                  <p className="text-sm text-destructive">{formErrors.change_type}</p>
+                )}
+              </div>
+
+              {/* Description */}
+              <div className="space-y-2">
+                <label htmlFor="description" className="text-sm font-medium">
+                  Description *
+                </label>
+                <textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Describe the purpose and impact of this change"
+                  rows={4}
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-invalid={!!formErrors.description}
+                />
+                {formErrors.description && (
+                  <p className="text-sm text-destructive">{formErrors.description}</p>
+                )}
+              </div>
+
+              {/* SQL Content */}
+              <div className="space-y-2">
+                <label htmlFor="sql_content" className="text-sm font-medium">
+                  SQL Content *
+                </label>
+                <textarea
+                  id="sql_content"
+                  value={formData.sql_content}
+                  onChange={(e) => setFormData({ ...formData, sql_content: e.target.value })}
+                  placeholder="-- Enter your SQL statements here&#10;CREATE TABLE users (&#10;  id UUID PRIMARY KEY,&#10;  email VARCHAR(255) UNIQUE&#10;);"
+                  rows={12}
+                  className="flex min-h-[200px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-invalid={!!formErrors.sql_content}
+                />
+                {formErrors.sql_content && (
+                  <p className="text-sm text-destructive">{formErrors.sql_content}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  SQL statements will be executed against the target database. Ensure they are
+                  correct and tested.
+                </p>
+              </div>
+
+              {/* Rollback SQL */}
+              <div className="space-y-2">
+                <label htmlFor="rollback_sql" className="text-sm font-medium">
+                  Rollback SQL (Optional)
+                </label>
+                <textarea
+                  id="rollback_sql"
+                  value={formData.rollback_sql || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      rollback_sql: e.target.value || undefined,
+                    })
+                  }
+                  placeholder="-- Optional: SQL to rollback this change&#10;DROP TABLE IF EXISTS users;"
+                  rows={8}
+                  className="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional SQL statements to reverse this change if needed.
+                </p>
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex items-center justify-end gap-4 pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Creating...' : 'Create Change Plan'}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </DefaultLayout>
+  );
+};
