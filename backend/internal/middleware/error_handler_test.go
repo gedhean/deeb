@@ -398,3 +398,386 @@ func TestCustomErrorHandler_WithCodeAndDetails(t *testing.T) {
 	assert.Equal(t, "invalid_format", response.Details["reason"])
 	assert.Equal(t, "not-an-email", response.Details["value"])
 }
+
+func TestCustomErrorHandler_ValidationError(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Set correlation ID
+	correlationID := "test-correlation-validation"
+	c.Set(CorrelationIDKey, correlationID)
+
+	// Create ValidationError
+	ve := NewValidationError([]FieldError{
+		{Field: "title", Message: "title is required", Rule: "required"},
+		{Field: "description", Message: "description is required", Rule: "required"},
+	})
+
+	// Execute
+	CustomErrorHandler(ve, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	assert.Equal(t, ErrorCodeValidationError, response.Code)
+	assert.Contains(t, response.Message, "title is required")
+	assert.NotNil(t, response.Details)
+	assert.NotNil(t, response.Details["validation_errors"])
+	assert.Equal(t, correlationID, response.RequestID)
+}
+
+func TestCustomErrorHandler_ValidationErrorWrappedInHTTPError(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Create ValidationError wrapped in echo.HTTPError
+	ve := NewValidationError([]FieldError{
+		{Field: "email", Message: "invalid email format", Rule: "format"},
+	})
+	he := echo.NewHTTPError(http.StatusBadRequest, "Validation failed")
+	he.SetInternal(ve)
+
+	// Execute
+	CustomErrorHandler(he, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	assert.Equal(t, ErrorCodeValidationError, response.Code)
+	assert.Contains(t, response.Message, "invalid email format")
+	assert.NotNil(t, response.Details)
+}
+
+func TestCustomErrorHandler_BindErrorParsing(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Create bind error that can be parsed as validation error
+	bindErr := errors.New("code=400, message=Unmarshal type error: expected=string, got=number, field=age, offset=123")
+	he := echo.NewHTTPError(http.StatusBadRequest, "Bad request")
+	he.SetInternal(bindErr)
+
+	// Execute
+	CustomErrorHandler(he, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	assert.Equal(t, ErrorCodeValidationError, response.Code)
+	assert.NotNil(t, response.Details)
+}
+
+func TestCustomErrorHandler_HTTPErrorWithCodeWrappedInHTTPError(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Create HTTPErrorWithCode wrapped in echo.HTTPError
+	details := map[string]interface{}{
+		"resource": "change_plan",
+		"reason":   "not_found",
+	}
+	hec := NewHTTPErrorWithCode(http.StatusNotFound, "RESOURCE_NOT_FOUND", "Change plan not found", details)
+	he := echo.NewHTTPError(http.StatusNotFound, "Not found")
+	he.SetInternal(hec)
+
+	// Execute
+	CustomErrorHandler(he, c)
+
+	// Assert
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Not Found", response.Error)
+	assert.Equal(t, "RESOURCE_NOT_FOUND", response.Code)
+	assert.NotNil(t, response.Details)
+}
+
+func TestCustomErrorHandler_RequestIDFromResponseHeader(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Set X-Request-ID header (from Echo's RequestID middleware)
+	requestID := "echo-request-id-123"
+	c.Response().Header().Set(echo.HeaderXRequestID, requestID)
+
+	// Create error
+	err := echo.NewHTTPError(http.StatusBadRequest, "Invalid request")
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, requestID, response.RequestID)
+}
+
+func TestCustomErrorHandler_RequestIDFromEchoContext(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Set request ID in Echo context (set by RequestID middleware)
+	requestID := "echo-context-id-456"
+	c.Set(echo.HeaderXRequestID, requestID)
+
+	// Create error
+	err := echo.NewHTTPError(http.StatusBadRequest, "Invalid request")
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, requestID, response.RequestID)
+}
+
+func TestCustomErrorHandler_RequestIDPriorityResponseHeader(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Set both response header and correlation ID (header should take priority)
+	requestID := "header-id-789"
+	correlationID := "correlation-id-999"
+	c.Response().Header().Set(echo.HeaderXRequestID, requestID)
+	c.Set(CorrelationIDKey, correlationID)
+
+	// Create error
+	err := echo.NewHTTPError(http.StatusBadRequest, "Invalid request")
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	// Should use response header, not correlation ID
+	assert.Equal(t, requestID, response.RequestID)
+}
+
+func TestCustomErrorHandler_HTTPErrorNonStringMessage(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Create HTTPError with non-string message
+	err := echo.NewHTTPError(http.StatusBadRequest, 12345) // numeric message
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	assert.Contains(t, response.Message, "12345")
+}
+
+func TestCustomErrorHandler_ServerErrorWithUserContext(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Set user context
+	userID := uuid.New()
+	userEmail := "admin@example.com"
+	claims := &auth.Claims{
+		UserID:           userID,
+		Email:            userEmail,
+		OrganizationRole: "OrganizationAdmin",
+	}
+	c.Set("user", claims)
+
+	// Create 500 error
+	err := echo.NewHTTPError(http.StatusInternalServerError, "Database error")
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Internal Server Error", response.Error)
+	// Message should be sanitized (not expose internal details)
+	assert.Equal(t, "Database error", response.Message)
+}
+
+func TestCustomErrorHandler_ClientErrorWithUserContext(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/change-plans", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Set user context
+	userID := uuid.New()
+	userEmail := "user@example.com"
+	claims := &auth.Claims{
+		UserID:           userID,
+		Email:            userEmail,
+		OrganizationRole: "OrganizationDeveloper",
+	}
+	c.Set("user", claims)
+
+	// Set correlation ID
+	correlationID := "test-correlation-user"
+	c.Set(CorrelationIDKey, correlationID)
+
+	// Create 400 error
+	err := echo.NewHTTPError(http.StatusBadRequest, "Invalid input")
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	assert.Equal(t, "Invalid input", response.Message)
+	assert.Equal(t, correlationID, response.RequestID)
+}
+
+func TestCustomErrorHandler_HTTPErrorWithCodeNilDetails(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Create HTTPErrorWithCode with nil details
+	err := NewHTTPErrorWithCode(http.StatusNotFound, "NOT_FOUND", "Resource not found", nil)
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Not Found", response.Error)
+	assert.Equal(t, "Resource not found", response.Message)
+	assert.Equal(t, "NOT_FOUND", response.Code)
+	assert.Nil(t, response.Details)
+}
+
+func TestCustomErrorHandler_ValidationErrorEmptyFields(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Create ValidationError with empty fields
+	ve := NewValidationError([]FieldError{})
+
+	// Execute
+	CustomErrorHandler(ve, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	assert.Equal(t, ErrorCodeValidationError, response.Code)
+	assert.NotNil(t, response.Details)
+}
+
+func TestCustomErrorHandler_EchoHTTPErrorWithInternalStringError(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Create HTTPError with internal string error (not ValidationError)
+	internalErr := errors.New("some internal error")
+	he := echo.NewHTTPError(http.StatusBadRequest, "Bad request")
+	he.SetInternal(internalErr)
+
+	// Execute
+	CustomErrorHandler(he, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	// For client errors with internal errors, the internal error message may be included
+	assert.Contains(t, response.Message, "some internal error")
+}

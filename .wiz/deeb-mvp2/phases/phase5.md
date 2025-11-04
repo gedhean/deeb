@@ -740,57 +740,179 @@ Ensure execution errors include full context for debugging.
 
 ### P05M21: Write unit tests for AuditLog repository
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M21
 
 **Goal**
 Create comprehensive unit tests for AuditLog repository operations.
 
 **Acceptance Criteria**
-- [ ] Unit tests for all AuditLog repository methods
-- [ ] Test coverage >85%
-- [ ] Filtering tests passing
-- [ ] Pagination tests passing
-- [ ] Edge cases covered
-- [ ] All tests passing
+- [x] Unit tests for all AuditLog repository methods
+- [x] Test coverage >85%
+- [x] Filtering tests passing
+- [x] Pagination tests passing
+- [x] Edge cases covered
+- [x] All tests passing
 
----
+**Notes:**
+- Created comprehensive unit tests in `backend/internal/repository/postgres/audit_log_repository_test.go`
+- Tests cover all repository methods:
+  - `NewAuditLogRepository`: Constructor test
+  - `Create`: Tests for successful creation with all fields, auto-generated ID, auto-generated timestamp, and database errors
+  - `List`: Tests for successful list with pagination, zero offset, and database errors
+  - `GetByUserID`: Tests for successful retrieval, empty results, and database errors
+  - `GetByAction`: Tests for successful retrieval and database errors
+  - `GetByTargetType`: Tests for successful retrieval and database errors
+  - `Filter`: Tests for filtering by:
+    - User ID only
+    - Action only
+    - Resource type only
+    - Resource ID only
+    - Date range
+    - Multiple criteria combined
+    - Without pagination
+    - Without any criteria
+    - Database errors
+  - `Count`: Tests for successful count, zero count, and database errors
+  - `CountWithFilters`: Tests for counting with user ID filter, multiple filters, without filters, and database errors
+- Edge cases covered:
+  - Empty results
+  - Zero offset/limit
+  - Missing optional fields (details, IP address, user agent)
+  - Auto-generated ID and timestamp
+  - Database connection errors
+  - Multiple filter combinations
+- Test coverage: 100% for all methods except `CountWithFilters` (91.2%)
+- Overall coverage: >85% requirement met
+- All tests passing (1454 tests, 25 skipped), linting passes (0 issues)
 
 ### P05M22: Write unit tests for audit logging service
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M22
 
 **Goal**
 Create comprehensive unit tests for audit logging service.
 
 **Acceptance Criteria**
-- [ ] Unit tests for audit logging service (>85% coverage)
-- [ ] Action logging tests
-- [ ] Target type tests
-- [ ] Result tracking tests
-- [ ] Edge cases covered
-- [ ] All tests passing
+- [x] Unit tests for audit logging service (>85% coverage)
+- [x] Action logging tests
+- [x] Target type tests
+- [x] Result tracking tests
+- [x] Edge cases covered
+- [x] All tests passing
 
----
+**Notes:**
+- Enhanced existing unit tests in `backend/internal/services/audit_log_service_test.go` with comprehensive coverage
+- Tests cover all service methods:
+  - `Log`: Basic logging with all fields, empty details, repository errors
+  - `LogWithHTTP`: HTTP request logging with:
+    - IP address extraction (X-Forwarded-For, X-Real-IP, RemoteAddr)
+    - User agent handling
+    - Nil request handling
+    - Invalid IP addresses
+    - IPv6 addresses
+    - Whitespace handling in X-Forwarded-For
+    - Empty user agent
+    - RemoteAddr without port
+    - Repository errors
+  - `LogStateTransition`: State transition logging with:
+    - All change plan status transitions (approved, closed, rejected, in_progress, completed, failed)
+    - Generic resource type transitions
+    - Nil additional details
+    - Invalid JSON details (graceful handling)
+    - Additional details merging
+    - Repository errors
+  - `LogWithResult`: Result tracking with:
+    - Success and failure results
+    - Error message handling
+    - Nil additional details
+    - Invalid JSON details (graceful handling)
+    - Additional details merging
+    - Repository errors
+- Edge cases covered:
+  - Nil HTTP request
+  - Missing headers
+  - Invalid IP addresses
+  - IPv6 addresses
+  - Empty user agent
+  - Nil additional details
+  - Invalid JSON (graceful error handling)
+  - Repository errors
+  - Empty details
+- Helper function tests:
+  - `extractIPAddress`: All code paths tested (X-Forwarded-For, X-Real-IP, RemoteAddr, nil)
+  - `parseIP`: IPv4 and IPv6 parsing
+  - `determineActionFromTransition`: All change plan statuses and generic resource types
+- Test coverage: 100% for all methods except `LogStateTransition` (90.9%) and `LogWithResult` (91.7%)
+- Overall coverage: >85% requirement met
+- All tests passing (1479 tests, 25 skipped), linting passes (0 issues)
 
 ### P05M23: Write unit tests for error handling middleware
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M23
 
 **Goal**
 Create comprehensive unit tests for error handling middleware.
 
 **Acceptance Criteria**
-- [ ] Unit tests for error handling middleware (>85% coverage)
-- [ ] Error response format tests
-- [ ] Error context capture tests
-- [ ] Error logging tests
-- [ ] Edge cases covered
-- [ ] All tests passing
+- [x] Unit tests for error handling middleware (>85% coverage)
+- [x] Error response format tests
+- [x] Error context capture tests
+- [x] Error logging tests
+- [x] Edge cases covered
+- [x] All tests passing
 
----
+**Notes:**
+- Enhanced existing unit tests in `backend/internal/middleware/error_handler_test.go` with comprehensive coverage
+- Tests cover all error handling scenarios:
+  - `EchoHTTPError`: Standard Echo HTTP errors (404, 400, 401, 403)
+  - `ServerError`: 500 errors with sanitized messages
+  - `GenericError`: Non-HTTP errors treated as 500
+  - `WithCorrelationID`: Request ID inclusion in responses
+  - `CommittedResponse`: Skip handling if response already committed
+  - `HTTPStatusMapping`: All HTTP status codes (400-503)
+  - `NoSensitiveInfoExposed`: Security - sensitive information not exposed
+  - `WithUserContext`: User context capture in logs
+  - `RequestIDInResponse`: Request ID from correlation ID
+  - `NoRequestIDWhenMissing`: Empty request ID when not set
+  - `WithCodeAndDetails`: HTTPErrorWithCode with application codes and details
+  - `ValidationError`: Direct ValidationError handling
+  - `ValidationErrorWrappedInHTTPError`: ValidationError wrapped in echo.HTTPError
+  - `BindErrorParsing`: ParseStringValidationError for bind errors
+  - `HTTPErrorWithCodeWrappedInHTTPError`: HTTPErrorWithCode wrapped in echo.HTTPError
+  - `RequestIDFromResponseHeader`: Request ID from X-Request-ID header (Echo's RequestID middleware)
+  - `RequestIDFromEchoContext`: Request ID from Echo context (echo.HeaderXRequestID)
+  - `RequestIDPriorityResponseHeader`: Priority handling (response header > Echo context > correlation ID)
+  - `HTTPErrorNonStringMessage`: Non-string message handling
+  - `ServerErrorWithUserContext`: Server errors with user context in logs
+  - `ClientErrorWithUserContext`: Client errors with user context in logs
+  - `HTTPErrorWithCodeNilDetails`: HTTPErrorWithCode with nil details
+  - `ValidationErrorEmptyFields`: ValidationError with empty fields
+  - `EchoHTTPErrorWithInternalStringError`: echo.HTTPError with internal string error
+- Error types tested:
+  - ValidationError (direct and wrapped)
+  - HTTPErrorWithCode (direct and wrapped)
+  - echo.HTTPError (with and without internal errors)
+  - Generic errors
+  - Bind errors (parsed as validation errors)
+- Error context capture tested:
+  - Request ID from multiple sources (response header, Echo context, correlation ID)
+  - User context (user ID and email) in logs
+  - HTTP method and path in logs
+  - Error severity-based logging (info for 4xx, error for 5xx)
+- Edge cases covered:
+  - Committed responses (skip handling)
+  - Missing request ID
+  - Non-string error messages
+  - Nil details
+  - Empty validation fields
+  - Wrapped errors
+  - Internal error handling
+- Test coverage: 92.3% for `CustomErrorHandler` (>85% requirement met)
+- `NewHTTPErrorWithCode`: 100% coverage
+- All tests passing (1479 tests, 25 skipped), linting passes (0 issues)
 
 ### P05M24: Write integration tests for audit logging
 
