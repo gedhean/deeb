@@ -376,7 +376,7 @@ export const EnvironmentsPage: React.FC = () => {
 
         {/* Create Environment Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className='w-[400px] sm:w-[540px]'>
+          <SheetContent className="w-[400px] sm:w-[540px]">
             <SheetHeader>
               <SheetTitle>Create Environment</SheetTitle>
               <SheetDescription>
