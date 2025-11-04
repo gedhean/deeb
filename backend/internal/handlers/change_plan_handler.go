@@ -283,9 +283,7 @@ func validateCreateChangePlanRequest(req *models.CreateChangePlanRequest) error 
 		ve.AddField("title", "title must not exceed 255 characters", "max")
 	}
 
-	if req.Description == "" {
-		ve.AddField("description", "description is required", "required")
-	}
+	// Description is optional - no validation needed
 
 	if req.SQLContent == "" {
 		ve.AddField("sql_content", "sql_content is required", "required")

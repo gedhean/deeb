@@ -82,7 +82,7 @@ type CreateChangePlanRequest struct {
 	ProjectID        uuid.UUID  `json:"project_id"             validate:"required"`
 	TargetDatabaseID uuid.UUID  `json:"target_database_id"     validate:"required"`
 	Title            string     `json:"title"                  validate:"required,max=255"`
-	Description      string     `json:"description"            validate:"required"`
+	Description      string     `json:"description"            validate:"omitempty"`
 	ChangeType       ChangeType `json:"change_type"            validate:"required,oneof=DDL DML"`
 	SQLContent       string     `json:"sql_content"            validate:"required"`
 	RollbackSQL      *string    `json:"rollback_sql,omitempty"`
