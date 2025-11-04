@@ -359,3 +359,42 @@ func TestCustomErrorHandler_NoRequestIDWhenMissing(t *testing.T) {
 	assert.Equal(t, "Invalid request", response.Message)
 	assert.Empty(t, response.RequestID)
 }
+
+func TestCustomErrorHandler_WithCodeAndDetails(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Set correlation ID
+	correlationID := "test-correlation-999"
+	c.Set(CorrelationIDKey, correlationID)
+
+	// Create error with code and details
+	details := map[string]interface{}{
+		"field":  "email",
+		"reason": "invalid_format",
+		"value":  "not-an-email",
+	}
+	err := NewHTTPErrorWithCode(http.StatusBadRequest, "VALIDATION_ERROR", "Validation failed", details)
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	assert.Equal(t, "Validation failed", response.Message)
+	assert.Equal(t, "VALIDATION_ERROR", response.Code)
+	assert.Equal(t, correlationID, response.RequestID)
+	assert.NotNil(t, response.Details)
+	assert.Equal(t, "email", response.Details["field"])
+	assert.Equal(t, "invalid_format", response.Details["reason"])
+	assert.Equal(t, "not-an-email", response.Details["value"])
+}

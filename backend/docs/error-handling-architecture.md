@@ -56,7 +56,12 @@ All API errors are returned in the following JSON structure:
 {
   "error": "Bad Request",
   "message": "Invalid request body",
-  "code": "INVALID_REQUEST"
+  "code": "VALIDATION_ERROR",
+  "details": {
+    "field": "email",
+    "reason": "invalid_format"
+  },
+  "request_id": "abc123-def456-ghi789"
 }
 ```
 
@@ -64,9 +69,11 @@ All API errors are returned in the following JSON structure:
 
 ```go
 type ErrorResponse struct {
-    Error   string `json:"error"`             // HTTP status text (e.g., "Bad Request")
-    Message string `json:"message,omitempty"` // Detailed error message
-    Code    string `json:"code,omitempty"`    // Application-specific error code
+    Error     string                 `json:"error"`              // HTTP status text (e.g., "Bad Request")
+    Message   string                 `json:"message,omitempty"` // Detailed error message
+    Code      string                 `json:"code,omitempty"`    // Application-specific error code
+    Details   map[string]interface{} `json:"details,omitempty"` // Structured error details
+    RequestID string                 `json:"request_id,omitempty"` // Request correlation ID
 }
 ```
 
@@ -74,15 +81,67 @@ type ErrorResponse struct {
 
 - **Error**: HTTP status text corresponding to the status code (e.g., "Bad Request", "Internal Server Error")
 - **Message**: Human-readable error message describing what went wrong
-- **Code**: Optional application-specific error code for programmatic error handling
+- **Code**: Optional application-specific error code for programmatic error handling (see Error Codes section)
+- **Details**: Optional structured error details (e.g., validation errors, field-specific errors)
+- **RequestID**: Optional request correlation ID for tracing errors across distributed systems
+
+### Error Codes
+
+Application-specific error codes provide programmatic error handling capabilities:
+
+#### Validation Errors
+- `VALIDATION_ERROR` - General validation error
+- `INVALID_INPUT` - Invalid input provided
+- `INVALID_FORMAT` - Invalid format (e.g., UUID, email, date)
+- `MISSING_REQUIRED_FIELD` - Required field is missing
+
+#### Authentication/Authorization Errors
+- `UNAUTHORIZED` - Authentication required
+- `FORBIDDEN` - Insufficient permissions
+- `INVALID_TOKEN` - Invalid authentication token
+- `EXPIRED_TOKEN` - Token has expired
+- `INSUFFICIENT_PERMISSIONS` - User lacks required permissions
+
+#### Resource Errors
+- `RESOURCE_NOT_FOUND` - Requested resource doesn't exist
+- `RESOURCE_ALREADY_EXISTS` - Resource already exists (duplicate)
+- `RESOURCE_CONFLICT` - Resource conflict (e.g., database locked)
+- `INVALID_STATE` - Resource is in invalid state for operation
+
+#### Server Errors
+- `INTERNAL_ERROR` - Unexpected internal server error
+- `DATABASE_ERROR` - Database operation failed
+- `EXTERNAL_SERVICE_ERROR` - External service unavailable
+- `TIMEOUT` - Operation timed out
 
 ### Error Response Examples
 
-#### 400 Bad Request
+#### 400 Bad Request - Validation Error
 ```json
 {
   "error": "Bad Request",
-  "message": "Invalid change plan ID format"
+  "message": "Validation failed",
+  "code": "VALIDATION_ERROR",
+  "details": {
+    "field": "email",
+    "reason": "invalid_format",
+    "value": "not-an-email"
+  },
+  "request_id": "req-123-456"
+}
+```
+
+#### 400 Bad Request - Missing Required Field
+```json
+{
+  "error": "Bad Request",
+  "message": "Missing required field: title",
+  "code": "MISSING_REQUIRED_FIELD",
+  "details": {
+    "field": "title",
+    "required": true
+  },
+  "request_id": "req-123-456"
 }
 ```
 
@@ -90,7 +149,9 @@ type ErrorResponse struct {
 ```json
 {
   "error": "Unauthorized",
-  "message": "Authentication required"
+  "message": "Authentication required",
+  "code": "UNAUTHORIZED",
+  "request_id": "req-123-456"
 }
 ```
 
@@ -98,7 +159,13 @@ type ErrorResponse struct {
 ```json
 {
   "error": "Forbidden",
-  "message": "Admin access required"
+  "message": "Admin access required",
+  "code": "INSUFFICIENT_PERMISSIONS",
+  "details": {
+    "required_role": "admin",
+    "user_role": "developer"
+  },
+  "request_id": "req-123-456"
 }
 ```
 
@@ -106,7 +173,52 @@ type ErrorResponse struct {
 ```json
 {
   "error": "Not Found",
-  "message": "Change plan not found"
+  "message": "Change plan not found",
+  "code": "RESOURCE_NOT_FOUND",
+  "details": {
+    "resource_type": "change_plan",
+    "resource_id": "550e8400-e29b-41d4-a716-446655440000"
+  },
+  "request_id": "req-123-456"
+}
+```
+
+#### 409 Conflict
+```json
+{
+  "error": "Conflict",
+  "message": "Database is locked by another execution",
+  "code": "RESOURCE_CONFLICT",
+  "details": {
+    "database_id": "550e8400-e29b-41d4-a716-446655440000",
+    "locked_by": "execution-123",
+    "locked_until": "2025-01-01T12:00:00Z"
+  },
+  "request_id": "req-123-456"
+}
+```
+
+#### 422 Unprocessable Entity - Validation Errors
+```json
+{
+  "error": "Unprocessable Entity",
+  "message": "Multiple validation errors",
+  "code": "VALIDATION_ERROR",
+  "details": {
+    "errors": [
+      {
+        "field": "title",
+        "reason": "too_short",
+        "min_length": 3
+      },
+      {
+        "field": "sql_content",
+        "reason": "empty",
+        "required": true
+      }
+    ]
+  },
+  "request_id": "req-123-456"
 }
 ```
 
@@ -114,11 +226,13 @@ type ErrorResponse struct {
 ```json
 {
   "error": "Internal Server Error",
-  "message": "Internal server error"
+  "message": "Internal server error",
+  "code": "INTERNAL_ERROR",
+  "request_id": "req-123-456"
 }
 ```
 
-**Note:** Server errors (5xx) do not expose internal error details to clients for security reasons.
+**Note:** Server errors (5xx) do not expose internal error details to clients for security reasons. The `details` field is omitted for server errors.
 
 ## Error Types
 
@@ -196,6 +310,37 @@ func (h *ChangePlanHandler) GetChangePlan(c echo.Context) error {
 
     return c.JSON(http.StatusOK, changePlan.ToResponse())
 }
+```
+
+For errors with codes and details, use `middleware.NewHTTPErrorWithCode`:
+
+```go
+import "github.com/nsxbet/deeb/internal/middleware"
+
+// Validation error with details
+details := map[string]interface{}{
+    "field":  "email",
+    "reason": "invalid_format",
+    "value":  "not-an-email",
+}
+return middleware.NewHTTPErrorWithCode(
+    http.StatusBadRequest,
+    middleware.ErrorCodeValidationError,
+    "Validation failed",
+    details,
+)
+
+// Resource not found with details
+details := map[string]interface{}{
+    "resource_type": "change_plan",
+    "resource_id":   changePlanID.String(),
+}
+return middleware.NewHTTPErrorWithCode(
+    http.StatusNotFound,
+    middleware.ErrorCodeNotFound,
+    "Change plan not found",
+    details,
+)
 ```
 
 ### 2. Repository Error Pattern

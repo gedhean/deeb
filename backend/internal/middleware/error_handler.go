@@ -14,10 +14,29 @@ import (
 
 // ErrorResponse represents a standardized JSON error response.
 type ErrorResponse struct {
-	Error     string    `json:"error"`
-	Message   string    `json:"message,omitempty"`
-	Code      string    `json:"code,omitempty"`
-	RequestID string    `json:"request_id,omitempty"`
+	Error     string                 `json:"error"`
+	Message   string                 `json:"message,omitempty"`
+	Code      string                 `json:"code,omitempty"`
+	Details   map[string]interface{} `json:"details,omitempty"`
+	RequestID string                 `json:"request_id,omitempty"`
+}
+
+// HTTPErrorWithCode represents an HTTP error with an application-specific error code and optional details
+type HTTPErrorWithCode struct {
+	Code    string
+	Message string
+	Details map[string]interface{}
+	*echo.HTTPError
+}
+
+// NewHTTPErrorWithCode creates a new HTTP error with application-specific error code and optional details
+func NewHTTPErrorWithCode(statusCode int, code, message string, details map[string]interface{}) *HTTPErrorWithCode {
+	return &HTTPErrorWithCode{
+		Code:      code,
+		Message:   message,
+		Details:   details,
+		HTTPError: echo.NewHTTPError(statusCode, message),
+	}
 }
 
 // CustomErrorHandler creates a custom error handler for Echo.
@@ -34,9 +53,18 @@ func CustomErrorHandler(err error, c echo.Context) {
 	code := http.StatusInternalServerError
 	message := "Internal server error"
 	errorDetail := err.Error()
+	errorCode := ""
+	var errorDetails map[string]interface{}
 
-	// Check if it's an Echo HTTPError
-	if he, ok := err.(*echo.HTTPError); ok {
+	// Check if it's an HTTPErrorWithCode
+	if hec, ok := err.(*HTTPErrorWithCode); ok {
+		code = hec.HTTPError.Code
+		message = hec.Message
+		errorDetail = hec.Message
+		errorCode = hec.Code
+		errorDetails = hec.Details
+	} else if he, ok := err.(*echo.HTTPError); ok {
+		// Standard Echo HTTPError
 		code = he.Code
 		// Use the error message if it's a string
 		if msg, ok := he.Message.(string); ok {
@@ -47,6 +75,16 @@ func CustomErrorHandler(err error, c echo.Context) {
 		// For client errors (4xx), include the error detail
 		if code >= 400 && code < 500 {
 			errorDetail = message
+		}
+		// Try to extract details from internal error if it's a map
+		// Note: Echo's Internal field is an error, but we can check if the error message
+		// contains structured data or use a custom error type
+		if he.Internal != nil {
+			// For now, we'll extract details from HTTPErrorWithCode if it's wrapped
+			if hecInternal, ok := he.Internal.(*HTTPErrorWithCode); ok {
+				errorCode = hecInternal.Code
+				errorDetails = hecInternal.Details
+			}
 		}
 	}
 
@@ -110,6 +148,16 @@ func CustomErrorHandler(err error, c echo.Context) {
 			Error:     http.StatusText(code),
 			Message:   errorDetail,
 			RequestID: correlationID,
+		}
+
+		// Add error code if available
+		if errorCode != "" {
+			response.Code = errorCode
+		}
+
+		// Add details if available
+		if len(errorDetails) > 0 {
+			response.Details = errorDetails
 		}
 
 		// Send response

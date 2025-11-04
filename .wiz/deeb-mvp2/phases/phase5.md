@@ -433,17 +433,35 @@ Create error handling middleware that standardizes error responses and captures 
 
 ### P05M14: Implement error response structure
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M14
 
 **Goal**
 Define consistent error response structure across all API endpoints.
 
 **Acceptance Criteria**
-- [ ] Error response struct defined
-- [ ] Error response includes: error, message, code, details, request_id
-- [ ] Error response format consistent across endpoints
-- [ ] Error response examples documented
+- [x] Error response struct defined
+- [x] Error response includes: error, message, code, details, request_id
+- [x] Error response format consistent across endpoints
+- [x] Error response examples documented
+
+**Notes:**
+- Enhanced ErrorResponse struct to include Details field (map[string]interface{})
+- Error response now includes all required fields: error, message, code, details, request_id
+- Created HTTPErrorWithCode type and NewHTTPErrorWithCode helper function for errors with codes and details
+- Defined error code constants in `backend/internal/middleware/error_codes.go`:
+  - Validation errors: VALIDATION_ERROR, INVALID_INPUT, INVALID_FORMAT, MISSING_REQUIRED_FIELD
+  - Authentication/Authorization: UNAUTHORIZED, FORBIDDEN, INVALID_TOKEN, EXPIRED_TOKEN, INSUFFICIENT_PERMISSIONS
+  - Resource errors: RESOURCE_NOT_FOUND, RESOURCE_ALREADY_EXISTS, RESOURCE_CONFLICT, INVALID_STATE
+  - Server errors: INTERNAL_ERROR, DATABASE_ERROR, EXTERNAL_SERVICE_ERROR, TIMEOUT
+- Error response format is consistent across all endpoints via CustomErrorHandler middleware
+- Updated error handling architecture documentation with:
+  - Complete error response structure definition
+  - Error code enumeration
+  - Error response examples for all common scenarios (400, 401, 403, 404, 409, 422, 500)
+  - Handler error pattern examples using NewHTTPErrorWithCode
+- Added unit test TestCustomErrorHandler_WithCodeAndDetails to verify code and details handling
+- All tests passing, linting passes (0 issues)
 
 ---
 
