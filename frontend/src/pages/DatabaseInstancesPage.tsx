@@ -20,6 +20,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Plus, Pencil, Trash2, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 
 export const DatabaseInstancesPage: React.FC = () => {
@@ -442,20 +450,50 @@ export const DatabaseInstancesPage: React.FC = () => {
 
         {/* Instances list */}
         {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-48 mt-2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-24 mt-2" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Host</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[1, 2, 3].map((i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Skeleton className="h-4 w-32" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-40" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Skeleton className="h-8 w-16 ml-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         ) : instances.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
@@ -469,56 +507,63 @@ export const DatabaseInstancesPage: React.FC = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {instances.map((instance) => (
-              <Card key={instance.id}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{instance.name}</CardTitle>
-                  <CardDescription className="line-clamp-2">
-                    {instance.description || 'No description'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Type:</span> {instance.database_type}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Host:</span> {instance.host}:{instance.port}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Username:</span> {instance.username}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Status:</span>{' '}
-                      <span className={getStatusColor(instance.status)}>{instance.status}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Created {formatDate(instance.created_at)}
-                    </div>
-                    <div className="flex items-center justify-end gap-2 pt-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditForm(instance)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteConfirmation(instance)}
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Host</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {instances.map((instance) => (
+                    <TableRow key={instance.id}>
+                      <TableCell className="font-medium">{instance.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {instance.database_type}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {instance.host}:{instance.port}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{instance.username}</TableCell>
+                      <TableCell>
+                        <span className={getStatusColor(instance.status)}>{instance.status}</span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(instance.created_at)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditForm(instance)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDeleteConfirmation(instance)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         )}
 
         {/* Create Instance Sheet */}

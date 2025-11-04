@@ -26,6 +26,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 
 export const DatabasesPage: React.FC = () => {
@@ -368,20 +376,50 @@ export const DatabasesPage: React.FC = () => {
 
         {/* Databases list */}
         {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-48 mt-2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-24 mt-2" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Database Name</TableHead>
+                    <TableHead>Project</TableHead>
+                    <TableHead>Environment</TableHead>
+                    <TableHead>Instance</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[1, 2, 3].map((i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Skeleton className="h-4 w-32" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-32" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Skeleton className="h-8 w-16 ml-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         ) : databases.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
@@ -395,58 +433,63 @@ export const DatabasesPage: React.FC = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {databases.map((database) => (
-              <Card key={database.id}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{database.database_name}</CardTitle>
-                  <CardDescription className="line-clamp-2">
-                    {database.description || 'No description'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Project:</span>{' '}
-                      {getProjectName(database.project_id)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Environment:</span>{' '}
-                      {getEnvironmentName(database.environment_id)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Instance:</span>{' '}
-                      {getInstanceName(database.database_instance_id)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Status:</span> {database.status}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Created {formatDate(database.created_at)}
-                    </div>
-                    <div className="flex items-center justify-end gap-2 pt-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditForm(database)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteConfirmation(database)}
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Database Name</TableHead>
+                    <TableHead>Project</TableHead>
+                    <TableHead>Environment</TableHead>
+                    <TableHead>Instance</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {databases.map((database) => (
+                    <TableRow key={database.id}>
+                      <TableCell className="font-medium">{database.database_name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {getProjectName(database.project_id)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {getEnvironmentName(database.environment_id)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {getInstanceName(database.database_instance_id)}
+                      </TableCell>
+                      <TableCell>{database.status}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(database.created_at)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditForm(database)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDeleteConfirmation(database)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         )}
 
         {/* Create Database Sheet */}
