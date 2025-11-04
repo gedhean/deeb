@@ -18,19 +18,19 @@ const (
 )
 
 // RequestLogger creates a middleware that logs HTTP requests with Zap logger.
-// Generates or extracts correlation IDs for request tracing and logs request/response details
+// Uses Echo's RequestID middleware for request tracking and logs request/response details
 // including method, URI, status, latency, and bytes transferred.
 func RequestLogger() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Generate correlation ID
-			correlationID := generateCorrelationID(c)
+			// Get request ID from Echo's RequestID middleware
+			requestID := getRequestID(c)
 
-			// Store in context for handler access
-			c.Set(CorrelationIDKey, correlationID)
+			// Store in context for handler access (for backwards compatibility)
+			c.Set(CorrelationIDKey, requestID)
 
-			// Add to response header
-			c.Response().Header().Set(CorrelationIDHeader, correlationID)
+			// Also set X-Correlation-ID header for backwards compatibility
+			c.Response().Header().Set(CorrelationIDHeader, requestID)
 
 			// Capture start time
 			start := time.Now()
@@ -102,20 +102,25 @@ func RequestLogger() echo.MiddlewareFunc {
 	}
 }
 
-// generateCorrelationID generates or extracts a correlation ID for the request
-func generateCorrelationID(c echo.Context) string {
-	// Check if correlation ID already exists in request header
-	correlationID := c.Request().Header.Get(CorrelationIDHeader)
-	if correlationID != "" {
-		return correlationID
-	}
-
-	// Check if Echo's RequestID middleware already set an ID
+// getRequestID gets the request ID from Echo's RequestID middleware
+// Falls back to correlation ID header or generates a new UUID if not available
+func getRequestID(c echo.Context) string {
+	// First, try to get from Echo's RequestID middleware
 	if requestID := c.Response().Header().Get(echo.HeaderXRequestID); requestID != "" {
 		return requestID
 	}
 
-	// Generate new UUID
+	// Fallback: try to get from context (set by RequestID middleware)
+	if requestID, ok := c.Get(echo.HeaderXRequestID).(string); ok && requestID != "" {
+		return requestID
+	}
+
+	// Fallback: check if correlation ID already exists in request header
+	if correlationID := c.Request().Header.Get(CorrelationIDHeader); correlationID != "" {
+		return correlationID
+	}
+
+	// Last resort: generate new UUID (should not happen if RequestID middleware is properly configured)
 	return uuid.New().String()
 }
 

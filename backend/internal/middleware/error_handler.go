@@ -127,9 +127,15 @@ func CustomErrorHandler(err error, c echo.Context) {
 		}
 	}
 
-	// Get correlation ID (request ID) if available
+	// Get request ID from Echo's RequestID middleware
 	correlationID := ""
-	if id, ok := c.Get(CorrelationIDKey).(string); ok {
+	// Try Echo's RequestID middleware first
+	if requestID := c.Response().Header().Get(echo.HeaderXRequestID); requestID != "" {
+		correlationID = requestID
+	} else if id, ok := c.Get(echo.HeaderXRequestID).(string); ok && id != "" {
+		correlationID = id
+	} else if id, ok := c.Get(CorrelationIDKey).(string); ok {
+		// Fallback to correlation ID from context (for backwards compatibility)
 		correlationID = id
 	}
 

@@ -20,6 +20,10 @@ func Setup(e *echo.Echo, cfg *config.Config, auditService *services.AuditLogServ
 	// Recovery middleware - recovers from panics
 	e.Use(middleware.Recover())
 
+	// Request ID middleware - generates unique ID for each request
+	// This must be before RequestLogger so the ID is available for logging
+	e.Use(middleware.RequestID())
+
 	// Custom request logger with Zap integration and correlation IDs
 	e.Use(RequestLogger())
 
@@ -33,7 +37,7 @@ func Setup(e *echo.Echo, cfg *config.Config, auditService *services.AuditLogServ
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     cfg.Server.CORSOrigins,
 		AllowMethods:     []string{echo.GET, echo.POST, echo.PUT, echo.DELETE, echo.PATCH, echo.OPTIONS},
-		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
+		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, echo.HeaderXRequestID},
 		AllowCredentials: true,
 		MaxAge:           300, // 5 minutes
 	}))

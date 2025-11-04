@@ -633,18 +633,47 @@ Add consistent error handling for input validation errors across all endpoints.
 
 ### P05M19: Implement request ID tracking
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M19
 
 **Goal**
 Add request ID tracking for correlating logs and errors across the application.
 
 **Acceptance Criteria**
-- [ ] Request ID middleware created
-- [ ] Request ID generated for each request
-- [ ] Request ID included in logs and error responses
-- [ ] Request ID correlation working
-- [ ] Unit tests passing
+- [x] Request ID middleware created (use https://echo.labstack.com/docs/middleware/request-id)
+- [x] Request ID generated for each request
+- [x] Request ID included in logs and error responses
+- [x] Request ID correlation working
+- [x] Unit tests passing
+
+**Notes:**
+- Added Echo's `middleware.RequestID()` to `backend/internal/middleware/setup.go` before RequestLogger middleware
+- Echo's RequestID middleware generates unique IDs for each request and sets `X-Request-ID` header
+- Updated `RequestLogger` middleware in `backend/internal/middleware/request_logger.go` to use Echo's request ID via `getRequestID()` function
+- Created `getRequestID()` function that:
+  - First tries to get request ID from Echo's RequestID middleware (response header or context)
+  - Falls back to correlation ID header (for backwards compatibility)
+  - Generates UUID as last resort (should not happen if RequestID middleware is properly configured)
+- Updated `CustomErrorHandler` in `backend/internal/middleware/error_handler.go` to use Echo's request ID:
+  - Tries Echo's RequestID middleware first (`X-Request-ID` header or context)
+  - Falls back to correlation ID from context (for backwards compatibility)
+  - Request ID is included in error responses (`RequestID` field)
+  - Request ID is included in all error logs (`correlation_id` field)
+- Added `X-Request-ID` header to CORS allowed headers for cross-origin requests
+- Request IDs are automatically included in:
+  - Response headers (`X-Request-ID` and `X-Correlation-ID` for backwards compatibility)
+  - Error responses (`request_id` field in JSON)
+  - All error logs (`correlation_id` field in structured logs)
+  - Request logger context (available via `CorrelationIDKey` for backwards compatibility)
+- Created comprehensive unit tests in `backend/internal/middleware/request_id_test.go` covering:
+  - Request ID generation for each request
+  - Request ID from header is used if provided
+  - Request ID included in error responses
+  - Request ID available in context
+  - Different requests get different IDs
+  - `getRequestID()` function fallback logic
+  - Request ID correlation in logs
+- All tests passing (1415 tests, 25 skipped), linting passes (0 issues)
 
 ---
 
