@@ -38,6 +38,11 @@ func TestExecutionLogRepository_Create(t *testing.T) {
 	repo := NewExecutionLogRepository(db)
 
 	ctx := context.Background()
+	dbID := uuid.New()
+	dbName := "test_db"
+	dbInstanceName := "test_instance"
+	dbType := "PostgreSQL"
+	sqlContent := "SELECT 1"
 	log := &models.ExecutionLog{
 		ID:                  uuid.New(),
 		ChangePlanID:        uuid.New(),
@@ -46,6 +51,11 @@ func TestExecutionLogRepository_Create(t *testing.T) {
 		ExecutionDurationMs: 1500,
 		RowsAffected:        intPtr(10),
 		ErrorMessage:        nil,
+		SQLContent:          &sqlContent,
+		DatabaseID:          &dbID,
+		DatabaseName:        &dbName,
+		DatabaseInstanceName: &dbInstanceName,
+		DatabaseType:        &dbType,
 		StartedAt:           time.Now(),
 		CompletedAt:         time.Now(),
 		CreatedAt:           time.Now(),
@@ -60,6 +70,11 @@ func TestExecutionLogRepository_Create(t *testing.T) {
 			log.ExecutionDurationMs,
 			log.RowsAffected,
 			log.ErrorMessage,
+			log.SQLContent,
+			log.DatabaseID,
+			log.DatabaseName,
+			log.DatabaseInstanceName,
+			log.DatabaseType,
 			log.StartedAt,
 			log.CompletedAt,
 			log.CreatedAt,
@@ -84,19 +99,27 @@ func TestExecutionLogRepository_GetByChangePlanID(t *testing.T) {
 	ctx := context.Background()
 	changePlanID := uuid.New()
 
+	dbID := uuid.New()
+	dbName := "test_db"
+	dbInstanceName := "test_instance"
+	dbType := "PostgreSQL"
+	sqlContent := "SELECT 1"
 	rows := sqlmock.NewRows([]string{
 		"id", "change_plan_id", "executor_id", "status",
 		"execution_duration_ms", "rows_affected", "error_message",
+		"sql_content", "database_id", "database_name", "database_instance_name", "database_type",
 		"started_at", "completed_at", "created_at",
 	}).
 		AddRow(
 			uuid.New(), changePlanID, uuid.New(), "Completed",
 			1500, 10, nil,
+			sqlContent, dbID, dbName, dbInstanceName, dbType,
 			time.Now(), time.Now(), time.Now(),
 		).
 		AddRow(
 			uuid.New(), changePlanID, uuid.New(), "Failed",
 			500, nil, executionLogStringPtr("error message"),
+			sqlContent, dbID, dbName, dbInstanceName, dbType,
 			time.Now(), time.Now(), time.Now(),
 		)
 
@@ -125,14 +148,21 @@ func TestExecutionLogRepository_GetByID(t *testing.T) {
 	ctx := context.Background()
 	logID := uuid.New()
 
+	dbID := uuid.New()
+	dbName := "test_db"
+	dbInstanceName := "test_instance"
+	dbType := "PostgreSQL"
+	sqlContent := "SELECT 1"
 	rows := sqlmock.NewRows([]string{
 		"id", "change_plan_id", "executor_id", "status",
 		"execution_duration_ms", "rows_affected", "error_message",
+		"sql_content", "database_id", "database_name", "database_instance_name", "database_type",
 		"started_at", "completed_at", "created_at",
 	}).
 		AddRow(
 			logID, uuid.New(), uuid.New(), "Completed",
 			1500, 10, nil,
+			sqlContent, dbID, dbName, dbInstanceName, dbType,
 			time.Now(), time.Now(), time.Now(),
 		)
 
@@ -185,14 +215,21 @@ func TestExecutionLogRepository_GetLatestByChangePlanID(t *testing.T) {
 	ctx := context.Background()
 	changePlanID := uuid.New()
 
+	dbID := uuid.New()
+	dbName := "test_db"
+	dbInstanceName := "test_instance"
+	dbType := "PostgreSQL"
+	sqlContent := "SELECT 1"
 	rows := sqlmock.NewRows([]string{
 		"id", "change_plan_id", "executor_id", "status",
 		"execution_duration_ms", "rows_affected", "error_message",
+		"sql_content", "database_id", "database_name", "database_instance_name", "database_type",
 		"started_at", "completed_at", "created_at",
 	}).
 		AddRow(
 			uuid.New(), changePlanID, uuid.New(), "Completed",
 			1500, 10, nil,
+			sqlContent, dbID, dbName, dbInstanceName, dbType,
 			time.Now(), time.Now(), time.Now(),
 		)
 

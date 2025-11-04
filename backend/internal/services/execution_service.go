@@ -388,8 +388,10 @@ func (s *ExecutionService) Execute(
 			// Don't fail the whole operation if update fails, but log it
 		}
 
-		// Create execution log entry for failed execution
+		// Create execution log entry for failed execution with full context
 		if s.executionLogRepo != nil {
+			dbType := string(dbInstance.DatabaseType)
+			sqlContent := changePlan.SQLContent
 			executionLog := &models.ExecutionLog{
 				ChangePlanID:        changePlanID,
 				ExecutorID:          executorID,
@@ -397,6 +399,11 @@ func (s *ExecutionService) Execute(
 				ExecutionDurationMs: int(duration.Milliseconds()),
 				RowsAffected:        nil,
 				ErrorMessage:        &errorMsg,
+				SQLContent:          &sqlContent,
+				DatabaseID:          &db.ID,
+				DatabaseName:        &db.DatabaseName,
+				DatabaseInstanceName: &dbInstance.Name,
+				DatabaseType:        &dbType,
 				StartedAt:           executionStartTime,
 				CompletedAt:         time.Now(),
 			}
@@ -492,15 +499,23 @@ func (s *ExecutionService) Execute(
 		zap.Duration("total_execution_duration", overallDuration),
 	)
 
-	// Create execution log entry for successful execution
+	// Create execution log entry for successful execution with full context
 	if s.executionLogRepo != nil {
+		dbType := string(dbInstance.DatabaseType)
+		sqlContent := changePlan.SQLContent
+		rowsAffected := result.RowsAffected
 		executionLog := &models.ExecutionLog{
 			ChangePlanID:        changePlanID,
 			ExecutorID:          executorID,
 			Status:              models.ExecutionLogStatusCompleted,
 			ExecutionDurationMs: int(duration.Milliseconds()),
-			RowsAffected:        &result.RowsAffected,
+			RowsAffected:        &rowsAffected,
 			ErrorMessage:        nil,
+			SQLContent:          &sqlContent,
+			DatabaseID:          &db.ID,
+			DatabaseName:        &db.DatabaseName,
+			DatabaseInstanceName: &dbInstance.Name,
+			DatabaseType:        &dbType,
 			StartedAt:           executionStartTime,
 			CompletedAt:         time.Now(),
 		}

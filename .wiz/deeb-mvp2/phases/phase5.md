@@ -679,19 +679,64 @@ Add request ID tracking for correlating logs and errors across the application.
 
 ### P05M20: Add error context to execution logs
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P05M20
 
 **Goal**
 Ensure execution errors include full context for debugging.
 
 **Acceptance Criteria**
-- [ ] Execution error logging includes full context
-- [ ] Context includes: Change Plan ID, SQL content, database, user, timestamp
-- [ ] Error context stored in execution logs
-- [ ] Error context queryable
+- [x] Execution error logging includes full context
+- [x] Context includes: Change Plan ID, SQL content, database, user, timestamp
+- [x] Error context stored in execution logs
+- [x] Error context queryable
 
----
+**Notes:**
+- Created database migration `000018_add_execution_logs_context.up.sql` to add context fields to `execution_logs` table:
+  - `sql_content` (TEXT): The SQL statement that was executed
+  - `database_id` (UUID): Reference to the database (with foreign key)
+  - `database_name` (VARCHAR): Name of the database
+  - `database_instance_name` (VARCHAR): Name of the database instance
+  - `database_type` (VARCHAR): Type of database (PostgreSQL, MySQL)
+- Added indexes on `database_id` and `database_type` for efficient querying
+- Updated `ExecutionLog` model in `backend/internal/models/execution_log.go` to include new context fields:
+  - All fields are optional (nullable) to support backward compatibility
+  - Updated `ExecutionLogResponse` to include new fields
+  - Updated `ToResponse()` method to map all new fields
+- Updated `executionLogRepository` in `backend/internal/repository/postgres/execution_log_repository.go`:
+  - Updated `Create()` method to insert new context fields
+  - Updated `GetByChangePlanID()`, `GetByID()`, and `GetLatestByChangePlanID()` to select new fields
+- Updated `ExecutionService` in `backend/internal/services/execution_service.go`:
+  - Updated execution log creation for failed executions (line 391-413) to include full context:
+    - SQL content from change plan
+    - Database ID, name, instance name, and type
+    - All context fields populated from execution context
+  - Updated execution log creation for successful executions (line 502-525) to include full context:
+    - Same context fields as failed executions
+  - Error logging already includes comprehensive context in `executeInTransaction()` method (lines 649-668):
+    - Change Plan ID, Database ID, Database Name, Database Instance Name, Database Type
+    - SQL content length and masked SQL content
+    - Execution duration and database-specific error details
+- Updated all repository tests in `backend/internal/repository/postgres/execution_log_repository_test.go`:
+  - Updated `TestExecutionLogRepository_Create` to include new fields in test data and mock expectations
+  - Updated `TestExecutionLogRepository_GetByChangePlanID` to include new fields in mock rows
+  - Updated `TestExecutionLogRepository_GetByID` to include new fields in mock rows
+  - Updated `TestExecutionLogRepository_GetLatestByChangePlanID` to include new fields in mock rows
+- Execution logs now include full context for debugging:
+  - Change Plan ID (already existed)
+  - Executor ID (already existed - represents user)
+  - SQL content (NEW)
+  - Database ID (NEW)
+  - Database name (NEW)
+  - Database instance name (NEW)
+  - Database type (NEW)
+  - Timestamp (already existed - started_at, completed_at)
+- Context is queryable via:
+  - `GetByChangePlanID()` - retrieves all logs for a change plan with full context
+  - `GetByID()` - retrieves specific log by ID with full context
+  - `GetLatestByChangePlanID()` - retrieves latest log for a change plan with full context
+  - Database ID and type indexes enable efficient filtering by database
+- All tests passing (1415 tests, 25 skipped), linting passes (0 issues)
 
 ### P05M21: Write unit tests for AuditLog repository
 
