@@ -42,6 +42,12 @@ func (r *AuditLogRepository) Create(ctx context.Context, auditLog *models.AuditL
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
+	// Convert net.IP to string for PostgreSQL INET type
+	var ipAddress interface{}
+	if auditLog.IPAddress != nil {
+		ipAddress = auditLog.IPAddress.String()
+	}
+
 	_, err := r.db.ExecContext(ctx, query,
 		auditLog.ID,
 		auditLog.UserID,
@@ -49,7 +55,7 @@ func (r *AuditLogRepository) Create(ctx context.Context, auditLog *models.AuditL
 		auditLog.ResourceType,
 		auditLog.ResourceID,
 		auditLog.Details,
-		auditLog.IPAddress,
+		ipAddress,
 		auditLog.UserAgent,
 		auditLog.Timestamp,
 	)
