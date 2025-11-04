@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Settings2,
   Users,
+  Building2,
 } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -105,6 +106,16 @@ const navOrgItems = [
     title: 'Audit Logs',
     url: '/audit',
     icon: History,
+  },
+  {
+    title: 'Environments',
+    url: '/environments',
+    icon: Building2,
+  },
+  {
+    title: 'Policies',
+    url: '/policies',
+    icon: FileCheck,
   },
   {
     title: 'Settings',
