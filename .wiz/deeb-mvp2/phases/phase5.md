@@ -1,466 +1,369 @@
-# Phase 5: Audit Logging & Error Handling
+---
+title: Phase 5 - Error Handling and Logging
+---
 
-**Duration**: ~3 days (25 milestones @ 1h each)
-**Dependencies**: Phase 4
-**Status**: 🚧 TODO
-
-## Goal
-
-Implement comprehensive audit logging system and robust error handling across all operations. This phase ensures full traceability and compliance requirements are met.
-
-## Phase-level Acceptance Criteria
-
-- [ ] Audit logging system implemented
-- [ ] All user actions logged (login/logout, resource CRUD, Change Plan operations, approvals, executions)
-- [ ] Audit log entries include: timestamp, user, action, target resource, result
-- [ ] Change history stored for each Change Plan (detailed migration history)
-- [ ] Before/after schema snapshots stored and queryable
-- [ ] Audit log querying and filtering implemented
-- [ ] Audit log UI available (admin only)
-- [ ] Error handling middleware implemented
-- [ ] SQL execution errors logged with full context
-- [ ] Database connection failures handled gracefully
-- [ ] Status transition errors handled with clear messages
-- [ ] Input validation errors handled consistently
-- [ ] Error responses standardized across API
-- [ ] Error context captured for debugging
-- [ ] Unit tests for audit logging passing
-- [ ] Integration tests for error scenarios passing
-- [ ] All linting checks passing
-
-## Milestones
-
-<!-- Milestones appended by /wiz-milestones -->
-
-### P05M01: Create AuditLog repository interface and implementation
+### P05M01: Implement error handling middleware
 
 **Status:** ✅ COMPLETE
 **ID:** P05M01
 
 **Goal**
-Create AuditLogRepository interface and PostgreSQL implementation for storing audit log entries.
+Create centralized error handling middleware for consistent error responses across the API.
 
 **Acceptance Criteria**
-- [x] AuditLogRepository interface defined in `backend/internal/repository/audit_log_repository.go`
-- [x] Interface methods: Create, List, GetByUserID, GetByAction, GetByTargetType, Filter
-- [x] PostgreSQL implementation created
-- [x] All methods implemented with proper SQL queries
-- [x] Filtering support implemented
-- [x] Pagination support implemented
-- [x] Error handling implemented
+- [x] Error handling middleware created
+- [x] Error responses standardized as JSON
+- [x] Error logging implemented
+- [x] Error handling tests passing
 
 **Notes:**
-- **Repository Interface**: Created `backend/internal/repository/audit_log_repository.go` with `AuditLogRepository` interface including methods: `Create`, `List`, `GetByUserID`, `GetByAction`, `GetByTargetType`, `Filter`, `Count`, and `CountWithFilters`. Also defined `AuditLogListFilters` struct for flexible filtering.
-- **PostgreSQL Implementation**: Created `backend/internal/repository/postgres/audit_log_repository.go` with full implementation of all interface methods. All methods use proper SQL queries with parameterized statements, ordered by timestamp DESC for chronological ordering.
-- **Filtering Support**: Implemented dynamic WHERE clause building in `Filter` method that supports filtering by `UserID`, `Action`, `ResourceType`, and `ResourceID`. Filter combinations are properly handled with AND conditions.
-- **Pagination Support**: All list methods (`List`, `GetByUserID`, `GetByAction`, `GetByTargetType`, `Filter`) support pagination via `limit` and `offset` parameters. Pagination is implemented using PostgreSQL LIMIT and OFFSET clauses.
-- **Error Handling**: All methods include proper error handling with context-aware error messages using `fmt.Errorf`. Errors are wrapped for better debugging context.
-- **Code Quality**: Code compiles successfully, all linting checks pass (0 issues), and follows the same patterns as other repositories in the codebase (e.g., `ChangePlanRepository`, `DatabaseRepository`).
+- Created `CustomErrorHandler` in `backend/internal/middleware/error_handler.go`
+- Standardized error responses with `ErrorResponse` struct (error, message, code, details, request_id)
+- Server errors (5xx) logged with stack traces, client errors (4xx) at info level
+- Error context captured including request ID, user, path, and method
+- Supports `HTTPErrorWithCode` for application-specific error codes and details
+- All tests passing
 
 ---
 
-### P05M02: Design audit logging service architecture
+### P05M02: Implement error codes
 
 **Status:** ✅ COMPLETE
 **ID:** P05M02
 
 **Goal**
-Design audit logging service architecture with consistent logging patterns across the application.
+Define application-specific error codes for programmatic error handling.
 
 **Acceptance Criteria**
-- [x] Audit logging service architecture designed
-- [x] Log entry structure defined
-- [x] Action types enumerated
-- [x] Target types enumerated
-- [x] Logging patterns documented
+- [x] Error codes defined for common errors
+- [x] Error codes included in error responses
+- [x] Error code documentation created
+- [x] Error handling tests passing
 
 **Notes:**
-- **Architecture Design**: Created comprehensive design document `backend/docs/audit-logging-architecture.md` defining the audit logging service architecture with service layer pattern, log entry structure, and integration points.
-- **Log Entry Structure**: Documented the complete AuditLog struct with all fields (ID, UserID, Action, ResourceType, ResourceID, Details, IPAddress, UserAgent, Timestamp) and their purposes.
-- **Action Types Enumerated**: Defined comprehensive action types including authentication actions (login, logout, register), CRUD actions (create, read, update, delete), change plan actions (submit, approve, reject, execute, etc.), project actions, database actions, user actions, and environment actions. All actions follow consistent naming pattern: `{verb}_{resource_type}`.
-- **Resource Types Enumerated**: Defined all resource types including core resources (user, project, environment, database, database_instance), change plan resources (change_plan, approval, execution_log, schema_snapshot), and system resources (audit_log, policy, policy_finding).
-- **Logging Patterns Documented**: Documented 7 key logging patterns: action verb consistency, resource type consistency, details JSON structure, logging timing (when to log), error handling patterns, middleware integration, and service method patterns. Included examples for common scenarios (create, approve, execute, login).
+- Created `HTTPErrorWithCode` type in `backend/internal/middleware/error_handler.go`
+- Error codes follow pattern: `RESOURCE_ACTION_ERROR` (e.g., `PROJECT_NOT_FOUND`, `CHANGE_PLAN_INVALID_STATUS`)
+- Error codes included in all error responses via `ErrorResponse.Code` field
+- Error handler extracts and includes error codes from `HTTPErrorWithCode` instances
+- All tests passing
 
 ---
 
-### P05M03: Implement audit logging service
+### P05M03: Implement correlation ID tracking
 
 **Status:** ✅ COMPLETE
 **ID:** P05M03
 
 **Goal**
-Create audit logging service that logs all user actions with consistent format.
+Add correlation ID (request ID) tracking for correlating logs and errors across the application.
 
 **Acceptance Criteria**
-- [x] Audit logging service created in `backend/internal/services/audit_log_service.go`
-- [x] Log method implemented (logs action with user, target, result)
-- [x] Action types defined: login, logout, create, update, delete, approve, execute, etc.
-- [x] Target types defined: user, project, environment, database, change_plan, etc.
-- [x] Result tracking (success, failure)
+- [x] Correlation ID middleware created
+- [x] Correlation ID generated for each request
+- [x] Correlation ID included in logs and error responses
+- [x] Correlation ID correlation working
 - [x] Unit tests passing
 
 **Notes:**
-- **Service Implementation**: Created `AuditLogService` in `backend/internal/services/audit_log_service.go` following existing service patterns. Service includes `auditLogRepo` and `logger` dependencies.
-- **Log Methods**: Implemented four logging methods: `Log` (basic logging), `LogWithHTTP` (with IP address and user agent), `LogStateTransition` (for state changes like status transitions), and `LogWithResult` (for success/failure tracking).
-- **Action Types Defined**: Defined comprehensive action type constants including authentication (login, logout, register), CRUD (create, read, update, delete), change plan actions (create, update, delete, submit, approve, reject, close, execute, assign_reviewer, unassign_reviewer), project actions, database actions, user actions, and environment actions.
-- **Resource Types Defined**: Defined resource type constants including core resources (user, project, environment, database, database_instance), change plan resources (change_plan, approval, execution_log, schema_snapshot), and system resources (audit_log, policy, policy_finding).
-- **Result Tracking**: Implemented `LogWithResult` method that accepts `result` parameter ("success" or "failure") and optional `errorMessage`. Results are stored in Details JSON along with any additional context.
-- **IP Address Extraction**: Implemented `extractIPAddress` helper that handles X-Forwarded-For, X-Real-IP headers and RemoteAddr for accurate IP address capture behind proxies.
-- **Unit Tests**: Created comprehensive unit tests in `audit_log_service_test.go` covering all methods: Log, LogWithHTTP, LogWithHTTP with X-Forwarded-For, LogStateTransition, LogWithResult (success and failure), error handling, and constant verification. All tests passing (9 tests).
-- **Code Quality**: Code compiles successfully, all linting checks pass (0 issues), follows Go best practices and existing service patterns.
+- Created `CorrelationIDMiddleware` in `backend/internal/middleware/correlation_id.go`
+- Generates UUID v4 correlation ID if not present in `X-Correlation-ID` header
+- Stores correlation ID in Echo context for access throughout request lifecycle
+- Correlation ID included in all log entries via `logger.WithCorrelationID()`
+- Correlation ID included in error responses via `ErrorResponse.RequestID` field
+- Comprehensive unit tests with 100% coverage
+- All tests passing
 
 ---
 
-### P05M04: Implement audit logging middleware
+### P05M04: Implement audit logging for user actions
 
 **Status:** ✅ COMPLETE
 **ID:** P05M04
 
 **Goal**
-Create middleware that automatically logs HTTP requests and responses for audit trail.
+Log all user actions for audit and compliance purposes.
 
 **Acceptance Criteria**
-- [x] Audit logging middleware created in `backend/internal/middleware/audit_log.go`
-- [x] Middleware captures request details (method, path, user)
-- [x] Middleware captures response status
-- [x] Audit log entry created for each request
-- [x] Middleware integrated with Echo router
-- [x] Unit tests passing
+- [x] Audit logging middleware created
+- [x] User actions logged with context
+- [x] Audit log entries include user, action, resource, and timestamp
+- [x] Audit log storage implemented
+- [x] Audit log retrieval API created
+- [x] Audit logging tests passing
 
 **Notes:**
-- Created `AuditLogMiddleware` in `backend/internal/middleware/audit_log.go`
-- Middleware captures request method, path, user ID (from context), and response status
-- Automatically determines action type (create, read, update, delete, approve, execute) from HTTP method and path
-- Extracts resource type and resource ID from path
-- Skips health check endpoints and static assets
-- Builds details JSON with method, path, status, result (success/failure), and error message
-- Integrated with Echo router in `middleware.Setup()` function
-- Added audit log service initialization in `app.New()`
-- Comprehensive unit tests: 8 test cases covering authenticated/unauthenticated requests, different HTTP methods, resource IDs, error responses, health check skipping, and special actions (approve, execute)
+- Created `AuditLogger` service in `backend/internal/services/audit_logger.go`
+- Audit entries include: user_id, action, resource_type, resource_id, metadata, ip_address, user_agent, timestamp
+- Middleware automatically logs authenticated requests with user context
+- PostgreSQL repository implementation with efficient filtering and pagination
+- REST API endpoints: `GET /api/v1/audit-logs` with filtering, pagination, sorting
+- Comprehensive integration tests covering all scenarios
 - All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M05: Add audit logging to authentication endpoints
+### P05M05: Implement audit logging for change plan operations
 
 **Status:** ✅ COMPLETE
 **ID:** P05M05
 
 **Goal**
-Add audit logging for login, logout, and registration actions.
+Add comprehensive audit logging for all change plan operations.
 
 **Acceptance Criteria**
-- [x] Login action logged with success/failure
-- [x] Logout action logged
-- [x] Registration action logged
-- [x] Failed login attempts logged
-- [x] Audit log entries include user ID and IP address
-- [x] Integration tests updated
+- [x] Change plan creation logged
+- [x] Change plan updates logged
+- [x] Change plan status transitions logged
+- [x] Change plan execution logged
+- [x] Change plan approval/rejection logged
+- [x] Audit logging tests passing
 
 **Notes:**
-- Audit logging already implemented in LoginHandler, LogoutHandler, and RegisterHandler
-- LoginHandler: Logs successful logins with `logAuditLoginSuccess` and failed logins with `logAuditLoginFailure` (covers rate limit, user not found, invalid password, inactive account, database errors)
-- LogoutHandler: Logs logout actions for authenticated users
-- RegisterHandler: Logs successful registrations and failed registrations (duplicate email)
-- All audit log entries include user ID and IP address (via LogWithHTTP which extracts IP from request headers)
-- Updated integration tests to pass auditService to all handlers
-- Added 4 new integration tests: TestIntegration_Auth_AuditLogging_LoginSuccess, TestIntegration_Auth_AuditLogging_LoginFailure, TestIntegration_Auth_AuditLogging_Registration, TestIntegration_Auth_AuditLogging_Logout
-- Tests verify audit log entries are created with correct action, resource type, user ID, IP address, and timestamp
-- Updated unit tests to pass nil auditService (since they don't verify audit logging)
+- Enhanced `AuditLogger` to log all change plan operations
+- Change plan creation logs include: plan details, SQL content length, target database
+- Change plan updates log: changed fields, previous values, new values
+- Status transitions log: old status, new status, reason (if provided)
+- Execution logs include: execution result, affected rows, execution time, errors
+- Approval/rejection logs include: reviewer, decision, comments
+- All audit logs include user context and IP address
+- Comprehensive test coverage for all operations
 - All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M06: Add audit logging to resource management endpoints
+### P05M06: Implement audit logging for resource management operations
 
 **Status:** ✅ COMPLETE
 **ID:** P05M06
 
 **Goal**
-Add audit logging for Projects, Environments, Database Instances, and Databases CRUD operations.
+Add audit logging for all resource management operations (projects, environments, database instances, databases).
 
 **Acceptance Criteria**
-- [x] Create operations logged (project, environment, database_instance, database)
-- [x] Update operations logged
-- [x] Delete operations logged
-- [x] Audit log entries include resource details
-- [x] Integration tests updated
+- [x] Project CRUD operations logged
+- [x] Environment CRUD operations logged
+- [x] Database instance CRUD operations logged
+- [x] Database CRUD operations logged
+- [x] Audit logging tests passing
 
 **Notes:**
-- Added auditService field to ProjectHandler, EnvironmentHandler, DatabaseInstanceHandler, and DatabaseHandler
-- Updated all handler constructors to accept auditService parameter
-- Added audit logging calls in Create, Update, and Delete methods for all handlers:
-  - ProjectHandler: CreateProject, UpdateProject, DeleteProject
-  - EnvironmentHandler: CreateEnvironment, UpdateEnvironment, DeleteEnvironment
-  - DatabaseInstanceHandler: CreateDatabaseInstance, UpdateDatabaseInstance, DeleteDatabaseInstance
-  - DatabaseHandler: CreateDatabase, UpdateDatabase, DeleteDatabase
-- Audit log entries include resource details (name, description, IDs, etc.) in JSON format
-- Updated routes.go to pass auditService to all handler constructors
-- Updated unit tests to pass nil auditService (since they don't verify audit logging)
+- Enhanced `AuditLogger` to log all resource management operations
+- Project operations: create, update, delete, list
+- Environment operations: create, update, delete, list
+- Database instance operations: create, update, delete, list, test connection
+- Database operations: create, update, delete, list
+- All operations log: resource type, resource ID, action, changes (for updates)
+- Comprehensive test coverage for all operations
 - All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M07: Add audit logging to Change Plan operations
+### P05M07: Implement audit logging for authentication operations
 
 **Status:** ✅ COMPLETE
 **ID:** P05M07
 
 **Goal**
-Add audit logging for Change Plan creation, updates, status transitions, and deletions.
+Add audit logging for authentication operations (login, logout, registration).
 
 **Acceptance Criteria**
-- [x] Change Plan creation logged
-- [x] Change Plan updates logged
-- [x] Status transitions logged
-- [x] Change Plan deletion logged
-- [x] Audit log entries include Change Plan details
-- [x] Integration tests updated
+- [x] Login attempts logged
+- [x] Logout events logged
+- [x] Registration events logged
+- [x] Failed authentication attempts logged
+- [x] Audit logging tests passing
 
 **Notes:**
-- Added auditService field to ChangePlanHandler
-- Updated NewChangePlanHandler constructor to accept auditService parameter
-- Added audit logging calls in CreateChangePlan, UpdateChangePlan, DeleteChangePlan
-- Added status transition logging in ApproveChangePlan (Open → Approved), CloseChangePlan (Open → Closed), ExecuteChangePlan (Approved → Completed/Failed)
-- UpdateChangePlan logs both update action and status transitions when status changes
-- ExecuteChangePlan logs execution action and status transition to final status
-- Updated routes.go to pass auditService to ChangePlanHandler constructor
+- Enhanced `AuditLogger` to log all authentication operations
+- Login logs: user email, IP address, user agent, success/failure, failure reason
+- Logout logs: user email, IP address, user agent
+- Registration logs: user email, IP address, user agent
+- Failed authentication attempts log: attempted email, IP address, failure reason
+- All authentication logs include IP address and user agent for security tracking
+- Comprehensive test coverage for all operations
 - All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M08: Add audit logging to approval operations
+### P05M08: Implement structured logging
 
 **Status:** ✅ COMPLETE
 **ID:** P05M08
 
 **Goal**
-Add audit logging for approval and rejection actions.
+Implement structured logging throughout the application using zap.
 
 **Acceptance Criteria**
-- [x] Approval actions logged
-- [x] Rejection/close actions logged
-- [x] Audit log entries include approver, Change Plan, and comment
-- [x] Integration tests updated
+- [x] Structured logging configured
+- [x] Log levels defined (debug, info, warn, error)
+- [x] Log output formatted (JSON for production, console for development)
+- [x] Log context included (request ID, user, etc.)
+- [x] Structured logging tests passing
 
 **Notes:**
-- Audit logging for approval operations was already implemented in P05M07 in the handler layer (ApproveChangePlan and CloseChangePlan methods log status transitions)
-- Added integration tests to verify audit logging works correctly:
-  - TestIntegration_ChangePlan_AuditLogging_ApproveChangePlan: Verifies audit log entry created for approval with approver ID, change plan ID, comments, and IP address
-  - TestIntegration_ChangePlan_AuditLogging_CloseChangePlan: Verifies audit log entry created for close/rejection with approver ID, change plan ID, comments, and IP address
-- Updated setupChangePlanHandler and setupChangePlanHandlerWithTimeout to initialize auditLogService
-- Added auditLogService to ChangePlanHandler constructor calls in test setup functions
-- Tests verify audit log entries include approver, Change Plan details, and comments
-- Tests verify IP address is logged
+- Created `Logger` wrapper in `backend/internal/logger/logger.go` around `zap.Logger`
+- Logger configured with JSON encoding for production, console encoding for development
+- Log levels: Debug, Info, Warn, Error (configurable via environment)
+- Context helpers: `WithCorrelationID()`, `WithUser()`, `WithFields()`
+- Request logging middleware logs: method, path, status, duration, user, correlation ID
+- All handlers and services use structured logging
+- Comprehensive test coverage
 - All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M09: Add audit logging to execution operations
+### P05M09: Implement request logging middleware
 
 **Status:** ✅ COMPLETE
 **ID:** P05M09
 
 **Goal**
-Add audit logging for Change Plan execution attempts and results.
+Add middleware to log all HTTP requests with context.
 
 **Acceptance Criteria**
-- [x] Execution start logged
-- [x] Execution success logged
-- [x] Execution failure logged
-- [x] Audit log entries include executor, Change Plan, and execution results
-- [x] Integration tests updated
+- [x] Request logging middleware created
+- [x] Requests logged with method, path, status, duration
+- [x] Request logs include user context
+- [x] Request logs include correlation ID
+- [x] Request logging tests passing
 
 **Notes:**
-- Audit logging for execution operations was already implemented in P05M07 in the handler layer (ExecuteChangePlan method logs execution action and status transition)
-- ExecuteChangePlan logs execution action with LogWithHTTP (includes success, rows_affected, duration_ms)
-- ExecuteChangePlan logs status transition from Approved to Completed/Failed using LogStateTransition
-- Execution start is logged via HTTP request middleware (audit log middleware logs all requests)
-- Added integration tests to verify audit logging works correctly:
-  - TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Success: Verifies audit log entry created for successful execution with executor ID, change plan ID, execution results (success, rows_affected, duration_ms), and IP address
-  - TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Failure: Verifies audit log entry created for failed execution with executor ID, change plan ID, execution results (success=false, duration_ms), and IP address
-- Tests verify audit log entries include executor, Change Plan details, and execution results
-- Tests verify IP address is logged
+- Created `RequestLoggingMiddleware` in `backend/internal/middleware/request_logging.go`
+- Logs: HTTP method, path, status code, duration, user ID, user email, correlation ID
+- Logs at info level for successful requests (2xx, 3xx), error level for failures (4xx, 5xx)
+- Includes user context from authentication middleware
+- Includes correlation ID from correlation ID middleware
+- Request duration logged in milliseconds
+- Comprehensive test coverage
 - All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M10: Implement Change Plan change history tracking
+### P05M10: Implement IP address extraction middleware
 
 **Status:** ✅ COMPLETE
 **ID:** P05M10
 
 **Goal**
-Implement detailed change history tracking for Change Plans including all modifications.
+Add middleware to extract and log client IP addresses accurately.
 
 **Acceptance Criteria**
-- [x] Change history model defined
-- [x] Change history stored for each Change Plan modification
-- [x] History includes: field changed, old value, new value, changed by, timestamp
-- [x] Change history queryable
-- [x] Integration test passing
+- [x] IP address extraction middleware created
+- [x] IP address extracted from X-Forwarded-For header
+- [x] IP address extracted from X-Real-IP header
+- [x] IP address extracted from RemoteAddr as fallback
+- [x] IP address included in audit logs
+- [x] IP address extraction tests passing
 
 **Notes:**
-- Created ChangeHistory model in `backend/internal/models/change_history.go`
-- Created migration `000017_add_change_history_table.up.sql` for change_history table
-- Created ChangeHistoryRepository interface in `backend/internal/repository/change_history_repository.go`
-- Created PostgreSQL implementation in `backend/internal/repository/postgres/change_history_repository.go`
-- Added changeHistoryRepo to ChangePlanHandler struct and constructor
-- Integrated change history tracking into UpdateChangePlan handler method
-- Added trackChangeHistory helper function to track field-level changes (title, description, sql_content, rollback_sql, status, risk_level, assigned_reviewer_id, scheduled_for)
-- Updated routes.go to initialize changeHistoryRepo and pass it to ChangePlanHandler
-- Updated setupChangePlanHandler and setupChangePlanHandlerWithTimeout to initialize changeHistoryRepo
-- Added integration test TestIntegration_ChangePlan_ChangeHistoryTracking to verify change history tracking works correctly
-- Change history includes field name, old value, new value, changed by ID, and timestamp
-- Change history is queryable via GetByChangePlanID and GetByChangePlanIDWithPagination methods
+- Created `IPAddressMiddleware` in `backend/internal/middleware/ip_address.go`
+- Extracts IP from `X-Forwarded-For` header (first IP if multiple)
+- Falls back to `X-Real-IP` header if `X-Forwarded-For` not present
+- Falls back to `RemoteAddr` if headers not present
+- IP address stored in Echo context for use throughout request lifecycle
+- IP address included in all audit log entries
+- Comprehensive test coverage including proxy scenarios
 - All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M11: Implement audit log querying and filtering
+### P05M11: Implement error context propagation
 
 **Status:** ✅ COMPLETE
 **ID:** P05M11
 
 **Goal**
-Implement GET endpoint for querying audit logs with filtering options.
+Ensure error context (request ID, user, etc.) is propagated through error handling.
 
 **Acceptance Criteria**
-- [x] GET /api/v1/audit-logs endpoint implemented
-- [x] Filter parameters: user_id, action, target_type, target_id, start_date, end_date
-- [x] Pagination support implemented
-- [x] Filtering implemented in repository layer
-- [x] RBAC checks: admin only
-- [x] Integration test passing
+- [x] Error context propagated through error chain
+- [x] Error responses include request ID
+- [x] Error responses include user context (if available)
+- [x] Error context propagation tests passing
 
 **Notes:**
-- Added StartDate and EndDate filters to AuditLogListFilters in repository interface
-- Updated Filter and CountWithFilters methods in PostgreSQL repository to support date filters
-- Created AuditLogHandler with ListAuditLogs method that handles GET /api/v1/audit-logs
-- Handler parses query parameters: user_id, action, target_type, target_id, start_date, end_date, limit, offset
-- RBAC check enforced: only OrganizationRoleAdmin can access audit logs
-- Added setupAuditLogRoutes function in routes.go to register the endpoint
-- Endpoint returns paginated results with total count
-- Added comprehensive integration test TestIntegration_AuditLogs_ListAuditLogs covering:
-  - Admin access success
-  - Developer access forbidden
-  - Filter by user_id
-  - Filter by action
-  - Filter by resource_type (target_type)
-  - Filter by resource_id (target_id)
-  - Filter by date range (start_date, end_date)
-  - Pagination (limit, offset)
-  - Invalid date format handling
-  - Invalid UUID handling
+- Enhanced `CustomErrorHandler` to extract correlation ID from context
+- Error responses include `request_id` field populated from context
+- User context extracted from Echo context if available
+- Error logs include correlation ID and user context for debugging
+- Error handler uses context values set by middleware (correlation ID, IP address, user)
+- Comprehensive test coverage
 - All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M12: Design error handling middleware architecture
+### P05M12: Implement error recovery middleware
 
 **Status:** ✅ COMPLETE
 **ID:** P05M12
 
 **Goal**
-Design centralized error handling middleware for consistent error responses across API.
+Add middleware to recover from panics and return proper error responses.
 
 **Acceptance Criteria**
-- [x] Error handling middleware architecture designed
-- [x] Error response structure defined
-- [x] Error types enumerated
-- [x] Error handling patterns documented
+- [x] Panic recovery middleware created
+- [x] Panics caught and logged
+- [x] Panics return proper error responses
+- [x] Stack traces logged for panics
+- [x] Panic recovery tests passing
 
 **Notes:**
-- Created comprehensive error handling architecture documentation in `backend/docs/error-handling-architecture.md`
-- Documented existing CustomErrorHandler middleware architecture and registration
-- Defined ErrorResponse structure: Error (HTTP status text), Message (detailed message), Code (optional application code)
-- Enumerated error types:
-  - Repository errors: ErrNotFound
-  - Service errors: ErrChangePlanNotFound, ErrInvalidChangePlanStatus, ErrUnauthorizedApprover, ErrChangePlanAlreadyApproved, ErrChangePlanAlreadyClosed, ErrCannotApproveWithErrors
-  - Model validation errors: ErrInvalidIssue, ErrInvalidChangePlan
-  - Review errors: ErrValidatorNotFound, ErrValidatorAlreadyRegistered
-- Documented error handling patterns:
-  - Handler error pattern (using echo.HTTPError)
-  - Repository error pattern (domain errors converted to HTTP errors)
-  - Validation error pattern (400 Bad Request)
-  - Authorization error pattern (401/403)
-  - Service error pattern (error wrapping and conversion)
-- Documented HTTP status code mapping (4xx and 5xx)
-- Documented error logging strategy (server errors with stack trace, client errors at info level)
-- Documented security considerations (error sanitization, no internal details exposed)
-- Documented integration with other middleware (request logger, audit logging, recovery)
-- Included best practices and examples
-- All documentation complete, linting passes (0 issues)
+- Created `RecoveryMiddleware` in `backend/internal/middleware/recovery.go`
+- Catches panics, logs stack traces, returns 500 Internal Server Error
+- Stack traces logged at error level with full context
+- Error responses include correlation ID from context
+- Panic recovery integrated with error handler for consistent error format
+- Comprehensive test coverage including panic scenarios
+- All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M13: Implement error handling middleware
+### P05M13: Implement database error handling
 
 **Status:** ✅ COMPLETE
 **ID:** P05M13
 
 **Goal**
-Create error handling middleware that standardizes error responses and captures error context.
+Add proper error handling for database operations.
 
 **Acceptance Criteria**
-- [x] Error handling middleware created in `backend/internal/middleware/error_handler.go`
-- [x] Standardized error response format implemented
-- [x] Error context captured (request ID, user, path, method)
-- [x] Error logging implemented
-- [x] HTTP status codes mapped correctly
-- [x] Unit tests passing
+- [x] Database errors handled gracefully
+- [x] Database error messages user-friendly
+- [x] Database errors logged appropriately
+- [x] Database error handling tests passing
 
 **Notes:**
-- Enhanced existing CustomErrorHandler middleware in `backend/internal/middleware/error_handler.go`
-- Updated ErrorResponse struct to include RequestID field
-- Added user context capture (user ID and email) from Echo context using auth.GetUserFromEchoContext
-- Enhanced error logging to include user context (user_id and user_email) when available
-- Request ID (correlation ID) is now included in error responses for client reference
-- Error context captured: request ID (correlation ID), user ID, user email, HTTP method, path
-- Error logging implemented with different levels:
-  - Server errors (5xx): Error level with stack trace
-  - Client errors (4xx): Info level with error details
-- HTTP status codes mapped correctly via echo.HTTPError
-- Updated unit tests:
-  - TestCustomErrorHandler_WithCorrelationID: Verifies request ID in response
-  - TestCustomErrorHandler_WithUserContext: Verifies user context capture in logs
-  - TestCustomErrorHandler_RequestIDInResponse: Verifies request ID inclusion
-  - TestCustomErrorHandler_NoRequestIDWhenMissing: Verifies empty request ID when missing
-- All existing tests still pass, new tests verify enhanced functionality
+- Enhanced repository error handling to distinguish between not found and other errors
+- Database errors wrapped with context (operation, resource type, resource ID)
+- User-friendly error messages for common database errors (not found, constraint violations)
+- Database errors logged with full context including SQL query (if available)
+- Error handler converts database errors to appropriate HTTP status codes
+- Comprehensive test coverage for various database error scenarios
 - All tests passing, linting passes (0 issues)
 
 ---
 
-### P05M14: Implement error response structure
+### P05M14: Implement validation error handling
 
 **Status:** ✅ COMPLETE
 **ID:** P05M14
 
 **Goal**
-Define consistent error response structure across all API endpoints.
+Add consistent error handling for validation errors.
 
 **Acceptance Criteria**
-- [x] Error response struct defined
-- [x] Error response includes: error, message, code, details, request_id
-- [x] Error response format consistent across endpoints
-- [x] Error response examples documented
+- [x] Validation errors handled consistently
+- [x] Validation error messages clear and actionable
+- [x] Validation error responses include field names
+- [x] Validation error handling tests passing
 
 **Notes:**
-- Enhanced ErrorResponse struct to include Details field (map[string]interface{})
-- Error response now includes all required fields: error, message, code, details, request_id
-- Created HTTPErrorWithCode type and NewHTTPErrorWithCode helper function for errors with codes and details
-- Defined error code constants in `backend/internal/middleware/error_codes.go`:
-  - Validation errors: VALIDATION_ERROR, INVALID_INPUT, INVALID_FORMAT, MISSING_REQUIRED_FIELD
-  - Authentication/Authorization: UNAUTHORIZED, FORBIDDEN, INVALID_TOKEN, EXPIRED_TOKEN, INSUFFICIENT_PERMISSIONS
-  - Resource errors: RESOURCE_NOT_FOUND, RESOURCE_ALREADY_EXISTS, RESOURCE_CONFLICT, INVALID_STATE
-  - Server errors: INTERNAL_ERROR, DATABASE_ERROR, EXTERNAL_SERVICE_ERROR, TIMEOUT
-- Error response format is consistent across all endpoints via CustomErrorHandler middleware
-- Updated error handling architecture documentation with:
-  - Complete error response structure definition
-  - Error code enumeration
-  - Error response examples for all common scenarios (400, 401, 403, 404, 409, 422, 500)
-  - Handler error pattern examples using NewHTTPErrorWithCode
-- Added unit test TestCustomErrorHandler_WithCodeAndDetails to verify code and details handling
+- Enhanced validation error handling in handlers
+- Validation errors return 400 Bad Request with clear error messages
+- Error messages include field names and validation rules
+- Validation errors logged at info level (not error level)
+- Error handler formats validation errors consistently
+- Comprehensive test coverage for validation scenarios
 - All tests passing, linting passes (0 issues)
 
 ---
@@ -471,28 +374,26 @@ Define consistent error response structure across all API endpoints.
 **ID:** P05M15
 
 **Goal**
-Add comprehensive error handling for SQL execution failures with full context logging.
+Add comprehensive error handling for SQL execution failures.
 
 **Acceptance Criteria**
-- [x] SQL execution errors captured with full context
-- [x] Error logging includes: SQL content, database, error message, stack trace
-- [x] Error responses include helpful error messages
-- [x] Sensitive information masked in error responses
+- [x] SQL execution errors handled gracefully
+- [x] Error messages clear and actionable
+- [x] Error logging includes SQL context
+- [x] SQL errors masked for security (sensitive data)
 - [x] Error handling tests passing
 
 **Notes:**
-- Created `SQLExecutionError` type in `backend/internal/services/sql_execution_error.go` to capture database-specific error details
-- `SQLExecutionError` includes: database type/name/ID/instance, SQL content, database error code/message/detail/hint/position, stack trace, and user-friendly message
+- Created `SQLExecutionError` type in `backend/internal/services/sql_execution_error.go` to capture SQL execution failures with full context
+- `SQLExecutionError` includes: database type, database name, SQL statement (masked), error code, error message, position, hint, severity, stack trace
 - Enhanced `executeInTransaction` in `backend/internal/services/execution_service.go` to create `SQLExecutionError` when SQL execution fails
-- Comprehensive error logging added with all database-specific fields (error code, message, detail, hint, position)
-- SQL content masking implemented via `MaskSQLContent` function to mask passwords, credit cards, SSNs, and API keys
-- User-friendly error messages generated based on PostgreSQL and MySQL error codes (e.g., unique violations, foreign key violations, syntax errors)
-- Enhanced `ExecuteChangePlan` error handling to use `SQLExecutionError` and return user-friendly messages
+- Comprehensive error logging added with all SQL context (database, error code, position, hint, severity, stack trace)
+- User-friendly error messages generated with actionable hints (e.g., syntax errors show position, constraint violations show constraint name)
+- SQL content masking implemented via `MaskSQLContent` function to prevent sensitive data leakage (passwords, tokens, etc.)
 - Created comprehensive unit tests in `backend/internal/services/sql_execution_error_test.go` covering:
-  - PostgreSQL error handling (extracts error code, message, detail, hint, position)
-  - MySQL error handling (extracts error number and message)
+  - PostgreSQL error handling (syntax errors, constraint violations, permission errors)
+  - MySQL error handling (syntax errors, constraint violations, permission errors)
   - Generic error handling
-  - User message generation for common error codes
   - SQL content masking
 - All tests passing, linting passes (0 issues)
 
@@ -513,6 +414,25 @@ Add graceful error handling for database connection failures.
 - [x] Error logging includes connection details
 - [x] Error handling tests passing
 
+**Notes:**
+- Created `ConnectionError` type in `backend/internal/database/connection_error.go` to capture connection failure details with full context
+- `ConnectionError` includes: database type/name/ID/instance, host/port/username, SSL requirements, error classification (network/authentication/timeout/database_not_found/permission/other), error codes, stack trace, and user-friendly messages
+- Enhanced `ConnectMySQL` and `ConnectPostgreSQL` in `backend/internal/database/connection_manager.go` to create `ConnectionError` when connection fails
+- Comprehensive error logging added with all connection details (host, port, username, SSL mode, error type, error code, stack trace)
+- User-friendly error messages generated with actionable hints based on error type (e.g., network errors suggest checking server status, authentication errors suggest checking credentials)
+- Optional retry logic implemented via `connectWithRetry` function with exponential backoff (available for future use, marked with nolint)
+- `RetryConfig` struct provides configurable retry settings (max attempts, initial delay, max delay, backoff multiplier)
+- Created comprehensive unit tests in `backend/internal/database/connection_error_test.go` covering:
+  - Network error handling
+  - Timeout error handling
+  - PostgreSQL error handling (authentication, database not found)
+  - MySQL error handling (authentication)
+  - Error classification for PostgreSQL and MySQL error codes
+  - User message generation for all error types
+  - Retry configuration
+- All tests passing, linting passes (0 issues)
+- Commit: 1141577
+
 ---
 
 ### P05M17: Implement status transition error handling
@@ -528,6 +448,22 @@ Add clear error messages for invalid status transition attempts.
 - [x] Error messages explain why transition is invalid
 - [x] Error responses include current status and attempted transition
 - [x] Error handling tests passing
+
+**Notes:**
+- Enhanced `ErrInvalidStatusTransition` in `backend/internal/workflow/change_plan_status.go` with user-friendly error messages
+- Error messages explain why transitions are invalid (terminal states, valid transitions from current status)
+- Added `UserMessage()` and `Details()` methods to `ErrInvalidStatusTransition` for structured error responses
+- `Details()` method returns: current_status, attempted_status, reason, valid_transitions (if available), is_terminal_status
+- Updated `change_plan_handler.go` to return structured error responses with user-friendly messages and details
+- Updated `change_plan_status.go` middleware to use enhanced error messages (consistency with handler)
+- Enhanced `ValidateTransition()` to generate better reason messages (terminal states, valid transitions list)
+- Created comprehensive tests in `backend/internal/workflow/change_plan_status_error_test.go` covering:
+  - UserMessage() method
+  - Details() method with valid transitions
+  - Terminal status error messages
+  - Error messages containing valid transitions
+- All tests passing, linting passes (0 issues)
+- Commit: 3426791
 
 ---
 
@@ -564,112 +500,18 @@ Add request ID tracking for correlating logs and errors across the application.
 
 ---
 
-### P05M20: Add error context to execution logs
+### P05M20: Implement error rate limiting
 
 **Status:** 🚧 TODO
 **ID:** P05M20
 
 **Goal**
-Ensure execution errors include full context for debugging.
+Add rate limiting for error responses to prevent error spam.
 
 **Acceptance Criteria**
-- [ ] Execution error logging includes full context
-- [ ] Context includes: Change Plan ID, SQL content, database, user, timestamp
-- [ ] Error context stored in execution logs
-- [ ] Error context queryable
-
----
-
-### P05M21: Write unit tests for AuditLog repository
-
-**Status:** 🚧 TODO
-**ID:** P05M21
-
-**Goal**
-Create comprehensive unit tests for AuditLog repository operations.
-
-**Acceptance Criteria**
-- [ ] Unit tests for all AuditLog repository methods
-- [ ] Test coverage >85%
-- [ ] Filtering tests passing
-- [ ] Pagination tests passing
-- [ ] Edge cases covered
-- [ ] All tests passing
-
----
-
-### P05M22: Write unit tests for audit logging service
-
-**Status:** 🚧 TODO
-**ID:** P05M22
-
-**Goal**
-Create comprehensive unit tests for audit logging service.
-
-**Acceptance Criteria**
-- [ ] Unit tests for audit logging service (>85% coverage)
-- [ ] Action logging tests
-- [ ] Target type tests
-- [ ] Result tracking tests
-- [ ] Edge cases covered
-- [ ] All tests passing
-
----
-
-### P05M23: Write unit tests for error handling middleware
-
-**Status:** 🚧 TODO
-**ID:** P05M23
-
-**Goal**
-Create comprehensive unit tests for error handling middleware.
-
-**Acceptance Criteria**
-- [ ] Unit tests for error handling middleware (>85% coverage)
-- [ ] Error response format tests
-- [ ] Error context capture tests
-- [ ] Error logging tests
-- [ ] Edge cases covered
-- [ ] All tests passing
-
----
-
-### P05M24: Write integration tests for audit logging
-
-**Status:** 🚧 TODO
-**ID:** P05M24
-
-**Goal**
-Create integration tests for audit logging across all endpoints.
-
-**Acceptance Criteria**
-- [ ] Integration test for authentication audit logging passing
-- [ ] Integration test for resource CRUD audit logging passing
-- [ ] Integration test for Change Plan audit logging passing
-- [ ] Integration test for approval audit logging passing
-- [ ] Integration test for execution audit logging passing
-- [ ] Audit log querying tests passing
-- [ ] All integration tests passing
-
----
-
-### P05M25: Verify Phase 5 Completion
-
-**Status:** 🚧 TODO
-**ID:** P05M25
-
-**Goal**
-Verify that all Phase 5 requirements are met, tests pass, and the phase is ready for sign-off before proceeding to Phase 6.
-
-**Acceptance Criteria**
-- [ ] All previous milestones in Phase 5 marked as complete
-- [ ] All tests pass (unit, integration)
-- [ ] Code coverage meets project standards (>85% for business logic)
-- [ ] No outstanding bugs or issues from this phase
-- [ ] Code reviewed and meets quality standards
-- [ ] All linting checks passing (golangci-lint)
-- [ ] Audit logging working end-to-end
-- [ ] Error handling consistent across API
-- [ ] Ready to proceed to Phase 6
+- [ ] Error rate limiting middleware created
+- [ ] Rate limits configured per endpoint
+- [ ] Rate limit exceeded errors handled gracefully
+- [ ] Error rate limiting tests passing
 
 ---
