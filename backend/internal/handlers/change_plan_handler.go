@@ -23,6 +23,7 @@ import (
 // ChangePlanHandler handles HTTP requests for change plan operations
 type ChangePlanHandler struct {
 	changePlanRepo       repository.ChangePlanRepository
+	changeHistoryRepo    repository.ChangeHistoryRepository
 	projectRepo          repository.ProjectRepository
 	databaseRepo         repository.DatabaseRepository
 	databaseInstanceRepo repository.DatabaseInstanceRepository
@@ -39,6 +40,7 @@ type ChangePlanHandler struct {
 // NewChangePlanHandler creates a new change plan handler
 func NewChangePlanHandler(
 	changePlanRepo repository.ChangePlanRepository,
+	changeHistoryRepo repository.ChangeHistoryRepository,
 	projectRepo repository.ProjectRepository,
 	databaseRepo repository.DatabaseRepository,
 	databaseInstanceRepo repository.DatabaseInstanceRepository,
@@ -53,6 +55,7 @@ func NewChangePlanHandler(
 ) *ChangePlanHandler {
 	return &ChangePlanHandler{
 		changePlanRepo:       changePlanRepo,
+		changeHistoryRepo:    changeHistoryRepo,
 		projectRepo:          projectRepo,
 		databaseRepo:         databaseRepo,
 		databaseInstanceRepo: databaseInstanceRepo,
@@ -747,12 +750,20 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		})
 	}
 
+	// Track field changes before updating
+	oldChangePlan := *changePlan // Make a copy of old values
+
 	// Update in repository
 	if err := h.changePlanRepo.Update(ctx, changePlan); err != nil {
 		h.logger.Error("Failed to update change plan", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "Failed to update change plan",
 		})
+	}
+
+	// Track field changes after successful update
+	if h.changeHistoryRepo != nil {
+		h.trackChangeHistory(ctx, &oldChangePlan, changePlan, userID)
 	}
 
 	h.logger.Info("Change plan updated successfully",
@@ -2194,6 +2205,124 @@ func (h *ChangePlanHandler) ResubmitChangePlan(c echo.Context) error {
 	)
 
 	return c.JSON(http.StatusOK, changePlan.ToResponse())
+}
+
+// trackChangeHistory tracks field-level changes between old and new change plan
+func (h *ChangePlanHandler) trackChangeHistory(
+	ctx context.Context,
+	oldChangePlan, newChangePlan *models.ChangePlan,
+	changedByID uuid.UUID,
+) {
+	if h.changeHistoryRepo == nil {
+		return
+	}
+
+	// Helper function to convert value to string
+	valueToString := func(v interface{}) *string {
+		if v == nil {
+			return nil
+		}
+		switch val := v.(type) {
+		case string:
+			if val == "" {
+				return nil
+			}
+			return &val
+		case *string:
+			return val
+		case models.ChangePlanStatus:
+			s := string(val)
+			return &s
+		case models.RiskLevel:
+			s := string(val)
+			return &s
+		case models.ChangeType:
+			s := string(val)
+			return &s
+		case *uuid.UUID:
+			if val == nil {
+				return nil
+			}
+			s := val.String()
+			return &s
+		case uuid.UUID:
+			s := val.String()
+			return &s
+		case *time.Time:
+			if val == nil {
+				return nil
+			}
+			s := val.Format(time.RFC3339)
+			return &s
+		case time.Time:
+			if val.IsZero() {
+				return nil
+			}
+			s := val.Format(time.RFC3339)
+			return &s
+		case *int:
+			if val == nil {
+				return nil
+			}
+			s := fmt.Sprintf("%d", *val)
+			return &s
+		case int:
+			s := fmt.Sprintf("%d", val)
+			return &s
+		default:
+			s := fmt.Sprintf("%v", val)
+			return &s
+		}
+	}
+
+	// Track changes for each field
+	changes := []struct {
+		fieldName string
+		oldValue  interface{}
+		newValue  interface{}
+	}{
+		{"title", oldChangePlan.Title, newChangePlan.Title},
+		{"description", oldChangePlan.Description, newChangePlan.Description},
+		{"sql_content", oldChangePlan.SQLContent, newChangePlan.SQLContent},
+		{"rollback_sql", oldChangePlan.RollbackSQL, newChangePlan.RollbackSQL},
+		{"status", oldChangePlan.Status, newChangePlan.Status},
+		{"risk_level", oldChangePlan.RiskLevel, newChangePlan.RiskLevel},
+		{"assigned_reviewer_id", oldChangePlan.AssignedReviewerID, newChangePlan.AssignedReviewerID},
+		{"scheduled_for", oldChangePlan.ScheduledFor, newChangePlan.ScheduledFor},
+	}
+
+	for _, change := range changes {
+		oldStr := valueToString(change.oldValue)
+		newStr := valueToString(change.newValue)
+
+		// Skip if values are the same
+		if oldStr == nil && newStr == nil {
+			continue
+		}
+		if oldStr != nil && newStr != nil && *oldStr == *newStr {
+			continue
+		}
+
+		// Create change history entry
+		changeHistory := &models.ChangeHistory{
+			ID:           uuid.New(),
+			ChangePlanID: newChangePlan.ID,
+			FieldName:    change.fieldName,
+			OldValue:     oldStr,
+			NewValue:     newStr,
+			ChangedByID:  changedByID,
+			ChangedAt:    time.Now(),
+		}
+
+		if err := h.changeHistoryRepo.Create(ctx, changeHistory); err != nil {
+			h.logger.Error("Failed to create change history entry",
+				zap.Error(err),
+				zap.String("change_plan_id", newChangePlan.ID.String()),
+				zap.String("field_name", change.fieldName),
+			)
+			// Continue tracking other fields even if one fails
+		}
+	}
 }
 
 // convertProjectRoleToRBAC converts models.ProjectRole to rbac.ProjectRole

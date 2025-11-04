@@ -40,6 +40,7 @@ func Setup(
 	dbRepo := postgres.NewDatabaseRepository(db)
 	issueRepo := postgres.NewIssueRepository(db.DB)
 	changePlanRepo := postgres.NewChangePlanRepository(db)
+	changeHistoryRepo := postgres.NewChangeHistoryRepository(db)
 	projectMemberRepo := postgres.NewProjectMemberRepository(db)
 	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
 	approvalRepo := postgres.NewApprovalRepository(db)
@@ -72,6 +73,7 @@ func Setup(
 	setupChangePlanRoutes(
 		e,
 		changePlanRepo,
+		changeHistoryRepo,
 		projectRepo,
 		dbRepo,
 		envRepo,
@@ -474,6 +476,7 @@ func setupIssueRoutes(e *echo.Echo, issueRepo repository.IssueRepository, tokenM
 func setupChangePlanRoutes(
 	e *echo.Echo,
 	changePlanRepo repository.ChangePlanRepository,
+	changeHistoryRepo repository.ChangeHistoryRepository,
 	projectRepo repository.ProjectRepository,
 	databaseRepo repository.DatabaseRepository,
 	environmentRepo repository.EnvironmentRepository,
@@ -585,6 +588,7 @@ func setupChangePlanRoutes(
 
 	changePlanHandler := handlers.NewChangePlanHandler(
 		changePlanRepo,
+		changeHistoryRepo,
 		projectRepo,
 		databaseRepo,
 		databaseInstanceRepo,

@@ -115,6 +115,7 @@ func cleanupChangePlanTestData(t *testing.T, db *sqlx.DB) {
 	t.Helper()
 
 	tables := []string{
+		"change_history",
 		"policy_findings",
 		"change_plans",
 		"databases",
@@ -320,6 +321,7 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 
 	// Initialize repositories
 	changePlanRepo := postgres.NewChangePlanRepository(db)
+	changeHistoryRepo := postgres.NewChangeHistoryRepository(db)
 	projectRepo := postgres.NewProjectRepository(db)
 	databaseRepo := postgres.NewDatabaseRepository(db)
 	environmentRepo := postgres.NewEnvironmentRepository(db)
@@ -415,6 +417,7 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 	// Create handler
 	handler := handlers.NewChangePlanHandler(
 		changePlanRepo,
+		changeHistoryRepo,
 		projectRepo,
 		databaseRepo,
 		databaseInstanceRepo,
@@ -444,6 +447,7 @@ func setupChangePlanHandlerWithTimeout(
 
 	// Initialize repositories
 	changePlanRepo := postgres.NewChangePlanRepository(db)
+	changeHistoryRepo := postgres.NewChangeHistoryRepository(db)
 	projectRepo := postgres.NewProjectRepository(db)
 	databaseRepo := postgres.NewDatabaseRepository(db)
 	environmentRepo := postgres.NewEnvironmentRepository(db)
@@ -540,6 +544,7 @@ func setupChangePlanHandlerWithTimeout(
 	// Create handler
 	handler := handlers.NewChangePlanHandler(
 		changePlanRepo,
+		changeHistoryRepo,
 		projectRepo,
 		databaseRepo,
 		databaseInstanceRepo,
@@ -7913,4 +7918,166 @@ func TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Failure(t *testin
 		// Verify IP address is logged
 		assert.NotNil(t, executionLog.IPAddress)
 	}
+}
+
+// TestIntegration_ChangePlan_ChangeHistoryTracking tests that change history is tracked for Change Plan modifications
+func TestIntegration_ChangePlan_ChangeHistoryTracking(t *testing.T) {
+	// Setup
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	defer cleanupChangePlanTestData(t, db)
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-minimum-32-characters-long-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Create test data
+	ctx := context.Background()
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	changeHistoryRepo := postgres.NewChangeHistoryRepository(db)
+
+	// Create author user
+	author := createChangePlanTestUser(
+		t,
+		userRepo,
+		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
+		models.OrganizationRoleDeveloper,
+	)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "Test Project")
+
+	// Add author as project member (Project Developer role)
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    author.ID,
+		Role:      models.ProjectRoleDeveloper,
+		AddedByID: author.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "production")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan in Draft status
+	changePlan := createTestChangePlan(
+		t,
+		changePlanRepo,
+		project.ID,
+		database.ID,
+		author.ID,
+		"CREATE TABLE users (id UUID PRIMARY KEY);",
+	)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for author
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Update change plan - change title, description, and status
+	newTitle := "Updated Title"
+	newDescription := "Updated Description"
+	newStatus := models.ChangePlanStatusOpen
+	reqBody := map[string]interface{}{
+		"title":       newTitle,
+		"description": newDescription,
+		"status":      string(newStatus),
+	}
+	reqBodyJSON, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+
+	e := echo.New()
+	req := httptest.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()),
+		bytes.NewReader(reqBodyJSON),
+	)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, author.ID, author.Email, author.OrganizationRole)
+
+	// Execute update
+	err = handler.UpdateChangePlan(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify change history entries were created
+	changeHistories, err := changeHistoryRepo.GetByChangePlanID(ctx, changePlan.ID)
+	require.NoError(t, err)
+
+	// Verify we have at least 3 change history entries (title, description, status)
+	assert.GreaterOrEqual(t, len(changeHistories), 3, "should have at least 3 change history entries")
+
+	// Verify title change
+	var titleChange *models.ChangeHistory
+	for _, ch := range changeHistories {
+		if ch.FieldName == "title" {
+			titleChange = ch
+			break
+		}
+	}
+	require.NotNil(t, titleChange, "title change history entry should exist")
+	assert.Equal(t, changePlan.ID, titleChange.ChangePlanID)
+	assert.Equal(t, "title", titleChange.FieldName)
+	assert.NotNil(t, titleChange.OldValue)
+	assert.Equal(t, changePlan.Title, *titleChange.OldValue)
+	assert.NotNil(t, titleChange.NewValue)
+	assert.Equal(t, newTitle, *titleChange.NewValue)
+	assert.Equal(t, author.ID, titleChange.ChangedByID)
+	assert.False(t, titleChange.ChangedAt.IsZero())
+
+	// Verify description change
+	var descChange *models.ChangeHistory
+	for _, ch := range changeHistories {
+		if ch.FieldName == "description" {
+			descChange = ch
+			break
+		}
+	}
+	require.NotNil(t, descChange, "description change history entry should exist")
+	assert.Equal(t, changePlan.ID, descChange.ChangePlanID)
+	assert.Equal(t, "description", descChange.FieldName)
+	assert.NotNil(t, descChange.OldValue)
+	assert.Equal(t, changePlan.Description, *descChange.OldValue)
+	assert.NotNil(t, descChange.NewValue)
+	assert.Equal(t, newDescription, *descChange.NewValue)
+	assert.Equal(t, author.ID, descChange.ChangedByID)
+	assert.False(t, descChange.ChangedAt.IsZero())
+
+	// Verify status change
+	var statusChange *models.ChangeHistory
+	for _, ch := range changeHistories {
+		if ch.FieldName == "status" {
+			statusChange = ch
+			break
+		}
+	}
+	require.NotNil(t, statusChange, "status change history entry should exist")
+	assert.Equal(t, changePlan.ID, statusChange.ChangePlanID)
+	assert.Equal(t, "status", statusChange.FieldName)
+	assert.NotNil(t, statusChange.OldValue)
+	assert.Equal(t, string(models.ChangePlanStatusDraft), *statusChange.OldValue)
+	assert.NotNil(t, statusChange.NewValue)
+	assert.Equal(t, string(newStatus), *statusChange.NewValue)
+	assert.Equal(t, author.ID, statusChange.ChangedByID)
+	assert.False(t, statusChange.ChangedAt.IsZero())
 }
