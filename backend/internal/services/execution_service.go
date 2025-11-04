@@ -334,27 +334,53 @@ func (s *ExecutionService) Execute(
 
 	if err != nil {
 		// Step 4: Execution failed - update status to Failed
-		errorMsg := err.Error()
+		var errorMsg string
+		var userFriendlyMsg string
+
+		// Check if it's a SQLExecutionError for enhanced handling
+		if sqlErr, ok := err.(*SQLExecutionError); ok {
+			// Use the user-friendly message from SQLExecutionError
+			userFriendlyMsg = sqlErr.Message
+			errorMsg = userFriendlyMsg
+
+			// Enhanced error context logging (already logged in executeInTransaction, but log summary here)
+			s.logger.Error("SQL execution failed (summary)",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_id", db.ID.String()),
+				zap.String("database_name", db.DatabaseName),
+				zap.String("database_instance_name", dbInstance.Name),
+				zap.String("database_type", string(dbInstance.DatabaseType)),
+				zap.String("database_error_code", sqlErr.DatabaseErrorCode),
+				zap.String("user_message", userFriendlyMsg),
+				zap.Duration("execution_duration", duration),
+				zap.Int("sql_content_length", sqlContentLength),
+			)
+		} else {
+			// Generic error handling
+			errorMsg = err.Error()
+			userFriendlyMsg = errorMsg
+
+			// Enhanced error context logging
+			sqlPreview := changePlan.SQLContent
+			if len(sqlPreview) > 200 {
+				sqlPreview = sqlPreview[:200] + "... (truncated)"
+			}
+			s.logger.Error("SQL execution failed",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_id", db.ID.String()),
+				zap.String("database_name", db.DatabaseName),
+				zap.String("database_instance_name", dbInstance.Name),
+				zap.String("database_type", string(dbInstance.DatabaseType)),
+				zap.Error(err),
+				zap.Duration("execution_duration", duration),
+				zap.Int("sql_content_length", sqlContentLength),
+				zap.String("sql_preview", sqlPreview),
+			)
+		}
+
 		changePlan.Status = models.ChangePlanStatusFailed
 		changePlan.ErrorMessage = &errorMsg
 		changePlan.AffectedRows = nil // No rows affected on error
-
-		// Enhanced error context logging
-		sqlPreview := changePlan.SQLContent
-		if len(sqlPreview) > 200 {
-			sqlPreview = sqlPreview[:200] + "... (truncated)"
-		}
-		s.logger.Error("SQL execution failed",
-			zap.String("change_plan_id", changePlanID.String()),
-			zap.String("database_id", db.ID.String()),
-			zap.String("database_name", db.DatabaseName),
-			zap.String("database_instance_name", dbInstance.Name),
-			zap.String("database_type", string(dbInstance.DatabaseType)),
-			zap.Error(err),
-			zap.Duration("execution_duration", duration),
-			zap.Int("sql_content_length", sqlContentLength),
-			zap.String("sql_preview", sqlPreview),
-		)
 
 		// Update Change Plan with error results
 		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
@@ -383,7 +409,7 @@ func (s *ExecutionService) Execute(
 			Success:      false,
 			RowsAffected: 0,
 			Duration:     duration,
-			ErrorMessage: &errorMsg,
+			ErrorMessage: &userFriendlyMsg, // Use user-friendly message
 		}, nil // Return result with error, don't propagate error
 	}
 
@@ -590,12 +616,58 @@ func (s *ExecutionService) executeInTransaction(
 	result, err := tx.ExecContext(ctx, sqlContent)
 	execDuration := time.Since(execStartTime)
 	if err != nil {
-		s.logger.Error("SQL execution failed",
-			zap.String("change_plan_id", changePlanID.String()),
-			zap.Duration("execution_duration", execDuration),
-			zap.Error(err),
+		// Create structured SQL execution error
+		sqlErr := NewSQLExecutionError(
+			string(dbInstance.DatabaseType),
+			db.DatabaseName,
+			db.ID.String(),
+			dbInstance.Name,
+			sqlContent,
+			err,
 		)
-		return nil, fmt.Errorf("execution failed: %w", err)
+
+		// Mask SQL content for logging
+		maskedSQL := MaskSQLContent(sqlContent)
+		sqlErr.SQLContentMasked = true
+
+		// Log comprehensive error details
+		logFields := []zap.Field{
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("database_id", db.ID.String()),
+			zap.String("database_name", db.DatabaseName),
+			zap.String("database_instance_name", dbInstance.Name),
+			zap.String("database_type", string(dbInstance.DatabaseType)),
+			zap.Duration("execution_duration", execDuration),
+			zap.Int("sql_content_length", len(sqlContent)),
+			zap.String("sql_content_masked", maskedSQL),
+			zap.Error(err),
+		}
+
+		// Add database-specific error details
+		if sqlErr.DatabaseErrorCode != "" {
+			logFields = append(logFields, zap.String("database_error_code", sqlErr.DatabaseErrorCode))
+		}
+		if sqlErr.DatabaseMessage != "" {
+			logFields = append(logFields, zap.String("database_message", sqlErr.DatabaseMessage))
+		}
+		if sqlErr.DatabaseDetail != "" {
+			logFields = append(logFields, zap.String("database_detail", sqlErr.DatabaseDetail))
+		}
+		if sqlErr.DatabaseHint != "" {
+			logFields = append(logFields, zap.String("database_hint", sqlErr.DatabaseHint))
+		}
+		if sqlErr.DatabasePosition != "" {
+			logFields = append(logFields, zap.String("database_position", sqlErr.DatabasePosition))
+		}
+
+		// Add stack trace (only in debug mode or for internal errors)
+		if sqlErr.StackTrace != "" {
+			logFields = append(logFields, zap.String("stack_trace", sqlErr.StackTrace))
+		}
+
+		s.logger.Error("SQL execution failed", logFields...)
+
+		return nil, sqlErr
 	}
 
 	// Get rows affected
