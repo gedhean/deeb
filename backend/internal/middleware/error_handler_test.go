@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -169,6 +171,7 @@ func TestCustomErrorHandler_WithCorrelationID(t *testing.T) {
 
 	assert.Equal(t, "Bad Request", response.Error)
 	assert.Equal(t, "Invalid request", response.Message)
+	assert.Equal(t, correlationID, response.RequestID)
 }
 
 func TestCustomErrorHandler_CommittedResponse(t *testing.T) {
@@ -260,4 +263,99 @@ func TestCustomErrorHandler_NoSensitiveInfoExposed(t *testing.T) {
 	assert.NotContains(t, response.Message, "secret123")
 	assert.NotContains(t, response.Message, "password")
 	assert.NotContains(t, response.Message, "user:pass")
+}
+
+func TestCustomErrorHandler_WithUserContext(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Set correlation ID
+	correlationID := "test-correlation-456"
+	c.Set(CorrelationIDKey, correlationID)
+
+	// Set user context
+	userID := uuid.New()
+	userEmail := "test@example.com"
+	claims := &auth.Claims{
+		UserID:           userID,
+		Email:            userEmail,
+		OrganizationRole: "OrganizationDeveloper",
+	}
+	c.Set("user", claims)
+
+	// Create error
+	err := echo.NewHTTPError(http.StatusBadRequest, "Invalid request")
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	assert.Equal(t, "Invalid request", response.Message)
+	assert.Equal(t, correlationID, response.RequestID)
+}
+
+func TestCustomErrorHandler_RequestIDInResponse(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Set correlation ID
+	correlationID := "test-request-id-789"
+	c.Set(CorrelationIDKey, correlationID)
+
+	// Create error
+	err := echo.NewHTTPError(http.StatusNotFound, "Resource not found")
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Not Found", response.Error)
+	assert.Equal(t, "Resource not found", response.Message)
+	assert.Equal(t, correlationID, response.RequestID)
+}
+
+func TestCustomErrorHandler_NoRequestIDWhenMissing(t *testing.T) {
+	// Setup
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Don't set correlation ID
+
+	// Create error
+	err := echo.NewHTTPError(http.StatusBadRequest, "Invalid request")
+
+	// Execute
+	CustomErrorHandler(err, c)
+
+	// Assert
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response ErrorResponse
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, jsonErr)
+
+	assert.Equal(t, "Bad Request", response.Error)
+	assert.Equal(t, "Invalid request", response.Message)
+	assert.Empty(t, response.RequestID)
 }
