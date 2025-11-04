@@ -12,6 +12,7 @@ import {
   Settings2,
   Users,
   Building2,
+  FolderKanban,
 } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -44,6 +45,11 @@ const navMainItems = [
     url: '/dashboard',
     icon: LayoutDashboard,
     isActive: true,
+  },
+  {
+    title: 'Projects',
+    url: '/projects',
+    icon: FolderKanban,
   },
   {
     title: 'Issues',
