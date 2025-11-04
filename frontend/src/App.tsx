@@ -12,6 +12,7 @@ import { EnvironmentsPage } from '@/pages/EnvironmentsPage';
 import { PoliciesPage } from '@/pages/PoliciesPage';
 import { DatabaseInstancesPage } from '@/pages/DatabaseInstancesPage';
 import { DatabasesPage } from '@/pages/DatabasesPage';
+import { UsersPage } from '@/pages/UsersPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import './App.css';
 
@@ -72,6 +73,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <DatabasesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute>
+                  <UsersPage />
                 </ProtectedRoute>
               }
             />

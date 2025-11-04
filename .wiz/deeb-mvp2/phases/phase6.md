@@ -248,20 +248,20 @@ Implement Databases CRUD UI with project and environment assignment (admin only)
 
 ### P06M12: Create User management UI
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M12
 
 **Goal**
 Implement User management UI for administrators (admin only).
 
 **Acceptance Criteria**
-- [ ] Users list page created in `frontend/src/pages/UsersPage.tsx`
-- [ ] Create User form implemented (email, password, organization role)
-- [ ] Edit User form implemented (organization role, active status)
-- [ ] Deactivate user functionality
-- [ ] User list with role badges
-- [ ] RBAC: admin only visibility
-- [ ] API integration working
+- [x] Users list page created in `frontend/src/pages/UsersPage.tsx`
+- [x] Create User form implemented (email, password, organization role)
+- [x] Edit User form implemented (organization role, active status)
+- [x] Deactivate user functionality
+- [x] User list with role badges
+- [x] RBAC: admin only visibility
+- [x] API integration working
 
 ---
 

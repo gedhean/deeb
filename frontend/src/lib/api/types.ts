@@ -45,6 +45,18 @@ export interface RegisterResponse {
   user: User;
 }
 
+export interface CreateUserRequest {
+  email: string;
+  password: string;
+  organization_role: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
+}
+
+export interface UpdateUserRequest {
+  organization_role?: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
+  is_active?: boolean;
+  two_factor_enabled?: boolean;
+}
+
 // Project Types
 export interface Project {
   id: string;
