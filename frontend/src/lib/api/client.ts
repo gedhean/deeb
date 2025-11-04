@@ -15,7 +15,7 @@ class APIClient {
       headers: {
         'Content-Type': 'application/json',
       },
-      withCredentials: true, // Enable sending cookies with requests
+      withCredentials: true, // Enable sending HttpOnly cookies with requests
     });
 
     this.setupInterceptors();
@@ -27,8 +27,9 @@ class APIClient {
       (response) => response,
       (error: AxiosError) => {
         // Handle 401 Unauthorized - dispatch event for auth context
+        // Backend will clear HttpOnly cookie automatically on logout endpoint
         if (error.response?.status === 401) {
-          // Dispatch custom event for auth context to handle
+          // Dispatch custom event for auth context to handle logout
           window.dispatchEvent(new CustomEvent('auth:unauthorized'));
         }
 
