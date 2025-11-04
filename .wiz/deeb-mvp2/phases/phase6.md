@@ -229,20 +229,20 @@ Implement Database Instances CRUD UI with connection testing (admin only).
 
 ### P06M11: Create Databases management UI
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M11
 
 **Goal**
 Implement Databases CRUD UI with project and environment assignment (admin only).
 
 **Acceptance Criteria**
-- [ ] Databases list page created in `frontend/src/pages/DatabasesPage.tsx`
-- [ ] Create Database form implemented (database_instance, project, environment, database_name)
-- [ ] Project and environment dropdowns populated
-- [ ] Edit Database form implemented
-- [ ] Delete confirmation dialog
-- [ ] RBAC: admin only visibility
-- [ ] API integration working
+- [x] Databases list page created in `frontend/src/pages/DatabasesPage.tsx`
+- [x] Create Database form implemented (database_instance, project, environment, database_name)
+- [x] Project and environment dropdowns populated
+- [x] Edit Database form implemented
+- [x] Delete confirmation dialog
+- [x] RBAC: admin only visibility
+- [x] API integration working
 
 ---
 

@@ -108,23 +108,31 @@ export interface UpdateDatabaseInstanceRequest {
 // Database Types
 export interface Database {
   id: string;
-  name: string;
-  database_instance_id: string;
   project_id: string;
+  database_instance_id: string;
   environment_id: string;
+  database_name: string;
+  description?: string;
+  status: 'Active' | 'Inactive';
   created_at: string;
   updated_at: string;
+  project?: Project;
+  database_instance?: DatabaseInstance;
+  environment?: Environment;
 }
 
 export interface CreateDatabaseRequest {
-  name: string;
-  database_instance_id: string;
   project_id: string;
+  database_instance_id: string;
   environment_id: string;
+  database_name: string;
+  description?: string;
 }
 
 export interface UpdateDatabaseRequest {
-  name?: string;
+  database_name?: string;
+  description?: string;
+  status?: 'Active' | 'Inactive';
 }
 
 // Environment Types
