@@ -94,7 +94,7 @@ const navMainItems = [
       },
       {
         title: 'Instances',
-        url: '/databases/instances',
+        url: '/database-instances',
       },
     ],
   },

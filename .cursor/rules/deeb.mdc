@@ -45,6 +45,10 @@ Refer to [docs/mvp.md](docs/mvp.md) for MVP scope.
 - **Start the Frontend**: `pnpm --dir frontend run dev`
 - **Start the Backend**: `make -C backend run`
 
+### Frontend: Adding new components
+
+- **Add new component**: `npx shadcn@latest add <component-name>` (see: https://ui.shadcn.com/docs/cli#add)
+- **See shadcn/ui reference**: https://ui.shadcn.com/docs/components
 
 ## Development Status
 
