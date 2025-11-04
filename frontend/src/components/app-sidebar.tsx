@@ -13,6 +13,7 @@ import {
   Users,
   Building2,
   FolderKanban,
+  FileEdit,
 } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,6 +51,21 @@ const navMainItems = [
     title: 'Projects',
     url: '/projects',
     icon: FolderKanban,
+  },
+  {
+    title: 'Change Plans',
+    url: '/change-plans',
+    icon: FileEdit,
+    items: [
+      {
+        title: 'All Change Plans',
+        url: '/change-plans',
+      },
+      {
+        title: 'Create Change Plan',
+        url: '/change-plans/create',
+      },
+    ],
   },
   {
     title: 'Approvals',
