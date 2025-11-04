@@ -87,7 +87,45 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 	// Connect to database
 	db, err := sqlx.ConnectContext(ctx, "mysql", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MySQL database: %w", err)
+		// Create structured connection error
+		connErr := NewConnectionError(
+			string(params.DatabaseInstance.DatabaseType),
+			params.Database.DatabaseName,
+			params.Database.ID.String(),
+			params.DatabaseInstance.Name,
+			params.DatabaseInstance.Host,
+			params.DatabaseInstance.Port,
+			params.DatabaseInstance.Username,
+			params.DatabaseInstance.RequireSSL,
+			10*time.Second, // timeout from DSN
+			err,
+		)
+
+		// Log comprehensive error details
+		logFields := []zap.Field{
+			zap.String("database_id", params.Database.ID.String()),
+			zap.String("database_name", params.Database.DatabaseName),
+			zap.String("database_instance_name", params.DatabaseInstance.Name),
+			zap.String("database_type", string(params.DatabaseInstance.DatabaseType)),
+			zap.String("host", params.DatabaseInstance.Host),
+			zap.Int("port", params.DatabaseInstance.Port),
+			zap.String("username", params.DatabaseInstance.Username),
+			zap.Bool("ssl_required", params.DatabaseInstance.RequireSSL),
+			zap.String("error_type", connErr.ErrorType),
+			zap.Error(err),
+		}
+
+		if connErr.ErrorCode != "" {
+			logFields = append(logFields, zap.String("error_code", connErr.ErrorCode))
+		}
+
+		if connErr.StackTrace != "" {
+			logFields = append(logFields, zap.String("stack_trace", connErr.StackTrace))
+		}
+
+		cm.logger.Error("MySQL database connection failed", logFields...)
+
+		return nil, connErr
 	}
 
 	// Configure connection pool with optimized settings for concurrent executions
@@ -117,7 +155,39 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 
 	if err := db.PingContext(testCtx); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("failed to ping MySQL database: %w", err)
+		// Create structured connection error for ping failure
+		connErr := NewConnectionError(
+			string(params.DatabaseInstance.DatabaseType),
+			params.Database.DatabaseName,
+			params.Database.ID.String(),
+			params.DatabaseInstance.Name,
+			params.DatabaseInstance.Host,
+			params.DatabaseInstance.Port,
+			params.DatabaseInstance.Username,
+			params.DatabaseInstance.RequireSSL,
+			5*time.Second, // ping timeout
+			err,
+		)
+
+		// Log comprehensive error details
+		logFields := []zap.Field{
+			zap.String("database_id", params.Database.ID.String()),
+			zap.String("database_name", params.Database.DatabaseName),
+			zap.String("database_instance_name", params.DatabaseInstance.Name),
+			zap.String("database_type", string(params.DatabaseInstance.DatabaseType)),
+			zap.String("host", params.DatabaseInstance.Host),
+			zap.Int("port", params.DatabaseInstance.Port),
+			zap.String("error_type", connErr.ErrorType),
+			zap.Error(err),
+		}
+
+		if connErr.ErrorCode != "" {
+			logFields = append(logFields, zap.String("error_code", connErr.ErrorCode))
+		}
+
+		cm.logger.Error("MySQL database ping failed", logFields...)
+
+		return nil, connErr
 	}
 
 	cm.logger.Info("MySQL database connected successfully",
@@ -193,7 +263,46 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 	// Connect to database
 	db, err := sqlx.ConnectContext(ctx, "postgres", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to PostgreSQL database: %w", err)
+		// Create structured connection error
+		connErr := NewConnectionError(
+			string(params.DatabaseInstance.DatabaseType),
+			params.Database.DatabaseName,
+			params.Database.ID.String(),
+			params.DatabaseInstance.Name,
+			params.DatabaseInstance.Host,
+			params.DatabaseInstance.Port,
+			params.DatabaseInstance.Username,
+			params.DatabaseInstance.RequireSSL,
+			10*time.Second, // reasonable default timeout
+			err,
+		)
+
+		// Log comprehensive error details
+		logFields := []zap.Field{
+			zap.String("database_id", params.Database.ID.String()),
+			zap.String("database_name", params.Database.DatabaseName),
+			zap.String("database_instance_name", params.DatabaseInstance.Name),
+			zap.String("database_type", string(params.DatabaseInstance.DatabaseType)),
+			zap.String("host", params.DatabaseInstance.Host),
+			zap.Int("port", params.DatabaseInstance.Port),
+			zap.String("username", params.DatabaseInstance.Username),
+			zap.Bool("ssl_required", params.DatabaseInstance.RequireSSL),
+			zap.String("ssl_mode", sslMode),
+			zap.String("error_type", connErr.ErrorType),
+			zap.Error(err),
+		}
+
+		if connErr.ErrorCode != "" {
+			logFields = append(logFields, zap.String("error_code", connErr.ErrorCode))
+		}
+
+		if connErr.StackTrace != "" {
+			logFields = append(logFields, zap.String("stack_trace", connErr.StackTrace))
+		}
+
+		cm.logger.Error("PostgreSQL database connection failed", logFields...)
+
+		return nil, connErr
 	}
 
 	// Configure connection pool with optimized settings for concurrent executions
@@ -223,7 +332,39 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 
 	if err := db.PingContext(testCtx); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("failed to ping PostgreSQL database: %w", err)
+		// Create structured connection error for ping failure
+		connErr := NewConnectionError(
+			string(params.DatabaseInstance.DatabaseType),
+			params.Database.DatabaseName,
+			params.Database.ID.String(),
+			params.DatabaseInstance.Name,
+			params.DatabaseInstance.Host,
+			params.DatabaseInstance.Port,
+			params.DatabaseInstance.Username,
+			params.DatabaseInstance.RequireSSL,
+			5*time.Second, // ping timeout
+			err,
+		)
+
+		// Log comprehensive error details
+		logFields := []zap.Field{
+			zap.String("database_id", params.Database.ID.String()),
+			zap.String("database_name", params.Database.DatabaseName),
+			zap.String("database_instance_name", params.DatabaseInstance.Name),
+			zap.String("database_type", string(params.DatabaseInstance.DatabaseType)),
+			zap.String("host", params.DatabaseInstance.Host),
+			zap.Int("port", params.DatabaseInstance.Port),
+			zap.String("error_type", connErr.ErrorType),
+			zap.Error(err),
+		}
+
+		if connErr.ErrorCode != "" {
+			logFields = append(logFields, zap.String("error_code", connErr.ErrorCode))
+		}
+
+		cm.logger.Error("PostgreSQL database ping failed", logFields...)
+
+		return nil, connErr
 	}
 
 	cm.logger.Info("PostgreSQL database connected successfully",
