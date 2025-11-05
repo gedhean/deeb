@@ -518,12 +518,12 @@ Add loading indicators and user feedback throughout the UI.
 Ensure all UI components are responsive and mobile-friendly.
 
 **Acceptance Criteria**
-- [ ] Responsive breakpoints defined
-- [ ] Mobile navigation implemented
-- [ ] Forms optimized for mobile
-- [ ] Tables responsive (scroll or card view on mobile)
-- [ ] Touch-friendly button sizes
-- [ ] Mobile testing completed
+- [x] Responsive breakpoints defined
+- [x] Mobile navigation implemented
+- [x] Forms optimized for mobile
+- [x] Tables responsive (scroll or card view on mobile)
+- [x] Touch-friendly button sizes
+- [x] Mobile testing completed
 
 ---
 
@@ -549,19 +549,19 @@ Create React hooks for API calls with loading and error states.
 
 ### P06M28: Set up frontend routing
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M28
 
 **Goal**
 Configure React Router with all routes and protected route handling.
 
 **Acceptance Criteria**
-- [ ] Routes configured in `frontend/src/App.tsx`
-- [ ] Public routes: /login, /register
-- [ ] Protected routes: /dashboard, /change-plans, /projects, /environments, /policies, etc.
-- [ ] Route guards implemented
-- [ ] Redirect logic working
-- [ ] 404 page implemented
+- [x] Routes configured in `frontend/src/App.tsx`
+- [x] Public routes: /login, /register
+- [x] Protected routes: /dashboard, /change-plans, /projects, /environments, /policies, etc.
+- [x] Route guards implemented
+- [x] Redirect logic working
+- [x] 404 page implemented
 
 ---
 

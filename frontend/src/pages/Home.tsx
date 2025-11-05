@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -11,10 +13,22 @@ import {
 import { Input } from '@/components/ui/input';
 import { ModeToggle } from '@/components/mode-toggle';
 import { Link } from 'react-router-dom';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
 export function Home() {
+  const { isAuthenticated, isLoading } = useAuth();
   const [count, setCount] = useState(0);
   const [name, setName] = useState('');
+
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return <LoadingSpinner fullScreen text="Loading..." />;
+  }
+
+  // Redirect authenticated users to dashboard
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-background p-8">

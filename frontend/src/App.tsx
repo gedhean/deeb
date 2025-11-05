@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ProtectedRoute } from '@/components/protected-route';
+import { PublicRoute } from '@/components/public-route';
 import { SetupCheck } from '@/components/setup-check';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Toaster } from '@/components/ui/sonner';
@@ -31,10 +32,22 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/health" element={<HealthCheckPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              {/* For testing - dashboard without auth */}
-              <Route path="/dash" element={<DashboardPage />} />
+              <Route
+                path="/login"
+                element={
+                  <PublicRoute>
+                    <LoginPage />
+                  </PublicRoute>
+                }
+              />
+              <Route
+                path="/register"
+                element={
+                  <PublicRoute>
+                    <RegisterPage />
+                  </PublicRoute>
+                }
+              />
               <Route
                 path="/dashboard"
                 element={
