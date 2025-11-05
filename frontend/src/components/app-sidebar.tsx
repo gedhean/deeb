@@ -6,7 +6,6 @@ import {
   Database,
   FileCheck,
   CircleCheckBig,
-  GalleryVerticalEnd,
   History,
   LayoutDashboard,
   Settings2,
@@ -26,7 +25,7 @@ import { NavMain } from '@/components/nav-main';
 import { NavOrg } from '@/components/nav-org';
 import { NavProjects } from '@/components/nav-projects';
 import { NavUser } from '@/components/nav-user';
-import { OrgSwitcher } from '@/components/org-switcher';
+import { ProjectSwitcher } from '@/components/project-switcher';
 import {
   Sidebar,
   SidebarContent,
@@ -34,15 +33,8 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar';
+import { useProjects } from '@/hooks/api/useProjects';
 
-// Placeholder orgs data - will be replaced with real data from API in future
-const placeholderOrgs = [
-  {
-    name: 'My Organization',
-    logo: GalleryVerticalEnd,
-    plan: 'Enterprise',
-  },
-];
 
 // Deeb navigation structure
 const navMainItems = [
@@ -148,20 +140,16 @@ const navOrgItems = [
   },
 ];
 
-// Placeholder projects - will be fetched from API in future
-const placeholderProjects = [
-  {
-    name: 'My Projects',
-    url: '/projects',
-    icon: AudioWaveform,
-  },
-];
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user } = useAuth();
+  const { projects } = useProjects();
 
   // Get initials from email for avatar fallback
-  const getInitials = (email: string): string => {
+  const getInitials = (email: string | undefined): string => {
+    if (!email) {
+      return '';
+    }
+
     return email
       .split('@')[0]
       .split('.')
@@ -172,19 +160,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   };
 
   // Format user data for NavUser component
-  const userData = user
-    ? {
-        name: user.email.split('@')[0], // Use email username as name
-        email: user.email,
+  const userData = user ? {
+        name: user?.email.split('@')[0], // Use email username as name
+        email: user?.email,
         avatar: '', // No avatar URL yet
-        initials: getInitials(user.email),
-      }
+        initials: getInitials(user?.email),
+      } 
     : {
-        name: 'Guest',
-        email: 'guest@example.com',
-        avatar: '',
-        initials: 'GU',
-      };
+      name: 'who are you?',
+      email: 'fix@me.pls',
+      avatar: '🔥',
+      initials: '🤔',
+    };
 
   // Filter navigation items based on user role and permissions
   const filteredNavOrgItems = navOrgItems.filter((item) => {
@@ -227,11 +214,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <OrgSwitcher orgs={placeholderOrgs} />
+        <ProjectSwitcher projects={projects} />
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={navMainItems} />
-        <NavProjects projects={placeholderProjects} />
         <NavOrg items={filteredNavOrgItems} />
       </SidebarContent>
       <SidebarFooter>

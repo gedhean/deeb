@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DefaultLayout } from '@/components/layouts';
-import { useCurrentProject, useSetCurrentProject } from '@/store';
 import { changePlanService } from '@/lib/api/services/changePlans';
 import type { ChangePlan } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,39 +8,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { healthService } from '@/lib/api/services/health';
 
 export const DashboardPage: React.FC = () => {
-  const currentProject = useCurrentProject();
-  const setCurrentProject = useSetCurrentProject();
   const [changePlans, setChangePlans] = useState<ChangePlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [systemStatus, setSystemStatus] = useState<'healthy' | 'unhealthy' | 'loading'>('loading');
-
-  // Mock projects data - replace with actual API call
-  const projects = useMemo(
-    () => [
-      {
-        id: '1',
-        name: 'Project Alpha',
-        description: 'Alpha project',
-        created_at: '',
-        updated_at: '',
-      },
-      {
-        id: '2',
-        name: 'Project Beta',
-        description: 'Beta project',
-        created_at: '',
-        updated_at: '',
-      },
-    ],
-    [],
-  );
-
-  // Set default project if none is selected
-  useEffect(() => {
-    if (!currentProject && projects.length > 0) {
-      setCurrentProject(projects[0]);
-    }
-  }, [currentProject, setCurrentProject, projects]);
 
   // Fetch change plans and system status
   useEffect(() => {
@@ -124,7 +93,7 @@ export const DashboardPage: React.FC = () => {
   };
 
   return (
-    <DefaultLayout projects={projects} breadcrumbs={[]}>
+    <DefaultLayout breadcrumbs={[{ label: 'Dashboard', isCurrentPage: true }]}>
       <div className="space-y-6">
         {/* Overview Cards */}
         <div className="grid gap-4 md:grid-cols-3">
@@ -272,7 +241,7 @@ export const DashboardPage: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      <div className="ml-4 flex-shrink-0">
+                      <div className="ml-4 shrink-0">
                         <Button size="sm" variant="outline">
                           Review
                         </Button>
