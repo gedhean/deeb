@@ -309,6 +309,30 @@ export interface ApprovalHistoryResponse {
   approvals: Approval[];
 }
 
+export interface ExecutionLog {
+  id: string;
+  change_plan_id: string;
+  executor_id: string;
+  status: 'Completed' | 'Failed';
+  execution_duration_ms: number;
+  rows_affected?: number;
+  error_message?: string;
+  sql_content?: string;
+  database_id?: string;
+  database_name?: string;
+  database_instance_name?: string;
+  database_type?: string;
+  started_at: string;
+  completed_at: string;
+  created_at: string;
+}
+
+export interface ExecutionLogHistoryResponse {
+  change_plan_id: string;
+  total: number;
+  logs: ExecutionLog[];
+}
+
 // API Error
 export class APIError extends Error {
   constructor(

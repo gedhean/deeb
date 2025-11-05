@@ -7,6 +7,7 @@ import type {
   ApproveChangePlanRequest,
   CloseChangePlanRequest,
   ApprovalHistoryResponse,
+  ExecutionLogHistoryResponse,
 } from '../types';
 
 export const changePlanService = {
@@ -94,5 +95,15 @@ export const changePlanService = {
    */
   async executeChangePlan(id: string): Promise<void> {
     await apiClient.post(`/api/v1/change-plans/${id}/execute`, {});
+  },
+
+  /**
+   * Get execution log history for a change plan
+   */
+  async getExecutionLogHistory(id: string): Promise<ExecutionLogHistoryResponse> {
+    const response = await apiClient.get<ExecutionLogHistoryResponse>(
+      `/api/v1/change-plans/${id}/execution-logs`,
+    );
+    return response;
   },
 };

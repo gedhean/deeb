@@ -15,6 +15,7 @@ import { SQLReviewResults } from '@/components/SQLReviewResults';
 import { ApprovalActions } from '@/components/ApprovalActions';
 import { ApprovalHistory } from '@/components/ApprovalHistory';
 import { ExecuteButton } from '@/components/ExecuteButton';
+import { ExecutionResults } from '@/components/ExecutionResults';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -399,6 +400,9 @@ export const ChangePlanDetailPage: React.FC = () => {
 
         {/* Approval History */}
         <ApprovalHistory changePlanId={changePlan.id} />
+
+        {/* Execution Results */}
+        <ExecutionResults changePlan={changePlan} />
 
         {/* SQL Content */}
         <Card>

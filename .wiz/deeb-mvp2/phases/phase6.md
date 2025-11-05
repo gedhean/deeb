@@ -417,21 +417,21 @@ Create UI for triggering Change Plan execution with confirmation dialog.
 
 ### P06M21: Implement execution results display
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M21
 
 **Goal**
 Create component displaying execution results and run log history.
 
 **Acceptance Criteria**
-- [ ] Execution results component created in `frontend/src/components/ExecutionResults.tsx`
-- [ ] Execution status displayed (Completed/Failed)
-- [ ] Execution duration displayed
-- [ ] Rows affected displayed
-- [ ] Error messages displayed for failures
-- [ ] Run log history displayed
-- [ ] Integrated into Change Plan detail page
-- [ ] API integration working
+- [x] Execution results component created in `frontend/src/components/ExecutionResults.tsx`
+- [x] Execution status displayed (Completed/Failed)
+- [x] Execution duration displayed
+- [x] Rows affected displayed
+- [x] Error messages displayed for failures
+- [x] Run log history displayed
+- [x] Integrated into Change Plan detail page
+- [x] API integration working
 
 ---
 
