@@ -346,92 +346,98 @@ export const ChangePlanDetailPage: React.FC = () => {
                 <Badge variant="outline">{changePlan.risk_level}</Badge>
               </div>
 
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <DatabaseIcon className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-sm font-medium">Database</p>
-                    <p className="text-sm text-muted-foreground">
-                      {database?.database_name || changePlan.target_database_id}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <FileCode className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-sm font-medium">Project</p>
-                    <p className="text-sm text-muted-foreground">
-                      {project?.name || changePlan.project_id}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <UserIcon className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-sm font-medium">Author</p>
-                    <p className="text-sm text-muted-foreground">
-                      {author?.email || changePlan.author_id}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-sm font-medium">Created</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDate(changePlan.created_at)}
-                    </p>
-                  </div>
-                </div>
-
-                {changePlan.updated_at !== changePlan.created_at && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Column: Database, Project, Author */}
+                <div className="space-y-3">
                   <div className="flex items-start gap-3">
-                    <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
+                    <DatabaseIcon className="h-4 w-4 text-muted-foreground mt-1" />
                     <div>
-                      <p className="text-sm font-medium">Last Updated</p>
+                      <p className="text-sm font-medium">Database</p>
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(changePlan.updated_at)}
+                        {database?.database_name || changePlan.target_database_id}
                       </p>
                     </div>
                   </div>
-                )}
 
-                {changePlan.scheduled_for && (
                   <div className="flex items-start gap-3">
-                    <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
+                    <FileCode className="h-4 w-4 text-muted-foreground mt-1" />
                     <div>
-                      <p className="text-sm font-medium">Scheduled For</p>
+                      <p className="text-sm font-medium">Project</p>
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(changePlan.scheduled_for)}
+                        {project?.name || changePlan.project_id}
                       </p>
                     </div>
                   </div>
-                )}
 
-                {changePlan.executed_at && (
+                  <div className="flex items-start gap-3">
+                    <UserIcon className="h-4 w-4 text-muted-foreground mt-1" />
+                    <div>
+                      <p className="text-sm font-medium">Author</p>
+                      <p className="text-sm text-muted-foreground">
+                        {author?.email || changePlan.author_id}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Timestamps */}
+                <div className="space-y-3">
                   <div className="flex items-start gap-3">
                     <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
                     <div>
-                      <p className="text-sm font-medium">Executed At</p>
+                      <p className="text-sm font-medium">Created</p>
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(changePlan.executed_at)}
+                        {formatDate(changePlan.created_at)}
                       </p>
-                      {changePlan.execution_duration_ms && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Duration: {changePlan.execution_duration_ms}ms
+                    </div>
+                  </div>
+
+                  {changePlan.updated_at !== changePlan.created_at && (
+                    <div className="flex items-start gap-3">
+                      <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
+                      <div>
+                        <p className="text-sm font-medium">Last Updated</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(changePlan.updated_at)}
                         </p>
-                      )}
-                      {changePlan.affected_rows !== undefined && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Affected rows: {changePlan.affected_rows}
-                        </p>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+
+                  {changePlan.scheduled_for && (
+                    <div className="flex items-start gap-3">
+                      <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
+                      <div>
+                        <p className="text-sm font-medium">Scheduled For</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(changePlan.scheduled_for)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {changePlan.executed_at && (
+                    <div className="flex items-start gap-3">
+                      <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
+                      <div>
+                        <p className="text-sm font-medium">Executed At</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(changePlan.executed_at)}
+                        </p>
+                        {changePlan.execution_duration_ms && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Duration: {changePlan.execution_duration_ms}ms
+                          </p>
+                        )}
+                        {changePlan.affected_rows !== undefined && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Affected rows: {changePlan.affected_rows}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
