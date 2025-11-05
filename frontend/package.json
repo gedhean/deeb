@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx",
     "lint-fix": "eslint . --ext .ts,.tsx --fix",
-    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "devDependencies": {
     "@eslint/compat": "^1.4.0",
@@ -18,12 +21,17 @@
     "@eslint/json": "^0.13.2",
     "@tailwindcss/postcss": "^4.1.15",
     "@tailwindcss/vite": "^4.1.15",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.9.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
     "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/coverage-v8": "^4.0.7",
+    "@vitest/ui": "^4.0.7",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.38.0",
     "eslint-config-prettier": "^10.1.8",
@@ -34,6 +42,7 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.4.0",
     "husky": "^9.1.7",
+    "jsdom": "^27.1.0",
     "lint-staged": "^16.2.6",
     "postcss": "^8.5.6",
     "prettier": "^3.6.2",
@@ -41,7 +50,8 @@
     "tailwindcss": "^4.1.15",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.2",
-    "vite": "^7.1.7"
+    "vite": "^7.1.7",
+    "vitest": "^4.0.7"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",

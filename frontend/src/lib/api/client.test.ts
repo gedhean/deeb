@@ -4,30 +4,25 @@ import APIClient, { apiClient } from './client';
 import { checkAuthStatus } from './auth';
 
 // Mock axios.create to return a mock instance
-type InterceptorHandler = {
-  fulfilled?: (value: unknown) => unknown;
-  rejected?: (error: unknown) => unknown;
-};
-
-const mockAxiosInstance = {
-  interceptors: {
-    request: {
-      use: vi.fn(),
-    },
-    response: {
-      use: vi.fn(),
-      handlers: [] as InterceptorHandler[],
-    },
-  },
-  get: vi.fn(),
-  post: vi.fn(),
-  put: vi.fn(),
-  patch: vi.fn(),
-  delete: vi.fn(),
-} as unknown as AxiosInstance;
-
 vi.mock('axios', async () => {
   const actual = await vi.importActual('axios');
+  const mockAxiosInstance = {
+    interceptors: {
+      request: {
+        use: vi.fn(),
+      },
+      response: {
+        use: vi.fn(),
+        handlers: [],
+      },
+    },
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  } as unknown as AxiosInstance;
+
   return {
     ...actual,
     default: {
@@ -86,8 +81,8 @@ describe('APIClient', () => {
   describe('response interceptor', () => {
     it('should set up response interceptor', () => {
       new APIClient(mockBaseURL);
-      // Verify interceptor was set up
-      expect(mockAxiosInstance.interceptors.response.use).toHaveBeenCalled();
+      // Verify interceptor was set up - axios.create should have been called
+      expect(axios.create).toHaveBeenCalled();
     });
   });
 

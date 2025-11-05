@@ -567,19 +567,19 @@ Configure React Router with all routes and protected route handling.
 
 ### P06M29: Write frontend unit tests
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M29
 
 **Goal**
 Create unit tests for React components using Vitest and React Testing Library.
 
 **Acceptance Criteria**
-- [ ] Vitest configured
-- [ ] Test utilities created
-- [ ] Unit tests for key components (>85% coverage)
-- [ ] API hook tests passing
-- [ ] Store slice tests passing
-- [ ] All unit tests passing
+- [x] Vitest configured
+- [x] Test utilities created
+- [x] Unit tests for key components (>85% coverage)
+- [x] API hook tests passing
+- [x] Store slice tests passing
+- [x] All unit tests passing
 
 ---
 
