@@ -333,58 +333,62 @@ export const ProjectsPage: React.FC = () => {
         ) : (
           <Card>
             <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {projects.map((project) => (
-                    <TableRow key={project.id}>
-                      <TableCell className="font-medium">{project.name}</TableCell>
-                      <TableCell className="max-w-md">
-                        <span className="line-clamp-2 text-muted-foreground">
-                          {project.description}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(project.created_at)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditForm(project)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openDeleteConfirmation(project)}
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto -mx-6 px-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {projects.map((project) => (
+                      <TableRow key={project.id}>
+                        <TableCell className="font-medium">{project.name}</TableCell>
+                        <TableCell className="max-w-md">
+                          <span className="line-clamp-2 text-muted-foreground">
+                            {project.description}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDate(project.created_at)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditForm(project)}
+                              className="h-11 w-11 p-0 touch-manipulation"
+                              aria-label="Edit project"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDeleteConfirmation(project)}
+                              className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
+                              aria-label="Delete project"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         )}
 
         {/* Create Project Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent>
+          <SheetContent className="w-full sm:w-[540px] overflow-y-auto">
             <SheetHeader>
               <SheetTitle>Create Project</SheetTitle>
               <SheetDescription>
@@ -435,7 +439,7 @@ export const ProjectsPage: React.FC = () => {
 
         {/* Edit Project Sheet */}
         <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <SheetContent>
+          <SheetContent className="w-full sm:w-[540px] overflow-y-auto">
             <SheetHeader>
               <SheetTitle>Edit Project</SheetTitle>
               <SheetDescription>Update project information.</SheetDescription>
@@ -484,7 +488,7 @@ export const ProjectsPage: React.FC = () => {
 
         {/* Delete Confirmation Sheet */}
         <Sheet open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-          <SheetContent>
+          <SheetContent className="w-full sm:w-[540px]">
             <SheetHeader>
               <SheetTitle>Delete Project</SheetTitle>
               <SheetDescription>

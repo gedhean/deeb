@@ -524,66 +524,70 @@ export const DatabaseInstancesPage: React.FC = () => {
         ) : (
           <Card>
             <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Host</TableHead>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {instances.map((instance) => (
-                    <TableRow key={instance.id}>
-                      <TableCell className="font-medium">{instance.name}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {instance.database_type}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {instance.host}:{instance.port}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{instance.username}</TableCell>
-                      <TableCell>
-                        <span className={getStatusColor(instance.status)}>{instance.status}</span>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(instance.created_at)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditForm(instance)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openDeleteConfirmation(instance)}
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto -mx-6 px-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Host</TableHead>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {instances.map((instance) => (
+                      <TableRow key={instance.id}>
+                        <TableCell className="font-medium">{instance.name}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {instance.database_type}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {instance.host}:{instance.port}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{instance.username}</TableCell>
+                        <TableCell>
+                          <span className={getStatusColor(instance.status)}>{instance.status}</span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDate(instance.created_at)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditForm(instance)}
+                              className="h-11 w-11 p-0 touch-manipulation"
+                              aria-label="Edit instance"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDeleteConfirmation(instance)}
+                              className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
+                              aria-label="Delete instance"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         )}
 
         {/* Create Instance Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className="overflow-y-auto max-h-[90vh]">
+          <SheetContent className="w-full sm:w-[540px] overflow-y-auto max-h-[90vh]">
             <SheetHeader>
               <SheetTitle>Create Database Instance</SheetTitle>
               <SheetDescription>

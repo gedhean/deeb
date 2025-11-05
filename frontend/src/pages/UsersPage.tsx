@@ -375,66 +375,70 @@ export const UsersPage: React.FC = () => {
         ) : (
           <Card>
             <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Last Login</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={getRoleBadgeVariant(user.organization_role)}>
-                          {formatRoleName(user.organization_role)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.is_active ? 'default' : 'secondary'}>
-                          {user.is_active ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {user.last_login_at ? formatDate(user.last_login_at) : 'Never'}
-                      </TableCell>
-                      <TableCell>{formatDate(user.created_at)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditForm(user)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openDeleteConfirmation(user)}
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto -mx-6 px-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last Login</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-medium">{user.email}</TableCell>
+                        <TableCell>
+                          <Badge variant={getRoleBadgeVariant(user.organization_role)}>
+                            {formatRoleName(user.organization_role)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={user.is_active ? 'default' : 'secondary'}>
+                            {user.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {user.last_login_at ? formatDate(user.last_login_at) : 'Never'}
+                        </TableCell>
+                        <TableCell>{formatDate(user.created_at)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditForm(user)}
+                              className="h-11 w-11 p-0 touch-manipulation"
+                              aria-label="Edit user"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDeleteConfirmation(user)}
+                              className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
+                              aria-label="Delete user"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         )}
 
         {/* Create User Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className="w-[400px] sm:w-[540px]">
+          <SheetContent className="w-full sm:w-[540px] overflow-y-auto">
             <SheetHeader>
               <SheetTitle>Create User</SheetTitle>
               <SheetDescription>
@@ -513,7 +517,7 @@ export const UsersPage: React.FC = () => {
 
         {/* Edit User Sheet */}
         <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <SheetContent>
+          <SheetContent className="w-full sm:w-[540px] overflow-y-auto">
             <SheetHeader>
               <SheetTitle>Edit User</SheetTitle>
               <SheetDescription>Update user organization role and active status.</SheetDescription>
@@ -592,7 +596,7 @@ export const UsersPage: React.FC = () => {
 
         {/* Delete Confirmation Sheet */}
         <Sheet open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-          <SheetContent>
+          <SheetContent className="w-full sm:w-[540px]">
             <SheetHeader>
               <SheetTitle>Deactivate User</SheetTitle>
               <SheetDescription>
