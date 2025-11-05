@@ -58,19 +58,19 @@
     color: hsl(var(--foreground));
     font-family: var(--font-sans);
   }
-  
+
   /* Touch-friendly interactions */
   button,
   a,
-  [role="button"] {
+  [role='button'] {
     touch-action: manipulation;
   }
-  
+
   /* Ensure minimum touch target size on mobile */
   @media (max-width: 767px) {
     button:not(.no-touch-target),
     a:not(.no-touch-target),
-    [role="button"]:not(.no-touch-target) {
+    [role='button']:not(.no-touch-target) {
       min-height: 44px;
       min-width: 44px;
     }

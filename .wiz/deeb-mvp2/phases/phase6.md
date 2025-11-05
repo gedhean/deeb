@@ -654,18 +654,18 @@ Create E2E tests verifying RBAC enforcement at UI level.
 
 ### P06M34: Run linting and fix issues
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M34
 
 **Goal**
 Run ESLint and fix all linting issues across the frontend codebase.
 
 **Acceptance Criteria**
-- [ ] ESLint configured correctly
-- [ ] All linting errors fixed
-- [ ] All linting warnings addressed
-- [ ] Code formatted with Prettier
-- [ ] Linting CI check passing
+- [x] ESLint configured correctly
+- [x] All linting errors fixed
+- [x] All linting warnings addressed
+- [x] Code formatted with Prettier
+- [x] Linting CI check passing
 
 ---
 
