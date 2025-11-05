@@ -343,19 +343,19 @@ Create component displaying SQL Review results with severity indicators (Error, 
 
 ### P06M17: Integrate SQL Review results into Change Plan detail
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M17
 
 **Goal**
 Integrate SQL Review results component into Change Plan detail page.
 
 **Acceptance Criteria**
-- [ ] SQL Review results displayed in Change Plan detail page
-- [ ] Results shown in dedicated section
-- [ ] Error blocking indication displayed
-- [ ] Manual review trigger working
-- [ ] Review results updated after manual trigger
-- [ ] Loading states implemented
+- [x] SQL Review results displayed in Change Plan detail page
+- [x] Results shown in dedicated section
+- [x] Error blocking indication displayed
+- [x] Manual review trigger working
+- [x] Review results updated after manual trigger
+- [x] Loading states implemented
 
 ---
 

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { SQLReviewResults } from '@/components/SQLReviewResults';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -359,6 +360,35 @@ export const ChangePlanDetailPage: React.FC = () => {
             </Card>
           )}
         </div>
+
+        {/* Error blocking indication */}
+        {changePlan.has_errors && changePlan.policy_findings && (
+          <Card className="border-destructive">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+                SQL Review Errors Block Progression
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                This change plan has SQL Review errors that must be resolved before it can be
+                approved or executed. Please review the errors below and update the SQL content.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* SQL Review Results */}
+        <SQLReviewResults
+          changePlanId={changePlan.id}
+          findings={changePlan.policy_findings}
+          onRefresh={() => {
+            if (id) {
+              loadChangePlan(id);
+            }
+          }}
+        />
 
         {/* SQL Content */}
         <Card>
