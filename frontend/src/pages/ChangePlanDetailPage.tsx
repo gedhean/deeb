@@ -37,6 +37,7 @@ import {
   Edit,
   Loader2,
 } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 export const ChangePlanDetailPage: React.FC = () => {
   const navigate = useNavigate();
@@ -424,16 +425,19 @@ export const ChangePlanDetailPage: React.FC = () => {
                         <p className="text-sm text-muted-foreground">
                           {formatDate(changePlan.executed_at)}
                         </p>
-                        {changePlan.execution_duration_ms && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Duration: {changePlan.execution_duration_ms}ms
-                          </p>
-                        )}
-                        {changePlan.affected_rows !== undefined && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Affected rows: {changePlan.affected_rows}
-                          </p>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {changePlan.execution_duration_ms && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Duration: {changePlan.execution_duration_ms}ms
+                            </p>
+                          )}
+                          {<span className="text-muted-foreground">&bull;</span>}
+                          {changePlan.affected_rows !== undefined && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Affected rows: {changePlan.affected_rows}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -582,11 +586,7 @@ export const ChangePlanDetailPage: React.FC = () => {
             </div>
 
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={handleCloseEditDialog}
-                disabled={isUpdatingSQL}
-              >
+              <Button variant="outline" onClick={handleCloseEditDialog} disabled={isUpdatingSQL}>
                 Cancel
               </Button>
               <Button onClick={handleSaveSQLContent} disabled={isUpdatingSQL}>
