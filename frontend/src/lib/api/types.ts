@@ -294,6 +294,16 @@ export interface CloseChangePlanRequest {
   comments?: string;
 }
 
+export interface UpdateChangePlanRequest {
+  title?: string;
+  description?: string;
+  sql_content?: string;
+  rollback_sql?: string;
+  status?: ChangePlanStatus;
+  risk_level?: RiskLevel;
+  assigned_reviewer_id?: string;
+}
+
 export interface Approval {
   id: string;
   change_plan_id: string;

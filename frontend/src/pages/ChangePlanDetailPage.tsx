@@ -16,6 +16,7 @@ import { ApprovalActions } from '@/components/ApprovalActions';
 import { ApprovalHistory } from '@/components/ApprovalHistory';
 import { ExecuteButton } from '@/components/ExecuteButton';
 import { ExecutionResults } from '@/components/ExecutionResults';
+import { SubmitForReview } from '@/components/SubmitForReview';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -234,6 +235,7 @@ export const ChangePlanDetailPage: React.FC = () => {
             >
               {changePlan.status}
             </Badge>
+            <SubmitForReview changePlan={changePlan} onSuccess={() => loadChangePlan(id!)} />
             <ApprovalActions changePlan={changePlan} onSuccess={() => loadChangePlan(id!)} />
             <ExecuteButton changePlan={changePlan} onSuccess={() => loadChangePlan(id!)} />
           </div>

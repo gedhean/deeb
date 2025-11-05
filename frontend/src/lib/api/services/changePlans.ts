@@ -3,6 +3,7 @@ import type {
   ChangePlan,
   ChangePlanListResponse,
   CreateChangePlanRequest,
+  UpdateChangePlanRequest,
   ListChangePlansParams,
   ApproveChangePlanRequest,
   CloseChangePlanRequest,
@@ -104,6 +105,14 @@ export const changePlanService = {
     const response = await apiClient.get<ExecutionLogHistoryResponse>(
       `/api/v1/change-plans/${id}/execution-logs`,
     );
+    return response;
+  },
+
+  /**
+   * Update a change plan
+   */
+  async updateChangePlan(id: string, data: UpdateChangePlanRequest): Promise<ChangePlan> {
+    const response = await apiClient.put<ChangePlan>(`/api/v1/change-plans/${id}`, data);
     return response;
   },
 };
