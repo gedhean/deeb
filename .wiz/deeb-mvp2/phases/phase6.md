@@ -602,7 +602,7 @@ Configure Playwright for end-to-end testing and create test utilities.
 
 ### P06M31: Write E2E test for Create → Approve → Execute workflow
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M31
 
 **Goal**

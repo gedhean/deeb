@@ -8,5 +8,5 @@
  * - Common assertions
  */
 
-export * from './utils/helpers';
-export * from './utils/mocks';
+export * from './helpers';
+export * from './mocks';
