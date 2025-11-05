@@ -294,6 +294,21 @@ export interface CloseChangePlanRequest {
   comments?: string;
 }
 
+export interface Approval {
+  id: string;
+  change_plan_id: string;
+  approver_id: string;
+  status: 'Approved' | 'Rejected';
+  comments?: string;
+  approved_at?: string;
+  created_at: string;
+}
+
+export interface ApprovalHistoryResponse {
+  change_plan_id: string;
+  approvals: Approval[];
+}
+
 // API Error
 export class APIError extends Error {
   constructor(

@@ -380,19 +380,19 @@ Create UI components for approving or closing Change Plans with comments.
 
 ### P06M19: Implement approval history display
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M19
 
 **Goal**
 Create component displaying approval history for a Change Plan.
 
 **Acceptance Criteria**
-- [ ] Approval history component created in `frontend/src/components/ApprovalHistory.tsx`
-- [ ] Approval history list displayed
-- [ ] Each entry shows: approver, action (approve/close), comment, timestamp
-- [ ] History ordered by timestamp (newest first)
-- [ ] Integrated into Change Plan detail page
-- [ ] API integration working
+- [x] Approval history component created in `frontend/src/components/ApprovalHistory.tsx`
+- [x] Approval history list displayed
+- [x] Each entry shows: approver, action (approve/close), comment, timestamp
+- [x] History ordered by timestamp (newest first)
+- [x] Integrated into Change Plan detail page
+- [x] API integration working
 
 ---
 

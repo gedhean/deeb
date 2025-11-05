@@ -6,6 +6,7 @@ import type {
   ListChangePlansParams,
   ApproveChangePlanRequest,
   CloseChangePlanRequest,
+  ApprovalHistoryResponse,
 } from '../types';
 
 export const changePlanService = {
@@ -76,5 +77,15 @@ export const changePlanService = {
    */
   async closeChangePlan(id: string, data?: CloseChangePlanRequest): Promise<void> {
     await apiClient.post(`/api/v1/change-plans/${id}/close`, data || {});
+  },
+
+  /**
+   * Get approval history for a change plan
+   */
+  async getApprovalHistory(id: string): Promise<ApprovalHistoryResponse> {
+    const response = await apiClient.get<ApprovalHistoryResponse>(
+      `/api/v1/change-plans/${id}/approvals`,
+    );
+    return response;
   },
 };

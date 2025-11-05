@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { SQLReviewResults } from '@/components/SQLReviewResults';
 import { ApprovalActions } from '@/components/ApprovalActions';
+import { ApprovalHistory } from '@/components/ApprovalHistory';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -393,6 +394,9 @@ export const ChangePlanDetailPage: React.FC = () => {
             }
           }}
         />
+
+        {/* Approval History */}
+        <ApprovalHistory changePlanId={changePlan.id} />
 
         {/* SQL Content */}
         <Card>
