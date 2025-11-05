@@ -637,18 +637,18 @@ Create E2E tests for login, registration, and logout flows.
 
 ### P06M33: Write E2E tests for RBAC enforcement
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M33
 
 **Goal**
 Create E2E tests verifying RBAC enforcement at UI level.
 
 **Acceptance Criteria**
-- [ ] E2E test for admin-only features passing
-- [ ] E2E test for Project Developer features passing
-- [ ] E2E test for Project Approver features passing
-- [ ] E2E test for unauthorized access blocked
-- [ ] All RBAC E2E tests passing
+- [x] E2E test for admin-only features passing
+- [x] E2E test for Project Developer features passing
+- [x] E2E test for Project Approver features passing
+- [x] E2E test for unauthorized access blocked
+- [x] All RBAC E2E tests passing
 
 ---
 
