@@ -26,6 +26,7 @@ func TestCanTransition(t *testing.T) {
 		{"InProgress to Completed", models.ChangePlanStatusInProgress, models.ChangePlanStatusCompleted, true},
 		{"InProgress to Failed", models.ChangePlanStatusInProgress, models.ChangePlanStatusFailed, true},
 		{"Failed to Approved", models.ChangePlanStatusFailed, models.ChangePlanStatusApproved, true},
+		{"Failed to Closed", models.ChangePlanStatusFailed, models.ChangePlanStatusClosed, true},
 		{"Same status", models.ChangePlanStatusDraft, models.ChangePlanStatusDraft, true},
 
 		// Invalid transitions
@@ -90,7 +91,7 @@ func TestGetValidTransitions(t *testing.T) {
 		{"Approved", models.ChangePlanStatusApproved, 3},
 		{"InProgress", models.ChangePlanStatusInProgress, 2},
 		{"Completed", models.ChangePlanStatusCompleted, 0},
-		{"Failed", models.ChangePlanStatusFailed, 1},
+		{"Failed", models.ChangePlanStatusFailed, 2},
 		{"Closed", models.ChangePlanStatusClosed, 0},
 		{"Cancelled", models.ChangePlanStatusCancelled, 0},
 	}
@@ -667,6 +668,7 @@ func TestValidateTransition_AllValidTransitions(t *testing.T) {
 		{"InProgress to Completed", models.ChangePlanStatusInProgress, models.ChangePlanStatusCompleted},
 		{"InProgress to Failed", models.ChangePlanStatusInProgress, models.ChangePlanStatusFailed},
 		{"Failed to Approved", models.ChangePlanStatusFailed, models.ChangePlanStatusApproved},
+		{"Failed to Closed", models.ChangePlanStatusFailed, models.ChangePlanStatusClosed},
 	}
 
 	for _, tt := range validTransitionTests {

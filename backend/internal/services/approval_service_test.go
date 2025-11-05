@@ -54,7 +54,10 @@ func (m *MockApprovalRepository) DeleteByChangePlanID(ctx context.Context, chang
 	return args.Error(0)
 }
 
-func (m *MockApprovalRepository) GetByChangePlanIDAndApproverID(ctx context.Context, changePlanID, approverID uuid.UUID) (*models.Approval, error) {
+func (m *MockApprovalRepository) GetByChangePlanIDAndApproverID(
+	ctx context.Context,
+	changePlanID, approverID uuid.UUID,
+) (*models.Approval, error) {
 	args := m.Called(ctx, changePlanID, approverID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -274,7 +277,8 @@ func TestApprovalService_Approve(t *testing.T) {
 
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return([]*models.PolicyFinding{}, nil)
-		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).
+			Return(nil, repository.ErrNotFound)
 		mockApprovalRepo.On("Create", ctxWithUser, mock.AnythingOfType("*models.Approval")).Return(nil)
 		mockChangePlanRepo.On("Update", ctxWithUser, mock.MatchedBy(func(cp *models.ChangePlan) bool {
 			return cp.ID == changePlanID && cp.Status == models.ChangePlanStatusApproved
@@ -327,7 +331,8 @@ func TestApprovalService_Approve(t *testing.T) {
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockProjectMemberRepo.On("GetMemberRole", ctxWithUser, projectID, approverID).Return(projectMember, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return([]*models.PolicyFinding{}, nil)
-		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).
+			Return(nil, repository.ErrNotFound)
 		mockApprovalRepo.On("Create", ctxWithUser, mock.AnythingOfType("*models.Approval")).Return(nil)
 		mockChangePlanRepo.On("Update", ctxWithUser, mock.MatchedBy(func(cp *models.ChangePlan) bool {
 			return cp.ID == changePlanID && cp.Status == models.ChangePlanStatusApproved
@@ -488,7 +493,8 @@ func TestApprovalService_Approve(t *testing.T) {
 
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return(errorFindings, nil)
-		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).
+			Return(nil, repository.ErrNotFound)
 
 		service := NewApprovalService(
 			mockApprovalRepo,
@@ -539,7 +545,8 @@ func TestApprovalService_Approve(t *testing.T) {
 
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return(warningFindings, nil)
-		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).
+			Return(nil, repository.ErrNotFound)
 		mockApprovalRepo.On("Create", ctxWithUser, mock.AnythingOfType("*models.Approval")).Return(nil)
 		mockChangePlanRepo.On("Update", ctxWithUser, mock.MatchedBy(func(cp *models.ChangePlan) bool {
 			return cp.ID == changePlanID && cp.Status == models.ChangePlanStatusApproved
@@ -675,6 +682,51 @@ func TestApprovalService_Close(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "already closed")
+		mockChangePlanRepo.AssertExpectations(t)
+	})
+
+	t.Run("successful close with Failed status", func(t *testing.T) {
+		changePlanID := uuid.New()
+		approverID := uuid.New()
+		projectID := uuid.New()
+		comments := "Closing failed change plan"
+
+		mockApprovalRepo := new(MockApprovalRepository)
+		mockChangePlanRepo := new(MockChangePlanRepository)
+		mockPolicyFindingRepo := new(MockPolicyFindingRepository)
+		mockProjectMemberRepo := new(MockProjectMemberRepository)
+		rbacChecker := rbac.NewCheckerService()
+
+		changePlan := &models.ChangePlan{
+			ID:        changePlanID,
+			ProjectID: projectID,
+			Status:    models.ChangePlanStatusFailed,
+			UpdatedAt: time.Now(),
+		}
+
+		ctxWithUser := createContextWithUser(approverID, rbac.OrganizationAdmin)
+
+		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
+		mockApprovalRepo.On("Create", ctxWithUser, mock.MatchedBy(func(a *models.Approval) bool {
+			return a.ChangePlanID == changePlanID && a.Status == models.ApprovalStatusRejected
+		})).Return(nil)
+		mockChangePlanRepo.On("Update", ctxWithUser, mock.MatchedBy(func(cp *models.ChangePlan) bool {
+			return cp.ID == changePlanID && cp.Status == models.ChangePlanStatusClosed
+		})).Return(nil)
+
+		service := NewApprovalService(
+			mockApprovalRepo,
+			mockChangePlanRepo,
+			mockPolicyFindingRepo,
+			mockProjectMemberRepo,
+			rbacChecker,
+			logger,
+		)
+
+		err := service.Close(ctxWithUser, changePlanID, approverID, &comments)
+
+		assert.NoError(t, err)
+		mockApprovalRepo.AssertExpectations(t)
 		mockChangePlanRepo.AssertExpectations(t)
 	})
 
@@ -964,7 +1016,8 @@ func TestApprovalService_ErrorHandling(t *testing.T) {
 
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return([]*models.PolicyFinding{}, nil)
-		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).
+			Return(nil, repository.ErrNotFound)
 		mockApprovalRepo.On("Create", ctxWithUser, mock.AnythingOfType("*models.Approval")).Return(errors.New("database error"))
 
 		service := NewApprovalService(

@@ -178,8 +178,8 @@ func (s *ApprovalService) Close(ctx context.Context, changePlanID uuid.UUID, app
 		return fmt.Errorf("failed to get change plan: %w", err)
 	}
 
-	// Verify Change Plan is in Open status
-	if changePlan.Status != models.ChangePlanStatusOpen {
+	// Verify Change Plan is in Open or Failed status
+	if changePlan.Status != models.ChangePlanStatusOpen && changePlan.Status != models.ChangePlanStatusFailed {
 		if changePlan.Status == models.ChangePlanStatusApproved {
 			return ErrChangePlanAlreadyApproved
 		}

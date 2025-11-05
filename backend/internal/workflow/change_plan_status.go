@@ -94,6 +94,7 @@ func (e ErrInvalidStatusTransition) Details() map[string]interface{} {
 // InProgress → Completed
 // InProgress → Failed
 // Failed → Approved (allows re-execution after transient failures)
+// Failed → Closed (allows closing failed change plans)
 
 // validTransitions defines the allowed status transitions
 var validTransitions = map[models.ChangePlanStatus][]models.ChangePlanStatus{
@@ -120,6 +121,7 @@ var validTransitions = map[models.ChangePlanStatus][]models.ChangePlanStatus{
 	},
 	models.ChangePlanStatusFailed: {
 		models.ChangePlanStatusApproved, // Allow re-execution after transient failures
+		models.ChangePlanStatusClosed,   // Allow closing failed change plans
 	},
 	models.ChangePlanStatusClosed: {
 		// Terminal state - no transitions allowed
