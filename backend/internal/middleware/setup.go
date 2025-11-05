@@ -35,9 +35,15 @@ func Setup(e *echo.Echo, cfg *config.Config, auditService *services.AuditLogServ
 
 	// CORS middleware - configure cross-origin requests
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     cfg.Server.CORSOrigins,
-		AllowMethods:     []string{echo.GET, echo.POST, echo.PUT, echo.DELETE, echo.PATCH, echo.OPTIONS},
-		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, echo.HeaderXRequestID},
+		AllowOrigins: cfg.Server.CORSOrigins,
+		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE, echo.PATCH, echo.OPTIONS},
+		AllowHeaders: []string{
+			echo.HeaderOrigin,
+			echo.HeaderContentType,
+			echo.HeaderAccept,
+			echo.HeaderAuthorization,
+			echo.HeaderXRequestID,
+		},
 		AllowCredentials: true,
 		MaxAge:           300, // 5 minutes
 	}))

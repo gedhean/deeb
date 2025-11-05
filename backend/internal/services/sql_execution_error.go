@@ -14,21 +14,21 @@ import (
 // SQLExecutionError represents a structured error from SQL execution
 type SQLExecutionError struct {
 	// Database information
-	DatabaseType    string
-	DatabaseName    string
-	DatabaseID      string
-	InstanceName    string
+	DatabaseType string
+	DatabaseName string
+	DatabaseID   string
+	InstanceName string
 
 	// SQL content (may be masked)
-	SQLContent      string
+	SQLContent       string
 	SQLContentMasked bool
 
 	// Database-specific error details
 	DatabaseErrorCode string // PostgreSQL error code (e.g., "23505") or MySQL error number (e.g., "1062")
 	DatabaseMessage   string // Database error message
-	DatabaseDetail     string // Additional detail from database (e.g., PostgreSQL detail field)
-	DatabaseHint       string // Database hint (e.g., PostgreSQL hint field)
-	DatabasePosition   string // Character position in SQL where error occurred (PostgreSQL) - stored as string
+	DatabaseDetail    string // Additional detail from database (e.g., PostgreSQL detail field)
+	DatabaseHint      string // Database hint (e.g., PostgreSQL hint field)
+	DatabasePosition  string // Character position in SQL where error occurred (PostgreSQL) - stored as string
 
 	// Standard error information
 	Message    string
@@ -70,13 +70,13 @@ func NewSQLExecutionError(
 	err error,
 ) *SQLExecutionError {
 	sqlErr := &SQLExecutionError{
-		DatabaseType:   dbType,
-		DatabaseName:   dbName,
-		DatabaseID:     dbID,
-		InstanceName:   instanceName,
-		SQLContent:     sqlContent,
-		Underlying:     err,
-		StackTrace:     captureStackTrace(3), // Skip NewSQLExecutionError, caller, and their caller
+		DatabaseType: dbType,
+		DatabaseName: dbName,
+		DatabaseID:   dbID,
+		InstanceName: instanceName,
+		SQLContent:   sqlContent,
+		Underlying:   err,
+		StackTrace:   captureStackTrace(3), // Skip NewSQLExecutionError, caller, and their caller
 	}
 
 	// Extract database-specific error details
@@ -278,4 +278,3 @@ func maskPattern(text, pattern, replacement string) string {
 	}
 	return re.ReplaceAllString(text, replacement)
 }
-

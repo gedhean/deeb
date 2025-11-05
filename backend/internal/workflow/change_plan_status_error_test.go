@@ -102,4 +102,3 @@ func TestErrInvalidStatusTransition_TerminalStatusMessage(t *testing.T) {
 	assert.Contains(t, msg, "Completed")
 	assert.Contains(t, msg, "cannot be changed")
 }
-

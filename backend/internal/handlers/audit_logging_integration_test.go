@@ -89,7 +89,14 @@ func TestIntegration_AuditLogging_ResourceCRUD(t *testing.T) {
 			Description: stringPtr("Updated Description"),
 		}
 		updateBody, _ := json.Marshal(updateReq)
-		rec = makeAuthenticatedRequest(t, e, http.MethodPut, fmt.Sprintf("/api/v1/projects/%s", project.ID.String()), bytes.NewReader(updateBody), adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPut,
+			fmt.Sprintf("/api/v1/projects/%s", project.ID.String()),
+			bytes.NewReader(updateBody),
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify audit log entry was created
@@ -126,7 +133,14 @@ func TestIntegration_AuditLogging_ResourceCRUD(t *testing.T) {
 		require.NoError(t, err)
 
 		// Delete the project
-		rec = makeAuthenticatedRequest(t, e, http.MethodDelete, fmt.Sprintf("/api/v1/projects/%s", project.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodDelete,
+			fmt.Sprintf("/api/v1/projects/%s", project.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify audit log entry was created
@@ -202,7 +216,14 @@ func TestIntegration_AuditLogging_ResourceCRUD(t *testing.T) {
 			Description: stringPtr("Updated Description"),
 		}
 		updateBody, _ := json.Marshal(updateReq)
-		rec = makeAuthenticatedRequest(t, e, http.MethodPut, fmt.Sprintf("/api/v1/environments/%s", env.ID.String()), bytes.NewReader(updateBody), adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPut,
+			fmt.Sprintf("/api/v1/environments/%s", env.ID.String()),
+			bytes.NewReader(updateBody),
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify audit log entry was created
@@ -239,7 +260,14 @@ func TestIntegration_AuditLogging_ResourceCRUD(t *testing.T) {
 		require.NoError(t, err)
 
 		// Delete the environment
-		rec = makeAuthenticatedRequest(t, e, http.MethodDelete, fmt.Sprintf("/api/v1/environments/%s", env.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodDelete,
+			fmt.Sprintf("/api/v1/environments/%s", env.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify audit log entry was created
@@ -439,10 +467,10 @@ func TestIntegration_AuditLogging_ChangePlanCRUD(t *testing.T) {
 	// Create database
 	dbReq := models.CreateDatabaseRequest{
 		ProjectID:          project.ID,
-		EnvironmentID:     env.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: instance.ID,
-		DatabaseName:      "testdb",
-		Description:       stringPtr("Test Database"),
+		DatabaseName:       "testdb",
+		Description:        stringPtr("Test Database"),
 	}
 	dbBody, _ := json.Marshal(dbReq)
 	rec = makeAuthenticatedRequest(t, e, http.MethodPost, "/api/v1/databases", bytes.NewReader(dbBody), adminToken)
@@ -454,9 +482,9 @@ func TestIntegration_AuditLogging_ChangePlanCRUD(t *testing.T) {
 	t.Run("Change Plan Create Audit Logging", func(t *testing.T) {
 		reqBody := models.CreateChangePlanRequest{
 			Title:            "Test Change Plan for Audit",
-			Description:     "Test Description",
+			Description:      "Test Description",
 			TargetDatabaseID: database.ID,
-			ChangeType:      models.ChangeTypeDDL,
+			ChangeType:       models.ChangeTypeDDL,
 			SQLContent:       "CREATE TABLE test (id UUID PRIMARY KEY);",
 		}
 		body, _ := json.Marshal(reqBody)
@@ -511,7 +539,14 @@ func TestIntegration_AuditLogging_ChangePlanCRUD(t *testing.T) {
 			Description: stringPtr("Updated Description"),
 		}
 		updateBody, _ := json.Marshal(updateReq)
-		rec = makeAuthenticatedRequest(t, e, http.MethodPut, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), bytes.NewReader(updateBody), adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPut,
+			fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()),
+			bytes.NewReader(updateBody),
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify audit log entry was created
@@ -552,7 +587,14 @@ func TestIntegration_AuditLogging_ChangePlanCRUD(t *testing.T) {
 		require.NoError(t, err)
 
 		// Delete the change plan
-		rec = makeAuthenticatedRequest(t, e, http.MethodDelete, fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()), nil, adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodDelete,
+			fmt.Sprintf("/api/v1/change-plans/%s", changePlan.ID.String()),
+			nil,
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify audit log entry was created
@@ -634,10 +676,10 @@ func TestIntegration_AuditLogging_ChangePlanStateTransitions(t *testing.T) {
 	// Create database
 	dbReq := models.CreateDatabaseRequest{
 		ProjectID:          project.ID,
-		EnvironmentID:     env.ID,
+		EnvironmentID:      env.ID,
 		DatabaseInstanceID: instance.ID,
-		DatabaseName:      "testdb",
-		Description:       stringPtr("Test Database"),
+		DatabaseName:       "testdb",
+		Description:        stringPtr("Test Database"),
 	}
 	dbBody, _ := json.Marshal(dbReq)
 	rec = makeAuthenticatedRequest(t, e, http.MethodPost, "/api/v1/databases", bytes.NewReader(dbBody), adminToken)
@@ -668,7 +710,14 @@ func TestIntegration_AuditLogging_ChangePlanStateTransitions(t *testing.T) {
 			Comments: stringPtr("Approved for testing"),
 		}
 		approveBody, _ := json.Marshal(approveReq)
-		rec = makeAuthenticatedRequest(t, e, http.MethodPost, fmt.Sprintf("/api/v1/change-plans/%s/approve", changePlan.ID.String()), bytes.NewReader(approveBody), adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPost,
+			fmt.Sprintf("/api/v1/change-plans/%s/approve", changePlan.ID.String()),
+			bytes.NewReader(approveBody),
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify audit log entry was created for approval
@@ -713,7 +762,14 @@ func TestIntegration_AuditLogging_ChangePlanStateTransitions(t *testing.T) {
 			Comments: stringPtr("Closed for testing"),
 		}
 		closeBody, _ := json.Marshal(closeReq)
-		rec = makeAuthenticatedRequest(t, e, http.MethodPost, fmt.Sprintf("/api/v1/change-plans/%s/close", changePlan.ID.String()), bytes.NewReader(closeBody), adminToken)
+		rec = makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPost,
+			fmt.Sprintf("/api/v1/change-plans/%s/close", changePlan.ID.String()),
+			bytes.NewReader(closeBody),
+			adminToken,
+		)
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify audit log entry was created for close
@@ -736,5 +792,3 @@ func TestIntegration_AuditLogging_ChangePlanStateTransitions(t *testing.T) {
 		assert.True(t, found, "Close change plan audit log entry should be created")
 	})
 }
-
-

@@ -44,21 +44,21 @@ func TestExecutionLogRepository_Create(t *testing.T) {
 	dbType := "PostgreSQL"
 	sqlContent := "SELECT 1"
 	log := &models.ExecutionLog{
-		ID:                  uuid.New(),
-		ChangePlanID:        uuid.New(),
-		ExecutorID:          uuid.New(),
-		Status:              models.ExecutionLogStatusCompleted,
-		ExecutionDurationMs: 1500,
-		RowsAffected:        intPtr(10),
-		ErrorMessage:        nil,
-		SQLContent:          &sqlContent,
-		DatabaseID:          &dbID,
-		DatabaseName:        &dbName,
+		ID:                   uuid.New(),
+		ChangePlanID:         uuid.New(),
+		ExecutorID:           uuid.New(),
+		Status:               models.ExecutionLogStatusCompleted,
+		ExecutionDurationMs:  1500,
+		RowsAffected:         intPtr(10),
+		ErrorMessage:         nil,
+		SQLContent:           &sqlContent,
+		DatabaseID:           &dbID,
+		DatabaseName:         &dbName,
 		DatabaseInstanceName: &dbInstanceName,
-		DatabaseType:        &dbType,
-		StartedAt:           time.Now(),
-		CompletedAt:         time.Now(),
-		CreatedAt:           time.Now(),
+		DatabaseType:         &dbType,
+		StartedAt:            time.Now(),
+		CompletedAt:          time.Now(),
+		CreatedAt:            time.Now(),
 	}
 
 	sqlMock.ExpectExec(`INSERT INTO execution_logs`).

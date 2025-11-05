@@ -19,32 +19,32 @@ import (
 // ConnectionError represents a structured error from database connection attempts
 type ConnectionError struct {
 	// Database information
-	DatabaseType    string
-	DatabaseName    string
-	DatabaseID      string
-	InstanceName    string
-	Host            string
-	Port            int
-	Username        string
+	DatabaseType string
+	DatabaseName string
+	DatabaseID   string
+	InstanceName string
+	Host         string
+	Port         int
+	Username     string
 
 	// Connection details
-	SSLRequired     bool
+	SSLRequired       bool
 	ConnectionTimeout time.Duration
 
 	// Error classification
-	ErrorType       string // "network", "authentication", "timeout", "database_not_found", "permission", "other"
-	ErrorCode       string // Database-specific error code if available
+	ErrorType string // "network", "authentication", "timeout", "database_not_found", "permission", "other"
+	ErrorCode string // Database-specific error code if available
 
 	// Standard error information
-	Message         string
-	Underlying      error
+	Message    string
+	Underlying error
 
 	// Stack trace
-	StackTrace      string
+	StackTrace string
 
 	// Retry information (if retries were attempted)
-	RetryAttempts   int
-	RetryDelay      time.Duration
+	RetryAttempts int
+	RetryDelay    time.Duration
 }
 
 // Error implements the error interface
@@ -83,17 +83,17 @@ func NewConnectionError(
 	err error,
 ) *ConnectionError {
 	connErr := &ConnectionError{
-		DatabaseType:     dbType,
-		DatabaseName:     dbName,
-		DatabaseID:       dbID,
-		InstanceName:     instanceName,
-		Host:             host,
-		Port:             port,
-		Username:         username,
-		SSLRequired:      sslRequired,
+		DatabaseType:      dbType,
+		DatabaseName:      dbName,
+		DatabaseID:        dbID,
+		InstanceName:      instanceName,
+		Host:              host,
+		Port:              port,
+		Username:          username,
+		SSLRequired:       sslRequired,
 		ConnectionTimeout: timeout,
-		Underlying:       err,
-		StackTrace:       captureStackTrace(3), // Skip NewConnectionError, caller, and their caller
+		Underlying:        err,
+		StackTrace:        captureStackTrace(3), // Skip NewConnectionError, caller, and their caller
 	}
 
 	// Classify error type and extract details
@@ -274,18 +274,18 @@ func (e *ConnectionError) generateUserMessage() string {
 
 // RetryConfig represents configuration for connection retry logic
 type RetryConfig struct {
-	MaxAttempts     int           // Maximum number of retry attempts (default: 3)
-	InitialDelay    time.Duration // Initial delay before first retry (default: 100ms)
-	MaxDelay        time.Duration // Maximum delay between retries (default: 5s)
-	BackoffMultiplier float64     // Multiplier for exponential backoff (default: 2.0)
+	MaxAttempts       int           // Maximum number of retry attempts (default: 3)
+	InitialDelay      time.Duration // Initial delay before first retry (default: 100ms)
+	MaxDelay          time.Duration // Maximum delay between retries (default: 5s)
+	BackoffMultiplier float64       // Multiplier for exponential backoff (default: 2.0)
 }
 
 // DefaultRetryConfig returns default retry configuration
 func DefaultRetryConfig() RetryConfig {
 	return RetryConfig{
-		MaxAttempts:     3,
-		InitialDelay:    100 * time.Millisecond,
-		MaxDelay:        5 * time.Second,
+		MaxAttempts:       3,
+		InitialDelay:      100 * time.Millisecond,
+		MaxDelay:          5 * time.Second,
 		BackoffMultiplier: 2.0,
 	}
 }
@@ -294,6 +294,7 @@ func DefaultRetryConfig() RetryConfig {
 // This function is available for future use when retry logic is needed.
 // It implements exponential backoff and skips retries for authentication/database_not_found errors.
 // For now, it's not used by default connection methods but can be called explicitly when needed.
+//
 //nolint:unused // Available for future use when retry logic is needed
 func (cm *ConnectionManager) connectWithRetry(
 	ctx context.Context,
@@ -366,4 +367,3 @@ func (cm *ConnectionManager) connectWithRetry(
 	connErr.RetryDelay = delay
 	return nil, connErr
 }
-

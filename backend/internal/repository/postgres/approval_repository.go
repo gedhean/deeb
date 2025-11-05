@@ -109,7 +109,11 @@ func (r *approvalRepository) GetByApproverID(ctx context.Context, approverID uui
 
 // GetByChangePlanIDAndApproverID retrieves an approval for a specific change plan and approver
 // Returns the approval if found, or ErrNotFound if not found
-func (r *approvalRepository) GetByChangePlanIDAndApproverID(ctx context.Context, changePlanID uuid.UUID, approverID uuid.UUID) (*models.Approval, error) {
+func (r *approvalRepository) GetByChangePlanIDAndApproverID(
+	ctx context.Context,
+	changePlanID uuid.UUID,
+	approverID uuid.UUID,
+) (*models.Approval, error) {
 	approval := &models.Approval{}
 
 	query := `

@@ -1546,8 +1546,7 @@ paths:
               title: Add user table
               description: Create users table with email and password fields
               change_type: DDL
-              sql_content: CREATE TABLE users (id UUID PRIMARY KEY, email VARCHAR(255) UNIQUE, password_hash
-                VARCHAR(255));
+              sql_content: CREATE TABLE users (id UUID PRIMARY KEY, email VARCHAR(255) UNIQUE, password_hash VARCHAR(255));
               rollback_sql: DROP TABLE IF EXISTS users;
       responses:
         '201':
@@ -1947,8 +1946,7 @@ paths:
                   rows_affected: 5
                   duration_ms: 1250
         '400':
-          description: Bad Request - Invalid status, SQL Review errors exist, or execution validation
-            failed
+          description: Bad Request - Invalid status, SQL Review errors exist, or execution validation failed
           content:
             application/json:
               schema:

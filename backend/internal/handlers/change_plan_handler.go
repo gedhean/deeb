@@ -68,8 +68,8 @@ func NewChangePlanHandler(
 		riskAssessmentSvc:    riskAssessmentSvc,
 		reviewService:        reviewService,
 		approvalService:      approvalService,
-		executionService:      executionService,
-		auditService:          auditService,
+		executionService:     executionService,
+		auditService:         auditService,
 		logger:               logger,
 	}
 }
@@ -828,7 +828,11 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 	// If SQL content was updated, trigger SQL Review
 	if isUpdatingSQLContent {
 		if err := h.triggerSQLReview(c, changePlan); err != nil {
-			h.logger.Error("SQL Review failed after SQL content update", zap.Error(err), zap.String("change_plan_id", changePlan.ID.String()))
+			h.logger.Error(
+				"SQL Review failed after SQL content update",
+				zap.Error(err),
+				zap.String("change_plan_id", changePlan.ID.String()),
+			)
 			// Don't block the update - SQL Review errors don't prevent saving the SQL content
 			// The review results will be stored and displayed to the user
 		}

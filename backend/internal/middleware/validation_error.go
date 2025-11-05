@@ -283,4 +283,3 @@ func extractRuleFromMessage(message string) string {
 
 	return "validation_failed"
 }
-

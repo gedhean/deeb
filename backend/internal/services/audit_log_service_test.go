@@ -512,8 +512,8 @@ func TestAuditLogService_LogStateTransition_AllChangePlanStatuses(t *testing.T) 
 	resourceType := ResourceTypeChangePlan
 
 	testCases := []struct {
-		name       string
-		toStatus   string
+		name           string
+		toStatus       string
 		expectedAction string
 	}{
 		{"approved", "approved", ActionApproveChangePlan},

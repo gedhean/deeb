@@ -12,10 +12,10 @@ import (
 func TestNewSQLExecutionError_PostgreSQL(t *testing.T) {
 	// Create a PostgreSQL error
 	pqErr := &pq.Error{
-		Code:    "23505",
-		Message: "duplicate key value violates unique constraint",
-		Detail:  "Key (id)=(123) already exists.",
-		Hint:    "Try updating the existing row instead.",
+		Code:     "23505",
+		Message:  "duplicate key value violates unique constraint",
+		Detail:   "Key (id)=(123) already exists.",
+		Hint:     "Try updating the existing row instead.",
 		Position: "100",
 	}
 
@@ -130,8 +130,8 @@ func TestNewSQLExecutionError_GenericError(t *testing.T) {
 
 func TestSQLExecutionError_ErrorInterface(t *testing.T) {
 	pqErr := &pq.Error{
-		Code:    "42601",
-		Message: "syntax error at or near \"INVALID\"",
+		Code:     "42601",
+		Message:  "syntax error at or near \"INVALID\"",
 		Position: "50",
 	}
 
@@ -351,4 +351,3 @@ func TestMaskSQLContent_PasswordPatterns(t *testing.T) {
 		})
 	}
 }
-

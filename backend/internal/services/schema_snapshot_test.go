@@ -281,7 +281,7 @@ func TestSchemaSnapshotService_CapturePostgreSQL_PgDumpCommand(t *testing.T) {
 	cmd := exec.CommandContext(ctx, "pg_dump", expectedArgs...)
 	assert.NotNil(t, cmd)
 	assert.Equal(t, "pg_dump", filepath.Base(cmd.Path)) // Check basename instead of full path
-	assert.Equal(t, expectedArgs, cmd.Args[1:]) // Args[0] is the command path
+	assert.Equal(t, expectedArgs, cmd.Args[1:])         // Args[0] is the command path
 
 	// Verify logger is used
 	_ = logger

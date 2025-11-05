@@ -710,7 +710,7 @@ func TestAuditLogRepository_Filter(t *testing.T) {
 		userID := uuid.New()
 		filters := repository.AuditLogListFilters{
 			Limit:  0, // No limit
-			Offset:  0,
+			Offset: 0,
 			UserID: userID,
 		}
 
@@ -983,4 +983,3 @@ func TestAuditLogRepository_CountWithFilters(t *testing.T) {
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
 }
-

@@ -269,4 +269,3 @@ func TestHandleValidationError(t *testing.T) {
 		assert.Equal(t, ErrorCodeValidationError, response.Code)
 	})
 }
-

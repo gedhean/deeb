@@ -178,7 +178,7 @@ export const ApprovalHistory: React.FC<ApprovalHistoryProps> = ({ changePlanId }
                       <div className="space-y-2 mt-3">
                         <div className="flex items-center gap-2 text-sm">
                           <UserIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">Approver:</span>
+                          <span className="text-muted-foreground">Author:</span>
                           <span className="font-medium">
                             {approver?.email || approval.approver_id}
                           </span>

@@ -393,19 +393,19 @@ func (s *ExecutionService) Execute(
 			dbType := string(dbInstance.DatabaseType)
 			sqlContent := changePlan.SQLContent
 			executionLog := &models.ExecutionLog{
-				ChangePlanID:        changePlanID,
-				ExecutorID:          executorID,
-				Status:              models.ExecutionLogStatusFailed,
-				ExecutionDurationMs: int(duration.Milliseconds()),
-				RowsAffected:        nil,
-				ErrorMessage:        &errorMsg,
-				SQLContent:          &sqlContent,
-				DatabaseID:          &db.ID,
-				DatabaseName:        &db.DatabaseName,
+				ChangePlanID:         changePlanID,
+				ExecutorID:           executorID,
+				Status:               models.ExecutionLogStatusFailed,
+				ExecutionDurationMs:  int(duration.Milliseconds()),
+				RowsAffected:         nil,
+				ErrorMessage:         &errorMsg,
+				SQLContent:           &sqlContent,
+				DatabaseID:           &db.ID,
+				DatabaseName:         &db.DatabaseName,
 				DatabaseInstanceName: &dbInstance.Name,
-				DatabaseType:        &dbType,
-				StartedAt:           executionStartTime,
-				CompletedAt:         time.Now(),
+				DatabaseType:         &dbType,
+				StartedAt:            executionStartTime,
+				CompletedAt:          time.Now(),
 			}
 			if logErr := s.executionLogRepo.Create(ctx, executionLog); logErr != nil {
 				s.logger.Warn("Failed to create execution log entry", zap.Error(logErr))
@@ -505,19 +505,19 @@ func (s *ExecutionService) Execute(
 		sqlContent := changePlan.SQLContent
 		rowsAffected := result.RowsAffected
 		executionLog := &models.ExecutionLog{
-			ChangePlanID:        changePlanID,
-			ExecutorID:          executorID,
-			Status:              models.ExecutionLogStatusCompleted,
-			ExecutionDurationMs: int(duration.Milliseconds()),
-			RowsAffected:        &rowsAffected,
-			ErrorMessage:        nil,
-			SQLContent:          &sqlContent,
-			DatabaseID:          &db.ID,
-			DatabaseName:        &db.DatabaseName,
+			ChangePlanID:         changePlanID,
+			ExecutorID:           executorID,
+			Status:               models.ExecutionLogStatusCompleted,
+			ExecutionDurationMs:  int(duration.Milliseconds()),
+			RowsAffected:         &rowsAffected,
+			ErrorMessage:         nil,
+			SQLContent:           &sqlContent,
+			DatabaseID:           &db.ID,
+			DatabaseName:         &db.DatabaseName,
 			DatabaseInstanceName: &dbInstance.Name,
-			DatabaseType:        &dbType,
-			StartedAt:           executionStartTime,
-			CompletedAt:         time.Now(),
+			DatabaseType:         &dbType,
+			StartedAt:            executionStartTime,
+			CompletedAt:          time.Now(),
 		}
 		if logErr := s.executionLogRepo.Create(ctx, executionLog); logErr != nil {
 			s.logger.Warn("Failed to create execution log entry", zap.Error(logErr))

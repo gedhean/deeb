@@ -207,7 +207,18 @@ func TestNewConnectionError_GenericError(t *testing.T) {
 
 func TestConnectionError_ErrorInterface(t *testing.T) {
 	err := errors.New("connection error")
-	connErr := NewConnectionError("postgresql", "testdb", "db-123", "test-instance", "localhost", 5432, "testuser", false, 10*time.Second, err)
+	connErr := NewConnectionError(
+		"postgresql",
+		"testdb",
+		"db-123",
+		"test-instance",
+		"localhost",
+		5432,
+		"testuser",
+		false,
+		10*time.Second,
+		err,
+	)
 
 	// Test Error() method
 	errorMsg := connErr.Error()
@@ -217,7 +228,18 @@ func TestConnectionError_ErrorInterface(t *testing.T) {
 
 func TestConnectionError_Unwrap(t *testing.T) {
 	err := errors.New("connection error")
-	connErr := NewConnectionError("postgresql", "testdb", "db-123", "test-instance", "localhost", 5432, "testuser", false, 10*time.Second, err)
+	connErr := NewConnectionError(
+		"postgresql",
+		"testdb",
+		"db-123",
+		"test-instance",
+		"localhost",
+		5432,
+		"testuser",
+		false,
+		10*time.Second,
+		err,
+	)
 
 	// Test Unwrap() method
 	unwrapped := connErr.Unwrap()
@@ -226,8 +248,8 @@ func TestConnectionError_Unwrap(t *testing.T) {
 
 func TestClassifyPostgreSQLError(t *testing.T) {
 	testCases := []struct {
-		name       string
-		code       pq.ErrorCode
+		name         string
+		code         pq.ErrorCode
 		expectedType string
 	}{
 		{"invalid_password", "28P01", "authentication"},
@@ -249,8 +271,8 @@ func TestClassifyPostgreSQLError(t *testing.T) {
 
 func TestClassifyMySQLError(t *testing.T) {
 	testCases := []struct {
-		name       string
-		number     uint16
+		name         string
+		number       uint16
 		expectedType string
 	}{
 		{"ER_ACCESS_DENIED_ERROR", 1045, "authentication"},
@@ -288,9 +310,9 @@ func TestGenerateUserMessage_ErrorTypes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			connErr := &ConnectionError{
-				ErrorType:   tc.errorType,
-				Host:        "localhost",
-				Port:        5432,
+				ErrorType:    tc.errorType,
+				Host:         "localhost",
+				Port:         5432,
 				DatabaseName: "testdb",
 			}
 			msg := connErr.generateUserMessage()
@@ -323,38 +345,38 @@ func TestDefaultRetryConfig(t *testing.T) {
 
 func TestConnectionError_ErrorTypeClassification(t *testing.T) {
 	tests := []struct {
-		name       string
-		err        error
+		name         string
+		err          error
 		expectedType string
 	}{
 		{
-			name:        "connection refused",
-			err:         &net.OpError{Op: "dial", Err: errors.New("connection refused")},
+			name:         "connection refused",
+			err:          &net.OpError{Op: "dial", Err: errors.New("connection refused")},
 			expectedType: "network",
 		},
 		{
-			name:        "password auth failed",
-			err:         errors.New("password authentication failed for user"),
+			name:         "password auth failed",
+			err:          errors.New("password authentication failed for user"),
 			expectedType: "authentication",
 		},
 		{
-			name:        "timeout",
-			err:         errors.New("connection timeout"),
+			name:         "timeout",
+			err:          errors.New("connection timeout"),
 			expectedType: "timeout",
 		},
 		{
-			name:        "database does not exist",
-			err:         errors.New("database does not exist"),
+			name:         "database does not exist",
+			err:          errors.New("database does not exist"),
 			expectedType: "database_not_found",
 		},
 		{
-			name:        "unknown database",
-			err:         errors.New("unknown database"),
+			name:         "unknown database",
+			err:          errors.New("unknown database"),
 			expectedType: "database_not_found",
 		},
 		{
-			name:        "permission denied",
-			err:         errors.New("permission denied"),
+			name:         "permission denied",
+			err:          errors.New("permission denied"),
 			expectedType: "permission",
 		},
 	}
@@ -393,4 +415,3 @@ func TestConnectionError_RetryInformation(t *testing.T) {
 	msg := connErr.generateUserMessage()
 	assert.Contains(t, msg, "Retried 2 time(s)")
 }
-

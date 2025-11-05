@@ -228,4 +228,3 @@ func TestRequestIDInLogs(t *testing.T) {
 	require.NotEmpty(t, requestID)
 	assert.Equal(t, requestID, capturedCorrelationID, "Correlation ID should be set in context for logging")
 }
-
