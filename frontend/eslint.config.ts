@@ -44,4 +44,17 @@ export default [
       react: { version: 'detect' },
     },
   },
+  // E2E test files configuration
+  {
+    files: ['e2e/**/*.{ts,tsx}', 'playwright.config.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      'react-hooks/rules-of-hooks': 'off', // Playwright fixtures use 'use' which conflicts with React hooks
+      'no-undef': 'off', // Node.js globals are available
+    },
+  },
 ];
