@@ -201,10 +201,7 @@ func (cp *ChangePlan) Validate() error {
 		return ErrInvalidChangePlan("title must not exceed 255 characters")
 	}
 
-	// Validate description
-	if cp.Description == "" {
-		return ErrInvalidChangePlan("description is required")
-	}
+	// Description is optional - no validation needed
 
 	// Validate SQL content
 	if cp.SQLContent == "" {
