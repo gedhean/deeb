@@ -286,20 +286,20 @@ Implement Change Plan creation form with all required and optional fields.
 
 ### P06M14: Create Change Plan list view with filtering
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M14
 
 **Goal**
 Implement Change Plan list page with filtering by status, project, database, and author.
 
 **Acceptance Criteria**
-- [ ] Change Plan list page created in `frontend/src/pages/ChangePlansPage.tsx`
-- [ ] Filter controls implemented (status, project, database, author)
-- [ ] Filter state management
-- [ ] Change Plan cards/list with status badges
-- [ ] Pagination implemented
-- [ ] API integration working
-- [ ] Responsive design working
+- [x] Change Plan list page created in `frontend/src/pages/ChangePlansPage.tsx`
+- [x] Filter controls implemented (status, project, database, author)
+- [x] Filter state management
+- [x] Change Plan cards/list with status badges
+- [x] Pagination implemented
+- [x] API integration working
+- [x] Responsive design working
 
 ---
 
