@@ -12,6 +12,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import {
   Table,
   TableBody,
   TableCell,
@@ -19,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, AlertTriangle, FileEdit } from 'lucide-react';
 
 const PAGE_SIZE = 20;
 
@@ -368,16 +376,33 @@ export const ChangePlansPage: React.FC = () => {
                 <Skeleton className="h-12 w-full" />
               </div>
             ) : changePlans.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">
-                  {hasFilters ? 'No change plans match your filters.' : 'No change plans found.'}
-                </p>
-                {hasFilters && (
-                  <Button variant="outline" className="mt-4" onClick={clearFilters}>
-                    Clear Filters
-                  </Button>
-                )}
-              </div>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <FileEdit className="h-12 w-12 text-muted-foreground" />
+                  </EmptyMedia>
+                  <EmptyTitle>
+                    {hasFilters ? 'No Change Plans Found' : 'No Change Plans Yet'}
+                  </EmptyTitle>
+                  <EmptyDescription>
+                    {hasFilters
+                      ? 'No change plans match your filters. Try adjusting your search criteria.'
+                      : 'Get started by creating your first change plan.'}
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  {hasFilters ? (
+                    <Button variant="outline" onClick={clearFilters}>
+                      Clear Filters
+                    </Button>
+                  ) : (
+                    <Button onClick={() => navigate('/change-plans/create')}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Change Plan
+                    </Button>
+                  )}
+                </EmptyContent>
+              </Empty>
             ) : (
               <>
                 <Table>
