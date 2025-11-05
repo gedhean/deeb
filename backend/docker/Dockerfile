@@ -24,8 +24,8 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -o deeb main.go
 # Stage 2: Create minimal runtime image
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS, timezone data, and libc for CGO binaries
-RUN apk --no-cache add ca-certificates tzdata libc6-compat
+# Install ca-certificates for HTTPS, timezone data, libc for CGO binaries, and database clients
+RUN apk --no-cache add ca-certificates tzdata libc6-compat postgresql-client mysql-client
 
 # Create non-root user
 RUN addgroup -g 1000 deeb && \
