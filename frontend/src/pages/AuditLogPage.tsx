@@ -29,40 +29,31 @@ import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Calendar, Filter, X } from 'lucide-react';
 
 // Common actions and resource types for filters
+// Actions match backend constants (lowercase with underscores)
 const COMMON_ACTIONS = [
-  'CreateProject',
-  'UpdateProject',
-  'DeleteProject',
-  'CreateEnvironment',
-  'UpdateEnvironment',
-  'DeleteEnvironment',
-  'CreatePolicy',
-  'UpdatePolicy',
-  'DeletePolicy',
-  'CreateDatabaseInstance',
-  'UpdateDatabaseInstance',
-  'DeleteDatabaseInstance',
-  'CreateDatabase',
-  'UpdateDatabase',
-  'DeleteDatabase',
-  'CreateChangePlan',
-  'UpdateChangePlan',
-  'ApproveChangePlan',
-  'CloseChangePlan',
-  'ExecuteChangePlan',
-  'CreateUser',
-  'UpdateUser',
-  'DeleteUser',
+  'login',
+  'logout',
+  'register',
+  'create',
+  'read',
+  'update',
+  'delete',
 ];
 
+// Resource types match backend constants (lowercase with underscores)
 const RESOURCE_TYPES = [
-  'Project',
-  'Environment',
-  'Policy',
-  'DatabaseInstance',
-  'Database',
-  'ChangePlan',
-  'User',
+  'user',
+  'project',
+  'environment',
+  'database',
+  'database_instance',
+  'change_plan',
+  'approval',
+  'execution_log',
+  'schema_snapshot',
+  'audit_log',
+  'policy',
+  'policy_finding',
 ];
 
 export const AuditLogPage: React.FC = () => {
@@ -280,7 +271,7 @@ export const AuditLogPage: React.FC = () => {
               <div className="space-y-2">
                 <Label htmlFor="action-filter">Action</Label>
                 <Select
-                  value={filters.action || ""}
+                  value={filters.action || undefined}
                   onValueChange={(value) => handleFilterChange('action', value || undefined)}
                 >
                   <SelectTrigger id="action-filter">
