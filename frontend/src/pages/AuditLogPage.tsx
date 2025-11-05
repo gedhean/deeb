@@ -280,7 +280,7 @@ export const AuditLogPage: React.FC = () => {
               <div className="space-y-2">
                 <Label htmlFor="action-filter">Action</Label>
                 <Select
-                  value={filters.action || undefined}
+                  value={filters.action || ""}
                   onValueChange={(value) => handleFilterChange('action', value || undefined)}
                 >
                   <SelectTrigger id="action-filter">
