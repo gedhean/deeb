@@ -17,6 +17,11 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  hasOrganizationPermission,
+  hasAnyOrganizationRole,
+  OrganizationPermission,
+} from '@/lib/rbac';
 import { NavMain } from '@/components/nav-main';
 import { NavOrg } from '@/components/nav-org';
 import { NavProjects } from '@/components/nav-projects';
@@ -181,6 +186,44 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         initials: 'GU',
       };
 
+  // Filter navigation items based on user role and permissions
+  const filteredNavOrgItems = navOrgItems.filter((item) => {
+    if (!user) {
+      return false;
+    }
+
+    // Audit Logs - Admin only
+    if (item.url === '/audit') {
+      return hasOrganizationPermission(
+        user.organization_role,
+        OrganizationPermission.AuditLogsRead,
+      );
+    }
+
+    // Environments - Admin only
+    if (item.url === '/environments') {
+      return hasAnyOrganizationRole(user.organization_role, ['OrganizationAdmin']);
+    }
+
+    // Policies - Admin only
+    if (item.url === '/policies') {
+      return hasAnyOrganizationRole(user.organization_role, ['OrganizationAdmin']);
+    }
+
+    // Users - Admin only
+    if (item.url === '/users') {
+      return hasOrganizationPermission(user.organization_role, OrganizationPermission.UsersRead);
+    }
+
+    // Settings - Admin only
+    if (item.url === '/settings') {
+      return hasAnyOrganizationRole(user.organization_role, ['OrganizationAdmin']);
+    }
+
+    // Default: show item
+    return true;
+  });
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -189,7 +232,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <NavMain items={navMainItems} />
         <NavProjects projects={placeholderProjects} />
-        <NavOrg items={navOrgItems} />
+        <NavOrg items={filteredNavOrgItems} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={userData} />

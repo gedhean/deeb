@@ -456,20 +456,20 @@ Create Audit Log viewer page with filtering options (admin only).
 
 ### P06M23: Implement RBAC enforcement at UI level
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M23
 
 **Goal**
 Create utilities and components for RBAC-based UI feature visibility.
 
 **Acceptance Criteria**
-- [ ] RBAC utilities created in `frontend/src/lib/rbac.ts`
-- [ ] Role checking functions implemented
-- [ ] Permission checking helpers
-- [ ] Protected component wrapper for feature visibility
-- [ ] Navigation menu filtered by roles
-- [ ] Buttons/actions hidden based on permissions
-- [ ] Unit tests passing
+- [x] RBAC utilities created in `frontend/src/lib/rbac.ts`
+- [x] Role checking functions implemented
+- [x] Permission checking helpers
+- [x] Protected component wrapper for feature visibility
+- [x] Navigation menu filtered by roles
+- [x] Buttons/actions hidden based on permissions
+- [x] Unit tests passing
 
 ---
 

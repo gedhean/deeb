@@ -28,6 +28,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Plus, ChevronLeft, ChevronRight, AlertTriangle, FileEdit } from 'lucide-react';
+import { ProtectedComponent } from '@/components/ProtectedComponent';
+import { OrganizationPermission } from '@/lib/rbac';
 
 const PAGE_SIZE = 20;
 
@@ -216,10 +218,12 @@ export const ChangePlansPage: React.FC = () => {
             <h1 className="text-3xl font-bold tracking-tight">Change Plans</h1>
             <p className="text-muted-foreground mt-1">View and manage database change plans</p>
           </div>
-          <Button onClick={() => navigate('/change-plans/create')}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Change Plan
-          </Button>
+          <ProtectedComponent requireOrganizationPermission={OrganizationPermission.ProjectsRead}>
+            <Button onClick={() => navigate('/change-plans/create')}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Change Plan
+            </Button>
+          </ProtectedComponent>
         </div>
 
         {/* Error message */}

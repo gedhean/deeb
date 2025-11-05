@@ -70,7 +70,7 @@ func (r *AuditLogRepository) Create(ctx context.Context, auditLog *models.AuditL
 func (r *AuditLogRepository) List(ctx context.Context, limit, offset int) ([]*models.AuditLog, error) {
 	query := `
 		SELECT id, user_id, action, resource_type, resource_id,
-			details, ip_address, user_agent, timestamp
+			details, host(ip_address) as ip_address, user_agent, timestamp
 		FROM audit_logs
 		ORDER BY timestamp DESC
 		LIMIT $1 OFFSET $2
