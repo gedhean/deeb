@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -15,6 +16,63 @@ import (
 // AuditLogRepository is the PostgreSQL implementation of repository.AuditLogRepository
 type AuditLogRepository struct {
 	db *sqlx.DB
+}
+
+// auditLogRow is a helper struct for scanning audit log rows from PostgreSQL
+type auditLogRow struct {
+	ID           string  `db:"id"`
+	UserID       string  `db:"user_id"`
+	Action       string  `db:"action"`
+	ResourceType string  `db:"resource_type"`
+	ResourceID   string  `db:"resource_id"`
+	Details      []byte  `db:"details"`
+	IPAddress    *string `db:"ip_address"` // TEXT from host() function
+	UserAgent    *string `db:"user_agent"`
+	Timestamp    string  `db:"timestamp"`
+}
+
+// toAuditLog converts auditLogRow to models.AuditLog
+func (r *auditLogRow) toAuditLog() (*models.AuditLog, error) {
+	id, err := uuid.Parse(r.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse audit log ID: %w", err)
+	}
+
+	userID, err := uuid.Parse(r.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse user ID: %w", err)
+	}
+
+	resourceID, err := uuid.Parse(r.ResourceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse resource ID: %w", err)
+	}
+
+	// PostgreSQL timestamp format: "2006-01-02 15:04:05.999999-07"
+	timestamp, err := time.Parse("2006-01-02 15:04:05.999999-07", r.Timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+	}
+
+	var ipAddress *net.IP
+	if r.IPAddress != nil && *r.IPAddress != "" {
+		ip := net.ParseIP(*r.IPAddress)
+		if ip != nil {
+			ipAddress = &ip
+		}
+	}
+
+	return &models.AuditLog{
+		ID:           id,
+		UserID:       userID,
+		Action:       r.Action,
+		ResourceType: r.ResourceType,
+		ResourceID:   resourceID,
+		Details:      r.Details,
+		IPAddress:    ipAddress,
+		UserAgent:    r.UserAgent,
+		Timestamp:    timestamp,
+	}, nil
 }
 
 // NewAuditLogRepository creates a new PostgreSQL audit log repository
@@ -69,17 +127,26 @@ func (r *AuditLogRepository) Create(ctx context.Context, auditLog *models.AuditL
 // List retrieves all audit logs with pagination
 func (r *AuditLogRepository) List(ctx context.Context, limit, offset int) ([]*models.AuditLog, error) {
 	query := `
-		SELECT id, user_id, action, resource_type, resource_id,
-			details, host(ip_address) as ip_address, user_agent, timestamp
+		SELECT id::text, user_id::text, action, resource_type, resource_id::text,
+			details, host(ip_address) as ip_address, user_agent, timestamp::text
 		FROM audit_logs
 		ORDER BY timestamp DESC
 		LIMIT $1 OFFSET $2
 	`
 
-	var auditLogs []*models.AuditLog
-	err := r.db.SelectContext(ctx, &auditLogs, query, limit, offset)
+	var rows []auditLogRow
+	err := r.db.SelectContext(ctx, &rows, query, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list audit logs: %w", err)
+	}
+
+	auditLogs := make([]*models.AuditLog, 0, len(rows))
+	for _, row := range rows {
+		auditLog, err := row.toAuditLog()
+		if err != nil {
+			return nil, err
+		}
+		auditLogs = append(auditLogs, auditLog)
 	}
 
 	return auditLogs, nil
@@ -88,18 +155,27 @@ func (r *AuditLogRepository) List(ctx context.Context, limit, offset int) ([]*mo
 // GetByUserID retrieves audit logs filtered by user ID
 func (r *AuditLogRepository) GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.AuditLog, error) {
 	query := `
-		SELECT id, user_id, action, resource_type, resource_id,
-			details, host(ip_address) as ip_address, user_agent, timestamp
+		SELECT id::text, user_id::text, action, resource_type, resource_id::text,
+			details, host(ip_address) as ip_address, user_agent, timestamp::text
 		FROM audit_logs
 		WHERE user_id = $1
 		ORDER BY timestamp DESC
 		LIMIT $2 OFFSET $3
 	`
 
-	var auditLogs []*models.AuditLog
-	err := r.db.SelectContext(ctx, &auditLogs, query, userID, limit, offset)
+	var rows []auditLogRow
+	err := r.db.SelectContext(ctx, &rows, query, userID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get audit logs by user ID: %w", err)
+	}
+
+	auditLogs := make([]*models.AuditLog, 0, len(rows))
+	for _, row := range rows {
+		auditLog, err := row.toAuditLog()
+		if err != nil {
+			return nil, err
+		}
+		auditLogs = append(auditLogs, auditLog)
 	}
 
 	return auditLogs, nil
@@ -108,18 +184,27 @@ func (r *AuditLogRepository) GetByUserID(ctx context.Context, userID uuid.UUID, 
 // GetByAction retrieves audit logs filtered by action
 func (r *AuditLogRepository) GetByAction(ctx context.Context, action string, limit, offset int) ([]*models.AuditLog, error) {
 	query := `
-		SELECT id, user_id, action, resource_type, resource_id,
-			details, host(ip_address) as ip_address, user_agent, timestamp
+		SELECT id::text, user_id::text, action, resource_type, resource_id::text,
+			details, host(ip_address) as ip_address, user_agent, timestamp::text
 		FROM audit_logs
 		WHERE action = $1
 		ORDER BY timestamp DESC
 		LIMIT $2 OFFSET $3
 	`
 
-	var auditLogs []*models.AuditLog
-	err := r.db.SelectContext(ctx, &auditLogs, query, action, limit, offset)
+	var rows []auditLogRow
+	err := r.db.SelectContext(ctx, &rows, query, action, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get audit logs by action: %w", err)
+	}
+
+	auditLogs := make([]*models.AuditLog, 0, len(rows))
+	for _, row := range rows {
+		auditLog, err := row.toAuditLog()
+		if err != nil {
+			return nil, err
+		}
+		auditLogs = append(auditLogs, auditLog)
 	}
 
 	return auditLogs, nil
@@ -132,18 +217,27 @@ func (r *AuditLogRepository) GetByTargetType(
 	limit, offset int,
 ) ([]*models.AuditLog, error) {
 	query := `
-		SELECT id, user_id, action, resource_type, resource_id,
-			details, host(ip_address) as ip_address, user_agent, timestamp
+		SELECT id::text, user_id::text, action, resource_type, resource_id::text,
+			details, host(ip_address) as ip_address, user_agent, timestamp::text
 		FROM audit_logs
 		WHERE resource_type = $1
 		ORDER BY timestamp DESC
 		LIMIT $2 OFFSET $3
 	`
 
-	var auditLogs []*models.AuditLog
-	err := r.db.SelectContext(ctx, &auditLogs, query, resourceType, limit, offset)
+	var rows []auditLogRow
+	err := r.db.SelectContext(ctx, &rows, query, resourceType, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get audit logs by resource type: %w", err)
+	}
+
+	auditLogs := make([]*models.AuditLog, 0, len(rows))
+	for _, row := range rows {
+		auditLog, err := row.toAuditLog()
+		if err != nil {
+			return nil, err
+		}
+		auditLogs = append(auditLogs, auditLog)
 	}
 
 	return auditLogs, nil
@@ -194,8 +288,8 @@ func (r *AuditLogRepository) Filter(ctx context.Context, filters repository.Audi
 
 	// Build query
 	query := `
-		SELECT id, user_id, action, resource_type, resource_id,
-			details, host(ip_address) as ip_address, user_agent, timestamp
+		SELECT id::text, user_id::text, action, resource_type, resource_id::text,
+			details, host(ip_address) as ip_address, user_agent, timestamp::text
 		FROM audit_logs
 	`
 
@@ -217,10 +311,19 @@ func (r *AuditLogRepository) Filter(ctx context.Context, filters repository.Audi
 		args = append(args, filters.Offset)
 	}
 
-	var auditLogs []*models.AuditLog
-	err := r.db.SelectContext(ctx, &auditLogs, query, args...)
+	var rows []auditLogRow
+	err := r.db.SelectContext(ctx, &rows, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter audit logs: %w", err)
+	}
+
+	auditLogs := make([]*models.AuditLog, 0, len(rows))
+	for _, row := range rows {
+		auditLog, err := row.toAuditLog()
+		if err != nil {
+			return nil, err
+		}
+		auditLogs = append(auditLogs, auditLog)
 	}
 
 	return auditLogs, nil

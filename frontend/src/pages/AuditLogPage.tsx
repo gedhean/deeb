@@ -280,14 +280,13 @@ export const AuditLogPage: React.FC = () => {
               <div className="space-y-2">
                 <Label htmlFor="action-filter">Action</Label>
                 <Select
-                  value={filters.action || ''}
+                  value={filters.action || undefined}
                   onValueChange={(value) => handleFilterChange('action', value || undefined)}
                 >
                   <SelectTrigger id="action-filter">
                     <SelectValue placeholder="All actions" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All actions</SelectItem>
                     {COMMON_ACTIONS.map((action) => (
                       <SelectItem key={action} value={action}>
                         {action}
