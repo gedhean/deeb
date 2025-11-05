@@ -48,10 +48,18 @@ func (r *auditLogRow) toAuditLog() (*models.AuditLog, error) {
 		return nil, fmt.Errorf("failed to parse resource ID: %w", err)
 	}
 
-	// PostgreSQL timestamp format: "2006-01-02 15:04:05.999999-07"
-	timestamp, err := time.Parse("2006-01-02 15:04:05.999999-07", r.Timestamp)
+	// Try parsing timestamp in multiple formats
+	// PostgreSQL can return different formats depending on how timestamp is cast
+	var timestamp time.Time
+
+	// Try RFC3339 format first (most common)
+	timestamp, err = time.Parse(time.RFC3339Nano, r.Timestamp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+		// Try PostgreSQL text format with space
+		timestamp, err = time.Parse("2006-01-02 15:04:05.999999-07", r.Timestamp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+		}
 	}
 
 	var ipAddress *net.IP

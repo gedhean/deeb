@@ -49,6 +49,24 @@ func (m *MockApprovalRepository) GetHistory(ctx context.Context, changePlanID uu
 	return args.Get(0).([]*models.Approval), args.Error(1)
 }
 
+func (m *MockApprovalRepository) DeleteByChangePlanID(ctx context.Context, changePlanID uuid.UUID) error {
+	args := m.Called(ctx, changePlanID)
+	return args.Error(0)
+}
+
+func (m *MockApprovalRepository) GetByChangePlanIDAndApproverID(ctx context.Context, changePlanID, approverID uuid.UUID) (*models.Approval, error) {
+	args := m.Called(ctx, changePlanID, approverID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Approval), args.Error(1)
+}
+
+func (m *MockApprovalRepository) Update(ctx context.Context, approval *models.Approval) error {
+	args := m.Called(ctx, approval)
+	return args.Error(0)
+}
+
 // MockChangePlanRepository is a mock implementation of ChangePlanRepository
 type MockChangePlanRepository struct {
 	mock.Mock
@@ -256,6 +274,7 @@ func TestApprovalService_Approve(t *testing.T) {
 
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return([]*models.PolicyFinding{}, nil)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
 		mockApprovalRepo.On("Create", ctxWithUser, mock.AnythingOfType("*models.Approval")).Return(nil)
 		mockChangePlanRepo.On("Update", ctxWithUser, mock.MatchedBy(func(cp *models.ChangePlan) bool {
 			return cp.ID == changePlanID && cp.Status == models.ChangePlanStatusApproved
@@ -308,6 +327,7 @@ func TestApprovalService_Approve(t *testing.T) {
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockProjectMemberRepo.On("GetMemberRole", ctxWithUser, projectID, approverID).Return(projectMember, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return([]*models.PolicyFinding{}, nil)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
 		mockApprovalRepo.On("Create", ctxWithUser, mock.AnythingOfType("*models.Approval")).Return(nil)
 		mockChangePlanRepo.On("Update", ctxWithUser, mock.MatchedBy(func(cp *models.ChangePlan) bool {
 			return cp.ID == changePlanID && cp.Status == models.ChangePlanStatusApproved
@@ -468,6 +488,7 @@ func TestApprovalService_Approve(t *testing.T) {
 
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return(errorFindings, nil)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
 
 		service := NewApprovalService(
 			mockApprovalRepo,
@@ -518,6 +539,7 @@ func TestApprovalService_Approve(t *testing.T) {
 
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return(warningFindings, nil)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
 		mockApprovalRepo.On("Create", ctxWithUser, mock.AnythingOfType("*models.Approval")).Return(nil)
 		mockChangePlanRepo.On("Update", ctxWithUser, mock.MatchedBy(func(cp *models.ChangePlan) bool {
 			return cp.ID == changePlanID && cp.Status == models.ChangePlanStatusApproved
@@ -942,6 +964,7 @@ func TestApprovalService_ErrorHandling(t *testing.T) {
 
 		mockChangePlanRepo.On("GetByID", ctxWithUser, changePlanID).Return(changePlan, nil)
 		mockPolicyFindingRepo.On("GetByChangePlanID", ctxWithUser, changePlanID).Return([]*models.PolicyFinding{}, nil)
+		mockApprovalRepo.On("GetByChangePlanIDAndApproverID", ctxWithUser, changePlanID, approverID).Return(nil, repository.ErrNotFound)
 		mockApprovalRepo.On("Create", ctxWithUser, mock.AnythingOfType("*models.Approval")).Return(errors.New("database error"))
 
 		service := NewApprovalService(

@@ -68,7 +68,7 @@ func TestAuditLogRepository_Create(t *testing.T) {
 				auditLog.ResourceType,
 				auditLog.ResourceID,
 				auditLog.Details,
-				auditLog.IPAddress,
+				auditLog.IPAddress.String(), // Convert to string as repository does
 				auditLog.UserAgent,
 				auditLog.Timestamp,
 			).
@@ -107,7 +107,7 @@ func TestAuditLogRepository_Create(t *testing.T) {
 				auditLog.ResourceType,
 				auditLog.ResourceID,
 				auditLog.Details,
-				auditLog.IPAddress,
+				nil, // IPAddress is nil
 				auditLog.UserAgent,
 				auditLog.Timestamp,
 			).
