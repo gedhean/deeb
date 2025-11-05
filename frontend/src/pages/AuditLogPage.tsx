@@ -300,7 +300,7 @@ export const AuditLogPage: React.FC = () => {
               <div className="space-y-2">
                 <Label htmlFor="resource-type-filter">Resource Type</Label>
                 <Select
-                  value={filters.target_type || ''}
+                  value={filters.target_type || undefined}
                   onValueChange={(value) => handleFilterChange('target_type', value || undefined)}
                 >
                   <SelectTrigger id="resource-type-filter">
