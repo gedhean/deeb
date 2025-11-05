@@ -88,4 +88,11 @@ export const changePlanService = {
     );
     return response;
   },
+
+  /**
+   * Execute a change plan
+   */
+  async executeChangePlan(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/execute`, {});
+  },
 };
