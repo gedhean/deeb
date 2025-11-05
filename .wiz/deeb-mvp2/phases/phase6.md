@@ -529,21 +529,21 @@ Ensure all UI components are responsive and mobile-friendly.
 
 ### P06M27: Create API integration hooks
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M27
 
 **Goal**
 Create React hooks for API calls with loading and error states.
 
 **Acceptance Criteria**
-- [ ] Custom hooks created in `frontend/src/hooks/api/`
-- [ ] useChangePlans hook implemented
-- [ ] useProjects hook implemented
-- [ ] usePolicies hook implemented (filter by type)
-- [ ] useApprovals hook implemented
-- [ ] useExecution hook implemented
-- [ ] Hooks include loading and error states
-- [ ] Hooks support mutations and queries
+- [x] Custom hooks created in `frontend/src/hooks/api/`
+- [x] useChangePlans hook implemented
+- [x] useProjects hook implemented
+- [x] usePolicies hook implemented (filter by type)
+- [x] useApprovals hook implemented
+- [x] useExecution hook implemented
+- [x] Hooks include loading and error states
+- [x] Hooks support mutations and queries
 
 ---
 
