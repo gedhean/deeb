@@ -307,7 +307,6 @@ export const AuditLogPage: React.FC = () => {
                     <SelectValue placeholder="All resource types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All resource types</SelectItem>
                     {RESOURCE_TYPES.map((type) => (
                       <SelectItem key={type} value={type}>
                         {type}
