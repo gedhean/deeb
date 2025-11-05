@@ -457,6 +457,34 @@ export const ChangePlanDetailPage: React.FC = () => {
           )}
         </div>
 
+        {/* SQL Content */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>SQL Content</CardTitle>
+                <CardDescription>SQL statements to be executed</CardDescription>
+              </div>
+              {isAuthor() && canEditSQLContent(changePlan.status) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleOpenEditDialog}
+                  className="h-8 w-8 p-0"
+                  aria-label="Edit SQL content"
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <pre className="p-4 bg-muted rounded-md overflow-x-auto">
+              <code className="text-sm font-mono">{changePlan.sql_content}</code>
+            </pre>
+          </CardContent>
+        </Card>
+
         {/* Error blocking indication */}
         {changePlan.has_errors && changePlan.policy_findings && (
           <Card className="border-destructive">
@@ -492,34 +520,6 @@ export const ChangePlanDetailPage: React.FC = () => {
 
         {/* Execution Results */}
         <ExecutionResults changePlan={changePlan} />
-
-        {/* SQL Content */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>SQL Content</CardTitle>
-                <CardDescription>SQL statements to be executed</CardDescription>
-              </div>
-              {isAuthor() && canEditSQLContent(changePlan.status) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleOpenEditDialog}
-                  className="h-8 w-8 p-0"
-                  aria-label="Edit SQL content"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <pre className="p-4 bg-muted rounded-md overflow-x-auto">
-              <code className="text-sm font-mono">{changePlan.sql_content}</code>
-            </pre>
-          </CardContent>
-        </Card>
 
         {/* Rollback SQL */}
         {changePlan.rollback_sql && (
