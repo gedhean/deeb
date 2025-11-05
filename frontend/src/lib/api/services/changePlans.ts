@@ -54,4 +54,11 @@ export const changePlanService = {
     const response = await apiClient.post<ChangePlan>('/api/v1/change-plans', data);
     return response;
   },
+
+  /**
+   * Trigger SQL Review manually for a change plan
+   */
+  async triggerSQLReview(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/review`, {});
+  },
 };
