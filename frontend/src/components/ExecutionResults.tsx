@@ -2,6 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { changePlanService } from '@/lib/api/services/changePlans';
 import { usersService } from '@/lib/api/services/users';
 import { APIError } from '@/lib/api/types';
@@ -248,100 +254,104 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ changePlan }
 
         {/* Execution Log History */}
         {executionLogs.length > 0 && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold mb-3">Execution History</h3>
-              <div className="space-y-3">
-                {executionLogs.map((log) => {
-                  const executor = executors.get(log.executor_id);
-                  const logIsCompleted = log.status === 'Completed';
-                  const logIsFailed = log.status === 'Failed';
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="execution-history" className="border-none">
+              <AccordionTrigger className="px-0 hover:no-underline">
+                <h3 className="text-sm font-semibold">Execution History</h3>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-3 mt-4">
+                  {executionLogs.map((log) => {
+                    const executor = executors.get(log.executor_id);
+                    const logIsCompleted = log.status === 'Completed';
+                    const logIsFailed = log.status === 'Failed';
 
-                  return (
-                    <div key={log.id} className="rounded-lg border p-4 space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          {logIsCompleted ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                          ) : logIsFailed ? (
-                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                          ) : null}
-                          <Badge
-                            variant={logIsCompleted ? 'default' : 'destructive'}
-                            className={
-                              logIsCompleted
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                            }
-                          >
-                            {log.status}
-                          </Badge>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(log.completed_at || log.started_at)}
-                        </span>
-                      </div>
-
-                      <div className="grid gap-2 text-sm md:grid-cols-2">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">Duration:</span>
-                          <span className="font-medium">
-                            {formatDuration(log.execution_duration_ms)}
+                    return (
+                      <div key={log.id} className="rounded-lg border p-4 space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            {logIsCompleted ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            ) : logIsFailed ? (
+                              <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            ) : null}
+                            <Badge
+                              variant={logIsCompleted ? 'default' : 'destructive'}
+                              className={
+                                logIsCompleted
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                              }
+                            >
+                              {log.status}
+                            </Badge>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(log.completed_at || log.started_at)}
                           </span>
                         </div>
 
-                        {log.rows_affected !== undefined && (
+                        <div className="grid gap-2 text-sm md:grid-cols-2">
                           <div className="flex items-center gap-2">
-                            <DatabaseIcon className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">Rows Affected:</span>
+                            <Clock className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">Duration:</span>
                             <span className="font-medium">
-                              {log.rows_affected.toLocaleString()}
+                              {formatDuration(log.execution_duration_ms)}
                             </span>
                           </div>
-                        )}
 
-                        {executor && (
-                          <div className="flex items-center gap-2">
-                            <UserIcon className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">Executor:</span>
-                            <span className="font-medium">{executor.email}</span>
+                          {log.rows_affected !== undefined && (
+                            <div className="flex items-center gap-2">
+                              <DatabaseIcon className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-muted-foreground">Rows Affected:</span>
+                              <span className="font-medium">
+                                {log.rows_affected.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+
+                          {executor && (
+                            <div className="flex items-center gap-2">
+                              <UserIcon className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-muted-foreground">Executor:</span>
+                              <span className="font-medium">{executor.email}</span>
+                            </div>
+                          )}
+
+                          {log.database_name && (
+                            <div className="flex items-center gap-2">
+                              <DatabaseIcon className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-muted-foreground">Database:</span>
+                              <span className="font-medium">{log.database_name}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {logIsFailed && log.error_message && (
+                          <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20 mt-2">
+                            <p className="text-sm text-red-800 dark:text-red-200 whitespace-pre-wrap">
+                              {log.error_message}
+                            </p>
                           </div>
                         )}
 
-                        {log.database_name && (
-                          <div className="flex items-center gap-2">
-                            <DatabaseIcon className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">Database:</span>
-                            <span className="font-medium">{log.database_name}</span>
-                          </div>
+                        {log.sql_content && (
+                          <details className="mt-2">
+                            <summary className="text-sm font-medium cursor-pointer hover:text-primary">
+                              View Executed SQL
+                            </summary>
+                            <pre className="mt-2 p-3 bg-muted rounded-md overflow-x-auto text-xs">
+                              <code>{log.sql_content}</code>
+                            </pre>
+                          </details>
                         )}
                       </div>
-
-                      {logIsFailed && log.error_message && (
-                        <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20 mt-2">
-                          <p className="text-sm text-red-800 dark:text-red-200 whitespace-pre-wrap">
-                            {log.error_message}
-                          </p>
-                        </div>
-                      )}
-
-                      {log.sql_content && (
-                        <details className="mt-2">
-                          <summary className="text-sm font-medium cursor-pointer hover:text-primary">
-                            View Executed SQL
-                          </summary>
-                          <pre className="mt-2 p-3 bg-muted rounded-md overflow-x-auto text-xs">
-                            <code>{log.sql_content}</code>
-                          </pre>
-                        </details>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+                    );
+                  })}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         )}
 
         {error && (

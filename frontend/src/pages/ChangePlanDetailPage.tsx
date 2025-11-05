@@ -37,7 +37,6 @@ import {
   Edit,
   Loader2,
 } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
 
 export const ChangePlanDetailPage: React.FC = () => {
   const navigate = useNavigate();
