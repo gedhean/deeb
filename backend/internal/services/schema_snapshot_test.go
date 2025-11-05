@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -279,7 +280,7 @@ func TestSchemaSnapshotService_CapturePostgreSQL_PgDumpCommand(t *testing.T) {
 	// Verify command can be constructed
 	cmd := exec.CommandContext(ctx, "pg_dump", expectedArgs...)
 	assert.NotNil(t, cmd)
-	assert.Equal(t, "pg_dump", cmd.Path)
+	assert.Equal(t, "pg_dump", filepath.Base(cmd.Path)) // Check basename instead of full path
 	assert.Equal(t, expectedArgs, cmd.Args[1:]) // Args[0] is the command path
 
 	// Verify logger is used

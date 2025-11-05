@@ -83,8 +83,7 @@ func (s *SchemaSnapshotService) CapturePostgreSQL(
 
 	// Build pg_dump command with performance optimizations
 	// pg_dump --schema-only --no-owner --no-privileges --host=<host> --port=<port> --username=<username> <database>
-	// Added --jobs=4 for parallel dump (faster for large schemas)
-	// Note: --compress is only available for directory/custom formats, not plain format
+	// Note: --jobs is only available with directory format (--format=d), not plain format
 	cmd := exec.CommandContext(ctx, "pg_dump",
 		"--schema-only",
 		"--no-owner",
@@ -94,7 +93,6 @@ func (s *SchemaSnapshotService) CapturePostgreSQL(
 		"--username", dbInstance.Username,
 		"--dbname", db.DatabaseName,
 		"--format", "plain", // Plain text SQL format
-		"--jobs", "4", // Parallel dump for faster execution (4 parallel workers)
 	)
 
 	// Set password via PGPASSWORD environment variable
