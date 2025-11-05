@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { changePlanService } from '@/lib/api/services/changePlans';
 import type { ChangePlan } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { healthService } from '@/lib/api/services/health';
 
@@ -169,9 +169,10 @@ export const DashboardPage: React.FC = () => {
               ) : (
                 <div className="space-y-3">
                   {stats.recentChangePlans.map((changePlan) => (
-                    <div
+                    <Link
                       key={changePlan.id}
-                      className="flex items-center justify-between border-b pb-3 last:border-0"
+                      to={`/change-plans/${changePlan.id}`}
+                      className="flex items-center justify-between border-b pb-3 last:border-0 hover:bg-muted/50 -mx-4 px-4 py-2 rounded-md transition-colors cursor-pointer"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -191,7 +192,7 @@ export const DashboardPage: React.FC = () => {
                           {formatDate(changePlan.created_at)}
                         </p>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
@@ -216,9 +217,10 @@ export const DashboardPage: React.FC = () => {
               ) : (
                 <div className="space-y-3">
                   {stats.pendingApprovals.map((changePlan) => (
-                    <div
+                    <Link
                       key={changePlan.id}
-                      className="flex items-center justify-between border-b pb-3 last:border-0"
+                      to={`/change-plans/${changePlan.id}`}
+                      className="flex items-center justify-between border-b pb-3 last:border-0 hover:bg-muted/50 -mx-4 px-4 py-2 rounded-md transition-colors cursor-pointer"
                     >
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-medium truncate">{changePlan.title}</h4>
@@ -242,11 +244,11 @@ export const DashboardPage: React.FC = () => {
                         </div>
                       </div>
                       <div className="ml-4 shrink-0">
-                        <Button size="sm" variant="outline">
+                        <span className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background border border-input hover:bg-accent hover:text-accent-foreground h-8 px-3 py-1">
                           Review
-                        </Button>
+                        </span>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
