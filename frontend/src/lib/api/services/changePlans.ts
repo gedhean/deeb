@@ -4,6 +4,8 @@ import type {
   ChangePlanListResponse,
   CreateChangePlanRequest,
   ListChangePlansParams,
+  ApproveChangePlanRequest,
+  CloseChangePlanRequest,
 } from '../types';
 
 export const changePlanService = {
@@ -60,5 +62,19 @@ export const changePlanService = {
    */
   async triggerSQLReview(id: string): Promise<void> {
     await apiClient.post(`/api/v1/change-plans/${id}/review`, {});
+  },
+
+  /**
+   * Approve a change plan
+   */
+  async approveChangePlan(id: string, data?: ApproveChangePlanRequest): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/approve`, data || {});
+  },
+
+  /**
+   * Close/reject a change plan
+   */
+  async closeChangePlan(id: string, data?: CloseChangePlanRequest): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/close`, data || {});
   },
 };

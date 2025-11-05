@@ -286,6 +286,14 @@ export interface CreateChangePlanRequest {
   rollback_sql?: string;
 }
 
+export interface ApproveChangePlanRequest {
+  comments?: string;
+}
+
+export interface CloseChangePlanRequest {
+  comments?: string;
+}
+
 // API Error
 export class APIError extends Error {
   constructor(

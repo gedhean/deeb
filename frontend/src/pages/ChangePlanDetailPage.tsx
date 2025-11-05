@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { SQLReviewResults } from '@/components/SQLReviewResults';
+import { ApprovalActions } from '@/components/ApprovalActions';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -223,12 +224,15 @@ export const ChangePlanDetailPage: React.FC = () => {
               </p>
             </div>
           </div>
-          <Badge
-            variant={getStatusBadgeVariant(changePlan.status)}
-            className={getStatusBadgeClass(changePlan.status)}
-          >
-            {changePlan.status}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge
+              variant={getStatusBadgeVariant(changePlan.status)}
+              className={getStatusBadgeClass(changePlan.status)}
+            >
+              {changePlan.status}
+            </Badge>
+            <ApprovalActions changePlan={changePlan} onSuccess={() => loadChangePlan(id!)} />
+          </div>
         </div>
 
         {/* Error message */}

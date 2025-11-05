@@ -361,20 +361,20 @@ Integrate SQL Review results component into Change Plan detail page.
 
 ### P06M18: Implement approval workflow UI
 
-**Status:** 🚧 TODO
+**Status:** ✅ COMPLETE
 **ID:** P06M18
 
 **Goal**
 Create UI components for approving or closing Change Plans with comments.
 
 **Acceptance Criteria**
-- [ ] Approval actions component created in `frontend/src/components/ApprovalActions.tsx`
-- [ ] Approve button with confirmation dialog
-- [ ] Close/reject button with confirmation dialog
-- [ ] Comment input field
-- [ ] Approval button only visible to Project Approvers
-- [ ] Error handling for invalid approvals
-- [ ] Success handling (refresh Change Plan details)
+- [x] Approval actions component created in `frontend/src/components/ApprovalActions.tsx`
+- [x] Approve button with confirmation dialog
+- [x] Close/reject button with confirmation dialog
+- [x] Comment input field
+- [x] Approval button only visible to Project Approvers
+- [x] Error handling for invalid approvals
+- [x] Success handling (refresh Change Plan details)
 
 ---
 
