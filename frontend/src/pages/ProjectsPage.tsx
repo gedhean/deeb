@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
 import {
   Empty,
   EmptyContent,
@@ -114,13 +115,14 @@ export const ProjectsPage: React.FC = () => {
       setIsCreateOpen(false);
       setFormData({ name: '', description: '' });
       setFormErrors({});
+      showSuccessToast('Project created successfully');
       await loadProjects();
     } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to create project. Please try again.');
-      }
+      const errorMsg = handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to create project',
+      });
+      setError(errorMsg);
       console.error('Failed to create project:', err);
     } finally {
       setIsSubmitting(false);
@@ -148,13 +150,14 @@ export const ProjectsPage: React.FC = () => {
       setSelectedProject(null);
       setFormData({ name: '', description: '' });
       setFormErrors({});
+      showSuccessToast('Project updated successfully');
       await loadProjects();
     } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to update project. Please try again.');
-      }
+      const errorMsg = handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to update project',
+      });
+      setError(errorMsg);
       console.error('Failed to update project:', err);
     } finally {
       setIsSubmitting(false);
@@ -172,13 +175,14 @@ export const ProjectsPage: React.FC = () => {
       await projectsService.deleteProject(selectedProject.id);
       setIsDeleteOpen(false);
       setSelectedProject(null);
+      showSuccessToast('Project deleted successfully');
       await loadProjects();
     } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to delete project. Please try again.');
-      }
+      const errorMsg = handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to delete project',
+      });
+      setError(errorMsg);
       console.error('Failed to delete project:', err);
     } finally {
       setIsSubmitting(false);

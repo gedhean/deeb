@@ -30,15 +30,7 @@ import { AlertTriangle, Calendar, Filter, X } from 'lucide-react';
 
 // Common actions and resource types for filters
 // Actions match backend constants (lowercase with underscores)
-const COMMON_ACTIONS = [
-  'login',
-  'logout',
-  'register',
-  'create',
-  'read',
-  'update',
-  'delete',
-];
+const COMMON_ACTIONS = ['login', 'logout', 'register', 'create', 'read', 'update', 'delete'];
 
 // Resource types match backend constants (lowercase with underscores)
 const RESOURCE_TYPES = [

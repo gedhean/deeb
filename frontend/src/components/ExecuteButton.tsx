@@ -10,10 +10,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { changePlanService } from '@/lib/api/services/changePlans';
-import { APIError } from '@/lib/api/types';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ChangePlan } from '@/lib/api/types';
 import { Play, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
 
 interface ExecuteButtonProps {
   changePlan: ChangePlan;
@@ -65,6 +65,7 @@ export const ExecuteButton: React.FC<ExecuteButtonProps> = ({ changePlan, onSucc
       await changePlanService.executeChangePlan(changePlan.id);
 
       setExecutionStatus('success');
+      showSuccessToast('Change plan executed successfully');
 
       // Wait a moment to show success state, then close and refresh
       setTimeout(() => {
@@ -77,11 +78,11 @@ export const ExecuteButton: React.FC<ExecuteButtonProps> = ({ changePlan, onSucc
       }, 1500);
     } catch (err) {
       setExecutionStatus('idle');
-      if (err instanceof APIError) {
-        setError(err.message || 'Failed to execute change plan. Please try again.');
-      } else {
-        setError('Failed to execute change plan. Please try again.');
-      }
+      const errorMsg = handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to execute change plan',
+      });
+      setError(errorMsg);
       console.error('Failed to execute change plan:', err);
     } finally {
       setIsExecuting(false);

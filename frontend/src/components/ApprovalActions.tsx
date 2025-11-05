@@ -11,10 +11,10 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { changePlanService } from '@/lib/api/services/changePlans';
-import { APIError } from '@/lib/api/types';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ChangePlan } from '@/lib/api/types';
 import { CheckCircle2, XCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
 
 interface ApprovalActionsProps {
   changePlan: ChangePlan;
@@ -62,16 +62,17 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({ changePlan, on
 
       setIsApproveDialogOpen(false);
       handleDialogClose();
+      showSuccessToast('Change plan approved successfully');
 
       if (onSuccess) {
         onSuccess();
       }
     } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message || 'Failed to approve change plan. Please try again.');
-      } else {
-        setError('Failed to approve change plan. Please try again.');
-      }
+      const errorMsg = handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to approve change plan',
+      });
+      setError(errorMsg);
       console.error('Failed to approve change plan:', err);
     } finally {
       setIsSubmitting(false);
@@ -94,16 +95,17 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({ changePlan, on
 
       setIsCloseDialogOpen(false);
       handleDialogClose();
+      showSuccessToast('Change plan closed successfully');
 
       if (onSuccess) {
         onSuccess();
       }
     } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message || 'Failed to close change plan. Please try again.');
-      } else {
-        setError('Failed to close change plan. Please try again.');
-      }
+      const errorMsg = handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to close change plan',
+      });
+      setError(errorMsg);
       console.error('Failed to close change plan:', err);
     } finally {
       setIsSubmitting(false);
