@@ -16,6 +16,7 @@ import { UsersPage } from '@/pages/UsersPage';
 import { ChangePlanCreatePage } from '@/pages/ChangePlanCreatePage';
 import { ChangePlansPage } from '@/pages/ChangePlansPage';
 import { ChangePlanDetailPage } from '@/pages/ChangePlanDetailPage';
+import { AuditLogPage } from '@/pages/AuditLogPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import './App.css';
 
@@ -108,6 +109,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ChangePlanDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/audit"
+              element={
+                <ProtectedRoute>
+                  <AuditLogPage />
                 </ProtectedRoute>
               }
             />

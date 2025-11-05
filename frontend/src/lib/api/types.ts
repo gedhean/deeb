@@ -333,6 +333,38 @@ export interface ExecutionLogHistoryResponse {
   logs: ExecutionLog[];
 }
 
+// Audit Log Types
+export interface AuditLog {
+  id: string;
+  user_id: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  details?: Record<string, unknown>;
+  ip_address?: string;
+  user_agent?: string;
+  timestamp: string;
+}
+
+export interface ListAuditLogsParams {
+  user_id?: string;
+  action?: string;
+  target_type?: string;
+  target_id?: string;
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AuditLogListResponse {
+  audit_logs: AuditLog[];
+  total: number;
+  limit: number;
+  offset: number;
+  count: number;
+}
+
 // API Error
 export class APIError extends Error {
   constructor(
