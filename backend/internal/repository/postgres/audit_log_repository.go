@@ -89,7 +89,7 @@ func (r *AuditLogRepository) List(ctx context.Context, limit, offset int) ([]*mo
 func (r *AuditLogRepository) GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.AuditLog, error) {
 	query := `
 		SELECT id, user_id, action, resource_type, resource_id,
-			details, ip_address, user_agent, timestamp
+			details, host(ip_address) as ip_address, user_agent, timestamp
 		FROM audit_logs
 		WHERE user_id = $1
 		ORDER BY timestamp DESC
@@ -109,7 +109,7 @@ func (r *AuditLogRepository) GetByUserID(ctx context.Context, userID uuid.UUID, 
 func (r *AuditLogRepository) GetByAction(ctx context.Context, action string, limit, offset int) ([]*models.AuditLog, error) {
 	query := `
 		SELECT id, user_id, action, resource_type, resource_id,
-			details, ip_address, user_agent, timestamp
+			details, host(ip_address) as ip_address, user_agent, timestamp
 		FROM audit_logs
 		WHERE action = $1
 		ORDER BY timestamp DESC
@@ -133,7 +133,7 @@ func (r *AuditLogRepository) GetByTargetType(
 ) ([]*models.AuditLog, error) {
 	query := `
 		SELECT id, user_id, action, resource_type, resource_id,
-			details, ip_address, user_agent, timestamp
+			details, host(ip_address) as ip_address, user_agent, timestamp
 		FROM audit_logs
 		WHERE resource_type = $1
 		ORDER BY timestamp DESC
@@ -195,7 +195,7 @@ func (r *AuditLogRepository) Filter(ctx context.Context, filters repository.Audi
 	// Build query
 	query := `
 		SELECT id, user_id, action, resource_type, resource_id,
-			details, ip_address, user_agent, timestamp
+			details, host(ip_address) as ip_address, user_agent, timestamp
 		FROM audit_logs
 	`
 
