@@ -37,8 +37,8 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({ changePlan, on
     (user.organization_role === 'OrganizationAdmin' ||
       user.organization_role === 'OrganizationDBA');
 
-  // Only show actions if change plan is in Open status
-  const canPerformActions = changePlan.status === 'Open';
+  // Only show actions if change plan is in Open status or Failed status (can retry)
+  const canPerformActions = changePlan.status === 'Open' || changePlan.status === 'Failed';
 
   // Reset state when dialog closes
   const handleDialogClose = () => {
@@ -62,7 +62,11 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({ changePlan, on
 
       setIsApproveDialogOpen(false);
       handleDialogClose();
-      showSuccessToast('Change plan approved successfully');
+      showSuccessToast(
+        changePlan.status === 'Failed'
+          ? 'Change plan approved for retry. You can now execute it again.'
+          : 'Change plan approved successfully',
+      );
 
       if (onSuccess) {
         onSuccess();
@@ -112,7 +116,7 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({ changePlan, on
     }
   };
 
-  // Don't render if user can't approve or change plan is not in Open status
+  // Don't render if user can't approve or change plan is not in Open/Failed status
   if (!canApprove || !canPerformActions) {
     return null;
   }
@@ -130,15 +134,18 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({ changePlan, on
             disabled={changePlan.has_errors}
           >
             <CheckCircle2 className="mr-2 h-4 w-4" />
-            Approve
+            {changePlan.status === 'Failed' ? 'Retry' : 'Approve'}
           </Button>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Approve Change Plan</DialogTitle>
+            <DialogTitle>
+              {changePlan.status === 'Failed' ? 'Retry Failed Change Plan' : 'Approve Change Plan'}
+            </DialogTitle>
             <DialogDescription>
-              Approve this change plan to proceed with execution. You can add optional comments
-              below.
+              {changePlan.status === 'Failed'
+                ? 'Approve this change plan to retry execution. The status will transition to Approved, allowing you to execute again.'
+                : 'Approve this change plan to proceed with execution. You can add optional comments below.'}
             </DialogDescription>
           </DialogHeader>
 

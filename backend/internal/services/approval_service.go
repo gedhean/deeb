@@ -10,6 +10,7 @@ import (
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/workflow"
 	"go.uber.org/zap"
 )
 
@@ -45,15 +46,16 @@ func NewApprovalService(
 // Approval errors
 var (
 	ErrChangePlanNotFound        = fmt.Errorf("change plan not found")
-	ErrInvalidChangePlanStatus   = fmt.Errorf("change plan is not in Open status")
+	ErrInvalidChangePlanStatus   = fmt.Errorf("change plan is not in Open or Failed status")
 	ErrUnauthorizedApprover      = fmt.Errorf("user does not have permission to approve change plans")
 	ErrCannotApproveWithErrors   = fmt.Errorf("cannot approve change plan with SQL Review errors")
 	ErrChangePlanAlreadyApproved = fmt.Errorf("change plan is already approved")
 	ErrChangePlanAlreadyClosed   = fmt.Errorf("change plan is already closed")
 )
 
-// Approve approves a Change Plan, moving it from Open to Approved status
+// Approve approves a Change Plan, moving it from Open or Failed to Approved status
 // Requires: no SQL Review errors, valid approver permissions
+// Allows retry of Failed change plans by transitioning them back to Approved
 func (s *ApprovalService) Approve(ctx context.Context, changePlanID uuid.UUID, approverID uuid.UUID, comments *string) error {
 	// Get Change Plan
 	changePlan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
@@ -64,8 +66,9 @@ func (s *ApprovalService) Approve(ctx context.Context, changePlanID uuid.UUID, a
 		return fmt.Errorf("failed to get change plan: %w", err)
 	}
 
-	// Verify Change Plan is in Open status
-	if changePlan.Status != models.ChangePlanStatusOpen {
+	// Verify Change Plan can transition to Approved status
+	// Allow transitions from Open or Failed status (Failed can be retried)
+	if changePlan.Status != models.ChangePlanStatusOpen && changePlan.Status != models.ChangePlanStatusFailed {
 		if changePlan.Status == models.ChangePlanStatusApproved {
 			return ErrChangePlanAlreadyApproved
 		}
@@ -73,6 +76,11 @@ func (s *ApprovalService) Approve(ctx context.Context, changePlanID uuid.UUID, a
 			return ErrChangePlanAlreadyClosed
 		}
 		return fmt.Errorf("%w: current status is %s", ErrInvalidChangePlanStatus, changePlan.Status)
+	}
+
+	// Validate the transition using workflow validation
+	if err := workflow.ValidateTransition(changePlan.Status, models.ChangePlanStatusApproved); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidChangePlanStatus, err)
 	}
 
 	// Verify approver has permission
@@ -95,21 +103,50 @@ func (s *ApprovalService) Approve(ctx context.Context, changePlanID uuid.UUID, a
 		return fmt.Errorf("%w: %s", ErrCannotApproveWithErrors, strings.Join(errorMessages, "; "))
 	}
 
-	// Create approval record
-	approval := &models.Approval{
-		ID:           uuid.New(),
-		ChangePlanID: changePlanID,
-		ApproverID:   approverID,
-		Status:       models.ApprovalStatusApproved,
-		Comments:     comments,
-		CreatedAt:    time.Now(),
+	// Check if approval already exists for this user and change plan
+	existingApproval, err := s.approvalRepo.GetByChangePlanIDAndApproverID(ctx, changePlanID, approverID)
+	if err != nil && err != repository.ErrNotFound {
+		return fmt.Errorf("failed to check existing approval: %w", err)
 	}
 
 	now := time.Now()
-	approval.ApprovedAt = &now
 
-	if err := s.approvalRepo.Create(ctx, approval); err != nil {
-		return fmt.Errorf("failed to create approval record: %w", err)
+	if existingApproval != nil {
+		// Update existing approval
+		existingApproval.Status = models.ApprovalStatusApproved
+		existingApproval.Comments = comments
+		existingApproval.ApprovedAt = &now
+
+		if err := s.approvalRepo.Update(ctx, existingApproval); err != nil {
+			return fmt.Errorf("failed to update approval record: %w", err)
+		}
+
+		s.logger.Info("Approval record updated",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("approver_id", approverID.String()),
+			zap.String("approval_id", existingApproval.ID.String()),
+		)
+	} else {
+		// Create new approval record
+		approval := &models.Approval{
+			ID:           uuid.New(),
+			ChangePlanID: changePlanID,
+			ApproverID:   approverID,
+			Status:       models.ApprovalStatusApproved,
+			Comments:     comments,
+			ApprovedAt:   &now,
+			CreatedAt:    now,
+		}
+
+		if err := s.approvalRepo.Create(ctx, approval); err != nil {
+			return fmt.Errorf("failed to create approval record: %w", err)
+		}
+
+		s.logger.Info("Approval record created",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("approver_id", approverID.String()),
+			zap.String("approval_id", approval.ID.String()),
+		)
 	}
 
 	// Update Change Plan status to Approved

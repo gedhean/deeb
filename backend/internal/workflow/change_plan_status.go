@@ -25,7 +25,7 @@ func (e ErrInvalidStatusTransition) Error() string {
 		msg.WriteString(fmt.Sprintf("Cannot transition from %s: target status %s is invalid", e.From, e.To))
 	} else if IsTerminalStatus(e.From) {
 		msg.WriteString(fmt.Sprintf("Cannot transition from %s to %s: %s is a terminal state", e.From, e.To, e.From))
-		msg.WriteString(". Terminal states (Completed, Failed, Closed, Cancelled) cannot be changed.")
+		msg.WriteString(". Terminal states (Completed, Closed, Cancelled) cannot be changed.")
 	} else {
 		msg.WriteString(fmt.Sprintf("Cannot transition from %s to %s", e.From, e.To))
 
@@ -93,6 +93,7 @@ func (e ErrInvalidStatusTransition) Details() map[string]interface{} {
 // Approved → InProgress
 // InProgress → Completed
 // InProgress → Failed
+// Failed → Approved (allows re-execution after transient failures)
 
 // validTransitions defines the allowed status transitions
 var validTransitions = map[models.ChangePlanStatus][]models.ChangePlanStatus{
@@ -118,7 +119,7 @@ var validTransitions = map[models.ChangePlanStatus][]models.ChangePlanStatus{
 		// Terminal state - no transitions allowed
 	},
 	models.ChangePlanStatusFailed: {
-		// Terminal state - no transitions allowed
+		models.ChangePlanStatusApproved, // Allow re-execution after transient failures
 	},
 	models.ChangePlanStatusClosed: {
 		// Terminal state - no transitions allowed
@@ -265,4 +266,10 @@ func CanBeModified(status models.ChangePlanStatus) bool {
 // CanBeDeleted checks if a Change Plan can be deleted (only Draft or Closed)
 func CanBeDeleted(status models.ChangePlanStatus) bool {
 	return status == models.ChangePlanStatusDraft || status == models.ChangePlanStatusClosed
+}
+
+// CanEditSQLContent checks if SQL content can be edited (not terminal states)
+// Terminal states are: Completed, Closed, Cancelled
+func CanEditSQLContent(status models.ChangePlanStatus) bool {
+	return !IsTerminalStatus(status)
 }

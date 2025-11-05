@@ -11,12 +11,22 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { SQLReviewResults } from '@/components/SQLReviewResults';
 import { ApprovalActions } from '@/components/ApprovalActions';
 import { ApprovalHistory } from '@/components/ApprovalHistory';
 import { ExecuteButton } from '@/components/ExecuteButton';
 import { ExecutionResults } from '@/components/ExecutionResults';
 import { SubmitForReview } from '@/components/SubmitForReview';
+import { useAuth } from '@/contexts/AuthContext';
+import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -24,17 +34,24 @@ import {
   User as UserIcon,
   Database as DatabaseIcon,
   FileCode,
+  Edit,
+  Loader2,
 } from 'lucide-react';
 
 export const ChangePlanDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [changePlan, setChangePlan] = useState<ChangePlan | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [database, setDatabase] = useState<Database | null>(null);
   const [author, setAuthor] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingSQLContent, setEditingSQLContent] = useState('');
+  const [isUpdatingSQL, setIsUpdatingSQL] = useState(false);
+  const [editError, setEditError] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -142,6 +159,69 @@ export const ChangePlanDetailPage: React.FC = () => {
       });
     } catch {
       return dateString;
+    }
+  };
+
+  // Check if SQL content can be edited (not terminal states)
+  // Terminal states are: Completed, Closed, Cancelled
+  // Failed is no longer terminal and can be edited
+  const canEditSQLContent = (status: ChangePlanStatus): boolean => {
+    const terminalStates: ChangePlanStatus[] = ['Completed', 'Closed', 'Cancelled'];
+    return !terminalStates.includes(status);
+  };
+
+  // Check if current user is the author
+  const isAuthor = (): boolean => {
+    return user?.id === changePlan?.author_id;
+  };
+
+  // Handle opening edit dialog
+  const handleOpenEditDialog = () => {
+    if (changePlan) {
+      setEditingSQLContent(changePlan.sql_content);
+      setEditError('');
+      setIsEditDialogOpen(true);
+    }
+  };
+
+  // Handle closing edit dialog
+  const handleCloseEditDialog = () => {
+    setIsEditDialogOpen(false);
+    setEditingSQLContent('');
+    setEditError('');
+  };
+
+  // Handle saving SQL content
+  const handleSaveSQLContent = async () => {
+    if (!changePlan || !editingSQLContent.trim()) {
+      setEditError('SQL content is required');
+      return;
+    }
+
+    try {
+      setIsUpdatingSQL(true);
+      setEditError('');
+
+      await changePlanService.updateChangePlan(changePlan.id, {
+        sql_content: editingSQLContent.trim(),
+      });
+
+      setIsEditDialogOpen(false);
+      showSuccessToast('SQL content updated successfully. SQL Review will run automatically.');
+
+      // Reload change plan to get updated status and SQL Review results
+      if (id) {
+        loadChangePlan(id);
+      }
+    } catch (err) {
+      const errorMsg = handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to update SQL content',
+      });
+      setEditError(errorMsg);
+      console.error('Failed to update SQL content:', err);
+    } finally {
+      setIsUpdatingSQL(false);
     }
   };
 
@@ -409,8 +489,23 @@ export const ChangePlanDetailPage: React.FC = () => {
         {/* SQL Content */}
         <Card>
           <CardHeader>
-            <CardTitle>SQL Content</CardTitle>
-            <CardDescription>SQL statements to be executed</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>SQL Content</CardTitle>
+                <CardDescription>SQL statements to be executed</CardDescription>
+              </div>
+              {isAuthor() && canEditSQLContent(changePlan.status) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleOpenEditDialog}
+                  className="h-8 w-8 p-0"
+                  aria-label="Edit SQL content"
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <pre className="p-4 bg-muted rounded-md overflow-x-auto">
@@ -433,6 +528,76 @@ export const ChangePlanDetailPage: React.FC = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Edit SQL Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit SQL Content</DialogTitle>
+              <DialogDescription>
+                Update the SQL content for this change plan. After saving, the change plan will
+                transition to "Open" status and SQL Review will run automatically.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label htmlFor="edit-sql-content" className="text-sm font-medium">
+                  SQL Content *
+                </label>
+                <textarea
+                  id="edit-sql-content"
+                  value={editingSQLContent}
+                  onChange={(e) => setEditingSQLContent(e.target.value)}
+                  placeholder="-- Enter your SQL statements here&#10;CREATE TABLE users (&#10;  id UUID PRIMARY KEY,&#10;  email VARCHAR(255) UNIQUE&#10;);"
+                  rows={16}
+                  className="flex min-h-[300px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-invalid={!!editError}
+                />
+                {editError && <p className="text-sm text-destructive">{editError}</p>}
+                <p className="text-xs text-muted-foreground">
+                  SQL statements will be executed against the target database. Ensure they are
+                  correct and tested.
+                </p>
+              </div>
+
+              {changePlan && changePlan.status !== 'Open' && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/20">
+                  <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span className="text-sm">
+                      After saving, this change plan will transition to "Open" status and SQL Review
+                      will run automatically.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={handleCloseEditDialog}
+                disabled={isUpdatingSQL}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSaveSQLContent} disabled={isUpdatingSQL}>
+                {isUpdatingSQL ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DefaultLayout>
   );

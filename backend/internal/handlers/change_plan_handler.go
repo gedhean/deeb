@@ -30,6 +30,7 @@ type ChangePlanHandler struct {
 	databaseInstanceRepo repository.DatabaseInstanceRepository
 	projectMemberRepo    repository.ProjectMemberRepository
 	policyFindingRepo    repository.PolicyFindingRepository
+	approvalRepo         repository.ApprovalRepository
 	riskAssessmentSvc    *services.RiskAssessmentService
 	reviewService        *review.ReviewService
 	approvalService      *services.ApprovalService
@@ -47,6 +48,7 @@ func NewChangePlanHandler(
 	databaseInstanceRepo repository.DatabaseInstanceRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
 	policyFindingRepo repository.PolicyFindingRepository,
+	approvalRepo repository.ApprovalRepository,
 	riskAssessmentSvc *services.RiskAssessmentService,
 	reviewService *review.ReviewService,
 	approvalService *services.ApprovalService,
@@ -62,11 +64,12 @@ func NewChangePlanHandler(
 		databaseInstanceRepo: databaseInstanceRepo,
 		projectMemberRepo:    projectMemberRepo,
 		policyFindingRepo:    policyFindingRepo,
+		approvalRepo:         approvalRepo,
 		riskAssessmentSvc:    riskAssessmentSvc,
 		reviewService:        reviewService,
 		approvalService:      approvalService,
-		executionService:     executionService,
-		auditService:         auditService,
+		executionService:      executionService,
+		auditService:          auditService,
 		logger:               logger,
 	}
 }
@@ -648,16 +651,6 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		}
 	}
 
-	// Only Draft status can be modified
-	if !workflow.CanBeModified(changePlan.Status) {
-		return c.JSON(http.StatusForbidden, map[string]interface{}{
-			"error": "Only Draft change plans can be modified",
-			"details": map[string]interface{}{
-				"current_status": changePlan.Status,
-			},
-		})
-	}
-
 	// Parse request
 	var req models.UpdateChangePlanRequest
 	if err := c.Bind(&req); err != nil {
@@ -670,6 +663,32 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 	if ve != nil {
 		h.logger.Error("Validation failed", zap.Error(ve))
 		return middleware.HandleValidationError(c, ve)
+	}
+
+	// Check if SQL content is being updated
+	isUpdatingSQLContent := req.SQLContent != nil && *req.SQLContent != changePlan.SQLContent
+
+	// If updating SQL content, allow editing if status allows SQL editing (not terminal)
+	// Otherwise, only Draft status can be modified
+	if isUpdatingSQLContent {
+		if !workflow.CanEditSQLContent(changePlan.Status) {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "Cannot edit SQL content for change plans in terminal states",
+				"details": map[string]interface{}{
+					"current_status": changePlan.Status,
+				},
+			})
+		}
+	} else {
+		// For other fields, only Draft status can be modified
+		if !workflow.CanBeModified(changePlan.Status) {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "Only Draft change plans can be modified",
+				"details": map[string]interface{}{
+					"current_status": changePlan.Status,
+				},
+			})
+		}
 	}
 
 	// Update fields if provided
@@ -697,6 +716,33 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 				// Continue with existing risk level
 			} else {
 				changePlan.RiskLevel = riskLevel
+			}
+		}
+
+		// If SQL content is updated and status is not "Open" and not terminal, transition to "Open"
+		if changePlan.Status != models.ChangePlanStatusOpen && workflow.CanEditSQLContent(changePlan.Status) {
+			previousStatus := changePlan.Status
+			changePlan.Status = models.ChangePlanStatusOpen
+			h.logger.Info("Status transitioned to Open due to SQL content update",
+				zap.String("change_plan_id", changePlan.ID.String()),
+				zap.String("previous_status", string(previousStatus)),
+			)
+		}
+
+		// Delete existing approval records when SQL content is updated
+		// This allows approvers to approve the updated version
+		// Delete approvals whether status transitions to Open or is already Open
+		if changePlan.Status == models.ChangePlanStatusOpen {
+			if err := h.approvalRepo.DeleteByChangePlanID(ctx, changePlan.ID); err != nil {
+				h.logger.Warn("Failed to delete existing approvals after SQL content update",
+					zap.String("change_plan_id", changePlan.ID.String()),
+					zap.Error(err),
+				)
+				// Don't block the update - continue even if approval deletion fails
+			} else {
+				h.logger.Info("Deleted existing approvals after SQL content update",
+					zap.String("change_plan_id", changePlan.ID.String()),
+				)
 			}
 		}
 	}
@@ -777,6 +823,15 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"error": err.Error(),
 		})
+	}
+
+	// If SQL content was updated, trigger SQL Review
+	if isUpdatingSQLContent {
+		if err := h.triggerSQLReview(c, changePlan); err != nil {
+			h.logger.Error("SQL Review failed after SQL content update", zap.Error(err), zap.String("change_plan_id", changePlan.ID.String()))
+			// Don't block the update - SQL Review errors don't prevent saving the SQL content
+			// The review results will be stored and displayed to the user
+		}
 	}
 
 	// Track field changes before updating

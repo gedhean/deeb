@@ -595,6 +595,7 @@ func setupChangePlanRoutes(
 		databaseInstanceRepo,
 		projectMemberRepo,
 		policyFindingRepo,
+		approvalRepo,
 		riskAssessmentSvc,
 		reviewService,
 		approvalService,
