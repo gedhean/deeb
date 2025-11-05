@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { PolicyFindingsSummary, PolicyFindingItem } from '@/lib/api/types';
+import type { PolicyFindingsSummary, PolicyFindingItem, ChangePlanStatus } from '@/lib/api/types';
 import { changePlanService } from '@/lib/api/services/changePlans';
 import { APIError } from '@/lib/api/types';
 import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw } from 'lucide-react';
@@ -11,12 +11,14 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw } from 'lucide-re
 interface SQLReviewResultsProps {
   changePlanId: string;
   findings?: PolicyFindingsSummary;
+  changePlanStatus?: ChangePlanStatus;
   onRefresh?: () => void;
 }
 
 export const SQLReviewResults: React.FC<SQLReviewResultsProps> = ({
   changePlanId,
   findings,
+  changePlanStatus,
   onRefresh,
 }) => {
   const [isTriggeringReview, setIsTriggeringReview] = useState(false);
@@ -46,19 +48,97 @@ export const SQLReviewResults: React.FC<SQLReviewResultsProps> = ({
     }
   };
 
-  // If no findings provided, show loading or empty state
+  // If no findings provided, show appropriate message or loading state
   if (!findings) {
+    // Show skeleton only when user triggers the review
+    if (isTriggeringReview) {
+      return (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>SQL Review Results</CardTitle>
+                <CardDescription>SQL Review results will appear here</CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={true}
+              >
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Running Review...
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    // Show message when change plan is Draft (not submitted for review yet)
+    if (changePlanStatus === 'Draft') {
+      return (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>SQL Review Results</CardTitle>
+                <CardDescription>SQL Review results will appear here</CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTriggerReview}
+                disabled={isTriggeringReview}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Run Review
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-left text-muted-foreground">
+              <p className="text-sm font-medium">No review results yet</p>
+              <p className="text-xs mt-1">
+                SQL Review results will appear here when you submit this change plan for review.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    // Show message when change plan is submitted but no review results yet
     return (
       <Card>
         <CardHeader>
-          <CardTitle>SQL Review Results</CardTitle>
-          <CardDescription>SQL Review results will appear here</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>SQL Review Results</CardTitle>
+              <CardDescription>SQL Review results will appear here</CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTriggerReview}
+              disabled={isTriggeringReview}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Run Review
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
+          <div className="text-center py-8 text-muted-foreground">
+            <p className="text-xs mt-1">
+              SQL Review results will appear here when the change plan is submitted for review.
+            </p>
           </div>
         </CardContent>
       </Card>

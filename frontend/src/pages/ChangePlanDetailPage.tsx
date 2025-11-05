@@ -473,6 +473,7 @@ export const ChangePlanDetailPage: React.FC = () => {
         <SQLReviewResults
           changePlanId={changePlan.id}
           findings={changePlan.policy_findings}
+          changePlanStatus={changePlan.status}
           onRefresh={() => {
             if (id) {
               loadChangePlan(id);
