@@ -9,6 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -24,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export const UsersPage: React.FC = () => {
@@ -344,13 +352,24 @@ export const UsersPage: React.FC = () => {
         ) : users.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No users found.</p>
-                <Button onClick={openCreateForm} className="mt-4">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Your First User
-                </Button>
-              </div>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Users className="h-12 w-12 text-muted-foreground" />
+                  </EmptyMedia>
+                  <EmptyTitle>No Users Yet</EmptyTitle>
+                  <EmptyDescription>
+                    Get started by creating your first user account with email, password, and
+                    organization role.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button onClick={openCreateForm}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create User
+                  </Button>
+                </EmptyContent>
+              </Empty>
             </CardContent>
           </Card>
         ) : (

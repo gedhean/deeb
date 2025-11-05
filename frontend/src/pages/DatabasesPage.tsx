@@ -19,6 +19,14 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -34,7 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, Database as DatabaseIcon } from 'lucide-react';
 
 export const DatabasesPage: React.FC = () => {
   const { user } = useAuth();
@@ -423,13 +431,24 @@ export const DatabasesPage: React.FC = () => {
         ) : databases.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No databases found.</p>
-                <Button onClick={openCreateForm} className="mt-4">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Your First Database
-                </Button>
-              </div>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <DatabaseIcon className="h-12 w-12 text-muted-foreground" />
+                  </EmptyMedia>
+                  <EmptyTitle>No Databases Yet</EmptyTitle>
+                  <EmptyDescription>
+                    Get started by creating your first database and assigning it to a project and
+                    environment.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button onClick={openCreateForm}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Database
+                  </Button>
+                </EmptyContent>
+              </Empty>
             </CardContent>
           </Card>
         ) : (
