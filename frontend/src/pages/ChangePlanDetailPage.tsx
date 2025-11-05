@@ -251,9 +251,9 @@ export const ChangePlanDetailPage: React.FC = () => {
         )}
 
         {/* Change Plan Information */}
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-6">
           {/* Basic Information */}
-          <Card>
+          <Card className="w-full">
             <CardHeader>
               <CardTitle>Basic Information</CardTitle>
             </CardHeader>
@@ -355,7 +355,7 @@ export const ChangePlanDetailPage: React.FC = () => {
 
           {/* Execution Status */}
           {changePlan.status === 'Failed' && changePlan.error_message && (
-            <Card className="border-destructive">
+            <Card className="border-destructive w-full">
               <CardHeader>
                 <CardTitle className="text-destructive">Execution Error</CardTitle>
               </CardHeader>
