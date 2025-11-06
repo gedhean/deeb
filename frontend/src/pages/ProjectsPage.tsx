@@ -634,7 +634,7 @@ export const ProjectsPage: React.FC = () => {
 
         {/* Create Project Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className="w-full sm:w-[540px] overflow-y-auto">
+          <SheetContent className="w-full sm:w-[540px] overflow-y-auto min-w-[600px]">
             <SheetHeader>
               <SheetTitle>Create Project</SheetTitle>
               <SheetDescription>
@@ -685,7 +685,7 @@ export const ProjectsPage: React.FC = () => {
 
         {/* Edit Project Sheet */}
         <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <SheetContent className="w-full sm:w-[540px] overflow-y-auto">
+          <SheetContent className="w-full sm:w-[540px] overflow-y-auto min-w-[600px]">
             <SheetHeader>
               <SheetTitle>Edit Project</SheetTitle>
               <SheetDescription>Update project information.</SheetDescription>

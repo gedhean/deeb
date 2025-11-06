@@ -500,7 +500,7 @@ export const PoliciesPage: React.FC = () => {
 
         {/* Create Policy Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className="overflow-y-auto max-h-[90vh]">
+          <SheetContent className="overflow-y-auto max-h-[90vh] min-w-[600px] sm:w-[540px]">
             <SheetHeader>
               <SheetTitle>Create Policy</SheetTitle>
               <SheetDescription>
@@ -670,7 +670,7 @@ export const PoliciesPage: React.FC = () => {
 
         {/* Edit Policy Sheet */}
         <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <SheetContent className="overflow-y-auto max-h-[90vh]">
+          <SheetContent className="overflow-y-auto max-h-[90vh] min-w-[600px] sm:w-[540px]">
             <SheetHeader>
               <SheetTitle>Edit Policy</SheetTitle>
               <SheetDescription>

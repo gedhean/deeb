@@ -759,7 +759,7 @@ export const DatabasesPage: React.FC = () => {
 
         {/* Create Database Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className="overflow-y-auto max-h-[90vh]">
+          <SheetContent className="overflow-y-auto max-h-[90vh] min-w-[600px] sm:w-[540px]">
             <SheetHeader>
               <SheetTitle>Create Database</SheetTitle>
               <SheetDescription>
@@ -889,7 +889,7 @@ export const DatabasesPage: React.FC = () => {
 
         {/* Edit Database Sheet */}
         <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <SheetContent className="overflow-y-auto max-h-[90vh]">
+          <SheetContent className="overflow-y-auto max-h-[90vh] min-w-[600px] sm:w-[540px]">
             <SheetHeader>
               <SheetTitle>Edit Database</SheetTitle>
               <SheetDescription>

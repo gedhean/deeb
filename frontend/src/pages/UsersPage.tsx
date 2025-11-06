@@ -469,7 +469,7 @@ export const UsersPage: React.FC = () => {
 
         {/* Create User Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className="w-full sm:w-[540px] overflow-y-auto">
+          <SheetContent className="w-full sm:w-[540px] overflow-y-auto min-w-[600px]">
             <SheetHeader>
               <SheetTitle>Create User</SheetTitle>
               <SheetDescription>
@@ -499,7 +499,7 @@ export const UsersPage: React.FC = () => {
 
         {/* Edit User Sheet */}
         <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <SheetContent className="w-full sm:w-[540px] overflow-y-auto">
+          <SheetContent className="w-full sm:w-[540px] overflow-y-auto min-w-[600px]">
             <SheetHeader>
               <SheetTitle>Edit User</SheetTitle>
               <SheetDescription>Update user organization role and active status.</SheetDescription>

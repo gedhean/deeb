@@ -816,7 +816,7 @@ export const DatabaseInstancesPage: React.FC = () => {
 
         {/* Create Instance Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className="w-full min-w-[800px] sm:w-[540px] overflow-y-auto max-h-[90vh]">
+          <SheetContent className="w-full min-w-[600px] sm:w-[540px] overflow-y-auto max-h-[90vh]">
             <SheetHeader>
               <SheetTitle>Create Database Instance</SheetTitle>
               <SheetDescription>
@@ -1041,7 +1041,7 @@ export const DatabaseInstancesPage: React.FC = () => {
 
         {/* Edit Instance Sheet */}
         <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <SheetContent className="overflow-y-auto max-h-[90vh]">
+          <SheetContent className="overflow-y-auto max-h-[90vh] min-w-[600px] sm:w-[540px]">
             <SheetHeader>
               <SheetTitle>Edit Database Instance</SheetTitle>
               <SheetDescription>
