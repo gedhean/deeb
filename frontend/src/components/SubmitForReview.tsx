@@ -20,10 +20,7 @@ interface SubmitForReviewProps {
   onSuccess?: () => void;
 }
 
-export const SubmitForReview: React.FC<SubmitForReviewProps> = ({
-  changePlan,
-  onSuccess,
-}) => {
+export const SubmitForReview: React.FC<SubmitForReviewProps> = ({ changePlan, onSuccess }) => {
   const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -147,4 +144,3 @@ export const SubmitForReview: React.FC<SubmitForReviewProps> = ({
     </Dialog>
   );
 };
-

@@ -60,11 +60,7 @@ export const SQLReviewResults: React.FC<SQLReviewResultsProps> = ({
                 <CardTitle>SQL Review Results</CardTitle>
                 <CardDescription>SQL Review results will appear here</CardDescription>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={true}
-              >
+              <Button variant="outline" size="sm" disabled={true}>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Running Review...
               </Button>

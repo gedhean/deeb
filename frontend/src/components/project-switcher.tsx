@@ -20,11 +20,7 @@ import {
 import { useCurrentProject, useSetCurrentProject } from '@/store';
 import type { Project } from '@/lib/api/types';
 
-export function ProjectSwitcher({
-  projects,
-}: {
-  projects: Project[];
-}) {
+export function ProjectSwitcher({ projects }: { projects: Project[] }) {
   const { isMobile } = useSidebar();
   const currentProject = useCurrentProject();
   const setCurrentProject = useSetCurrentProject();
@@ -97,4 +93,3 @@ export function ProjectSwitcher({
     </SidebarMenu>
   );
 }
-
