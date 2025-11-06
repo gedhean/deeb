@@ -6,7 +6,6 @@ import { usersService } from '@/lib/api/services/users';
 import type { CreateUserRequest, User, UpdateUserRequest } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -35,6 +34,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Pencil, Trash2, AlertTriangle, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { UserForm, type UserFormData, type UserFormErrors } from '@/components/user-form';
 
 export const UsersPage: React.FC = () => {
   const navigate = useNavigate();
@@ -49,26 +49,18 @@ export const UsersPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form state
-  const [formData, setFormData] = useState<CreateUserRequest>({
+  const [formData, setFormData] = useState<UserFormData>({
     email: '',
     password: '',
     display_name: '',
     organization_role: 'OrganizationDeveloper',
   });
-  const [editFormData, setEditFormData] = useState<{
-    display_name?: string;
-    organization_role: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
-    is_active: boolean;
-  }>({
+  const [editFormData, setEditFormData] = useState<UserFormData>({
     display_name: '',
     organization_role: 'OrganizationDeveloper',
     is_active: true,
   });
-  const [formErrors, setFormErrors] = useState<{
-    email?: string;
-    password?: string;
-    organization_role?: string;
-  }>({});
+  const [formErrors, setFormErrors] = useState<UserFormErrors>({});
 
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
@@ -153,7 +145,12 @@ export const UsersPage: React.FC = () => {
       };
       await usersService.createUser(createData);
       setIsCreateOpen(false);
-      setFormData({ email: '', password: '', display_name: '', organization_role: 'OrganizationDeveloper' });
+      setFormData({
+        email: '',
+        password: '',
+        display_name: '',
+        organization_role: 'OrganizationDeveloper',
+      });
       setFormErrors({});
       await loadUsers();
     } catch (err) {
@@ -191,7 +188,11 @@ export const UsersPage: React.FC = () => {
       await usersService.updateUser(selectedUser.id, updateData);
       setIsEditOpen(false);
       setSelectedUser(null);
-      setEditFormData({ display_name: '', organization_role: 'OrganizationDeveloper', is_active: true });
+      setEditFormData({
+        display_name: '',
+        organization_role: 'OrganizationDeveloper',
+        is_active: true,
+      });
       setFormErrors({});
       await loadUsers();
     } catch (err) {
@@ -232,7 +233,12 @@ export const UsersPage: React.FC = () => {
 
   // Open create form
   const openCreateForm = () => {
-    setFormData({ email: '', password: '', display_name: '', organization_role: 'OrganizationDeveloper' });
+    setFormData({
+      email: '',
+      password: '',
+      display_name: '',
+      organization_role: 'OrganizationDeveloper',
+    });
     setFormErrors({});
     setIsCreateOpen(true);
   };
@@ -465,77 +471,16 @@ export const UsersPage: React.FC = () => {
                 Create a new user account with email, password, and organization role.
               </SheetDescription>
             </SheetHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label htmlFor="create-email" className="text-sm font-medium">
-                  Email *
-                </label>
-                <Input
-                  id="create-email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="user@example.com"
-                  aria-invalid={!!formErrors.email}
-                />
-                {formErrors.email && <p className="text-sm text-destructive">{formErrors.email}</p>}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-display-name" className="text-sm font-medium">
-                  Display Name
-                </label>
-                <Input
-                  id="create-display-name"
-                  type="text"
-                  value={formData.display_name || ''}
-                  onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                  placeholder="John Doe"
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-password" className="text-sm font-medium">
-                  Password *
-                </label>
-                <Input
-                  id="create-password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Enter password (min 8 characters)"
-                  aria-invalid={!!formErrors.password}
-                />
-                {formErrors.password && (
-                  <p className="text-sm text-destructive">{formErrors.password}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-role" className="text-sm font-medium">
-                  Organization Role *
-                </label>
-                <select
-                  id="create-role"
-                  value={formData.organization_role}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      organization_role: e.target.value as
-                        | 'OrganizationAdmin'
-                        | 'OrganizationDBA'
-                        | 'OrganizationDeveloper',
-                    })
-                  }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-invalid={!!formErrors.organization_role}
-                >
-                  <option value="OrganizationDeveloper">Developer</option>
-                  <option value="OrganizationDBA">DBA</option>
-                  <option value="OrganizationAdmin">Admin</option>
-                </select>
-                {formErrors.organization_role && (
-                  <p className="text-sm text-destructive">{formErrors.organization_role}</p>
-                )}
-              </div>
-            </div>
+            <UserForm
+              mode="create"
+              formData={formData}
+              formErrors={formErrors}
+              onChange={(data) => setFormData({ ...formData, ...data })}
+              onSubmit={handleCreate}
+              onCancel={() => setIsCreateOpen(false)}
+              isSubmitting={isSubmitting}
+              submitLabel={isSubmitting ? 'Creating...' : 'Create User'}
+            />
             <SheetFooter>
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancel
@@ -554,79 +499,12 @@ export const UsersPage: React.FC = () => {
               <SheetTitle>Edit User</SheetTitle>
               <SheetDescription>Update user organization role and active status.</SheetDescription>
             </SheetHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label htmlFor="edit-email" className="text-sm font-medium">
-                  Email
-                </label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={selectedUser?.email || ''}
-                  disabled
-                  className="bg-muted"
-                />
-                <p className="text-xs text-muted-foreground">Email cannot be changed</p>
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-display-name" className="text-sm font-medium">
-                  Display Name
-                </label>
-                <Input
-                  id="edit-display-name"
-                  type="text"
-                  value={editFormData.display_name || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, display_name: e.target.value })}
-                  placeholder="John Doe"
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-role" className="text-sm font-medium">
-                  Organization Role *
-                </label>
-                <select
-                  id="edit-role"
-                  value={editFormData.organization_role}
-                  onChange={(e) =>
-                    setEditFormData({
-                      ...editFormData,
-                      organization_role: e.target.value as
-                        | 'OrganizationAdmin'
-                        | 'OrganizationDBA'
-                        | 'OrganizationDeveloper',
-                    })
-                  }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-invalid={!!formErrors.organization_role}
-                >
-                  <option value="OrganizationDeveloper">Developer</option>
-                  <option value="OrganizationDBA">DBA</option>
-                  <option value="OrganizationAdmin">Admin</option>
-                </select>
-                {formErrors.organization_role && (
-                  <p className="text-sm text-destructive">{formErrors.organization_role}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-active" className="text-sm font-medium">
-                  Status
-                </label>
-                <select
-                  id="edit-active"
-                  value={editFormData.is_active ? 'true' : 'false'}
-                  onChange={(e) => {
-                    setEditFormData({
-                      ...editFormData,
-                      is_active: e.target.value === 'true',
-                    });
-                  }}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
-                </select>
-              </div>
-            </div>
+            <UserForm
+              mode="edit"
+              formData={{ ...editFormData, email: selectedUser?.email || '' }}
+              formErrors={formErrors}
+              onChange={(data) => setEditFormData({ ...editFormData, ...data })}
+            />
             <SheetFooter>
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                 Cancel

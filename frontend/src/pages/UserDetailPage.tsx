@@ -18,7 +18,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { AlertTriangle, Pencil, Calendar, Mail, Shield, User as UserIcon } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { UserForm, type UserFormData, type UserFormErrors } from '@/components/user-form';
 
 export const UserDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,18 +28,12 @@ export const UserDetailPage: React.FC = () => {
   const [error, setError] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editFormData, setEditFormData] = useState<{
-    display_name?: string;
-    organization_role: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
-    is_active: boolean;
-  }>({
+  const [editFormData, setEditFormData] = useState<UserFormData>({
     display_name: '',
     organization_role: 'OrganizationDeveloper',
     is_active: true,
   });
-  const [formErrors, setFormErrors] = useState<{
-    organization_role?: string;
-  }>({});
+  const [formErrors, setFormErrors] = useState<UserFormErrors>({});
 
   // Check if current user is admin
   const isAdmin = currentUser?.organization_role === 'OrganizationAdmin';
@@ -342,81 +336,12 @@ export const UserDetailPage: React.FC = () => {
               <SheetTitle>Edit User</SheetTitle>
               <SheetDescription>Update user organization role and active status.</SheetDescription>
             </SheetHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label htmlFor="edit-display-name" className="text-sm font-medium">
-                  Display Name
-                </label>
-                <Input
-                  id="edit-display-name"
-                  type="text"
-                  value={editFormData.display_name || ''}
-                  onChange={(e) =>
-                    setEditFormData({ ...editFormData, display_name: e.target.value })
-                  }
-                  placeholder="John Doe"
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-email" className="text-sm font-medium">
-                  Email
-                </label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={user?.email || ''}
-                  disabled
-                  className="bg-muted"
-                />
-                <p className="text-xs text-muted-foreground">Email cannot be changed</p>
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-role" className="text-sm font-medium">
-                  Organization Role *
-                </label>
-                <select
-                  id="edit-role"
-                  value={editFormData.organization_role}
-                  onChange={(e) =>
-                    setEditFormData({
-                      ...editFormData,
-                      organization_role: e.target.value as
-                        | 'OrganizationAdmin'
-                        | 'OrganizationDBA'
-                        | 'OrganizationDeveloper',
-                    })
-                  }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-invalid={!!formErrors.organization_role}
-                >
-                  <option value="OrganizationDeveloper">Developer</option>
-                  <option value="OrganizationDBA">DBA</option>
-                  <option value="OrganizationAdmin">Admin</option>
-                </select>
-                {formErrors.organization_role && (
-                  <p className="text-sm text-destructive">{formErrors.organization_role}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-active" className="text-sm font-medium">
-                  Status
-                </label>
-                <select
-                  id="edit-active"
-                  value={editFormData.is_active ? 'true' : 'false'}
-                  onChange={(e) => {
-                    setEditFormData({
-                      ...editFormData,
-                      is_active: e.target.value === 'true',
-                    });
-                  }}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
-                </select>
-              </div>
-            </div>
+            <UserForm
+              mode="edit"
+              formData={{ ...editFormData, email: user?.email || '' }}
+              formErrors={formErrors}
+              onChange={(data) => setEditFormData({ ...editFormData, ...data })}
+            />
             <SheetFooter>
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                 Cancel
