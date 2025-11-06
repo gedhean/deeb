@@ -4,10 +4,8 @@ import * as React from 'react';
 import {
   Database,
   FileCheck,
-  CircleCheckBig,
   History,
   LayoutDashboard,
-  Settings2,
   Users,
   Building2,
   FolderKanban,
@@ -99,22 +97,6 @@ const navOrgItems = [
     title: 'Users',
     url: '/users',
     icon: Users,
-  },
-  {
-    title: 'Settings',
-    url: '/settings',
-    icon: Settings2,
-    items: [
-      {
-        title: 'Policies',
-        url: '/settings/policies',
-      },
-      {
-        title: 'Users & Groups',
-        url: '/settings/users-groups',
-        icon: Users,
-      },
-    ],
   },
 ];
 

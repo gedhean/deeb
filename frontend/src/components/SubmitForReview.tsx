@@ -10,7 +10,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { changePlanService } from '@/lib/api/services/changePlans';
-import { useAuth } from '@/contexts/AuthContext';
 import type { ChangePlan } from '@/lib/api/types';
 import { Send, Loader2, AlertTriangle } from 'lucide-react';
 import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
@@ -21,7 +20,6 @@ interface SubmitForReviewProps {
 }
 
 export const SubmitForReview: React.FC<SubmitForReviewProps> = ({ changePlan, onSuccess }) => {
-  const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');

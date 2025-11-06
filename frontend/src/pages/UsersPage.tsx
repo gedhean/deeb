@@ -98,13 +98,13 @@ export const UsersPage: React.FC = () => {
   const validateForm = (): boolean => {
     const errors: { email?: string; password?: string; organization_role?: string } = {};
 
-    if (!formData.email.trim()) {
+    if (!formData.email?.trim()) {
       errors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       errors.email = 'Invalid email format';
     }
 
-    if (!formData.password.trim()) {
+    if (!formData.password?.trim()) {
       errors.password = 'Password is required';
     } else if (formData.password.length < 8) {
       errors.password = 'Password must be at least 8 characters';
@@ -138,8 +138,8 @@ export const UsersPage: React.FC = () => {
     try {
       setIsSubmitting(true);
       const createData: CreateUserRequest = {
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password,
+        email: formData.email?.trim().toLowerCase() || '',
+        password: formData.password || '',
         display_name: formData.display_name?.trim() || undefined,
         organization_role: formData.organization_role,
       };
@@ -481,10 +481,6 @@ export const UsersPage: React.FC = () => {
               formData={formData}
               formErrors={formErrors}
               onChange={(data) => setFormData({ ...formData, ...data })}
-              onSubmit={handleCreate}
-              onCancel={() => setIsCreateOpen(false)}
-              isSubmitting={isSubmitting}
-              submitLabel={isSubmitting ? 'Creating...' : 'Create User'}
             />
             <SheetFooter>
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>

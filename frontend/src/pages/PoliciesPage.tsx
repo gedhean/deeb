@@ -861,7 +861,9 @@ export const PoliciesPage: React.FC = () => {
               <Button
                 variant="destructive"
                 onClick={handleDelete}
-                disabled={isSubmitting || (selectedPolicy && isPolicyReferenced(selectedPolicy.id))}
+                disabled={
+                  isSubmitting || (selectedPolicy ? isPolicyReferenced(selectedPolicy.id) : false)
+                }
               >
                 {isSubmitting ? 'Deleting...' : 'Delete Policy'}
               </Button>

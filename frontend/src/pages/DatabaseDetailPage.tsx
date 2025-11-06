@@ -41,7 +41,6 @@ import {
   ArrowLeft,
   AlertTriangle,
   Calendar,
-  Database as DatabaseIcon,
   ExternalLink,
   FileEdit,
   Server,

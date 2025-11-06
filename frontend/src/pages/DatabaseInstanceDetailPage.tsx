@@ -31,7 +31,6 @@ import {
   ArrowLeft,
   AlertTriangle,
   Calendar,
-  Server,
   Database as DatabaseIcon,
   ExternalLink,
 } from 'lucide-react';
