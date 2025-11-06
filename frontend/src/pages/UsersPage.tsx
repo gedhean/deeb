@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { usersService } from '@/lib/api/services/users';
@@ -36,6 +37,7 @@ import { Plus, Pencil, Trash2, AlertTriangle, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export const UsersPage: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -389,7 +391,11 @@ export const UsersPage: React.FC = () => {
                   </TableHeader>
                   <TableBody>
                     {users.map((user) => (
-                      <TableRow key={user.id}>
+                      <TableRow
+                        key={user.id}
+                        onClick={() => navigate(`/users/${user.id}`)}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
                         <TableCell className="font-medium">{user.email}</TableCell>
                         <TableCell>
                           <Badge variant={getRoleBadgeVariant(user.organization_role)}>
@@ -405,12 +411,15 @@ export const UsersPage: React.FC = () => {
                           {user.last_login_at ? formatDate(user.last_login_at) : 'Never'}
                         </TableCell>
                         <TableCell>{formatDate(user.created_at)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => openEditForm(user)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditForm(user);
+                              }}
                               className="h-11 w-11 p-0 touch-manipulation"
                               aria-label="Edit user"
                             >
@@ -419,7 +428,10 @@ export const UsersPage: React.FC = () => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => openDeleteConfirmation(user)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDeleteConfirmation(user);
+                              }}
                               className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
                               aria-label="Delete user"
                             >

@@ -18,6 +18,7 @@ import (
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/routes"
 	"github.com/nsxbet/deeb/internal/services"
+	"github.com/nsxbet/deeb/internal/validator"
 	"go.uber.org/zap"
 )
 
@@ -106,6 +107,7 @@ func New(version string, configPath string) (*App, error) {
 	// Create Echo instance
 	e := echo.New()
 	e.HideBanner = true
+	e.Validator = validator.New()
 
 	// Configure middleware (including audit logging)
 	middleware.Setup(e, cfg, auditLogService)
