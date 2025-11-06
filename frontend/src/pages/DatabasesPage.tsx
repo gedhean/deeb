@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { databasesService } from '@/lib/api/services/databases';
@@ -42,12 +43,22 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle, Database as DatabaseIcon, Search, X } from 'lucide-react';
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  Database as DatabaseIcon,
+  Search,
+  X,
+  Eye,
+} from 'lucide-react';
 import { useCurrentProject } from '@/store';
 
 export const DatabasesPage: React.FC = () => {
   const { user } = useAuth();
   const currentProject = useCurrentProject();
+  const navigate = useNavigate();
   const [databases, setDatabases] = useState<Database[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -395,7 +406,10 @@ export const DatabasesPage: React.FC = () => {
     }
 
     // Instance filter
-    if (filters.database_instance_id && database.database_instance_id !== filters.database_instance_id) {
+    if (
+      filters.database_instance_id &&
+      database.database_instance_id !== filters.database_instance_id
+    ) {
       return false;
     }
 
@@ -461,7 +475,9 @@ export const DatabasesPage: React.FC = () => {
         <Card>
           <CardHeader>
             <CardTitle>Filters</CardTitle>
-            <CardDescription>Filter databases by name, project, environment, instance, or status</CardDescription>
+            <CardDescription>
+              Filter databases by name, project, environment, instance, or status
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -667,7 +683,8 @@ export const DatabasesPage: React.FC = () => {
             <CardHeader>
               <CardTitle>Databases</CardTitle>
               <CardDescription>
-                {filteredDatabases.length} of {databases.length} database{databases.length === 1 ? '' : 's'}
+                {filteredDatabases.length} of {databases.length} database
+                {databases.length === 1 ? '' : 's'}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
@@ -685,7 +702,11 @@ export const DatabasesPage: React.FC = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredDatabases.map((database) => (
-                    <TableRow key={database.id}>
+                    <TableRow
+                      key={database.id}
+                      onClick={() => navigate(`/databases/${database.id}`)}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    >
                       <TableCell className="font-medium">{database.database_name}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {getProjectName(database.project_id)}
@@ -700,8 +721,16 @@ export const DatabasesPage: React.FC = () => {
                       <TableCell className="text-muted-foreground">
                         {formatDate(database.created_at)}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/databases/${database.id}`)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
