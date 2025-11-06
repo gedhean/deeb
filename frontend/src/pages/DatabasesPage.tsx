@@ -42,10 +42,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle, Database as DatabaseIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, Database as DatabaseIcon, Search, X } from 'lucide-react';
+import { useCurrentProject } from '@/store';
 
 export const DatabasesPage: React.FC = () => {
   const { user } = useAuth();
+  const currentProject = useCurrentProject();
   const [databases, setDatabases] = useState<Database[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -58,6 +60,17 @@ export const DatabasesPage: React.FC = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedDatabase, setSelectedDatabase] = useState<Database | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Filter state - initialize with currentProject if available
+  const [filters, setFilters] = useState<{
+    search?: string;
+    project_id?: string;
+    environment_id?: string;
+    database_instance_id?: string;
+    status?: string;
+  }>({
+    project_id: currentProject?.id,
+  });
 
   // Form state
   const [formData, setFormData] = useState<CreateDatabaseRequest>({
@@ -103,6 +116,14 @@ export const DatabasesPage: React.FC = () => {
 
     loadDropdownData();
   }, [isAdmin]);
+
+  // Sync filters with currentProject on initial load (only if filter not already set)
+  useEffect(() => {
+    if (currentProject?.id && !filters.project_id) {
+      setFilters((prev) => ({ ...prev, project_id: currentProject.id }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProject]);
 
   // Load databases
   useEffect(() => {
@@ -334,6 +355,60 @@ export const DatabasesPage: React.FC = () => {
     return instance?.name || 'Unknown';
   };
 
+  // Handle filter changes
+  const handleFilterChange = (key: keyof typeof filters, value: string | undefined) => {
+    setFilters((prev) => {
+      const updated = { ...prev };
+      if (value && value.trim()) {
+        updated[key] = value;
+      } else {
+        delete updated[key];
+      }
+      return updated;
+    });
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters({});
+  };
+
+  // Filter databases
+  const filteredDatabases = databases.filter((database) => {
+    // Search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      const matchesSearch =
+        database.database_name.toLowerCase().includes(searchLower) ||
+        (database.description && database.description.toLowerCase().includes(searchLower));
+      if (!matchesSearch) return false;
+    }
+
+    // Project filter
+    if (filters.project_id && database.project_id !== filters.project_id) {
+      return false;
+    }
+
+    // Environment filter
+    if (filters.environment_id && database.environment_id !== filters.environment_id) {
+      return false;
+    }
+
+    // Instance filter
+    if (filters.database_instance_id && database.database_instance_id !== filters.database_instance_id) {
+      return false;
+    }
+
+    // Status filter
+    if (filters.status && database.status !== filters.status) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const hasFilters = Object.keys(filters).length > 0;
+
   // Render access denied
   if (!isAdmin) {
     return (
@@ -382,6 +457,134 @@ export const DatabasesPage: React.FC = () => {
           </Card>
         )}
 
+        {/* Filters */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Filters</CardTitle>
+            <CardDescription>Filter databases by name, project, environment, instance, or status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+              {/* Search Filter */}
+              <div className="space-y-2">
+                <label htmlFor="filter-search" className="text-sm font-medium">
+                  Search
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="filter-search"
+                    placeholder="Search databases..."
+                    value={filters.search || ''}
+                    onChange={(e) => handleFilterChange('search', e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              {/* Project Filter */}
+              <div className="space-y-2">
+                <label htmlFor="filter-project" className="text-sm font-medium">
+                  Project
+                </label>
+                {isLoadingDropdowns ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <select
+                    id="filter-project"
+                    value={filters.project_id || ''}
+                    onChange={(e) => handleFilterChange('project_id', e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">All Projects</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Environment Filter */}
+              <div className="space-y-2">
+                <label htmlFor="filter-environment" className="text-sm font-medium">
+                  Environment
+                </label>
+                {isLoadingDropdowns ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <select
+                    id="filter-environment"
+                    value={filters.environment_id || ''}
+                    onChange={(e) => handleFilterChange('environment_id', e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">All Environments</option>
+                    {environments.map((env) => (
+                      <option key={env.id} value={env.id}>
+                        {env.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Instance Filter */}
+              <div className="space-y-2">
+                <label htmlFor="filter-instance" className="text-sm font-medium">
+                  Instance
+                </label>
+                {isLoadingDropdowns ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <select
+                    id="filter-instance"
+                    value={filters.database_instance_id || ''}
+                    onChange={(e) => handleFilterChange('database_instance_id', e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">All Instances</option>
+                    {databaseInstances.map((instance) => (
+                      <option key={instance.id} value={instance.id}>
+                        {instance.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <label htmlFor="filter-status" className="text-sm font-medium">
+                  Status
+                </label>
+                <select
+                  id="filter-status"
+                  value={filters.status || ''}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Clear Filters Button */}
+            {hasFilters && (
+              <div className="mt-4">
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  <X className="mr-2 h-4 w-4" />
+                  Clear Filters
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Databases list */}
         {isLoading ? (
           <Card>
@@ -428,7 +631,7 @@ export const DatabasesPage: React.FC = () => {
               </Table>
             </CardContent>
           </Card>
-        ) : databases.length === 0 ? (
+        ) : filteredDatabases.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
               <Empty>
@@ -436,23 +639,37 @@ export const DatabasesPage: React.FC = () => {
                   <EmptyMedia variant="icon">
                     <DatabaseIcon className="h-12 w-12 text-muted-foreground" />
                   </EmptyMedia>
-                  <EmptyTitle>No Databases Yet</EmptyTitle>
+                  <EmptyTitle>{hasFilters ? 'No Databases Found' : 'No Databases Yet'}</EmptyTitle>
                   <EmptyDescription>
-                    Get started by creating your first database and assigning it to a project and
-                    environment.
+                    {hasFilters
+                      ? 'No databases match your filters. Try adjusting your search criteria.'
+                      : 'Get started by creating your first database and assigning it to a project and environment.'}
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button onClick={openCreateForm}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Database
-                  </Button>
+                  {hasFilters ? (
+                    <Button variant="outline" onClick={clearFilters}>
+                      <X className="mr-2 h-4 w-4" />
+                      Clear Filters
+                    </Button>
+                  ) : (
+                    <Button onClick={openCreateForm}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Database
+                    </Button>
+                  )}
                 </EmptyContent>
               </Empty>
             </CardContent>
           </Card>
         ) : (
           <Card>
+            <CardHeader>
+              <CardTitle>Databases</CardTitle>
+              <CardDescription>
+                {filteredDatabases.length} of {databases.length} database{databases.length === 1 ? '' : 's'}
+              </CardDescription>
+            </CardHeader>
             <CardContent className="pt-6">
               <Table>
                 <TableHeader>
@@ -467,7 +684,7 @@ export const DatabasesPage: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {databases.map((database) => (
+                  {filteredDatabases.map((database) => (
                     <TableRow key={database.id}>
                       <TableCell className="font-medium">{database.database_name}</TableCell>
                       <TableCell className="text-muted-foreground">

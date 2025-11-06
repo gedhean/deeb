@@ -36,7 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle, CheckCircle2, Loader2, Server } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, CheckCircle2, Loader2, Server, Search, X } from 'lucide-react';
 
 export const DatabaseInstancesPage: React.FC = () => {
   const { user } = useAuth();
@@ -53,6 +53,13 @@ export const DatabaseInstancesPage: React.FC = () => {
     success: boolean;
     message?: string;
   } | null>(null);
+
+  // Filter state
+  const [filters, setFilters] = useState<{
+    search?: string;
+    database_type?: string;
+    status?: string;
+  }>({});
 
   // Form state
   const [formData, setFormData] = useState<CreateDatabaseInstanceRequest>({
@@ -404,6 +411,52 @@ export const DatabaseInstancesPage: React.FC = () => {
     }
   };
 
+  // Handle filter changes
+  const handleFilterChange = (key: keyof typeof filters, value: string | undefined) => {
+    setFilters((prev) => {
+      const updated = { ...prev };
+      if (value && value.trim()) {
+        updated[key] = value;
+      } else {
+        delete updated[key];
+      }
+      return updated;
+    });
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters({});
+  };
+
+  // Filter instances
+  const filteredInstances = instances.filter((instance) => {
+    // Search filter (name and host)
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      const matchesSearch =
+        instance.name.toLowerCase().includes(searchLower) ||
+        instance.host.toLowerCase().includes(searchLower) ||
+        instance.username.toLowerCase().includes(searchLower) ||
+        (instance.description && instance.description.toLowerCase().includes(searchLower));
+      if (!matchesSearch) return false;
+    }
+
+    // Database type filter
+    if (filters.database_type && instance.database_type !== filters.database_type) {
+      return false;
+    }
+
+    // Status filter
+    if (filters.status && instance.status !== filters.status) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const hasFilters = Object.keys(filters).length > 0;
+
   // Render access denied
   if (!isAdmin) {
     return (
@@ -452,6 +505,79 @@ export const DatabaseInstancesPage: React.FC = () => {
           </Card>
         )}
 
+        {/* Filters */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Filters</CardTitle>
+            <CardDescription>Filter database instances by name, host, type, or status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {/* Search Filter */}
+              <div className="space-y-2">
+                <label htmlFor="filter-search" className="text-sm font-medium">
+                  Search
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="filter-search"
+                    placeholder="Search instances..."
+                    value={filters.search || ''}
+                    onChange={(e) => handleFilterChange('search', e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              {/* Database Type Filter */}
+              <div className="space-y-2">
+                <label htmlFor="filter-type" className="text-sm font-medium">
+                  Database Type
+                </label>
+                <select
+                  id="filter-type"
+                  value={filters.database_type || ''}
+                  onChange={(e) => handleFilterChange('database_type', e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">All Types</option>
+                  <option value="postgresql">PostgreSQL</option>
+                  <option value="mysql">MySQL</option>
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <label htmlFor="filter-status" className="text-sm font-medium">
+                  Status
+                </label>
+                <select
+                  id="filter-status"
+                  value={filters.status || ''}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Clear Filters Button */}
+            {hasFilters && (
+              <div className="mt-4">
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  <X className="mr-2 h-4 w-4" />
+                  Clear Filters
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Instances list */}
         {isLoading ? (
           <Card>
@@ -498,7 +624,7 @@ export const DatabaseInstancesPage: React.FC = () => {
               </Table>
             </CardContent>
           </Card>
-        ) : instances.length === 0 ? (
+        ) : filteredInstances.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
               <Empty>
@@ -506,23 +632,37 @@ export const DatabaseInstancesPage: React.FC = () => {
                   <EmptyMedia variant="icon">
                     <Server className="h-12 w-12 text-muted-foreground" />
                   </EmptyMedia>
-                  <EmptyTitle>No Database Instances Yet</EmptyTitle>
+                  <EmptyTitle>{hasFilters ? 'No Instances Found' : 'No Database Instances Yet'}</EmptyTitle>
                   <EmptyDescription>
-                    Get started by creating your first database instance connection to manage server
-                    credentials.
+                    {hasFilters
+                      ? 'No database instances match your filters. Try adjusting your search criteria.'
+                      : 'Get started by creating your first database instance connection to manage server credentials.'}
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button onClick={openCreateForm}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Instance
-                  </Button>
+                  {hasFilters ? (
+                    <Button variant="outline" onClick={clearFilters}>
+                      <X className="mr-2 h-4 w-4" />
+                      Clear Filters
+                    </Button>
+                  ) : (
+                    <Button onClick={openCreateForm}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Instance
+                    </Button>
+                  )}
                 </EmptyContent>
               </Empty>
             </CardContent>
           </Card>
         ) : (
           <Card>
+            <CardHeader>
+              <CardTitle>Database Instances</CardTitle>
+              <CardDescription>
+                {filteredInstances.length} of {instances.length} instance{instances.length === 1 ? '' : 's'}
+              </CardDescription>
+            </CardHeader>
             <CardContent className="pt-6">
               <div className="overflow-x-auto -mx-6 px-6">
                 <Table>
@@ -538,7 +678,7 @@ export const DatabaseInstancesPage: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {instances.map((instance) => (
+                    {filteredInstances.map((instance) => (
                       <TableRow key={instance.id}>
                         <TableCell className="font-medium">{instance.name}</TableCell>
                         <TableCell className="text-muted-foreground">
