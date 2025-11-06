@@ -377,6 +377,14 @@ func TestUpdateUser(t *testing.T) {
 			c.SetParamNames("id")
 			c.SetParamValues(tt.userID)
 
+			// Set authenticated user context (admin user for permissions)
+			adminUserID := uuid.New()
+			c.Set("user", &auth.Claims{
+				UserID:           adminUserID,
+				Email:            "admin@example.com",
+				OrganizationRole: string(models.OrganizationRoleAdmin),
+			})
+
 			// Execute handler
 			err := handler.UpdateUser(c)
 			if err != nil {

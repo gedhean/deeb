@@ -154,6 +154,14 @@ func (h *UserHandler) ListUsers(c echo.Context) error {
 func (h *UserHandler) GetUser(c echo.Context) error {
 	ctx := c.Request().Context()
 
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "User not authenticated",
+		})
+	}
+
 	// Parse user ID from path parameter
 	idParam := c.Param("id")
 	userID, err := uuid.Parse(idParam)
@@ -177,12 +185,31 @@ func (h *UserHandler) GetUser(c echo.Context) error {
 		})
 	}
 
+	// Allow users to view their own profile, or admins to view any profile
+	// Check if user is viewing their own profile
+	isOwnProfile := claims.UserID == userID
+	isAdmin := claims.OrganizationRole == "OrganizationAdmin"
+
+	if !isOwnProfile && !isAdmin {
+		return c.JSON(http.StatusForbidden, map[string]interface{}{
+			"error": "You can only view your own profile",
+		})
+	}
+
 	return c.JSON(http.StatusOK, user.ToResponse())
 }
 
 // UpdateUser handles PUT /api/v1/users/:id - update user
 func (h *UserHandler) UpdateUser(c echo.Context) error {
 	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "User not authenticated",
+		})
+	}
 
 	// Parse user ID from path parameter
 	idParam := c.Param("id")
@@ -221,6 +248,36 @@ func (h *UserHandler) UpdateUser(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "Failed to retrieve user",
 		})
+	}
+
+	// Check authorization: users can update their own profile (limited fields), admins can update any user
+	isOwnProfile := claims.UserID == userID
+	isAdmin := claims.OrganizationRole == "OrganizationAdmin"
+
+	if !isOwnProfile && !isAdmin {
+		return c.JSON(http.StatusForbidden, map[string]interface{}{
+			"error": "You can only update your own profile",
+		})
+	}
+
+	// If updating own profile, restrict to display_name and password only
+	if isOwnProfile && !isAdmin {
+		// Only allow updating display_name and password for own profile
+		if req.OrganizationRole != nil {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "You cannot change your own organization role",
+			})
+		}
+		if req.IsActive != nil {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "You cannot change your own active status",
+			})
+		}
+		if req.TwoFactorEnabled != nil {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "You cannot change your own two-factor authentication settings",
+			})
+		}
 	}
 
 	// Apply updates

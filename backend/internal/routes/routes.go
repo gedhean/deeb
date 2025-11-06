@@ -168,7 +168,7 @@ func setupUserRoutes(e *echo.Echo, userRepo repository.UserRepository, tokenMana
 		"/:id",
 		userHandler.GetUser,
 		authMiddleware.Authenticate,
-		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersRead),
+		// Authorization check is in handler - allows users to view own profile
 	)
 	usersGroup.POST(
 		"",
@@ -180,7 +180,7 @@ func setupUserRoutes(e *echo.Echo, userRepo repository.UserRepository, tokenMana
 		"/:id",
 		userHandler.UpdateUser,
 		authMiddleware.Authenticate,
-		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersUpdate),
+		// Authorization check is in handler - allows users to update own profile
 	)
 	usersGroup.DELETE(
 		"/:id",

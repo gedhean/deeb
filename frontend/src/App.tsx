@@ -18,6 +18,7 @@ import { DatabaseInstancesPage } from '@/pages/DatabaseInstancesPage';
 import { DatabasesPage } from '@/pages/DatabasesPage';
 import { UsersPage } from '@/pages/UsersPage';
 import { UserDetailPage } from '@/pages/UserDetailPage';
+import { ProfilePage } from '@/pages/ProfilePage';
 import { ChangePlanCreatePage } from '@/pages/ChangePlanCreatePage';
 import { ChangePlansPage } from '@/pages/ChangePlansPage';
 import { ChangePlanDetailPage } from '@/pages/ChangePlanDetailPage';
@@ -119,6 +120,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <UserDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <ProfilePage />
                   </ProtectedRoute>
                 }
               />

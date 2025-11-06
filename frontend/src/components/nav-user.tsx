@@ -1,4 +1,5 @@
 import { BadgeCheck, ChevronsUpDown, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -30,9 +31,14 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar();
   const { logout } = useAuth();
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
+  };
+
+  const handleProfileClick = () => {
+    navigate('/profile');
   };
 
   return (
@@ -75,7 +81,7 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={handleProfileClick}>
                 <BadgeCheck />
                 Profile
               </DropdownMenuItem>
