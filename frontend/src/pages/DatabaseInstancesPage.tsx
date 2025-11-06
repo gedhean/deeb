@@ -816,7 +816,7 @@ export const DatabaseInstancesPage: React.FC = () => {
 
         {/* Create Instance Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className="w-full sm:w-[540px] overflow-y-auto max-h-[90vh]">
+          <SheetContent className="w-full min-w-[800px] sm:w-[540px] overflow-y-auto max-h-[90vh]">
             <SheetHeader>
               <SheetTitle>Create Database Instance</SheetTitle>
               <SheetDescription>
@@ -892,36 +892,38 @@ export const DatabaseInstancesPage: React.FC = () => {
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
-                <label htmlFor="create-host" className="text-sm font-medium">
-                  Host *
-                </label>
-                <Input
-                  id="create-host"
-                  value={formData.host}
-                  onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                  placeholder="Enter database host"
-                  aria-invalid={!!formErrors.host}
-                />
-                {formErrors.host && <p className="text-sm text-destructive">{formErrors.host}</p>}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-port" className="text-sm font-medium">
-                  Port *
-                </label>
-                <Input
-                  id="create-port"
-                  type="number"
-                  value={formData.port}
-                  onChange={(e) =>
-                    setFormData({ ...formData, port: parseInt(e.target.value) || 0 })
-                  }
-                  placeholder="Enter database port"
-                  min={1}
-                  max={65535}
-                  aria-invalid={!!formErrors.port}
-                />
-                {formErrors.port && <p className="text-sm text-destructive">{formErrors.port}</p>}
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2 col-span-3">
+                  <label htmlFor="create-host" className="text-sm font-medium">
+                    Host *
+                  </label>
+                  <Input
+                    id="create-host"
+                    value={formData.host}
+                    onChange={(e) => setFormData({ ...formData, host: e.target.value })}
+                    placeholder="Enter database host"
+                    aria-invalid={!!formErrors.host}
+                  />
+                  {formErrors.host && <p className="text-sm text-destructive">{formErrors.host}</p>}
+                </div>
+                <div className="space-y-2 col-span-1">
+                  <label htmlFor="create-port" className="text-sm font-medium">
+                    Port *
+                  </label>
+                  <Input
+                    id="create-port"
+                    type="number"
+                    value={formData.port}
+                    onChange={(e) =>
+                      setFormData({ ...formData, port: parseInt(e.target.value) || 0 })
+                    }
+                    placeholder="Enter database port"
+                    min={1}
+                    max={65535}
+                    aria-invalid={!!formErrors.port}
+                  />
+                  {formErrors.port && <p className="text-sm text-destructive">{formErrors.port}</p>}
+                </div>
               </div>
               <div className="space-y-2">
                 <label htmlFor="create-username" className="text-sm font-medium">
@@ -1115,36 +1117,38 @@ export const DatabaseInstancesPage: React.FC = () => {
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-host" className="text-sm font-medium">
-                  Host *
-                </label>
-                <Input
-                  id="edit-host"
-                  value={formData.host}
-                  onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                  placeholder="Enter database host"
-                  aria-invalid={!!formErrors.host}
-                />
-                {formErrors.host && <p className="text-sm text-destructive">{formErrors.host}</p>}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-port" className="text-sm font-medium">
-                  Port *
-                </label>
-                <Input
-                  id="edit-port"
-                  type="number"
-                  value={formData.port}
-                  onChange={(e) =>
-                    setFormData({ ...formData, port: parseInt(e.target.value) || 0 })
-                  }
-                  placeholder="Enter database port"
-                  min={1}
-                  max={65535}
-                  aria-invalid={!!formErrors.port}
-                />
-                {formErrors.port && <p className="text-sm text-destructive">{formErrors.port}</p>}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="edit-host" className="text-sm font-medium">
+                    Host *
+                  </label>
+                  <Input
+                    id="edit-host"
+                    value={formData.host}
+                    onChange={(e) => setFormData({ ...formData, host: e.target.value })}
+                    placeholder="Enter database host"
+                    aria-invalid={!!formErrors.host}
+                  />
+                  {formErrors.host && <p className="text-sm text-destructive">{formErrors.host}</p>}
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="edit-port" className="text-sm font-medium">
+                    Port *
+                  </label>
+                  <Input
+                    id="edit-port"
+                    type="number"
+                    value={formData.port}
+                    onChange={(e) =>
+                      setFormData({ ...formData, port: parseInt(e.target.value) || 0 })
+                    }
+                    placeholder="Enter database port"
+                    min={1}
+                    max={65535}
+                    aria-invalid={!!formErrors.port}
+                  />
+                  {formErrors.port && <p className="text-sm text-destructive">{formErrors.port}</p>}
+                </div>
               </div>
               <div className="space-y-2">
                 <label htmlFor="edit-username" className="text-sm font-medium">
