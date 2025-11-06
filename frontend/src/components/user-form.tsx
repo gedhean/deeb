@@ -42,6 +42,20 @@ export const UserForm: React.FC<UserFormProps> = ({ mode, formData, formErrors, 
 
   return (
     <div className="space-y-4 py-4">
+      {/* Display Name Field */}
+      <div className="space-y-2">
+        <label htmlFor="user-display-name" className="text-sm font-medium">
+          Display Name
+        </label>
+        <Input
+          id="user-display-name"
+          type="text"
+          value={formData.display_name || ''}
+          onChange={(e) => handleFieldChange('display_name', e.target.value)}
+          placeholder="John Doe"
+        />
+      </div>
+
       {/* Email Field */}
       <div className="space-y-2">
         <label htmlFor="user-email" className="text-sm font-medium">
@@ -63,22 +77,8 @@ export const UserForm: React.FC<UserFormProps> = ({ mode, formData, formErrors, 
         {formErrors.email && <p className="text-sm text-destructive">{formErrors.email}</p>}
       </div>
 
-      {/* Display Name Field */}
-      <div className="space-y-2">
-        <label htmlFor="user-display-name" className="text-sm font-medium">
-          Display Name
-        </label>
-        <Input
-          id="user-display-name"
-          type="text"
-          value={formData.display_name || ''}
-          onChange={(e) => handleFieldChange('display_name', e.target.value)}
-          placeholder="John Doe"
-        />
-      </div>
-
-      {/* Password Field (only in create mode) */}
-      {mode === 'create' && (
+      {/* Password Field (only in create mode, optional in edit mode) */}
+      {mode === 'create' ? (
         <div className="space-y-2">
           <label htmlFor="user-password" className="text-sm font-medium">
             Password *
@@ -91,6 +91,24 @@ export const UserForm: React.FC<UserFormProps> = ({ mode, formData, formErrors, 
             placeholder="Enter password (min 8 characters)"
             aria-invalid={!!formErrors.password}
           />
+          {formErrors.password && <p className="text-sm text-destructive">{formErrors.password}</p>}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <label htmlFor="user-password" className="text-sm font-medium">
+            Password
+          </label>
+          <Input
+            id="user-password"
+            type="password"
+            value={formData.password || ''}
+            onChange={(e) => handleFieldChange('password', e.target.value)}
+            placeholder="Leave blank to keep current password"
+            aria-invalid={!!formErrors.password}
+          />
+          <p className="text-xs text-muted-foreground">
+            Leave blank to keep current password. Enter new password to change it.
+          </p>
           {formErrors.password && <p className="text-sm text-destructive">{formErrors.password}</p>}
         </div>
       )}

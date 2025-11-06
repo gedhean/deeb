@@ -224,6 +224,27 @@ func (h *UserHandler) UpdateUser(c echo.Context) error {
 	}
 
 	// Apply updates
+	if req.Password != nil && *req.Password != "" {
+		// Hash new password
+		passwordHash, err := auth.HashPassword(*req.Password, 0) // Use default cost (12)
+		if err != nil {
+			h.logger.Debug("Password validation failed", zap.Error(err))
+			if errors.Is(err, auth.ErrPasswordTooShort) {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Password must be at least 8 characters",
+				})
+			}
+			if errors.Is(err, auth.ErrPasswordTooLong) {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Password must not exceed 72 characters",
+				})
+			}
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid password",
+			})
+		}
+		user.PasswordHash = passwordHash
+	}
 	if req.DisplayName != nil {
 		user.DisplayName = req.DisplayName
 	}

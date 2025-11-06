@@ -54,6 +54,7 @@ export interface CreateUserRequest {
 }
 
 export interface UpdateUserRequest {
+  password?: string;
   display_name?: string;
   organization_role?: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
   is_active?: boolean;

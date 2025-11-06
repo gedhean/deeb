@@ -52,6 +52,7 @@ export const UserDetailPage: React.FC = () => {
       setUser(userData);
       setEditFormData({
         display_name: userData.display_name || '',
+        password: '',
         organization_role: userData.organization_role as
           | 'OrganizationAdmin'
           | 'OrganizationDBA'
@@ -70,9 +71,20 @@ export const UserDetailPage: React.FC = () => {
     }
   };
 
-  // Validate edit form
+  // Validate edit form (password is optional for edit)
   const validateEditForm = (): boolean => {
-    const errors: { organization_role?: string } = {};
+    const errors: {
+      password?: string;
+      organization_role?: string;
+    } = {};
+
+    // Validate password if provided
+    if (editFormData.password && editFormData.password.trim() !== '') {
+      if (editFormData.password.length < 8) {
+        errors.password = 'Password must be at least 8 characters';
+      }
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -87,6 +99,9 @@ export const UserDetailPage: React.FC = () => {
       setIsSubmitting(true);
       const updateData: UpdateUserRequest = {};
 
+      if (editFormData.password && editFormData.password.trim() !== '') {
+        updateData.password = editFormData.password;
+      }
       if (editFormData.display_name !== (user.display_name || '')) {
         updateData.display_name = editFormData.display_name?.trim() || undefined;
       }
@@ -118,6 +133,7 @@ export const UserDetailPage: React.FC = () => {
     if (!user) return;
     setEditFormData({
       display_name: user.display_name || '',
+      password: '',
       organization_role: user.organization_role as
         | 'OrganizationAdmin'
         | 'OrganizationDBA'

@@ -175,6 +175,9 @@ export const UsersPage: React.FC = () => {
       setIsSubmitting(true);
       const updateData: UpdateUserRequest = {};
 
+      if (editFormData.password && editFormData.password.trim() !== '') {
+        updateData.password = editFormData.password;
+      }
       if (editFormData.display_name !== (selectedUser.display_name || '')) {
         updateData.display_name = editFormData.display_name?.trim() || undefined;
       }
@@ -190,6 +193,7 @@ export const UsersPage: React.FC = () => {
       setSelectedUser(null);
       setEditFormData({
         display_name: '',
+        password: '',
         organization_role: 'OrganizationDeveloper',
         is_active: true,
       });
@@ -248,6 +252,7 @@ export const UsersPage: React.FC = () => {
     setSelectedUser(user);
     setEditFormData({
       display_name: user.display_name || '',
+      password: '',
       organization_role: user.organization_role as
         | 'OrganizationAdmin'
         | 'OrganizationDBA'

@@ -44,6 +44,7 @@ type CreateUserRequest struct {
 
 // UpdateUserRequest represents the request to update a user with optional fields.
 type UpdateUserRequest struct {
+	Password         *string          `json:"password,omitempty"          validate:"omitempty,min=8"`
 	DisplayName      *string          `json:"display_name,omitempty"`
 	OrganizationRole *OrganizationRole `json:"organization_role,omitempty"  validate:"omitempty,oneof=OrganizationAdmin OrganizationDBA OrganizationDeveloper"`
 	TwoFactorEnabled *bool             `json:"two_factor_enabled,omitempty"`
