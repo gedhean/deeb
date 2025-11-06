@@ -111,7 +111,15 @@ export const ChangePlansPage: React.FC = () => {
     setFilters((prev) => {
       const updated = { ...prev };
       if (value) {
-        updated[key] = value as ChangePlanStatus | string;
+        if (key === 'status') {
+          updated.status = value as ChangePlanStatus;
+        } else if (key === 'project_id') {
+          updated.project_id = value;
+        } else if (key === 'database_id') {
+          updated.database_id = value;
+        } else if (key === 'author_id') {
+          updated.author_id = value;
+        }
       } else {
         delete updated[key];
       }
@@ -424,7 +432,11 @@ export const ChangePlansPage: React.FC = () => {
                   </TableHeader>
                   <TableBody>
                     {changePlans.map((changePlan) => (
-                      <TableRow key={changePlan.id}>
+                      <TableRow
+                        key={changePlan.id}
+                        onClick={() => navigate(`/change-plans/${changePlan.id}`)}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
                         <TableCell className="font-medium">
                           <div className="flex flex-col">
                             <span className="truncate max-w-[200px]">{changePlan.title}</span>
@@ -458,11 +470,14 @@ export const ChangePlansPage: React.FC = () => {
                         <TableCell className="text-muted-foreground">
                           {formatDate(changePlan.created_at)}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => navigate(`/change-plans/${changePlan.id}`)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/change-plans/${changePlan.id}`);
+                            }}
                           >
                             View
                           </Button>
