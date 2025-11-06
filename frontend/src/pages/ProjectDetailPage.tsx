@@ -286,10 +286,6 @@ export const ProjectDetailPage: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button onClick={() => navigate('/projects')} variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Button>
             <div>
               <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
               <p className="text-muted-foreground mt-1">
