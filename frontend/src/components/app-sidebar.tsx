@@ -62,25 +62,6 @@ const navMainItems = [
     ],
   },
   {
-    title: 'Approvals',
-    url: '/approvals',
-    icon: CircleCheckBig,
-    items: [
-      {
-        title: 'Pending Approval',
-        url: '/approvals/pending',
-      },
-      {
-        title: 'Approved',
-        url: '/approvals/approved',
-      },
-      {
-        title: 'Rejected',
-        url: '/approvals/rejected',
-      },
-    ],
-  },
-  {
     title: 'Databases',
     url: '/databases',
     icon: Database,
