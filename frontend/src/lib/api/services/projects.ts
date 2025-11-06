@@ -1,5 +1,15 @@
 import { apiClient } from '../client';
-import type { CreateProjectRequest, ListResponse, Project, UpdateProjectRequest } from '../types';
+import type {
+  AddProjectMemberRequest,
+  CreateProjectRequest,
+  ListResponse,
+  Project,
+  ProjectMembersListResponse,
+  ProjectMemberWithUser,
+  ProjectRole,
+  UpdateProjectMemberRoleRequest,
+  UpdateProjectRequest,
+} from '../types';
 
 export const projectsService = {
   /**
@@ -65,5 +75,74 @@ export const projectsService = {
    */
   async deleteProject(id: string): Promise<void> {
     await apiClient.delete(`/api/v1/projects/${id}`);
+  },
+};
+
+export const projectMembersService = {
+  /**
+   * List all members of a project
+   * Requires Project Owner or Organization Admin role
+   */
+  async listProjectMembers(projectId: string): Promise<ProjectMemberWithUser[]> {
+    const response = await apiClient.get<ProjectMembersListResponse>(
+      `/api/v1/projects/${projectId}/members`,
+    );
+    return response.members;
+  },
+
+  /**
+   * Add a member to a project
+   * Requires Project Owner or Organization Admin role
+   */
+  async addProjectMember(
+    projectId: string,
+    data: AddProjectMemberRequest,
+  ): Promise<ProjectMemberWithUser> {
+    const memberResponse = await apiClient.post<ProjectMemberWithUser['member']>(
+      `/api/v1/projects/${projectId}/members`,
+      data,
+    );
+    // Backend returns member, but we need user details - reload the list to get full data
+    // For now return member with empty user - UI will refresh the list
+    return {
+      member: memberResponse,
+      user: {
+        id: memberResponse.user_id,
+        email: '',
+        display_name: '',
+      },
+    };
+  },
+
+  /**
+   * Remove a member from a project
+   * Requires Project Owner or Organization Admin role
+   */
+  async removeProjectMember(projectId: string, userId: string): Promise<void> {
+    await apiClient.delete(`/api/v1/projects/${projectId}/members/${userId}`);
+  },
+
+  /**
+   * Update a project member's role
+   * Requires Project Owner or Organization Admin role
+   */
+  async updateProjectMemberRole(
+    projectId: string,
+    userId: string,
+    role: ProjectRole,
+  ): Promise<ProjectMemberWithUser> {
+    const memberResponse = await apiClient.put<ProjectMemberWithUser['member']>(
+      `/api/v1/projects/${projectId}/members/${userId}`,
+      { project_role: role } as UpdateProjectMemberRoleRequest,
+    );
+    // Backend returns member, but we need user details - reload the list to get full data
+    return {
+      member: memberResponse,
+      user: {
+        id: memberResponse.user_id,
+        email: '',
+        display_name: '',
+      },
+    };
   },
 };

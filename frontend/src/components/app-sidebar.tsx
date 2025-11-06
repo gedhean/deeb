@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import {
-  AudioWaveform,
   Database,
   FileCheck,
   CircleCheckBig,
@@ -23,7 +22,6 @@ import {
 } from '@/lib/rbac';
 import { NavMain } from '@/components/nav-main';
 import { NavOrg } from '@/components/nav-org';
-import { NavProjects } from '@/components/nav-projects';
 import { NavUser } from '@/components/nav-user';
 import { ProjectSwitcher } from '@/components/project-switcher';
 import {
@@ -34,7 +32,6 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { useProjects } from '@/hooks/api/useProjects';
-
 
 // Deeb navigation structure
 const navMainItems = [
@@ -160,18 +157,38 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   };
 
   // Format user data for NavUser component
-  const userData = user ? {
+  const userData = user
+    ? {
         name: user?.email.split('@')[0], // Use email username as name
         email: user?.email,
         avatar: '', // No avatar URL yet
         initials: getInitials(user?.email),
-      } 
+      }
     : {
-      name: 'who are you?',
-      email: 'fix@me.pls',
-      avatar: '🔥',
-      initials: '🤔',
-    };
+        name: 'who are you?',
+        email: 'fix@me.pls',
+        avatar: '🔥',
+        initials: '🤔',
+      };
+
+  // Filter navigation items based on user role and permissions
+  const filteredNavMainItems = navMainItems.filter((item) => {
+    if (!user) {
+      return false;
+    }
+
+    // Projects - Admin or users with ProjectsRead permission (which includes project owners through useProjects)
+    if (item.url === '/projects') {
+      // Show for admins or anyone who can read projects
+      return (
+        hasAnyOrganizationRole(user.organization_role, ['OrganizationAdmin']) ||
+        hasOrganizationPermission(user.organization_role, OrganizationPermission.ProjectsRead)
+      );
+    }
+
+    // Default: show item
+    return true;
+  });
 
   // Filter navigation items based on user role and permissions
   const filteredNavOrgItems = navOrgItems.filter((item) => {
@@ -217,7 +234,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <ProjectSwitcher projects={projects} />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navMainItems} />
+        <NavMain items={filteredNavMainItems} />
         <NavOrg items={filteredNavOrgItems} />
       </SidebarContent>
       <SidebarFooter>

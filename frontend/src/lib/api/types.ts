@@ -17,6 +17,7 @@ export interface ErrorResponse {
 export interface User {
   id: string;
   email: string;
+  display_name?: string;
   organization_role: string;
   is_active: boolean;
   created_at: string;
@@ -74,6 +75,41 @@ export interface CreateProjectRequest {
 export interface UpdateProjectRequest {
   name?: string;
   description?: string;
+}
+
+// Project Member Types
+export type ProjectRole = 'ProjectOwner' | 'ProjectDeveloper' | 'ProjectApprover' | 'ProjectViewer';
+
+export interface ProjectMember {
+  id: string;
+  project_id: string;
+  user_id: string;
+  role: ProjectRole;
+  added_by_id: string;
+  added_at: string;
+}
+
+export interface ProjectMemberWithUser {
+  member: ProjectMember;
+  user: {
+    id: string;
+    email: string;
+    display_name?: string;
+  };
+}
+
+export interface AddProjectMemberRequest {
+  user_id: string;
+  project_role: ProjectRole;
+}
+
+export interface UpdateProjectMemberRoleRequest {
+  project_role: ProjectRole;
+}
+
+export interface ProjectMembersListResponse {
+  members: ProjectMemberWithUser[];
+  count: number;
 }
 
 // Database Instance Types

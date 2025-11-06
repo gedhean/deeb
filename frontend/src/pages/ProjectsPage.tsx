@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsService } from '@/lib/api/services/projects';
-import type { CreateProjectRequest, Project, UpdateProjectRequest } from '@/lib/api/types';
+import { projectsService, projectMembersService } from '@/lib/api/services/projects';
+import type {
+  AddProjectMemberRequest,
+  CreateProjectRequest,
+  Project,
+  ProjectMemberWithUser,
+  ProjectRole,
+  UpdateProjectRequest,
+} from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +33,14 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Table,
   TableBody,
   TableCell,
@@ -33,18 +48,47 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle, FolderOpen } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Pencil, Trash2, AlertTriangle, FolderOpen, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useProjectPermissions } from '@/hooks/api/useProjectPermissions';
+import { usersService } from '@/lib/api/services/users';
+import type { User } from '@/lib/api/types';
+import { useProjects } from '@/hooks/api/useProjects';
 
 export const ProjectsPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { projects: availableProjects } = useProjects(); // Projects from hook (may include user's projects)
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Members management state
+  const [members, setMembers] = useState<ProjectMemberWithUser[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [isRemoveMemberOpen, setIsRemoveMemberOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<ProjectMemberWithUser | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [addMemberForm, setAddMemberForm] = useState<AddProjectMemberRequest>({
+    user_id: '',
+    project_role: 'ProjectDeveloper',
+  });
 
   // Form state
   const [formData, setFormData] = useState<CreateProjectRequest>({
@@ -53,19 +97,63 @@ export const ProjectsPage: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<{ name?: string; description?: string }>({});
 
+  // Check permissions for members management
+  const { canManageMembers } = useProjectPermissions(members);
+
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
 
-  // Load projects
+  // Load projects - admins see all, project owners fetch their owned projects
   useEffect(() => {
-    if (!isAdmin) {
-      setError('Access denied. Admin access required.');
+    if (!user) {
+      setError('Authentication required.');
       setIsLoading(false);
       return;
     }
 
-    loadProjects();
-  }, [isAdmin]);
+    if (isAdmin) {
+      // Admins can list all projects
+      loadProjects();
+    } else {
+      // For Project Owners, check projects from useProjects hook
+      loadProjectsForOwner();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isAdmin, availableProjects]);
+
+  // Load projects where user is owner
+  const loadProjectsForOwner = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+
+      // Check projects from useProjects hook to see which ones user owns
+      const userProjects: Project[] = [];
+      for (const project of availableProjects) {
+        try {
+          const members = await projectMembersService.listProjectMembers(project.id);
+          const isOwner = members.some(
+            (m) => m.member.user_id === user?.id && m.member.role === 'ProjectOwner',
+          );
+          if (isOwner) {
+            userProjects.push(project);
+          }
+        } catch {
+          // Skip projects where we can't check membership or don't have access
+        }
+      }
+      setProjects(userProjects);
+    } catch (err) {
+      if (err instanceof APIError) {
+        setError(err.message);
+      } else {
+        setError('Failed to load projects. Contact an admin to be added as a project owner.');
+      }
+      console.error('Failed to load projects:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const loadProjects = async () => {
     try {
@@ -213,6 +301,129 @@ export const ProjectsPage: React.FC = () => {
     setIsDeleteOpen(true);
   };
 
+  // Load members
+  const loadMembers = async (projectId: string) => {
+    try {
+      setIsLoadingMembers(true);
+      const membersList = await projectMembersService.listProjectMembers(projectId);
+      setMembers(membersList);
+    } catch (err) {
+      handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to load members',
+      });
+      console.error('Failed to load members:', err);
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  };
+
+  // Load available users for adding members
+  const loadAvailableUsers = async () => {
+    try {
+      setIsLoadingUsers(true);
+      const response = await usersService.listUsers({ limit: 100 });
+      setAvailableUsers(response.items);
+    } catch (err) {
+      console.error('Failed to load users:', err);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  // Handle add member
+  const handleAddMember = async () => {
+    if (!selectedProject || !addMemberForm.user_id) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await projectMembersService.addProjectMember(selectedProject.id, addMemberForm);
+      setIsAddMemberOpen(false);
+      setAddMemberForm({ user_id: '', project_role: 'ProjectDeveloper' });
+      showSuccessToast('Member added successfully');
+      await loadMembers(selectedProject.id);
+    } catch (err) {
+      handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to add member',
+      });
+      console.error('Failed to add member:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle remove member
+  const handleRemoveMember = async () => {
+    if (!selectedProject || !selectedMember) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await projectMembersService.removeProjectMember(
+        selectedProject.id,
+        selectedMember.member.user_id,
+      );
+      setIsRemoveMemberOpen(false);
+      setSelectedMember(null);
+      showSuccessToast('Member removed successfully');
+      await loadMembers(selectedProject.id);
+    } catch (err) {
+      handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to remove member',
+      });
+      console.error('Failed to remove member:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle update role
+  const handleUpdateRole = async (member: ProjectMemberWithUser, newRole: ProjectRole) => {
+    if (!selectedProject) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await projectMembersService.updateProjectMemberRole(
+        selectedProject.id,
+        member.member.user_id,
+        newRole,
+      );
+      showSuccessToast('Member role updated successfully');
+      await loadMembers(selectedProject.id);
+    } catch (err) {
+      handleApiError(err, {
+        showToast: true,
+        toastTitle: 'Failed to update role',
+      });
+      console.error('Failed to update role:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Get role badge color
+  const getRoleBadgeVariant = (role: ProjectRole): 'default' | 'secondary' | 'destructive' => {
+    switch (role) {
+      case 'ProjectOwner':
+        return 'default';
+      case 'ProjectDeveloper':
+        return 'secondary';
+      case 'ProjectApprover':
+        return 'secondary';
+      case 'ProjectViewer':
+        return 'secondary';
+      default:
+        return 'secondary';
+    }
+  };
+
   // Format date
   const formatDate = (dateString: string) => {
     try {
@@ -227,23 +438,21 @@ export const ProjectsPage: React.FC = () => {
   };
 
   // Render access denied
-  if (!isAdmin) {
+  if (!user) {
     return (
       <DefaultLayout breadcrumbs={[{ label: 'Projects', isCurrentPage: true }]}>
         <Card>
           <CardHeader>
             <CardTitle>Access Denied</CardTitle>
-            <CardDescription>You do not have permission to access this page.</CardDescription>
+            <CardDescription>You must be logged in to access this page.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              This page requires Organization Admin role.
-            </p>
-          </CardContent>
         </Card>
       </DefaultLayout>
     );
   }
+
+  // Non-admins can access but with limited functionality
+  const canCreateProjects = isAdmin;
 
   return (
     <DefaultLayout breadcrumbs={[{ label: 'Projects', isCurrentPage: true }]}>
@@ -253,13 +462,17 @@ export const ProjectsPage: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
             <p className="text-muted-foreground mt-1">
-              Manage projects and organize database change requests
+              {isAdmin
+                ? 'Manage projects and organize database change requests'
+                : 'Manage members for projects you own'}
             </p>
           </div>
-          <Button onClick={openCreateForm}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Project
-          </Button>
+          {canCreateProjects && (
+            <Button onClick={openCreateForm}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Project
+            </Button>
+          )}
         </div>
 
         {/* Error message */}
@@ -322,10 +535,17 @@ export const ProjectsPage: React.FC = () => {
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button onClick={openCreateForm}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Project
-                  </Button>
+                  {isAdmin ? (
+                    <Button onClick={openCreateForm}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Project
+                    </Button>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      You don&apos;t have permission to view all projects. Contact an admin to be
+                      added as a project owner.
+                    </p>
+                  )}
                 </EmptyContent>
               </Empty>
             </CardContent>
@@ -345,7 +565,11 @@ export const ProjectsPage: React.FC = () => {
                   </TableHeader>
                   <TableBody>
                     {projects.map((project) => (
-                      <TableRow key={project.id}>
+                      <TableRow
+                        key={project.id}
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
                         <TableCell className="font-medium">{project.name}</TableCell>
                         <TableCell className="max-w-md">
                           <span className="line-clamp-2 text-muted-foreground">
@@ -355,26 +579,48 @@ export const ProjectsPage: React.FC = () => {
                         <TableCell className="text-muted-foreground">
                           {formatDate(project.created_at)}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => openEditForm(project)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/projects/${project.id}`);
+                              }}
                               className="h-11 w-11 p-0 touch-manipulation"
-                              aria-label="Edit project"
+                              aria-label="View project details"
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Users className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openDeleteConfirmation(project)}
-                              className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
-                              aria-label="Delete project"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {isAdmin && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditForm(project);
+                                  }}
+                                  className="h-11 w-11 p-0 touch-manipulation"
+                                  aria-label="Edit project"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDeleteConfirmation(project);
+                                  }}
+                                  className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
+                                  aria-label="Delete project"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -513,6 +759,268 @@ export const ProjectsPage: React.FC = () => {
             </SheetFooter>
           </SheetContent>
         </Sheet>
+
+        {/* Members Management Sheet */}
+        <Sheet open={isMembersOpen} onOpenChange={setIsMembersOpen}>
+          <SheetContent className="w-full sm:w-[640px] overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Project Members</SheetTitle>
+              <SheetDescription>
+                Manage project members and owners. Only admins and project owners can manage
+                members.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-4 py-4">
+              {!canManageMembers && (
+                <Card className="border-destructive">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-2 text-destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span className="text-sm">
+                        You do not have permission to manage members. Only admins and project owners
+                        can manage members.
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {canManageMembers && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Members</h3>
+                    <Button
+                      onClick={async () => {
+                        setAddMemberForm({ user_id: '', project_role: 'ProjectDeveloper' });
+                        await loadAvailableUsers();
+                        setIsAddMemberOpen(true);
+                      }}
+                      size="sm"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Member
+                    </Button>
+                  </div>
+
+                  {isLoadingMembers ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-16 w-full" />
+                      ))}
+                    </div>
+                  ) : members.length === 0 ? (
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <Users className="h-12 w-12 text-muted-foreground" />
+                        </EmptyMedia>
+                        <EmptyTitle>No Members</EmptyTitle>
+                        <EmptyDescription>
+                          Add members to this project to grant them access.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      <EmptyContent>
+                        <Button
+                          onClick={async () => {
+                            setAddMemberForm({ user_id: '', project_role: 'ProjectDeveloper' });
+                            await loadAvailableUsers();
+                            setIsAddMemberOpen(true);
+                          }}
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Member
+                        </Button>
+                      </EmptyContent>
+                    </Empty>
+                  ) : (
+                    <div className="overflow-x-auto -mx-6 px-6">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>User</TableHead>
+                            <TableHead>Role</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {members.map((memberWithUser) => (
+                            <TableRow key={memberWithUser.member.id}>
+                              <TableCell>
+                                <div>
+                                  <div className="font-medium">
+                                    {memberWithUser.user.email || memberWithUser.member.user_id}
+                                  </div>
+                                  {memberWithUser.user.display_name && (
+                                    <div className="text-sm text-muted-foreground">
+                                      {memberWithUser.user.display_name}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {canManageMembers ? (
+                                  <Select
+                                    value={memberWithUser.member.role}
+                                    onValueChange={(value) =>
+                                      handleUpdateRole(memberWithUser, value as ProjectRole)
+                                    }
+                                    disabled={isSubmitting}
+                                  >
+                                    <SelectTrigger className="w-[180px]">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="ProjectOwner">Project Owner</SelectItem>
+                                      <SelectItem value="ProjectDeveloper">
+                                        Project Developer
+                                      </SelectItem>
+                                      <SelectItem value="ProjectApprover">
+                                        Project Approver
+                                      </SelectItem>
+                                      <SelectItem value="ProjectViewer">Project Viewer</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Badge variant={getRoleBadgeVariant(memberWithUser.member.role)}>
+                                    {memberWithUser.member.role}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {canManageMembers && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedMember(memberWithUser);
+                                      setIsRemoveMemberOpen(true);
+                                    }}
+                                    className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                    aria-label="Remove member"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Add Member Dialog */}
+        <Dialog open={isAddMemberOpen} onOpenChange={setIsAddMemberOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Member</DialogTitle>
+              <DialogDescription>
+                Add a user to this project and assign them a role.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label htmlFor="member-user" className="text-sm font-medium">
+                  User *
+                </label>
+                <Select
+                  value={addMemberForm.user_id}
+                  onValueChange={(value) => setAddMemberForm({ ...addMemberForm, user_id: value })}
+                  disabled={isLoadingUsers || isSubmitting}
+                >
+                  <SelectTrigger id="member-user">
+                    <SelectValue placeholder="Select a user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableUsers
+                      .filter((u) => !members.some((m) => m.member.user_id === u.id) && u.is_active)
+                      .map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.email}
+                          {u.display_name && ` (${u.display_name})`}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {availableUsers.filter(
+                  (u) => !members.some((m) => m.member.user_id === u.id) && u.is_active,
+                ).length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No available users to add. All users are already members.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="member-role" className="text-sm font-medium">
+                  Role *
+                </label>
+                <Select
+                  value={addMemberForm.project_role}
+                  onValueChange={(value) =>
+                    setAddMemberForm({ ...addMemberForm, project_role: value as ProjectRole })
+                  }
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger id="member-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ProjectOwner">Project Owner</SelectItem>
+                    <SelectItem value="ProjectDeveloper">Project Developer</SelectItem>
+                    <SelectItem value="ProjectApprover">Project Approver</SelectItem>
+                    <SelectItem value="ProjectViewer">Project Viewer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAddMemberOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddMember} disabled={!addMemberForm.user_id || isSubmitting}>
+                {isSubmitting ? 'Adding...' : 'Add Member'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Remove Member Dialog */}
+        <Dialog open={isRemoveMemberOpen} onOpenChange={setIsRemoveMemberOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Remove Member</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to remove this member from the project? This action cannot be
+                undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {selectedMember && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">
+                    {selectedMember.user.email || selectedMember.member.user_id}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Role: {selectedMember.member.role}
+                  </p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRemoveMemberOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleRemoveMember} disabled={isSubmitting}>
+                {isSubmitting ? 'Removing...' : 'Remove Member'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DefaultLayout>
   );

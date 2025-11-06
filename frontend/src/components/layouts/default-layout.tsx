@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { AppSidebar } from '@/components/app-sidebar';
 import {
   Breadcrumb,
@@ -40,11 +41,7 @@ export interface DefaultLayoutProps {
  * @param children - The main page content
  * @param breadcrumbs - Optional breadcrumb navigation items
  */
-export const DefaultLayout: React.FC<DefaultLayoutProps> = ({
-  children,
-  breadcrumbs = [],
-}) => {
-
+export const DefaultLayout: React.FC<DefaultLayoutProps> = ({ children, breadcrumbs = [] }) => {
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -54,7 +51,10 @@ export const DefaultLayout: React.FC<DefaultLayoutProps> = ({
             <SidebarTrigger className="-ml-1" />
             {breadcrumbs.length > 0 && (
               <>
-                <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+                <Separator
+                  orientation="vertical"
+                  className="mr-2 data-[orientation=vertical]:h-4"
+                />
                 {/* Breadcrumb Navigation */}
                 <Breadcrumb>
                   <BreadcrumbList>
@@ -65,7 +65,9 @@ export const DefaultLayout: React.FC<DefaultLayoutProps> = ({
                           {item.isCurrentPage || !item.href ? (
                             <BreadcrumbPage>{item.label}</BreadcrumbPage>
                           ) : (
-                            <BreadcrumbLink href={item.href}>{item.label}</BreadcrumbLink>
+                            <BreadcrumbLink asChild>
+                              <Link to={item.href}>{item.label}</Link>
+                            </BreadcrumbLink>
                           )}
                         </BreadcrumbItem>
                       </React.Fragment>
