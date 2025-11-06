@@ -43,6 +43,7 @@ func TestUserRepository_Create(t *testing.T) {
 			sqlmock.AnyArg(), // id
 			user.Email,
 			user.PasswordHash,
+			user.DisplayName,
 			user.OrganizationRole,
 			user.TwoFactorEnabled,
 			user.TwoFactorSecret,
@@ -177,6 +178,7 @@ func TestUserRepository_Update(t *testing.T) {
 			user.ID,
 			user.Email,
 			user.PasswordHash,
+			user.DisplayName,
 			user.OrganizationRole,
 			user.TwoFactorEnabled,
 			user.TwoFactorSecret,
@@ -211,6 +213,7 @@ func TestUserRepository_Update_NotFound(t *testing.T) {
 			user.ID,
 			user.Email,
 			user.PasswordHash,
+			user.DisplayName,
 			user.OrganizationRole,
 			user.TwoFactorEnabled,
 			user.TwoFactorSecret,

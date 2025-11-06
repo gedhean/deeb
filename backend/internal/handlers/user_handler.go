@@ -85,6 +85,7 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 	user := &models.User{
 		Email:            req.Email,
 		PasswordHash:     passwordHash,
+		DisplayName:      req.DisplayName,
 		OrganizationRole: req.OrganizationRole,
 		TwoFactorEnabled: false,
 		IsActive:         true,
@@ -223,6 +224,9 @@ func (h *UserHandler) UpdateUser(c echo.Context) error {
 	}
 
 	// Apply updates
+	if req.DisplayName != nil {
+		user.DisplayName = req.DisplayName
+	}
 	if req.OrganizationRole != nil {
 		user.OrganizationRole = *req.OrganizationRole
 	}

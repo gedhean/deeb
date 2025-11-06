@@ -52,12 +52,15 @@ export const UsersPage: React.FC = () => {
   const [formData, setFormData] = useState<CreateUserRequest>({
     email: '',
     password: '',
+    display_name: '',
     organization_role: 'OrganizationDeveloper',
   });
   const [editFormData, setEditFormData] = useState<{
+    display_name?: string;
     organization_role: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
     is_active: boolean;
   }>({
+    display_name: '',
     organization_role: 'OrganizationDeveloper',
     is_active: true,
   });
@@ -145,11 +148,12 @@ export const UsersPage: React.FC = () => {
       const createData: CreateUserRequest = {
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
+        display_name: formData.display_name?.trim() || undefined,
         organization_role: formData.organization_role,
       };
       await usersService.createUser(createData);
       setIsCreateOpen(false);
-      setFormData({ email: '', password: '', organization_role: 'OrganizationDeveloper' });
+      setFormData({ email: '', password: '', display_name: '', organization_role: 'OrganizationDeveloper' });
       setFormErrors({});
       await loadUsers();
     } catch (err) {
@@ -174,6 +178,9 @@ export const UsersPage: React.FC = () => {
       setIsSubmitting(true);
       const updateData: UpdateUserRequest = {};
 
+      if (editFormData.display_name !== (selectedUser.display_name || '')) {
+        updateData.display_name = editFormData.display_name?.trim() || undefined;
+      }
       if (editFormData.organization_role !== selectedUser.organization_role) {
         updateData.organization_role = editFormData.organization_role;
       }
@@ -184,7 +191,7 @@ export const UsersPage: React.FC = () => {
       await usersService.updateUser(selectedUser.id, updateData);
       setIsEditOpen(false);
       setSelectedUser(null);
-      setEditFormData({ organization_role: 'OrganizationDeveloper', is_active: true });
+      setEditFormData({ display_name: '', organization_role: 'OrganizationDeveloper', is_active: true });
       setFormErrors({});
       await loadUsers();
     } catch (err) {
@@ -225,7 +232,7 @@ export const UsersPage: React.FC = () => {
 
   // Open create form
   const openCreateForm = () => {
-    setFormData({ email: '', password: '', organization_role: 'OrganizationDeveloper' });
+    setFormData({ email: '', password: '', display_name: '', organization_role: 'OrganizationDeveloper' });
     setFormErrors({});
     setIsCreateOpen(true);
   };
@@ -234,6 +241,7 @@ export const UsersPage: React.FC = () => {
   const openEditForm = (user: User) => {
     setSelectedUser(user);
     setEditFormData({
+      display_name: user.display_name || '',
       organization_role: user.organization_role as
         | 'OrganizationAdmin'
         | 'OrganizationDBA'
@@ -473,6 +481,18 @@ export const UsersPage: React.FC = () => {
                 {formErrors.email && <p className="text-sm text-destructive">{formErrors.email}</p>}
               </div>
               <div className="space-y-2">
+                <label htmlFor="create-display-name" className="text-sm font-medium">
+                  Display Name
+                </label>
+                <Input
+                  id="create-display-name"
+                  type="text"
+                  value={formData.display_name || ''}
+                  onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+                  placeholder="John Doe"
+                />
+              </div>
+              <div className="space-y-2">
                 <label htmlFor="create-password" className="text-sm font-medium">
                   Password *
                 </label>
@@ -547,6 +567,18 @@ export const UsersPage: React.FC = () => {
                   className="bg-muted"
                 />
                 <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="edit-display-name" className="text-sm font-medium">
+                  Display Name
+                </label>
+                <Input
+                  id="edit-display-name"
+                  type="text"
+                  value={editFormData.display_name || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, display_name: e.target.value })}
+                  placeholder="John Doe"
+                />
               </div>
               <div className="space-y-2">
                 <label htmlFor="edit-role" className="text-sm font-medium">

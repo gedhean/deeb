@@ -35,11 +35,11 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 
 	query := `
 		INSERT INTO users (
-			id, email, password_hash, organization_role,
+			id, email, password_hash, display_name, organization_role,
 			two_factor_enabled, two_factor_secret, is_active,
 			created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		)
 	`
 
@@ -49,6 +49,7 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 		user.ID,
 		user.Email,
 		user.PasswordHash,
+		user.DisplayName,
 		user.OrganizationRole,
 		user.TwoFactorEnabled,
 		user.TwoFactorSecret,
@@ -119,11 +120,12 @@ func (r *userRepository) Update(ctx context.Context, user *models.User) error {
 		UPDATE users
 		SET email = $2,
 			password_hash = $3,
-			organization_role = $4,
-			two_factor_enabled = $5,
-			two_factor_secret = $6,
-			is_active = $7,
-			updated_at = $8
+			display_name = $4,
+			organization_role = $5,
+			two_factor_enabled = $6,
+			two_factor_secret = $7,
+			is_active = $8,
+			updated_at = $9
 		WHERE id = $1
 	`
 
@@ -133,6 +135,7 @@ func (r *userRepository) Update(ctx context.Context, user *models.User) error {
 		user.ID,
 		user.Email,
 		user.PasswordHash,
+		user.DisplayName,
 		user.OrganizationRole,
 		user.TwoFactorEnabled,
 		user.TwoFactorSecret,

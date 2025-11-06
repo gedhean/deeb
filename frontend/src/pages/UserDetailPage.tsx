@@ -29,9 +29,11 @@ export const UserDetailPage: React.FC = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editFormData, setEditFormData] = useState<{
+    display_name?: string;
     organization_role: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
     is_active: boolean;
   }>({
+    display_name: '',
     organization_role: 'OrganizationDeveloper',
     is_active: true,
   });
@@ -55,6 +57,7 @@ export const UserDetailPage: React.FC = () => {
       const userData = await usersService.getUser(userId);
       setUser(userData);
       setEditFormData({
+        display_name: userData.display_name || '',
         organization_role: userData.organization_role as
           | 'OrganizationAdmin'
           | 'OrganizationDBA'
@@ -90,6 +93,9 @@ export const UserDetailPage: React.FC = () => {
       setIsSubmitting(true);
       const updateData: UpdateUserRequest = {};
 
+      if (editFormData.display_name !== (user.display_name || '')) {
+        updateData.display_name = editFormData.display_name?.trim() || undefined;
+      }
       if (editFormData.organization_role !== user.organization_role) {
         updateData.organization_role = editFormData.organization_role;
       }
@@ -117,6 +123,7 @@ export const UserDetailPage: React.FC = () => {
   const openEditForm = () => {
     if (!user) return;
     setEditFormData({
+      display_name: user.display_name || '',
       organization_role: user.organization_role as
         | 'OrganizationAdmin'
         | 'OrganizationDBA'
@@ -336,6 +343,20 @@ export const UserDetailPage: React.FC = () => {
               <SheetDescription>Update user organization role and active status.</SheetDescription>
             </SheetHeader>
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label htmlFor="edit-display-name" className="text-sm font-medium">
+                  Display Name
+                </label>
+                <Input
+                  id="edit-display-name"
+                  type="text"
+                  value={editFormData.display_name || ''}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, display_name: e.target.value })
+                  }
+                  placeholder="John Doe"
+                />
+              </div>
               <div className="space-y-2">
                 <label htmlFor="edit-email" className="text-sm font-medium">
                   Email

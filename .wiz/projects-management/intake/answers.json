@@ -1,0 +1,58 @@
+[
+  {
+    "index": 1,
+    "answer": "Go, TypeScript"
+  },
+  {
+    "index": 2,
+    "answer": "skip"
+  },
+  {
+    "index": 3,
+    "answer": "skip"
+  },
+  {
+    "index": 4,
+    "answer": "Can have multiple owners"
+  },
+  {
+    "index": 5,
+    "answer": "add/remove project members"
+  },
+  {
+    "index": 6,
+    "answer": "member can have Project-level roles like owner, approver, viewer, developer, etc."
+  },
+  {
+    "index": 7,
+    "answer": "To be determined during implementation"
+  },
+  {
+    "index": 8,
+    "answer": "require explicit reassignment"
+  },
+  {
+    "index": 9,
+    "answer": "yes"
+  },
+  {
+    "index": 10,
+    "answer": "dedicated page"
+  },
+  {
+    "index": 11,
+    "answer": "no"
+  },
+  {
+    "index": 12,
+    "answer": "no"
+  },
+  {
+    "index": 13,
+    "answer": "50"
+  },
+  {
+    "index": 14,
+    "answer": "Yes"
+  }
+]

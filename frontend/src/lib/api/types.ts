@@ -49,10 +49,12 @@ export interface RegisterResponse {
 export interface CreateUserRequest {
   email: string;
   password: string;
+  display_name?: string;
   organization_role: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
 }
 
 export interface UpdateUserRequest {
+  display_name?: string;
   organization_role?: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
   is_active?: boolean;
   two_factor_enabled?: boolean;

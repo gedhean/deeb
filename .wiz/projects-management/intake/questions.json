@@ -1,0 +1,72 @@
+[
+  {
+    "index": 1,
+    "question": "What are the primary language(s) for this project? (Go, TypeScript, Python, C#, Java, or other)",
+    "rationale": "Determines which design guidelines to generate and which language specialist subagents to consult during implementation"
+  },
+  {
+    "index": 2,
+    "question": "What is the benchmarking policy? (hot spots only, comprehensive, or skip)",
+    "rationale": "Defines performance measurement requirements for critical code paths and optimization validation"
+  },
+  {
+    "index": 3,
+    "question": "What is the fuzzing policy? (core areas only, comprehensive, or skip)",
+    "rationale": "Determines fuzz testing scope for input validation and security-critical components"
+  },
+  {
+    "index": 4,
+    "question": "How should project ownership be assigned? Can a project have multiple owners, or is it single-owner only?",
+    "rationale": "Defines the ownership model and cardinality constraints for the database schema and business logic"
+  },
+  {
+    "index": 5,
+    "question": "What permissions should project owners have that regular members don't? (e.g., add/remove members, change settings, delete project)",
+    "rationale": "Establishes the permission boundaries and RBAC rules for owners versus members"
+  },
+  {
+    "index": 6,
+    "question": "How should member roles work? Do you need different member types (e.g., viewer, contributor, approver), or is it a single 'member' role?",
+    "rationale": "Determines if we need a role hierarchy within project membership or a flat member structure"
+  },
+  {
+    "index": 7,
+    "question": "Should there be inheritance or relationship between project membership and database change permissions? (e.g., does being a project member automatically grant certain change request capabilities?)",
+    "rationale": "Clarifies integration points with existing change management workflow and authorization model"
+  },
+  {
+    "index": 8,
+    "question": "What should happen when a project owner is removed or leaves the organization? Should ownership automatically transfer, or require explicit reassignment?",
+    "rationale": "Defines business rules for ownership lifecycle and ensures projects don't become orphaned"
+  },
+  {
+    "index": 9,
+    "question": "Should there be audit logging for membership changes? What events should be tracked (owner assigned, member added/removed, role changes)?",
+    "rationale": "Establishes compliance requirements and integration with existing audit trail system"
+  },
+  {
+    "index": 10,
+    "question": "How should the UI present project management? Should it be a dedicated page, integrated into project settings, or both?",
+    "rationale": "Guides frontend design and navigation structure for member management interface"
+  },
+  {
+    "index": 11,
+    "question": "Are there any constraints on who can be added as members or owners? (e.g., must be in certain groups, require 2FA, organizational restrictions)",
+    "rationale": "Identifies security and compliance requirements that may restrict membership eligibility"
+  },
+  {
+    "index": 12,
+    "question": "Should there be notifications when users are added/removed from projects or when ownership changes? If yes, what channels (email, in-app, webhook)?",
+    "rationale": "Determines integration requirements with notification system and user communication strategy"
+  },
+  {
+    "index": 13,
+    "question": "What are the performance expectations? How many projects, owners, and members per project do you expect to support?",
+    "rationale": "Establishes scalability requirements and helps design efficient database queries and caching strategies"
+  },
+  {
+    "index": 14,
+    "question": "Should admins be able to override project owner decisions (e.g., remove members that owners added, change ownership)? Are there any restrictions on admin capabilities?",
+    "rationale": "Clarifies the super-admin privilege model and any guardrails to prevent accidental or malicious changes"
+  }
+]
