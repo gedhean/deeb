@@ -142,6 +142,7 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 		UseRDSIAMAuth:              req.UseRDSIAMAuth,
 		RequireSSL:                 req.RequireSSL,
 		Status:                     models.DatabaseInstanceStatusActive,
+		EnvironmentID:              req.EnvironmentID,
 		CreatedByID:                claims.UserID,
 	}
 
@@ -197,8 +198,25 @@ func (h *DatabaseInstanceHandler) ListDatabaseInstances(c echo.Context) error {
 		}
 	}
 
-	// Fetch database instances
-	instances, err := h.dbInstanceRepo.List(ctx, limit, offset)
+	// Check for environment filter
+	var instances []*models.DatabaseInstance
+	var err error
+
+	environmentIDStr := c.QueryParam("environment_id")
+	if environmentIDStr != "" {
+		// Filter by environment
+		environmentID, parseErr := uuid.Parse(environmentIDStr)
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid environment ID format",
+			})
+		}
+		instances, err = h.dbInstanceRepo.ListByEnvironment(ctx, environmentID, limit, offset)
+	} else {
+		// No filter, list all
+		instances, err = h.dbInstanceRepo.List(ctx, limit, offset)
+	}
+
 	if err != nil {
 		h.logger.Error("Failed to list database instances", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -424,6 +442,9 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 	}
 	if req.Status != nil {
 		instance.Status = *req.Status
+	}
+	if req.EnvironmentID != nil {
+		instance.EnvironmentID = req.EnvironmentID
 	}
 
 	// Update database instance

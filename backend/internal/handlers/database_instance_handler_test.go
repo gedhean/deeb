@@ -84,6 +84,31 @@ func (m *mockDatabaseInstanceRepository) Count(ctx context.Context) (int64, erro
 	return int64(len(m.instances)), nil
 }
 
+func (m *mockDatabaseInstanceRepository) ListByEnvironment(ctx context.Context, environmentID uuid.UUID, limit, offset int) ([]*models.DatabaseInstance, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	// Filter instances by environment ID
+	var filtered []*models.DatabaseInstance
+	for _, instance := range m.instances {
+		if instance.EnvironmentID != nil && *instance.EnvironmentID == environmentID {
+			filtered = append(filtered, instance)
+		}
+	}
+	return filtered, nil
+}
+
+func (m *mockDatabaseInstanceRepository) CountByEnvironment(ctx context.Context, environmentID uuid.UUID) (int64, error) {
+	// Count instances by environment ID
+	count := int64(0)
+	for _, instance := range m.instances {
+		if instance.EnvironmentID != nil && *instance.EnvironmentID == environmentID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // Mock DatabaseRepository for testing
 type mockDatabaseRepositoryForInstance struct{}
 

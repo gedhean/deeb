@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { databaseInstancesService } from '@/lib/api/services/database-instances';
+import { environmentsService } from '@/lib/api/services/environments';
 import type {
   CreateDatabaseInstanceRequest,
   DatabaseInstance,
   UpdateDatabaseInstanceRequest,
+  Environment,
 } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
@@ -37,12 +39,24 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle, CheckCircle2, Loader2, Server, Search, X, Eye } from 'lucide-react';
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  Server,
+  Search,
+  X,
+  Eye,
+} from 'lucide-react';
 
 export const DatabaseInstancesPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [instances, setInstances] = useState<DatabaseInstance[]>([]);
+  const [environments, setEnvironments] = useState<Environment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -61,6 +75,7 @@ export const DatabaseInstancesPage: React.FC = () => {
     search?: string;
     database_type?: string;
     status?: string;
+    environment_id?: string;
   }>({});
 
   // Form state
@@ -74,6 +89,7 @@ export const DatabaseInstancesPage: React.FC = () => {
     password: '',
     use_rds_iam_auth: false,
     require_ssl: false,
+    environment_id: undefined,
   });
   const [formErrors, setFormErrors] = useState<{
     name?: string;
@@ -86,7 +102,7 @@ export const DatabaseInstancesPage: React.FC = () => {
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
 
-  // Load instances
+  // Load instances and environments
   useEffect(() => {
     if (!isAdmin) {
       setError('Access denied. Admin access required.');
@@ -94,12 +110,33 @@ export const DatabaseInstancesPage: React.FC = () => {
       return;
     }
 
-    loadInstances();
+    loadData();
   }, [isAdmin]);
+
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      const [instancesResponse, environmentsResponse] = await Promise.all([
+        databaseInstancesService.listDatabaseInstances({ limit: 100 }),
+        environmentsService.listEnvironments({ limit: 100 }),
+      ]);
+      setInstances(instancesResponse.items);
+      setEnvironments(environmentsResponse.items);
+    } catch (err) {
+      if (err instanceof APIError) {
+        setError(err.message);
+      } else {
+        setError('Failed to load data. Please try again.');
+      }
+      console.error('Failed to load data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const loadInstances = async () => {
     try {
-      setIsLoading(true);
       setError('');
       const response = await databaseInstancesService.listDatabaseInstances({ limit: 100 });
       setInstances(response.items);
@@ -110,8 +147,6 @@ export const DatabaseInstancesPage: React.FC = () => {
         setError('Failed to load database instances. Please try again.');
       }
       console.error('Failed to load database instances:', err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -224,6 +259,7 @@ export const DatabaseInstancesPage: React.FC = () => {
         password: formData.password,
         use_rds_iam_auth: formData.use_rds_iam_auth,
         require_ssl: formData.require_ssl,
+        environment_id: formData.environment_id || undefined,
       };
       await databaseInstancesService.createDatabaseInstance(createData);
       setIsCreateOpen(false);
@@ -237,6 +273,7 @@ export const DatabaseInstancesPage: React.FC = () => {
         password: '',
         use_rds_iam_auth: false,
         require_ssl: false,
+        environment_id: undefined,
       });
       setFormErrors({});
       setConnectionTestResult(null);
@@ -289,6 +326,9 @@ export const DatabaseInstancesPage: React.FC = () => {
       if (formData.require_ssl !== selectedInstance.require_ssl) {
         updateData.require_ssl = formData.require_ssl;
       }
+      if (formData.environment_id !== selectedInstance.environment_id) {
+        updateData.environment_id = formData.environment_id || undefined;
+      }
 
       await databaseInstancesService.updateDatabaseInstance(selectedInstance.id, updateData);
       setIsEditOpen(false);
@@ -303,6 +343,7 @@ export const DatabaseInstancesPage: React.FC = () => {
         password: '',
         use_rds_iam_auth: false,
         require_ssl: false,
+        environment_id: undefined,
       });
       setFormErrors({});
       setConnectionTestResult(null);
@@ -374,6 +415,7 @@ export const DatabaseInstancesPage: React.FC = () => {
       password: '', // Never show existing password
       use_rds_iam_auth: instance.use_rds_iam_auth,
       require_ssl: instance.require_ssl,
+      environment_id: instance.environment_id || undefined,
     });
     setFormErrors({});
     setConnectionTestResult(null);
@@ -511,7 +553,9 @@ export const DatabaseInstancesPage: React.FC = () => {
         <Card>
           <CardHeader>
             <CardTitle>Filters</CardTitle>
-            <CardDescription>Filter database instances by name, host, type, or status</CardDescription>
+            <CardDescription>
+              Filter database instances by name, host, type, or status
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -564,6 +608,26 @@ export const DatabaseInstancesPage: React.FC = () => {
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                   <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+
+              {/* Environment Filter */}
+              <div className="space-y-2">
+                <label htmlFor="filter-environment" className="text-sm font-medium">
+                  Environment
+                </label>
+                <select
+                  id="filter-environment"
+                  value={filters.environment_id || ''}
+                  onChange={(e) => handleFilterChange('environment_id', e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">All Environments</option>
+                  {environments.map((env) => (
+                    <option key={env.id} value={env.id}>
+                      {env.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -634,7 +698,9 @@ export const DatabaseInstancesPage: React.FC = () => {
                   <EmptyMedia variant="icon">
                     <Server className="h-12 w-12 text-muted-foreground" />
                   </EmptyMedia>
-                  <EmptyTitle>{hasFilters ? 'No Instances Found' : 'No Database Instances Yet'}</EmptyTitle>
+                  <EmptyTitle>
+                    {hasFilters ? 'No Instances Found' : 'No Database Instances Yet'}
+                  </EmptyTitle>
                   <EmptyDescription>
                     {hasFilters
                       ? 'No database instances match your filters. Try adjusting your search criteria.'
@@ -662,7 +728,8 @@ export const DatabaseInstancesPage: React.FC = () => {
             <CardHeader>
               <CardTitle>Database Instances</CardTitle>
               <CardDescription>
-                {filteredInstances.length} of {instances.length} instance{instances.length === 1 ? '' : 's'}
+                {filteredInstances.length} of {instances.length} instance
+                {instances.length === 1 ? '' : 's'}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
@@ -674,6 +741,7 @@ export const DatabaseInstancesPage: React.FC = () => {
                       <TableHead>Type</TableHead>
                       <TableHead>Host</TableHead>
                       <TableHead>Username</TableHead>
+                      <TableHead>Environment</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -681,7 +749,7 @@ export const DatabaseInstancesPage: React.FC = () => {
                   </TableHeader>
                   <TableBody>
                     {filteredInstances.map((instance) => (
-                      <TableRow 
+                      <TableRow
                         key={instance.id}
                         onClick={() => navigate(`/database-instances/${instance.id}`)}
                         className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -694,6 +762,12 @@ export const DatabaseInstancesPage: React.FC = () => {
                           {instance.host}:{instance.port}
                         </TableCell>
                         <TableCell className="text-muted-foreground">{instance.username}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {instance.environment_id
+                            ? environments.find((env) => env.id === instance.environment_id)
+                                ?.name || 'Unknown'
+                            : '-'}
+                        </TableCell>
                         <TableCell>
                           <span className={getStatusColor(instance.status)}>{instance.status}</span>
                         </TableCell>
@@ -793,6 +867,29 @@ export const DatabaseInstancesPage: React.FC = () => {
                 >
                   <option value="postgresql">PostgreSQL</option>
                   <option value="mysql">MySQL</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="create-environment" className="text-sm font-medium">
+                  Environment (optional)
+                </label>
+                <select
+                  id="create-environment"
+                  value={formData.environment_id || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      environment_id: e.target.value || undefined,
+                    })
+                  }
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">No Environment</option>
+                  {environments.map((env) => (
+                    <option key={env.id} value={env.id}>
+                      {env.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">
@@ -993,6 +1090,29 @@ export const DatabaseInstancesPage: React.FC = () => {
                 >
                   <option value="postgresql">PostgreSQL</option>
                   <option value="mysql">MySQL</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="edit-environment" className="text-sm font-medium">
+                  Environment (optional)
+                </label>
+                <select
+                  id="edit-environment"
+                  value={formData.environment_id || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      environment_id: e.target.value || undefined,
+                    })
+                  }
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">No Environment</option>
+                  {environments.map((env) => (
+                    <option key={env.id} value={env.id}>
+                      {env.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">

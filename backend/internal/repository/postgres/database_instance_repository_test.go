@@ -53,8 +53,8 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 		mock.ExpectExec("INSERT INTO database_instances").
 			WithArgs(sqlmock.AnyArg(), instance.Name, instance.Description, instance.DatabaseType,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
-				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.CreatedByID,
-				sqlmock.AnyArg(), sqlmock.AnyArg()).
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
+				instance.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, instance)
@@ -86,8 +86,8 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 		mock.ExpectExec("INSERT INTO database_instances").
 			WithArgs(sqlmock.AnyArg(), instance.Name, nil, instance.DatabaseType,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
-				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.CreatedByID,
-				sqlmock.AnyArg(), sqlmock.AnyArg()).
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
+				instance.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, instance)
@@ -121,8 +121,8 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 		mock.ExpectExec("INSERT INTO database_instances").
 			WithArgs(existingID, instance.Name, instance.Description, instance.DatabaseType,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
-				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.CreatedByID,
-				sqlmock.AnyArg(), sqlmock.AnyArg()).
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
+				instance.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, instance)
@@ -204,8 +204,8 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 		mock.ExpectExec("INSERT INTO database_instances").
 			WithArgs(sqlmock.AnyArg(), instance.Name, instance.Description, instance.DatabaseType,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
-				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.CreatedByID,
-				sqlmock.AnyArg(), sqlmock.AnyArg()).
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
+				instance.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnError(errors.New("database error"))
 
 		err := repo.Create(ctx, instance)
@@ -233,10 +233,10 @@ func TestDatabaseInstanceRepository_GetByID(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{
 			"id", "name", "description", "database_type", "host", "port", "username",
-			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID, "Test Instance", description, "postgresql", "localhost", 5432, "postgres",
-				encryptedDetails, false, true, "Active", createdByID, now, now)
+				encryptedDetails, false, true, "Active", nil, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances WHERE id =").
 			WithArgs(instanceID).
@@ -269,10 +269,10 @@ func TestDatabaseInstanceRepository_GetByID(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{
 			"id", "name", "description", "database_type", "host", "port", "username",
-			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID, "Test Instance", nil, "mysql", "localhost", 3306, "root",
-				encryptedDetails, true, false, "Active", createdByID, now, now)
+				encryptedDetails, true, false, "Active", nil, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances WHERE id =").
 			WithArgs(instanceID).
@@ -334,12 +334,12 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{
 			"id", "name", "description", "database_type", "host", "port", "username",
-			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID1, "Instance 1", nil, "postgresql", "localhost", 5432, "postgres",
-				encryptedDetails, false, true, "Active", createdByID, now, now).
+				encryptedDetails, false, true, "Active", nil, createdByID, now, now).
 			AddRow(instanceID2, "Instance 2", nil, "mysql", "localhost", 3306, "root",
-				encryptedDetails, false, false, "Active", createdByID, now, now)
+				encryptedDetails, false, false, "Active", nil, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).
@@ -357,7 +357,7 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 	t.Run("empty list", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{
 			"id", "name", "description", "database_type", "host", "port", "username",
-			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		})
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
@@ -380,10 +380,10 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{
 			"id", "name", "description", "database_type", "host", "port", "username",
-			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "created_by_id", "created_at", "updated_at",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID, "Instance 1", nil, "postgresql", "localhost", 5432, "postgres",
-				encryptedDetails, false, true, "Active", createdByID, now, now)
+				encryptedDetails, false, true, "Active", nil, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
 			WithArgs(5, 10).
@@ -495,7 +495,8 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 		mock.ExpectExec("UPDATE database_instances").
 			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseType,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
-				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, sqlmock.AnyArg()).
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
+				sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, instance)
@@ -527,7 +528,8 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 		mock.ExpectExec("UPDATE database_instances").
 			WithArgs(instanceID, instance.Name, nil, instance.DatabaseType,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
-				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, sqlmock.AnyArg()).
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
+				sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, instance)
@@ -555,7 +557,8 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 		mock.ExpectExec("UPDATE database_instances").
 			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseType,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
-				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, sqlmock.AnyArg()).
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
+				sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Update(ctx, instance)
@@ -620,7 +623,8 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 		mock.ExpectExec("UPDATE database_instances").
 			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseType,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
-				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, sqlmock.AnyArg()).
+				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
+				sqlmock.AnyArg()).
 			WillReturnError(errors.New("database error"))
 
 		err := repo.Update(ctx, instance)

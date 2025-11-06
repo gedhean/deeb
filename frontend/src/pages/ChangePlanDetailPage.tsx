@@ -543,7 +543,7 @@ export const ChangePlanDetailPage: React.FC = () => {
               <DialogTitle>Edit SQL Content</DialogTitle>
               <DialogDescription>
                 Update the SQL content for this change plan. After saving, the change plan will
-                transition to "Open" status and SQL Review will run automatically.
+                transition to &quot;Open&quot; status and SQL Review will run automatically.
               </DialogDescription>
             </DialogHeader>
 
@@ -573,8 +573,8 @@ export const ChangePlanDetailPage: React.FC = () => {
                   <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
                     <AlertTriangle className="h-4 w-4" />
                     <span className="text-sm">
-                      After saving, this change plan will transition to "Open" status and SQL Review
-                      will run automatically.
+                      After saving, this change plan will transition to &quot;Open&quot; status and
+                      SQL Review will run automatically.
                     </span>
                   </div>
                 </div>

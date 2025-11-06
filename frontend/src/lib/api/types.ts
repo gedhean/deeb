@@ -127,6 +127,7 @@ export interface DatabaseInstance {
   use_rds_iam_auth: boolean;
   require_ssl: boolean;
   status: 'Active' | 'Inactive' | 'Maintenance';
+  environment_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -141,6 +142,7 @@ export interface CreateDatabaseInstanceRequest {
   password: string;
   use_rds_iam_auth?: boolean;
   require_ssl?: boolean;
+  environment_id?: string;
 }
 
 export interface UpdateDatabaseInstanceRequest {
@@ -154,6 +156,7 @@ export interface UpdateDatabaseInstanceRequest {
   use_rds_iam_auth?: boolean;
   require_ssl?: boolean;
   status?: 'Active' | 'Inactive' | 'Maintenance';
+  environment_id?: string;
 }
 
 // Database Types

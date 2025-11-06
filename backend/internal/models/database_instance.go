@@ -38,6 +38,7 @@ type DatabaseInstance struct {
 	UseRDSIAMAuth              bool                   `json:"use_rds_iam_auth"      db:"use_rds_iam_auth"`
 	RequireSSL                 bool                   `json:"require_ssl"           db:"require_ssl"`
 	Status                     DatabaseInstanceStatus `json:"status"                db:"status"`
+	EnvironmentID              *uuid.UUID             `json:"environment_id"        db:"environment_id"`
 	CreatedByID                uuid.UUID              `json:"created_by_id"         db:"created_by_id"`
 	CreatedAt                  time.Time              `json:"created_at"            db:"created_at"`
 	UpdatedAt                  time.Time              `json:"updated_at"            db:"updated_at"`
@@ -54,6 +55,7 @@ type CreateDatabaseInstanceRequest struct {
 	Password      string       `json:"password"              validate:"required"` // Plain password (will be encrypted)
 	UseRDSIAMAuth bool         `json:"use_rds_iam_auth"`
 	RequireSSL    bool         `json:"require_ssl"`
+	EnvironmentID *uuid.UUID   `json:"environment_id"`
 }
 
 // UpdateDatabaseInstanceRequest represents the request to update a database instance
@@ -68,6 +70,7 @@ type UpdateDatabaseInstanceRequest struct {
 	UseRDSIAMAuth *bool                   `json:"use_rds_iam_auth,omitempty"`
 	RequireSSL    *bool                   `json:"require_ssl,omitempty"`
 	Status        *DatabaseInstanceStatus `json:"status,omitempty"           validate:"omitempty,oneof=Active Inactive Maintenance"`
+	EnvironmentID *uuid.UUID              `json:"environment_id"`
 }
 
 // DatabaseInstanceResponse represents a database instance response
@@ -82,6 +85,7 @@ type DatabaseInstanceResponse struct {
 	UseRDSIAMAuth bool                   `json:"use_rds_iam_auth"`
 	RequireSSL    bool                   `json:"require_ssl"`
 	Status        DatabaseInstanceStatus `json:"status"`
+	EnvironmentID *uuid.UUID             `json:"environment_id"`
 	CreatedAt     time.Time              `json:"created_at"`
 	UpdatedAt     time.Time              `json:"updated_at"`
 }
@@ -99,6 +103,7 @@ func (d *DatabaseInstance) ToResponse() *DatabaseInstanceResponse {
 		UseRDSIAMAuth: d.UseRDSIAMAuth,
 		RequireSSL:    d.RequireSSL,
 		Status:        d.Status,
+		EnvironmentID: d.EnvironmentID,
 		CreatedAt:     d.CreatedAt,
 		UpdatedAt:     d.UpdatedAt,
 	}

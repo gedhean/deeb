@@ -36,16 +36,16 @@ type User struct {
 
 // CreateUserRequest represents the request to create a new user with validation tags.
 type CreateUserRequest struct {
-	Email            string           `json:"email"             validate:"required,email"`
-	Password         string           `json:"password"          validate:"required,min=8"`
+	Email            string           `json:"email"                  validate:"required,email"`
+	Password         string           `json:"password"               validate:"required,min=8"`
 	DisplayName      *string          `json:"display_name,omitempty"`
-	OrganizationRole OrganizationRole `json:"organization_role" validate:"required,oneof=OrganizationAdmin OrganizationDBA OrganizationDeveloper"`
+	OrganizationRole OrganizationRole `json:"organization_role"      validate:"required,oneof=OrganizationAdmin OrganizationDBA OrganizationDeveloper"`
 }
 
 // UpdateUserRequest represents the request to update a user with optional fields.
 type UpdateUserRequest struct {
-	Password         *string          `json:"password,omitempty"          validate:"omitempty,min=8"`
-	DisplayName      *string          `json:"display_name,omitempty"`
+	Password         *string           `json:"password,omitempty"           validate:"omitempty,min=8"`
+	DisplayName      *string           `json:"display_name,omitempty"`
 	OrganizationRole *OrganizationRole `json:"organization_role,omitempty"  validate:"omitempty,oneof=OrganizationAdmin OrganizationDBA OrganizationDeveloper"`
 	TwoFactorEnabled *bool             `json:"two_factor_enabled,omitempty"`
 	IsActive         *bool             `json:"is_active,omitempty"`

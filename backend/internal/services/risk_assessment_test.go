@@ -160,6 +160,19 @@ func (m *MockDatabaseInstanceRepository) Delete(ctx context.Context, id uuid.UUI
 	return args.Error(0)
 }
 
+func (m *MockDatabaseInstanceRepository) ListByEnvironment(ctx context.Context, environmentID uuid.UUID, limit, offset int) ([]*models.DatabaseInstance, error) {
+	args := m.Called(ctx, environmentID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.DatabaseInstance), args.Error(1)
+}
+
+func (m *MockDatabaseInstanceRepository) CountByEnvironment(ctx context.Context, environmentID uuid.UUID) (int64, error) {
+	args := m.Called(ctx, environmentID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	ctx := context.Background()

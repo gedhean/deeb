@@ -48,9 +48,9 @@ func (r *DatabaseInstanceRepository) Create(ctx context.Context, instance *model
 		INSERT INTO database_instances (
 			id, name, description, database_type, host, port, username,
 			connection_details_encrypted, use_rds_iam_auth, require_ssl,
-			status, created_by_id, created_at, updated_at
+			status, environment_id, created_by_id, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -65,6 +65,7 @@ func (r *DatabaseInstanceRepository) Create(ctx context.Context, instance *model
 		instance.UseRDSIAMAuth,
 		instance.RequireSSL,
 		instance.Status,
+		instance.EnvironmentID,
 		instance.CreatedByID,
 		instance.CreatedAt,
 		instance.UpdatedAt,
@@ -81,7 +82,7 @@ func (r *DatabaseInstanceRepository) GetByID(ctx context.Context, id uuid.UUID) 
 	query := `
 		SELECT id, name, description, database_type, host, port, username,
 		       connection_details_encrypted, use_rds_iam_auth, require_ssl,
-		       status, created_by_id, created_at, updated_at
+		       status, environment_id, created_by_id, created_at, updated_at
 		FROM database_instances
 		WHERE id = $1
 	`
@@ -106,7 +107,7 @@ func (r *DatabaseInstanceRepository) List(ctx context.Context, limit, offset int
 	query := `
 		SELECT id, name, description, database_type, host, port, username,
 		       connection_details_encrypted, use_rds_iam_auth, require_ssl,
-		       status, created_by_id, created_at, updated_at
+		       status, environment_id, created_by_id, created_at, updated_at
 		FROM database_instances
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -114,6 +115,36 @@ func (r *DatabaseInstanceRepository) List(ctx context.Context, limit, offset int
 
 	var instances []*models.DatabaseInstance
 	err := r.db.SelectContext(ctx, &instances, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return empty slice instead of nil if no instances found
+	if instances == nil {
+		instances = []*models.DatabaseInstance{}
+	}
+
+	return instances, nil
+}
+
+// ListByEnvironment retrieves database instances filtered by environment ID with pagination
+func (r *DatabaseInstanceRepository) ListByEnvironment(
+	ctx context.Context,
+	environmentID uuid.UUID,
+	limit, offset int,
+) ([]*models.DatabaseInstance, error) {
+	query := `
+		SELECT id, name, description, database_type, host, port, username,
+		       connection_details_encrypted, use_rds_iam_auth, require_ssl,
+		       status, environment_id, created_by_id, created_at, updated_at
+		FROM database_instances
+		WHERE environment_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	var instances []*models.DatabaseInstance
+	err := r.db.SelectContext(ctx, &instances, query, environmentID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +170,19 @@ func (r *DatabaseInstanceRepository) Count(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
+// CountByEnvironment returns the total number of database instances for a specific environment
+func (r *DatabaseInstanceRepository) CountByEnvironment(ctx context.Context, environmentID uuid.UUID) (int64, error) {
+	query := `SELECT COUNT(*) FROM database_instances WHERE environment_id = $1`
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, environmentID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
 // Update updates an existing database instance's information
 func (r *DatabaseInstanceRepository) Update(ctx context.Context, instance *models.DatabaseInstance) error {
 	// Validate instance
@@ -156,7 +200,7 @@ func (r *DatabaseInstanceRepository) Update(ctx context.Context, instance *model
 		UPDATE database_instances
 		SET name = $2, description = $3, database_type = $4, host = $5, port = $6,
 		    username = $7, connection_details_encrypted = $8, use_rds_iam_auth = $9,
-		    require_ssl = $10, status = $11, updated_at = $12
+		    require_ssl = $10, status = $11, environment_id = $12, updated_at = $13
 		WHERE id = $1
 	`
 
@@ -172,6 +216,7 @@ func (r *DatabaseInstanceRepository) Update(ctx context.Context, instance *model
 		instance.UseRDSIAMAuth,
 		instance.RequireSSL,
 		instance.Status,
+		instance.EnvironmentID,
 		instance.UpdatedAt,
 	)
 	if err != nil {

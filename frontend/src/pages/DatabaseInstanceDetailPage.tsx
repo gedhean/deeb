@@ -181,7 +181,11 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
             </Button>
             <div>
               <h1 className="text-3xl font-bold tracking-tight">
-                {isLoading ? <Skeleton className="h-9 w-64" /> : instance?.name || 'Database Instance'}
+                {isLoading ? (
+                  <Skeleton className="h-9 w-64" />
+                ) : (
+                  instance?.name || 'Database Instance'
+                )}
               </h1>
               <p className="text-muted-foreground mt-1">
                 {isLoading ? (
@@ -372,9 +376,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
                           {getEnvironmentName(database.environment_id)}
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={database.status === 'Active' ? 'default' : 'secondary'}
-                          >
+                          <Badge variant={database.status === 'Active' ? 'default' : 'secondary'}>
                             {database.status}
                           </Badge>
                         </TableCell>
@@ -403,4 +405,3 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
     </DefaultLayout>
   );
 };
-

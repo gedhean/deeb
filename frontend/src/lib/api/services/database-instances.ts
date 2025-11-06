@@ -14,6 +14,7 @@ export const databaseInstancesService = {
   async listDatabaseInstances(params?: {
     limit?: number;
     offset?: number;
+    environment_id?: string;
   }): Promise<ListResponse<DatabaseInstance>> {
     const queryParams = new URLSearchParams();
     if (params?.limit) {
@@ -21,6 +22,9 @@ export const databaseInstancesService = {
     }
     if (params?.offset) {
       queryParams.append('offset', params.offset.toString());
+    }
+    if (params?.environment_id) {
+      queryParams.append('environment_id', params.environment_id);
     }
 
     const queryString = queryParams.toString();
