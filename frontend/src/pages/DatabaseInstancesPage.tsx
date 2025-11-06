@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { databaseInstancesService } from '@/lib/api/services/database-instances';
@@ -36,10 +37,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle, CheckCircle2, Loader2, Server, Search, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, CheckCircle2, Loader2, Server, Search, X, Eye } from 'lucide-react';
 
 export const DatabaseInstancesPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [instances, setInstances] = useState<DatabaseInstance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -679,7 +681,11 @@ export const DatabaseInstancesPage: React.FC = () => {
                   </TableHeader>
                   <TableBody>
                     {filteredInstances.map((instance) => (
-                      <TableRow key={instance.id}>
+                      <TableRow 
+                        key={instance.id}
+                        onClick={() => navigate(`/database-instances/${instance.id}`)}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
                         <TableCell className="font-medium">{instance.name}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {instance.database_type}
@@ -694,8 +700,17 @@ export const DatabaseInstancesPage: React.FC = () => {
                         <TableCell className="text-muted-foreground">
                           {formatDate(instance.created_at)}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/database-instances/${instance.id}`)}
+                              className="h-11 w-11 p-0 touch-manipulation"
+                              aria-label="View instance"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="sm"

@@ -15,6 +15,7 @@ import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
 import { EnvironmentsPage } from '@/pages/EnvironmentsPage';
 import { PoliciesPage } from '@/pages/PoliciesPage';
 import { DatabaseInstancesPage } from '@/pages/DatabaseInstancesPage';
+import { DatabaseInstanceDetailPage } from '@/pages/DatabaseInstanceDetailPage';
 import { DatabasesPage } from '@/pages/DatabasesPage';
 import { UsersPage } from '@/pages/UsersPage';
 import { UserDetailPage } from '@/pages/UserDetailPage';
@@ -96,6 +97,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <DatabaseInstancesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/database-instances/:id"
+                element={
+                  <ProtectedRoute>
+                    <DatabaseInstanceDetailPage />
                   </ProtectedRoute>
                 }
               />
