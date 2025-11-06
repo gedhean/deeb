@@ -30,11 +30,13 @@ import {
 import { Plus, ChevronLeft, ChevronRight, AlertTriangle, FileEdit } from 'lucide-react';
 import { ProtectedComponent } from '@/components/ProtectedComponent';
 import { OrganizationPermission } from '@/lib/rbac';
+import { useCurrentProject } from '@/store';
 
 const PAGE_SIZE = 20;
 
 export const ChangePlansPage: React.FC = () => {
   const navigate = useNavigate();
+  const currentProject = useCurrentProject();
   const [changePlans, setChangePlans] = useState<ChangePlan[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [databases, setDatabases] = useState<Database[]>([]);
@@ -45,13 +47,15 @@ export const ChangePlansPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Filter state
+  // Filter state - initialize with currentProject if available
   const [filters, setFilters] = useState<{
     status?: ChangePlanStatus;
     project_id?: string;
     database_id?: string;
     author_id?: string;
-  }>({});
+  }>({
+    project_id: currentProject?.id,
+  });
 
   // Load filter options
   useEffect(() => {
@@ -75,6 +79,14 @@ export const ChangePlansPage: React.FC = () => {
 
     loadFilters();
   }, []);
+
+  // Sync filters with currentProject on initial load (only if filter not already set)
+  useEffect(() => {
+    if (currentProject?.id && !filters.project_id) {
+      setFilters((prev) => ({ ...prev, project_id: currentProject.id }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProject]);
 
   // Load change plans
   useEffect(() => {

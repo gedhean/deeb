@@ -11,9 +11,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
+import { useCurrentProject } from '@/store';
 
 export const ChangePlanCreatePage: React.FC = () => {
   const navigate = useNavigate();
+  const currentProject = useCurrentProject();
   const [projects, setProjects] = useState<Project[]>([]);
   const [databases, setDatabases] = useState<Database[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
@@ -21,9 +23,9 @@ export const ChangePlanCreatePage: React.FC = () => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form state
+  // Form state - initialize with currentProject if available
   const [formData, setFormData] = useState<CreateChangePlanRequest>({
-    project_id: '',
+    project_id: currentProject?.id || '',
     target_database_id: '',
     title: '',
     description: '',
@@ -41,9 +43,21 @@ export const ChangePlanCreatePage: React.FC = () => {
     sql_content?: string;
   }>({});
 
-  // Load projects
+  // Load projects and set initial project from currentProject
   useEffect(() => {
-    loadProjects();
+    const initializeProjects = async () => {
+      await loadProjects();
+      // Set project from currentProject after projects are loaded
+      // Only set if formData.project_id is empty or matches currentProject (i.e., initial load)
+      if (
+        currentProject?.id &&
+        (!formData.project_id || formData.project_id === currentProject.id)
+      ) {
+        setFormData((prev) => ({ ...prev, project_id: currentProject.id }));
+      }
+    };
+    initializeProjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load databases when project is selected
