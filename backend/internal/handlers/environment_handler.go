@@ -238,6 +238,12 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 		})
 	}
 
+	// Debug logging
+	h.logger.Info("Update request received",
+		zap.Bool("policy_provided", req.PolicyID.Provided),
+		zap.Any("policy_uuid", req.PolicyID.UUID),
+	)
+
 	// Validate request
 	if err := models.ValidateUpdateEnvironmentRequest(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
