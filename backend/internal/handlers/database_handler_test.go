@@ -205,7 +205,11 @@ func (m *mockDatabaseInstanceRepositoryForDB) Count(ctx context.Context) (int64,
 	return 0, nil
 }
 
-func (m *mockDatabaseInstanceRepositoryForDB) ListByEnvironment(ctx context.Context, environmentID uuid.UUID, limit, offset int) ([]*models.DatabaseInstance, error) {
+func (m *mockDatabaseInstanceRepositoryForDB) ListByEnvironment(
+	ctx context.Context,
+	environmentID uuid.UUID,
+	limit, offset int,
+) ([]*models.DatabaseInstance, error) {
 	return nil, nil
 }
 

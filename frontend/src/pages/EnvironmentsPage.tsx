@@ -180,7 +180,7 @@ export const EnvironmentsPage: React.FC = () => {
         updateData.description = formData.description?.trim() || undefined;
       }
       if (formData.policy_id !== selectedEnvironment.policy_id) {
-        updateData.policy_id = formData.policy_id || undefined;
+        updateData.policy_id = formData.policy_id || null;
       }
 
       await environmentsService.updateEnvironment(selectedEnvironment.id, updateData);
