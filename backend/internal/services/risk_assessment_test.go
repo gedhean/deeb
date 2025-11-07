@@ -160,7 +160,11 @@ func (m *MockDatabaseInstanceRepository) Delete(ctx context.Context, id uuid.UUI
 	return args.Error(0)
 }
 
-func (m *MockDatabaseInstanceRepository) ListByEnvironment(ctx context.Context, environmentID uuid.UUID, limit, offset int) ([]*models.DatabaseInstance, error) {
+func (m *MockDatabaseInstanceRepository) ListByEnvironment(
+	ctx context.Context,
+	environmentID uuid.UUID,
+	limit, offset int,
+) ([]*models.DatabaseInstance, error) {
 	args := m.Called(ctx, environmentID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
