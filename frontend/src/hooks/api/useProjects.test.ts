@@ -98,7 +98,9 @@ describe('useProjects', () => {
       page_size: 100,
     });
 
-    await result.current.refetch();
+    await waitFor(async () => {
+      await result.current.refetch();
+    });
 
     await waitFor(() => {
       expect(result.current.projects).toHaveLength(2);

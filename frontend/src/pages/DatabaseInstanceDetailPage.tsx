@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { databaseInstancesService } from '@/lib/api/services/database-instances';
@@ -51,45 +51,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
 
-  useEffect(() => {
-    if (id) {
-      loadInstance(id);
-    }
-  }, [id]);
-
-  const loadInstance = async (instanceId: string) => {
-    try {
-      setIsLoading(true);
-      setError('');
-
-      // Load instance
-      const instanceData = await databaseInstancesService.getDatabaseInstance(instanceId);
-      setInstance(instanceData);
-
-      // Load databases for this instance
-      await loadDatabases(instanceId);
-
-      // Load related data for display
-      const [projectsRes, environmentsRes] = await Promise.all([
-        projectsService.listProjects({ limit: 100 }),
-        environmentsService.listEnvironments({ limit: 100 }),
-      ]);
-
-      setProjects(projectsRes.items);
-      setEnvironments(environmentsRes.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load database instance. Please try again.');
-      }
-      console.error('Failed to load database instance:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadDatabases = async (instanceId: string) => {
+  const loadDatabases = useCallback(async (instanceId: string) => {
     try {
       setIsLoadingDatabases(true);
       const response = await databasesService.listDatabases({
@@ -102,7 +64,48 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
     } finally {
       setIsLoadingDatabases(false);
     }
-  };
+  }, []);
+
+  const loadInstance = useCallback(
+    async (instanceId: string) => {
+      try {
+        setIsLoading(true);
+        setError('');
+
+        // Load instance
+        const instanceData = await databaseInstancesService.getDatabaseInstance(instanceId);
+        setInstance(instanceData);
+
+        // Load databases for this instance
+        await loadDatabases(instanceId);
+
+        // Load related data for display
+        const [projectsRes, environmentsRes] = await Promise.all([
+          projectsService.listProjects({ limit: 100 }),
+          environmentsService.listEnvironments({ limit: 100 }),
+        ]);
+
+        setProjects(projectsRes.items);
+        setEnvironments(environmentsRes.items);
+      } catch (err) {
+        if (err instanceof APIError) {
+          setError(err.message);
+        } else {
+          setError('Failed to load database instance. Please try again.');
+        }
+        console.error('Failed to load database instance:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [loadDatabases],
+  );
+
+  useEffect(() => {
+    if (id) {
+      loadInstance(id);
+    }
+  }, [id, loadInstance]);
 
   // Format date
   const formatDate = (dateString: string) => {

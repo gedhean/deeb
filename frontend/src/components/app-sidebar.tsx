@@ -40,11 +40,6 @@ const navMainItems = [
     isActive: true,
   },
   {
-    title: 'Projects',
-    url: '/projects',
-    icon: FolderKanban,
-  },
-  {
     title: 'Change Plans',
     url: '/change-plans',
     icon: FileEdit,
@@ -73,6 +68,11 @@ const navMainItems = [
         url: '/database-instances',
       },
     ],
+  },
+  {
+    title: 'Projects',
+    url: '/projects',
+    icon: FolderKanban,
   },
 ];
 

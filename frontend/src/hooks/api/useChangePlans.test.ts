@@ -87,7 +87,9 @@ describe('useChangePlans', () => {
       offset: 0,
     });
 
-    await result.current.refetch();
+    await waitFor(async () => {
+      await result.current.refetch();
+    });
 
     await waitFor(() => {
       expect(result.current.changePlans).toHaveLength(2);

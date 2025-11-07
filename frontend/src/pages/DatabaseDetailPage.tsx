@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { databasesService } from '@/lib/api/services/databases';
@@ -66,58 +66,7 @@ export const DatabaseDetailPage: React.FC = () => {
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
 
-  useEffect(() => {
-    if (id) {
-      loadDatabase(id);
-    }
-  }, [id]);
-
-  const loadDatabase = async (databaseId: string) => {
-    try {
-      setIsLoading(true);
-      setError('');
-
-      // Load database
-      const databaseData = await databasesService.getDatabase(databaseId);
-      setDatabase(databaseData);
-
-      // Load change plans for this database
-      await loadChangePlans(databaseId);
-
-      // Load related data for display
-      const [projectsRes, environmentsRes, instancesRes, usersRes] = await Promise.all([
-        projectsService.listProjects({ limit: 100 }),
-        environmentsService.listEnvironments({ limit: 100 }),
-        databaseInstancesService.listDatabaseInstances({ limit: 100 }),
-        usersService.listUsers({ limit: 100 }),
-      ]);
-
-      // Find related entities
-      const foundProject = projectsRes.items.find((p) => p.id === databaseData.project_id);
-      const foundEnvironment = environmentsRes.items.find(
-        (e) => e.id === databaseData.environment_id,
-      );
-      const foundInstance = instancesRes.items.find(
-        (i) => i.id === databaseData.database_instance_id,
-      );
-
-      setProject(foundProject || null);
-      setEnvironment(foundEnvironment || null);
-      setInstance(foundInstance || null);
-      setUsers(usersRes.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load database. Please try again.');
-      }
-      console.error('Failed to load database:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadChangePlans = async (databaseId: string) => {
+  const loadChangePlans = useCallback(async (databaseId: string) => {
     try {
       setIsLoadingChangePlans(true);
       const response = await changePlanService.listChangePlans({
@@ -130,7 +79,61 @@ export const DatabaseDetailPage: React.FC = () => {
     } finally {
       setIsLoadingChangePlans(false);
     }
-  };
+  }, []);
+
+  const loadDatabase = useCallback(
+    async (databaseId: string) => {
+      try {
+        setIsLoading(true);
+        setError('');
+
+        // Load database
+        const databaseData = await databasesService.getDatabase(databaseId);
+        setDatabase(databaseData);
+
+        // Load change plans for this database
+        await loadChangePlans(databaseId);
+
+        // Load related data for display
+        const [projectsRes, environmentsRes, instancesRes, usersRes] = await Promise.all([
+          projectsService.listProjects({ limit: 100 }),
+          environmentsService.listEnvironments({ limit: 100 }),
+          databaseInstancesService.listDatabaseInstances({ limit: 100 }),
+          usersService.listUsers({ limit: 100 }),
+        ]);
+
+        // Find related entities
+        const foundProject = projectsRes.items.find((p) => p.id === databaseData.project_id);
+        const foundEnvironment = environmentsRes.items.find(
+          (e) => e.id === databaseData.environment_id,
+        );
+        const foundInstance = instancesRes.items.find(
+          (i) => i.id === databaseData.database_instance_id,
+        );
+
+        setProject(foundProject || null);
+        setEnvironment(foundEnvironment || null);
+        setInstance(foundInstance || null);
+        setUsers(usersRes.items);
+      } catch (err) {
+        if (err instanceof APIError) {
+          setError(err.message);
+        } else {
+          setError('Failed to load database. Please try again.');
+        }
+        console.error('Failed to load database:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [loadChangePlans],
+  );
+
+  useEffect(() => {
+    if (id) {
+      loadDatabase(id);
+    }
+  }, [id, loadDatabase]);
 
   // Format date
   const formatDate = (dateString: string) => {
