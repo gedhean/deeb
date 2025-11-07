@@ -1,5 +1,14 @@
 import { apiClient } from '../client';
-import type { CreatePolicyRequest, ListResponse, Policy, UpdatePolicyRequest } from '../types';
+import type {
+  BatchMigrationResult,
+  CreatePolicyRequest,
+  ListResponse,
+  MigrationResult,
+  MigrationStatus,
+  Policy,
+  SQLReviewRulesResponse,
+  UpdatePolicyRequest,
+} from '../types';
 
 export const policiesService = {
   /**
@@ -73,5 +82,52 @@ export const policiesService = {
    */
   async deletePolicy(id: string): Promise<void> {
     await apiClient.delete(`/api/v1/policies/${id}`);
+  },
+
+  /**
+   * Get available SQL review rules
+   * Returns rules organized by engine and category
+   */
+  async getSQLReviewRules(): Promise<SQLReviewRulesResponse> {
+    const response = await apiClient.get<SQLReviewRulesResponse>(
+      '/api/v1/policies/sql-review/rules',
+    );
+    return response;
+  },
+
+  /**
+   * Get migration status for all policies
+   * Shows count of V1 vs V2 policies
+   * Requires Organization Admin role
+   */
+  async getMigrationStatus(): Promise<MigrationStatus> {
+    const response = await apiClient.get<{ status: MigrationStatus }>(
+      '/api/v1/policies/migration/status',
+    );
+    return response.status;
+  },
+
+  /**
+   * Migrate a single policy to V2
+   * Requires Organization Admin role
+   */
+  async migratePolicy(id: string): Promise<MigrationResult> {
+    const response = await apiClient.post<{ result: MigrationResult }>(
+      `/api/v1/policies/${id}/migrate`,
+      {},
+    );
+    return response.result;
+  },
+
+  /**
+   * Migrate all V1 policies to V2
+   * Requires Organization Admin role
+   */
+  async migrateAllPolicies(): Promise<BatchMigrationResult> {
+    const response = await apiClient.post<{ result: BatchMigrationResult }>(
+      '/api/v1/policies/migration/migrate-all',
+      {},
+    );
+    return response.result;
   },
 };

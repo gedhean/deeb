@@ -1,0 +1,35 @@
+# vim: set ft=make:
+
+.PHONY: generate-rules generate-check
+
+# Path to sql-reviewer schema
+SQL_REVIEWER_PATH ?= $(HOME)/w/sql-reviewer
+
+# Generate rules metadata from sql-reviewer schema.yaml
+generate-rules:
+	@echo "Generating rules metadata from sql-reviewer..."
+	@go run internal/review/generator/*.go \
+		-schema $(SQL_REVIEWER_PATH)/config/schema.yaml \
+		-output-go internal/review/rules_metadata.go \
+		-output-ts ../frontend/src/lib/api/generated-types.ts
+	@echo "✅ Rules metadata generated successfully"
+
+# Check if generated files are up-to-date
+generate-check:
+	@echo "Checking if generated rules metadata is up-to-date..."
+	@go run internal/review/generator/*.go \
+		-schema $(SQL_REVIEWER_PATH)/config/schema.yaml \
+		-output-go internal/review/rules_metadata.go.tmp \
+		-output-ts ../frontend/src/lib/api/generated-types.ts.tmp
+	@if ! diff -q internal/review/rules_metadata.go internal/review/rules_metadata.go.tmp > /dev/null 2>&1; then \
+		echo "❌ Go metadata is out of date. Run 'make generate-rules'"; \
+		rm -f internal/review/rules_metadata.go.tmp ../frontend/src/lib/api/generated-types.ts.tmp; \
+		exit 1; \
+	fi
+	@if ! diff -q ../frontend/src/lib/api/generated-types.ts ../frontend/src/lib/api/generated-types.ts.tmp > /dev/null 2>&1; then \
+		echo "❌ TypeScript types are out of date. Run 'make generate-rules'"; \
+		rm -f internal/review/rules_metadata.go.tmp ../frontend/src/lib/api/generated-types.ts.tmp; \
+		exit 1; \
+	fi
+	@rm -f internal/review/rules_metadata.go.tmp ../frontend/src/lib/api/generated-types.ts.tmp
+	@echo "✅ Generated files are up-to-date"

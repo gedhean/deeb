@@ -1,12 +1,44 @@
 package models
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// NullableUUID is a wrapper that can distinguish between not provided, null, and a value
+type NullableUUID struct {
+	UUID     *uuid.UUID
+	Provided bool
+}
+
+// UnmarshalJSON implements json.Unmarshaler for NullableUUID
+func (n *NullableUUID) UnmarshalJSON(data []byte) error {
+	n.Provided = true
+
+	// Check for explicit null
+	if string(data) == "null" {
+		n.UUID = nil
+		return nil
+	}
+
+	// Try to parse as UUID
+	var uuidStr string
+	if err := json.Unmarshal(data, &uuidStr); err != nil {
+		return err
+	}
+
+	parsed, err := uuid.Parse(uuidStr)
+	if err != nil {
+		return err
+	}
+
+	n.UUID = &parsed
+	return nil
+}
 
 // Environment represents an environment stage (Dev, Staging, Production)
 type Environment struct {
@@ -28,9 +60,9 @@ type CreateEnvironmentRequest struct {
 
 // UpdateEnvironmentRequest represents the request to update an environment
 type UpdateEnvironmentRequest struct {
-	Name        *string    `json:"name,omitempty"        validate:"omitempty,max=100"`
-	Description *string    `json:"description,omitempty"`
-	PolicyID    *uuid.UUID `json:"policy_id,omitempty"`
+	Name        *string      `json:"name,omitempty"        validate:"omitempty,max=100"`
+	Description *string      `json:"description,omitempty"`
+	PolicyID    NullableUUID `json:"policy_id,omitempty"`
 }
 
 // EnvironmentResponse represents an environment response

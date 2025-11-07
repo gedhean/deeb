@@ -3,6 +3,7 @@ package routes
 
 import (
 	"context"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -16,9 +17,8 @@ import (
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/review"
-	"github.com/nsxbet/deeb/internal/review/validators"
+	"github.com/nsxbet/deeb/internal/review/sqlreviewer"
 	"github.com/nsxbet/deeb/internal/services"
-	"go.uber.org/zap"
 )
 
 // Setup registers all application routes including health checks, authentication,
@@ -88,6 +88,7 @@ func Setup(
 		auditLogService,
 	)
 	setupAuditLogRoutes(e, auditLogRepo, tokenManager)
+	setupPolicyMigrationRoutes(e, policyRepo, tokenManager)
 
 	// Setup Swagger documentation
 	SetupSwaggerRoutes(e)
@@ -341,6 +342,8 @@ func setupPolicyRoutes(
 		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationAdmin(),
 	)
+	// SQL Review rules endpoint - accessible to all authenticated users
+	policiesGroup.GET("/sql-review/rules", policyHandler.GetSQLReviewRules, authMiddleware.Authenticate)
 }
 
 // setupDatabaseInstanceRoutes registers database instance management routes
@@ -499,34 +502,22 @@ func setupChangePlanRoutes(
 		logger.Get(),
 	)
 
-	// Initialize SQL Review engine and register validators
-	reviewEngine := review.NewEngine()
+	// Initialize SQL Review service with sql-reviewer
+	reviewAdvisor := sqlreviewer.NewAdvisor(logger.Get())
 	reviewService := review.NewReviewService(
 		policyRepo,
 		databaseRepo,
-		reviewEngine,
+		reviewAdvisor,
 		logger.Get(),
 	)
 
-	// Register all validators
-	if err := reviewService.RegisterValidator(validators.NewPostgreSQLSyntaxValidator()); err != nil {
-		logger.Get().Warn("Failed to register PostgreSQL syntax validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewMySQLSyntaxValidator()); err != nil {
-		logger.Get().Warn("Failed to register MySQL syntax validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewSecurityValidator()); err != nil {
-		logger.Get().Warn("Failed to register security validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewPerformanceValidator()); err != nil {
-		logger.Get().Warn("Failed to register performance validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewBackwardsCompatibilityValidator()); err != nil {
-		logger.Get().Warn("Failed to register backwards compatibility validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewBestPracticesValidator()); err != nil {
-		logger.Get().Warn("Failed to register best practices validator", zap.Error(err))
-	}
+	// Initialize ReviewServiceV2 with enhanced capabilities
+	schemaCache := review.NewSchemaCache(15*time.Minute, logger.Get())
+	reviewServiceV2 := review.NewReviewServiceV2(
+		policyRepo,
+		schemaCache,
+		logger.Get(),
+	)
 
 	// Initialize approval service
 	rbacChecker := rbac.NewCheckerService()
@@ -596,8 +587,10 @@ func setupChangePlanRoutes(
 		projectMemberRepo,
 		policyFindingRepo,
 		approvalRepo,
+		environmentRepo,
 		riskAssessmentSvc,
 		reviewService,
+		reviewServiceV2,
 		approvalService,
 		executionService,
 		auditLogService,
@@ -630,6 +623,7 @@ func setupChangePlanRoutes(
 	)
 	changePlansGroup.DELETE("/:id", changePlanHandler.DeleteChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/review", changePlanHandler.TriggerSQLReview, authMiddleware.Authenticate)
+	changePlansGroup.GET("/:id/review/findings", changePlanHandler.GetReviewFindings, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/approve", changePlanHandler.ApproveChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/close", changePlanHandler.CloseChangePlan, authMiddleware.Authenticate)
 	// Initialize execution auth middleware
@@ -660,4 +654,25 @@ func setupAuditLogRoutes(
 
 	// All audit log routes require authentication and admin role
 	auditLogsGroup.GET("", auditLogHandler.ListAuditLogs, authMiddleware.Authenticate)
+}
+
+// setupPolicyMigrationRoutes registers policy migration routes
+func setupPolicyMigrationRoutes(
+	e *echo.Echo,
+	policyRepo repository.PolicyRepository,
+	tokenManager *auth.TokenManager,
+) {
+	migrationService := services.NewPolicyMigrationService(policyRepo, logger.Get())
+	migrationHandler := handlers.NewPolicyMigrationHandler(migrationService, logger.Get())
+
+	// Migration routes under policies group
+	policiesGroup := e.Group("/api/v1/policies")
+
+	// Authentication middleware for protected routes
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+
+	// All migration routes require authentication and admin role (TODO: add RBAC middleware)
+	policiesGroup.GET("/migration/status", migrationHandler.GetMigrationStatus, authMiddleware.Authenticate)
+	policiesGroup.POST("/migration/migrate-all", migrationHandler.MigrateAllPolicies, authMiddleware.Authenticate)
+	policiesGroup.POST("/:id/migrate", migrationHandler.MigratePolicy, authMiddleware.Authenticate)
 }

@@ -6,8 +6,10 @@ import { environmentsService } from '@/lib/api/services/environments';
 import type {
   CreatePolicyRequest,
   Policy,
+  SQLReviewPolicyConfig,
   UpdatePolicyRequest,
   Environment,
+  MigrationStatus,
 } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
@@ -22,33 +24,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Plus, Pencil, Trash2, AlertTriangle, Code2 } from 'lucide-react';
-
-// Available SQL_REVIEW validators
-const SQL_REVIEW_VALIDATORS = [
-  {
-    name: 'postgresql-syntax',
-    label: 'PostgreSQL Syntax',
-    description: 'Validates PostgreSQL SQL syntax',
-  },
-  { name: 'mysql-syntax', label: 'MySQL Syntax', description: 'Validates MySQL SQL syntax' },
-  {
-    name: 'security',
-    label: 'Security',
-    description: 'Detects security risks and destructive operations',
-  },
-  { name: 'performance', label: 'Performance', description: 'Identifies performance issues' },
-  {
-    name: 'backwards-compatibility',
-    label: 'Backwards Compatibility',
-    description: 'Checks for breaking changes',
-  },
-  {
-    name: 'best-practices',
-    label: 'Best Practices',
-    description: 'Enforces coding best practices',
-  },
-];
+import { Plus, Pencil, Trash2, AlertTriangle, Code2, ArrowUpCircle, RefreshCw } from 'lucide-react';
+import { SQLReviewRuleSelector } from '@/components/sql-review-rule-selector';
+import { toast } from 'sonner';
 
 export const PoliciesPage: React.FC = () => {
   const { user } = useAuth();
@@ -64,15 +42,16 @@ export const PoliciesPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [useJsonEditor, setUseJsonEditor] = useState(false);
   const [jsonEditorError, setJsonEditorError] = useState('');
+  const [migrationStatus, setMigrationStatus] = useState<MigrationStatus | null>(null);
+  const [isMigrating, setIsMigrating] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<CreatePolicyRequest>({
     name: '',
     description: '',
     type: 'SQL_REVIEW',
-    policy_config: {},
+    policy_config: { rules: {} },
   });
-  const [validatorStates, setValidatorStates] = useState<Record<string, boolean>>({});
   const [formErrors, setFormErrors] = useState<{
     name?: string;
     description?: string;
@@ -132,24 +111,23 @@ export const PoliciesPage: React.FC = () => {
     loadPolicies();
   }, [isAdmin, filterType]);
 
-  // Initialize validator states from policy config
-  const initValidatorStates = (config: Record<string, unknown>) => {
-    const states: Record<string, boolean> = {};
-    SQL_REVIEW_VALIDATORS.forEach((validator) => {
-      const validatorsConfig = config.validators as Record<string, boolean> | undefined;
-      states[validator.name] = validatorsConfig?.[validator.name] === true;
-    });
-    setValidatorStates(states);
-  };
+  // Load migration status
+  useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
 
-  // Build policy config from validator states
-  const buildPolicyConfig = (): Record<string, unknown> => {
-    const validators: Record<string, boolean> = {};
-    SQL_REVIEW_VALIDATORS.forEach((validator) => {
-      validators[validator.name] = validatorStates[validator.name] === true;
-    });
-    return { validators };
-  };
+    const loadMigrationStatus = async () => {
+      try {
+        const status = await policiesService.getMigrationStatus();
+        setMigrationStatus(status);
+      } catch (err) {
+        console.error('Failed to load migration status:', err);
+      }
+    };
+
+    loadMigrationStatus();
+  }, [isAdmin, policies]); // Reload when policies change
 
   // Validate form
   const validateForm = (): boolean => {
@@ -162,17 +140,17 @@ export const PoliciesPage: React.FC = () => {
     }
 
     if (!useJsonEditor) {
-      // Validate that at least one validator is enabled
-      const enabledCount = Object.values(validatorStates).filter((v) => v).length;
+      // Validate that at least one rule is enabled
+      const enabledCount = Object.keys(formData.policy_config.rules || {}).length;
       if (enabledCount === 0) {
-        errors.policy_config = 'At least one validator must be enabled';
+        errors.policy_config = 'At least one rule must be enabled';
       }
     } else {
       // Validate JSON
       try {
         const config = JSON.parse(formData.policy_config as unknown as string);
-        if (!config || typeof config !== 'object') {
-          errors.policy_config = 'Policy config must be a valid JSON object';
+        if (!config || typeof config !== 'object' || !config.rules) {
+          errors.policy_config = 'Policy config must have a rules object';
         }
       } catch {
         errors.policy_config = 'Invalid JSON format';
@@ -196,13 +174,12 @@ export const PoliciesPage: React.FC = () => {
         description: formData.description?.trim() || undefined,
         type: 'SQL_REVIEW',
         policy_config: useJsonEditor
-          ? (JSON.parse(formData.policy_config as unknown as string) as Record<string, unknown>)
-          : buildPolicyConfig(),
+          ? (JSON.parse(formData.policy_config as unknown as string) as SQLReviewPolicyConfig)
+          : formData.policy_config,
       };
       await policiesService.createPolicy(createData);
       setIsCreateOpen(false);
-      setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: {} });
-      setValidatorStates({});
+      setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
       setFormErrors({});
       setUseJsonEditor(false);
       // Reload policies
@@ -240,8 +217,8 @@ export const PoliciesPage: React.FC = () => {
       }
 
       const newConfig = useJsonEditor
-        ? (JSON.parse(formData.policy_config as unknown as string) as Record<string, unknown>)
-        : buildPolicyConfig();
+        ? (JSON.parse(formData.policy_config as unknown as string) as SQLReviewPolicyConfig)
+        : formData.policy_config;
 
       // Only update if config changed
       if (JSON.stringify(newConfig) !== JSON.stringify(selectedPolicy.policy_config)) {
@@ -251,8 +228,7 @@ export const PoliciesPage: React.FC = () => {
       await policiesService.updatePolicy(selectedPolicy.id, updateData);
       setIsEditOpen(false);
       setSelectedPolicy(null);
-      setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: {} });
-      setValidatorStates({});
+      setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
       setFormErrors({});
       setUseJsonEditor(false);
       // Reload policies
@@ -302,10 +278,79 @@ export const PoliciesPage: React.FC = () => {
     }
   };
 
+  // Handle migrate single policy
+  const handleMigratePolicy = async (policy: Policy) => {
+    try {
+      setIsMigrating(true);
+      const result = await policiesService.migratePolicy(policy.id);
+
+      if (result.success) {
+        toast.success(`Policy "${policy.name}" migrated successfully`, {
+          description: `Added ${result.rules_added} new rules`,
+        });
+
+        // Reload policies
+        const response = await policiesService.listPolicies({
+          type: filterType === 'SQL_REVIEW' ? 'SQL_REVIEW' : undefined,
+          limit: 100,
+        });
+        setPolicies(response.items);
+      } else {
+        toast.error(`Failed to migrate policy "${policy.name}"`, {
+          description: result.error || 'Unknown error',
+        });
+      }
+    } catch (err) {
+      if (err instanceof APIError) {
+        toast.error('Migration failed', {
+          description: err.message,
+        });
+      } else {
+        toast.error('Migration failed', {
+          description: 'An unexpected error occurred',
+        });
+      }
+      console.error('Failed to migrate policy:', err);
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
+  // Handle migrate all policies
+  const handleMigrateAll = async () => {
+    try {
+      setIsMigrating(true);
+      const result = await policiesService.migrateAllPolicies();
+
+      toast.success('Batch migration completed', {
+        description: `${result.success_count} succeeded, ${result.failure_count} failed`,
+      });
+
+      // Reload policies
+      const response = await policiesService.listPolicies({
+        type: filterType === 'SQL_REVIEW' ? 'SQL_REVIEW' : undefined,
+        limit: 100,
+      });
+      setPolicies(response.items);
+    } catch (err) {
+      if (err instanceof APIError) {
+        toast.error('Batch migration failed', {
+          description: err.message,
+        });
+      } else {
+        toast.error('Batch migration failed', {
+          description: 'An unexpected error occurred',
+        });
+      }
+      console.error('Failed to migrate all policies:', err);
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   // Open create form
   const openCreateForm = () => {
-    setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: {} });
-    setValidatorStates({});
+    setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
     setFormErrors({});
     setUseJsonEditor(false);
     setJsonEditorError('');
@@ -315,13 +360,13 @@ export const PoliciesPage: React.FC = () => {
   // Open edit form
   const openEditForm = (policy: Policy) => {
     setSelectedPolicy(policy);
+    const config = policy.policy_config as SQLReviewPolicyConfig;
     setFormData({
       name: policy.name,
       description: policy.description || '',
       type: policy.type,
-      policy_config: policy.policy_config,
+      policy_config: config.rules ? config : { rules: {} },
     });
-    initValidatorStates(policy.policy_config);
     setFormErrors({});
     setUseJsonEditor(false);
     setJsonEditorError('');
@@ -393,6 +438,68 @@ export const PoliciesPage: React.FC = () => {
           </Button>
         </div>
 
+        {/* Migration Status Card */}
+        {migrationStatus && migrationStatus.needs_migration > 0 && (
+          <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ArrowUpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    Policy Schema Migration Available
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Upgrade your policies to V2 for access to 101 comprehensive SQL review rules
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={handleMigrateAll}
+                  disabled={isMigrating}
+                  className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                >
+                  {isMigrating ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Migrating...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpCircle className="mr-2 h-4 w-4" />
+                      Migrate All to V2
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-4 gap-4 text-sm">
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Total Policies</p>
+                  <p className="text-2xl font-bold">{migrationStatus.total}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">V1 (Legacy)</p>
+                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                    {migrationStatus['1.0']}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">V2 (Enhanced)</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {migrationStatus['2.0']}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Needs Migration</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    {migrationStatus.needs_migration}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Filter */}
         <div className="flex items-center gap-4">
           <label htmlFor="filter-type" className="text-sm font-medium">
@@ -454,10 +561,23 @@ export const PoliciesPage: React.FC = () => {
             {policies.map((policy) => (
               <Card key={policy.id}>
                 <CardHeader>
-                  <CardTitle className="text-lg">{policy.name}</CardTitle>
-                  <CardDescription className="line-clamp-2">
-                    {policy.description || 'No description'}
-                  </CardDescription>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg">{policy.name}</CardTitle>
+                      <CardDescription className="line-clamp-2 mt-1">
+                        {policy.description || 'No description'}
+                      </CardDescription>
+                    </div>
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        policy.schema_version === '2.0'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                      }`}
+                    >
+                      V{policy.schema_version}
+                    </span>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
@@ -472,6 +592,18 @@ export const PoliciesPage: React.FC = () => {
                         ⚠️ Referenced by {getReferencingEnvironments(policy.id).length}{' '}
                         environment(s)
                       </div>
+                    )}
+                    {policy.schema_version === '1.0' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleMigratePolicy(policy)}
+                        disabled={isMigrating}
+                        className="w-full mt-2 border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                      >
+                        <ArrowUpCircle className="mr-2 h-3 w-3" />
+                        Upgrade to V2
+                      </Button>
                     )}
                     <div className="flex items-center justify-end gap-2 pt-2">
                       <Button
@@ -561,25 +693,27 @@ export const PoliciesPage: React.FC = () => {
                     size="sm"
                     onClick={() => {
                       if (useJsonEditor) {
-                        // Switch to checkbox editor
+                        // Switch to rule selector
                         try {
                           const config = JSON.parse(
                             formData.policy_config as unknown as string,
-                          ) as Record<string, unknown>;
-                          initValidatorStates(config);
+                          ) as SQLReviewPolicyConfig;
+                          setFormData({
+                            ...formData,
+                            policy_config: config,
+                          });
                         } catch {
-                          // Invalid JSON, initialize with empty states
-                          setValidatorStates({});
+                          // Invalid JSON, keep current config
                         }
                       } else {
                         // Switch to JSON editor
-                        const config = buildPolicyConfig();
                         setFormData({
                           ...formData,
-                          policy_config: JSON.stringify(config, null, 2) as unknown as Record<
-                            string,
-                            unknown
-                          >,
+                          policy_config: JSON.stringify(
+                            formData.policy_config,
+                            null,
+                            2,
+                          ) as unknown as SQLReviewPolicyConfig,
                         });
                       }
                       setUseJsonEditor(!useJsonEditor);
@@ -588,7 +722,7 @@ export const PoliciesPage: React.FC = () => {
                     className="h-8"
                   >
                     <Code2 className="mr-2 h-4 w-4" />
-                    {useJsonEditor ? 'Use Checkboxes' : 'Use JSON Editor'}
+                    {useJsonEditor ? 'Use Rule Selector' : 'Use JSON Editor'}
                   </Button>
                 </div>
                 {useJsonEditor ? (
@@ -609,7 +743,7 @@ export const PoliciesPage: React.FC = () => {
                           setJsonEditorError('Invalid JSON format');
                         }
                       }}
-                      placeholder='{"validators": {"postgresql-syntax": true, "mysql-syntax": false, ...}}'
+                      placeholder='{"rules": {"mysql.engine.no-select-all": {"type": "mysql.engine.no-select-all", "level": "error", "engine": "mysql"}}}'
                       className="flex min-h-[200px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                       aria-invalid={!!formErrors.policy_config || !!jsonEditorError}
                     />
@@ -619,37 +753,18 @@ export const PoliciesPage: React.FC = () => {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Format: {`{"validators": {"validator-name": true/false}}`}
+                      Format:{' '}
+                      {`{"rules": {"rule-key": {"type": "...", "level": "error|warning", "engine": "mysql|postgresql", "payload": {...}}}}`}
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3 rounded-md border border-input p-4">
-                    <p className="text-sm font-medium">Enable Validators:</p>
-                    {SQL_REVIEW_VALIDATORS.map((validator) => (
-                      <div key={validator.name} className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          id={`validator-${validator.name}`}
-                          checked={validatorStates[validator.name] === true}
-                          onChange={(e) =>
-                            setValidatorStates({
-                              ...validatorStates,
-                              [validator.name]: e.target.checked,
-                            })
-                          }
-                          className="mt-1 h-4 w-4 rounded border-gray-300"
-                        />
-                        <label
-                          htmlFor={`validator-${validator.name}`}
-                          className="flex-1 cursor-pointer text-sm"
-                        >
-                          <div className="font-medium">{validator.label}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {validator.description}
-                          </div>
-                        </label>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    <SQLReviewRuleSelector
+                      config={formData.policy_config}
+                      onChange={(newConfig) =>
+                        setFormData({ ...formData, policy_config: newConfig })
+                      }
+                    />
                     {formErrors.policy_config && (
                       <p className="text-sm text-destructive">{formErrors.policy_config}</p>
                     )}
@@ -718,24 +833,27 @@ export const PoliciesPage: React.FC = () => {
                     size="sm"
                     onClick={() => {
                       if (useJsonEditor) {
-                        // Switch to checkbox editor
+                        // Switch to rule selector
                         try {
                           const config = JSON.parse(
                             formData.policy_config as unknown as string,
-                          ) as Record<string, unknown>;
-                          initValidatorStates(config);
+                          ) as SQLReviewPolicyConfig;
+                          setFormData({
+                            ...formData,
+                            policy_config: config,
+                          });
                         } catch {
-                          // Invalid JSON, keep current states
+                          // Invalid JSON, keep current config
                         }
                       } else {
                         // Switch to JSON editor
-                        const config = buildPolicyConfig();
                         setFormData({
                           ...formData,
-                          policy_config: JSON.stringify(config, null, 2) as unknown as Record<
-                            string,
-                            unknown
-                          >,
+                          policy_config: JSON.stringify(
+                            formData.policy_config,
+                            null,
+                            2,
+                          ) as unknown as SQLReviewPolicyConfig,
                         });
                       }
                       setUseJsonEditor(!useJsonEditor);
@@ -744,7 +862,7 @@ export const PoliciesPage: React.FC = () => {
                     className="h-8"
                   >
                     <Code2 className="mr-2 h-4 w-4" />
-                    {useJsonEditor ? 'Use Checkboxes' : 'Use JSON Editor'}
+                    {useJsonEditor ? 'Use Rule Selector' : 'Use JSON Editor'}
                   </Button>
                 </div>
                 {useJsonEditor ? (
@@ -765,7 +883,7 @@ export const PoliciesPage: React.FC = () => {
                           setJsonEditorError('Invalid JSON format');
                         }
                       }}
-                      placeholder='{"validators": {"postgresql-syntax": true, ...}}'
+                      placeholder='{"rules": {"mysql.engine.no-select-all": {"type": "mysql.engine.no-select-all", "level": "error", "engine": "mysql"}}}'
                       className="flex min-h-[200px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                       aria-invalid={!!formErrors.policy_config || !!jsonEditorError}
                     />
@@ -774,35 +892,19 @@ export const PoliciesPage: React.FC = () => {
                         {formErrors.policy_config || jsonEditorError}
                       </p>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      Format:{' '}
+                      {`{"rules": {"rule-key": {"type": "...", "level": "error|warning", "engine": "mysql|postgresql", "payload": {...}}}}`}
+                    </p>
                   </div>
                 ) : (
-                  <div className="space-y-3 rounded-md border border-input p-4">
-                    <p className="text-sm font-medium">Enable Validators:</p>
-                    {SQL_REVIEW_VALIDATORS.map((validator) => (
-                      <div key={validator.name} className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          id={`edit-validator-${validator.name}`}
-                          checked={validatorStates[validator.name] === true}
-                          onChange={(e) =>
-                            setValidatorStates({
-                              ...validatorStates,
-                              [validator.name]: e.target.checked,
-                            })
-                          }
-                          className="mt-1 h-4 w-4 rounded border-gray-300"
-                        />
-                        <label
-                          htmlFor={`edit-validator-${validator.name}`}
-                          className="flex-1 cursor-pointer text-sm"
-                        >
-                          <div className="font-medium">{validator.label}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {validator.description}
-                          </div>
-                        </label>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    <SQLReviewRuleSelector
+                      config={formData.policy_config}
+                      onChange={(newConfig) =>
+                        setFormData({ ...formData, policy_config: newConfig })
+                      }
+                    />
                     {formErrors.policy_config && (
                       <p className="text-sm text-destructive">{formErrors.policy_config}</p>
                     )}

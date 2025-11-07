@@ -6,6 +6,7 @@ include Makefile.lint
 include Makefile.format
 include Makefile.run
 include Makefile.testing
+include Makefile.generate
 
 .PHONY: info
 info:

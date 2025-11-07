@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/sql-reviewer/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +21,30 @@ func (m *mockValidator) Validate(ctx context.Context, sqlContent string, dbType 
 	if m.validateFunc != nil {
 		return m.validateFunc(ctx, sqlContent, dbType)
 	}
-	return NewResult(m.GetName(), true, []Violation{})
+	return NewResult(m.GetName(), true, []*types.Advice{})
+}
+
+// Test helper functions to create types.Advice instances
+func newTestAdvice(title, content string, status types.Advice_Status) *types.Advice {
+	return &types.Advice{
+		Status:  status,
+		Code:    0,
+		Title:   title,
+		Content: content,
+	}
+}
+
+func newTestAdviceWithLocation(title, content string, status types.Advice_Status, line, column int32) *types.Advice {
+	return &types.Advice{
+		Status:  status,
+		Code:    0,
+		Title:   title,
+		Content: content,
+		StartPosition: &types.Position{
+			Line:   line,
+			Column: column,
+		},
+	}
 }
 
 func TestBaseValidator(t *testing.T) {
@@ -43,41 +67,9 @@ func TestBaseValidator(t *testing.T) {
 	})
 }
 
-func TestNewViolation(t *testing.T) {
-	t.Run("creates violation with basic fields", func(t *testing.T) {
-		violation := NewViolation("rule1", "test message", SeverityError)
-
-		assert.Equal(t, "rule1", violation.Rule)
-		assert.Equal(t, "test message", violation.Message)
-		assert.Equal(t, SeverityError, violation.Severity)
-		assert.Equal(t, 0, violation.Line)
-		assert.Equal(t, 0, violation.Column)
-		assert.Empty(t, violation.SQL)
-	})
-
-	t.Run("creates violation with location", func(t *testing.T) {
-		violation := NewViolationWithLocation("rule1", "test message", SeverityWarning, 10, 5)
-
-		assert.Equal(t, "rule1", violation.Rule)
-		assert.Equal(t, "test message", violation.Message)
-		assert.Equal(t, SeverityWarning, violation.Severity)
-		assert.Equal(t, 10, violation.Line)
-		assert.Equal(t, 5, violation.Column)
-	})
-
-	t.Run("creates violation with SQL context", func(t *testing.T) {
-		violation := NewViolationWithSQL("rule1", "test message", SeverityInfo, "SELECT * FROM users")
-
-		assert.Equal(t, "rule1", violation.Rule)
-		assert.Equal(t, "test message", violation.Message)
-		assert.Equal(t, SeverityInfo, violation.Severity)
-		assert.Equal(t, "SELECT * FROM users", violation.SQL)
-	})
-}
-
 func TestNewResult(t *testing.T) {
 	t.Run("creates valid result", func(t *testing.T) {
-		result := NewResult("validator1", true, []Violation{})
+		result := NewResult("validator1", true, []*types.Advice{})
 
 		assert.Equal(t, "validator1", result.ValidatorName)
 		assert.True(t, result.Valid)
@@ -86,9 +78,9 @@ func TestNewResult(t *testing.T) {
 	})
 
 	t.Run("creates result with violations", func(t *testing.T) {
-		violations := []Violation{
-			NewViolation("rule1", "error message", SeverityError),
-			NewViolation("rule2", "warning message", SeverityWarning),
+		violations := []*types.Advice{
+			newTestAdvice("rule1", "error message", types.Advice_ERROR),
+			newTestAdvice("rule2", "warning message", types.Advice_WARNING),
 		}
 
 		result := NewResult("validator1", false, violations)
@@ -331,8 +323,8 @@ func TestEngine(t *testing.T) {
 				DefaultSeverity: SeverityError,
 			},
 			validateFunc: func(ctx context.Context, sqlContent string, dbType models.DatabaseType) Result {
-				return NewResult("validator1", false, []Violation{
-					NewViolation("rule1", "error", SeverityError),
+				return NewResult("validator1", false, []*types.Advice{
+					newTestAdvice("rule1", "error", types.Advice_ERROR),
 				})
 			},
 		}
@@ -343,8 +335,8 @@ func TestEngine(t *testing.T) {
 				DefaultSeverity: SeverityWarning,
 			},
 			validateFunc: func(ctx context.Context, sqlContent string, dbType models.DatabaseType) Result {
-				return NewResult("validator2", false, []Violation{
-					NewViolation("rule2", "warning", SeverityWarning),
+				return NewResult("validator2", false, []*types.Advice{
+					newTestAdvice("rule2", "warning", types.Advice_WARNING),
 				})
 			},
 		}
@@ -372,10 +364,10 @@ func TestEngine(t *testing.T) {
 				DefaultSeverity: SeverityError,
 			},
 			validateFunc: func(ctx context.Context, sqlContent string, dbType models.DatabaseType) Result {
-				return NewResult("test-validator", false, []Violation{
-					NewViolation("rule1", "error", SeverityError),
-					NewViolation("rule2", "warning", SeverityWarning),
-					NewViolation("rule3", "info", SeverityInfo),
+				return NewResult("test-validator", false, []*types.Advice{
+					newTestAdvice("rule1", "error", types.Advice_ERROR),
+					newTestAdvice("rule2", "warning", types.Advice_WARNING),
+					newTestAdvice("rule3", "info", types.Advice_SUCCESS),
 				})
 			},
 		}
@@ -401,7 +393,7 @@ func TestEngine(t *testing.T) {
 				DefaultSeverity: SeverityError,
 			},
 			validateFunc: func(ctx context.Context, sqlContent string, dbType models.DatabaseType) Result {
-				return NewResult("test-validator", true, []Violation{})
+				return NewResult("test-validator", true, []*types.Advice{})
 			},
 		}
 
@@ -417,12 +409,12 @@ func TestEngine(t *testing.T) {
 func TestAggregateResults(t *testing.T) {
 	t.Run("aggregates multiple results", func(t *testing.T) {
 		results := []Result{
-			NewResult("validator1", false, []Violation{
-				NewViolation("rule1", "error", SeverityError),
-				NewViolation("rule2", "warning", SeverityWarning),
+			NewResult("validator1", false, []*types.Advice{
+				newTestAdvice("rule1", "error", types.Advice_ERROR),
+				newTestAdvice("rule2", "warning", types.Advice_WARNING),
 			}),
-			NewResult("validator2", false, []Violation{
-				NewViolation("rule3", "info", SeverityInfo),
+			NewResult("validator2", false, []*types.Advice{
+				newTestAdvice("rule3", "info", types.Advice_SUCCESS),
 			}),
 		}
 
@@ -446,8 +438,8 @@ func TestAggregateResults(t *testing.T) {
 
 	t.Run("results with only warnings return invalid", func(t *testing.T) {
 		results := []Result{
-			NewResult("validator1", false, []Violation{
-				NewViolation("rule1", "warning", SeverityWarning),
+			NewResult("validator1", false, []*types.Advice{
+				newTestAdvice("rule1", "warning", types.Advice_WARNING),
 			}),
 		}
 

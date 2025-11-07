@@ -32,9 +32,14 @@ func (r *PolicyRepository) Create(ctx context.Context, policy *models.Policy) er
 	policy.CreatedAt = now
 	policy.UpdatedAt = now
 
+	// Default to V2 schema for new policies
+	if policy.SchemaVersion == "" {
+		policy.SchemaVersion = models.PolicySchemaV2
+	}
+
 	query := `
-		INSERT INTO policies (id, name, description, type, policy_config, created_by_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO policies (id, name, description, type, policy_config, schema_version, created_by_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -43,6 +48,7 @@ func (r *PolicyRepository) Create(ctx context.Context, policy *models.Policy) er
 		policy.Description,
 		policy.Type,
 		policy.PolicyConfig,
+		policy.SchemaVersion,
 		policy.CreatedByID,
 		policy.CreatedAt,
 		policy.UpdatedAt,
@@ -57,7 +63,7 @@ func (r *PolicyRepository) Create(ctx context.Context, policy *models.Policy) er
 // GetByID retrieves a policy by its ID
 func (r *PolicyRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Policy, error) {
 	query := `
-		SELECT id, name, description, type, policy_config, created_by_id, created_at, updated_at
+		SELECT id, name, description, type, policy_config, schema_version, created_by_id, created_at, updated_at
 		FROM policies
 		WHERE id = $1
 	`
@@ -77,7 +83,7 @@ func (r *PolicyRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.P
 // List retrieves all policies with pagination
 func (r *PolicyRepository) List(ctx context.Context, limit, offset int) ([]*models.Policy, error) {
 	query := `
-		SELECT id, name, description, type, policy_config, created_by_id, created_at, updated_at
+		SELECT id, name, description, type, policy_config, schema_version, created_by_id, created_at, updated_at
 		FROM policies
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -117,7 +123,7 @@ func (r *PolicyRepository) GetByType(
 	limit, offset int,
 ) ([]*models.Policy, error) {
 	query := `
-		SELECT id, name, description, type, policy_config, created_by_id, created_at, updated_at
+		SELECT id, name, description, type, policy_config, schema_version, created_by_id, created_at, updated_at
 		FROM policies
 		WHERE type = $1
 		ORDER BY created_at DESC
@@ -158,7 +164,7 @@ func (r *PolicyRepository) Update(ctx context.Context, policy *models.Policy) er
 
 	query := `
 		UPDATE policies
-		SET name = $2, description = $3, policy_config = $4, updated_at = $5
+		SET name = $2, description = $3, policy_config = $4, schema_version = $5, updated_at = $6
 		WHERE id = $1
 	`
 
@@ -167,6 +173,7 @@ func (r *PolicyRepository) Update(ctx context.Context, policy *models.Policy) er
 		policy.Name,
 		policy.Description,
 		policy.PolicyConfig,
+		policy.SchemaVersion,
 		policy.UpdatedAt,
 	)
 	if err != nil {

@@ -33,7 +33,7 @@ import (
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/review"
-	"github.com/nsxbet/deeb/internal/review/validators"
+	"github.com/nsxbet/deeb/internal/review/sqlreviewer"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/utils"
 	"github.com/stretchr/testify/assert"
@@ -339,22 +339,14 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		logger,
 	)
 
-	// Initialize SQL Review engine and service
-	reviewEngine := review.NewEngine()
+	// Initialize SQL Review service with sql-reviewer
+	reviewAdvisor := sqlreviewer.NewAdvisor(logger)
 	reviewService := review.NewReviewService(
 		policyRepo,
 		databaseRepo,
-		reviewEngine,
+		reviewAdvisor,
 		logger,
 	)
-
-	// Register all validators
-	require.NoError(t, reviewService.RegisterValidator(validators.NewPostgreSQLSyntaxValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewMySQLSyntaxValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewSecurityValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewPerformanceValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewBackwardsCompatibilityValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewBestPracticesValidator()))
 
 	// Initialize approval service
 	rbacChecker := rbac.NewCheckerService()
@@ -465,22 +457,14 @@ func setupChangePlanHandlerWithTimeout(
 		logger,
 	)
 
-	// Initialize SQL Review engine and service
-	reviewEngine := review.NewEngine()
+	// Initialize SQL Review service with sql-reviewer
+	reviewAdvisor := sqlreviewer.NewAdvisor(logger)
 	reviewService := review.NewReviewService(
 		policyRepo,
 		databaseRepo,
-		reviewEngine,
+		reviewAdvisor,
 		logger,
 	)
-
-	// Register all validators
-	require.NoError(t, reviewService.RegisterValidator(validators.NewPostgreSQLSyntaxValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewMySQLSyntaxValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewSecurityValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewPerformanceValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewBackwardsCompatibilityValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewBestPracticesValidator()))
 
 	// Initialize approval service
 	rbacChecker := rbac.NewCheckerService()

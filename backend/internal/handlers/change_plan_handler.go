@@ -18,6 +18,7 @@ import (
 	"github.com/nsxbet/deeb/internal/review"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/workflow"
+	"github.com/nsxbet/sql-reviewer/pkg/types"
 	"go.uber.org/zap"
 )
 
@@ -31,8 +32,10 @@ type ChangePlanHandler struct {
 	projectMemberRepo    repository.ProjectMemberRepository
 	policyFindingRepo    repository.PolicyFindingRepository
 	approvalRepo         repository.ApprovalRepository
+	environmentRepo      repository.EnvironmentRepository
 	riskAssessmentSvc    *services.RiskAssessmentService
 	reviewService        *review.ReviewService
+	reviewServiceV2      *review.ReviewServiceV2
 	approvalService      *services.ApprovalService
 	executionService     *services.ExecutionService
 	auditService         *services.AuditLogService
@@ -49,8 +52,10 @@ func NewChangePlanHandler(
 	projectMemberRepo repository.ProjectMemberRepository,
 	policyFindingRepo repository.PolicyFindingRepository,
 	approvalRepo repository.ApprovalRepository,
+	environmentRepo repository.EnvironmentRepository,
 	riskAssessmentSvc *services.RiskAssessmentService,
 	reviewService *review.ReviewService,
+	reviewServiceV2 *review.ReviewServiceV2,
 	approvalService *services.ApprovalService,
 	executionService *services.ExecutionService,
 	auditService *services.AuditLogService,
@@ -65,8 +70,10 @@ func NewChangePlanHandler(
 		projectMemberRepo:    projectMemberRepo,
 		policyFindingRepo:    policyFindingRepo,
 		approvalRepo:         approvalRepo,
+		environmentRepo:      environmentRepo,
 		riskAssessmentSvc:    riskAssessmentSvc,
 		reviewService:        reviewService,
+		reviewServiceV2:      reviewServiceV2,
 		approvalService:      approvalService,
 		executionService:     executionService,
 		auditService:         auditService,
@@ -901,7 +908,8 @@ func (e *SQLReviewError) Error() string {
 
 // triggerSQLReview triggers SQL Review for a change plan and stores findings
 func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.ChangePlan) error {
-	if h.reviewService == nil {
+	// Check if either review service is configured
+	if h.reviewService == nil && h.reviewServiceV2 == nil {
 		h.logger.Warn("ReviewService not configured, skipping SQL Review")
 		return nil
 	}
@@ -925,16 +933,42 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 		}
 	}
 
-	// Run SQL Review
-	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
-		ChangePlanID: changePlan.ID,
-		SQLContent:   changePlan.SQLContent,
-		DatabaseType: databaseInstance.DatabaseType,
-	})
-	if err != nil {
-		return &SQLReviewError{
-			HasErrors: false,
-			Message:   "Failed to run SQL Review: " + err.Error(),
+	var reviewResult *review.ReviewResultWithSummary
+
+	// Try ReviewServiceV2 first (preferred), fall back to V1
+	if h.reviewServiceV2 != nil {
+		h.logger.Info("Using ReviewServiceV2 for SQL Review")
+
+		v2Result, err := h.reviewServiceV2.Review(ctx, review.ReviewOptionsV2{
+			ChangePlanID:  changePlan.ID,
+			EnvironmentID: database.EnvironmentID,
+			DatabaseID:    &database.ID,
+			SQLContent:    changePlan.SQLContent,
+			DatabaseType:  databaseInstance.DatabaseType,
+		})
+		if err != nil {
+			return &SQLReviewError{
+				HasErrors: false,
+				Message:   "Failed to run SQL Review V2: " + err.Error(),
+			}
+		}
+
+		// Convert V2 result to legacy format
+		reviewResult = convertReviewResultV2ToLegacy(v2Result)
+	} else {
+		h.logger.Info("Using ReviewService (legacy) for SQL Review")
+
+		// Run SQL Review with V1
+		reviewResult, err = h.reviewService.Review(ctx, review.ReviewOptions{
+			ChangePlanID: changePlan.ID,
+			SQLContent:   changePlan.SQLContent,
+			DatabaseType: databaseInstance.DatabaseType,
+		})
+		if err != nil {
+			return &SQLReviewError{
+				HasErrors: false,
+				Message:   "Failed to run SQL Review: " + err.Error(),
+			}
 		}
 	}
 
@@ -982,26 +1016,56 @@ func (h *ChangePlanHandler) storeReviewFindings(
 	findings := make([]*models.PolicyFinding, 0)
 
 	for _, result := range reviewResult.Results {
-		for _, violation := range result.Violations {
+		for _, advice := range result.Violations {
 			// Map validator name to validator type
 			validatorType := mapValidatorNameToType(result.ValidatorName)
+
+			// Convert Advice.Status to severity string
+			var severity string
+			switch advice.Status {
+			case types.Advice_ERROR:
+				severity = "error"
+			case types.Advice_WARNING:
+				severity = "warning"
+			case types.Advice_SUCCESS, types.Advice_STATUS_UNSPECIFIED:
+				severity = "info"
+			default:
+				severity = "warning"
+			}
+
+			// Extract rule name from advice title or use a default
+			ruleName := "unknown"
+			if advice.Title != "" {
+				ruleName = advice.Title
+			}
+
+			// Combine title and content for message
+			message := advice.Title
+			if advice.Content != "" {
+				if message != "" {
+					message += ": " + advice.Content
+				} else {
+					message = advice.Content
+				}
+			}
 
 			finding := &models.PolicyFinding{
 				ChangePlanID:  changePlanID,
 				ValidatorType: validatorType,
-				Severity:      string(violation.Severity),
-				RuleName:      violation.Rule,
-				Message:       violation.Message,
+				Severity:      severity,
+				RuleName:      ruleName,
+				Message:       message,
 			}
 
-			if violation.Line > 0 {
-				lineNum := violation.Line
-				finding.LineNumber = &lineNum
-			}
-
-			if violation.Column > 0 {
-				colNum := violation.Column
-				finding.ColumnNumber = &colNum
+			if advice.StartPosition != nil {
+				if advice.StartPosition.Line > 0 {
+					lineNum := int(advice.StartPosition.Line)
+					finding.LineNumber = &lineNum
+				}
+				if advice.StartPosition.Column > 0 {
+					colNum := int(advice.StartPosition.Column)
+					finding.ColumnNumber = &colNum
+				}
 			}
 
 			findings = append(findings, finding)
@@ -1117,7 +1181,7 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 	}
 
 	// Trigger SQL Review (without blocking on errors - manual review always returns results)
-	if h.reviewService == nil {
+	if h.reviewService == nil && h.reviewServiceV2 == nil {
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "SQL Review service not configured",
 		})
@@ -1140,17 +1204,43 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 		})
 	}
 
-	// Run SQL Review
-	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
-		ChangePlanID: changePlan.ID,
-		SQLContent:   changePlan.SQLContent,
-		DatabaseType: databaseInstance.DatabaseType,
-	})
-	if err != nil {
-		h.logger.Error("Failed to run SQL Review", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to run SQL Review: " + err.Error(),
+	var reviewResult *review.ReviewResultWithSummary
+
+	// Try ReviewServiceV2 first (preferred), fall back to V1
+	if h.reviewServiceV2 != nil {
+		h.logger.Info("Using ReviewServiceV2 for manual SQL Review")
+
+		v2Result, err := h.reviewServiceV2.Review(ctx, review.ReviewOptionsV2{
+			ChangePlanID:  changePlan.ID,
+			EnvironmentID: database.EnvironmentID,
+			DatabaseID:    &database.ID,
+			SQLContent:    changePlan.SQLContent,
+			DatabaseType:  databaseInstance.DatabaseType,
 		})
+		if err != nil {
+			h.logger.Error("Failed to run SQL Review V2", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to run SQL Review V2: " + err.Error(),
+			})
+		}
+
+		// Convert V2 result to legacy format
+		reviewResult = convertReviewResultV2ToLegacy(v2Result)
+	} else {
+		h.logger.Info("Using ReviewService (legacy) for manual SQL Review")
+
+		// Run SQL Review with V1
+		reviewResult, err = h.reviewService.Review(ctx, review.ReviewOptions{
+			ChangePlanID: changePlan.ID,
+			SQLContent:   changePlan.SQLContent,
+			DatabaseType: databaseInstance.DatabaseType,
+		})
+		if err != nil {
+			h.logger.Error("Failed to run SQL Review", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to run SQL Review: " + err.Error(),
+			})
+		}
 	}
 
 	// Delete existing findings for this change plan
@@ -1178,16 +1268,104 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"change_plan_id": changePlan.ID,
 		"review_result": map[string]interface{}{
-			"valid":              reviewResult.Valid,
-			"errors":             reviewResult.Errors,
-			"warnings":           reviewResult.Warnings,
-			"infos":              reviewResult.Infos,
-			"results":            reviewResult.Results,
-			"policy_id":          reviewResult.PolicyID,
-			"policy_name":        reviewResult.PolicyName,
-			"enabled_validators": reviewResult.EnabledValidators,
-			"skipped_validators": reviewResult.SkippedValidators,
+			"valid":         reviewResult.Valid,
+			"errors":        reviewResult.Errors,
+			"warnings":      reviewResult.Warnings,
+			"infos":         reviewResult.Infos,
+			"results":       reviewResult.Results,
+			"policy_id":     reviewResult.PolicyID,
+			"policy_name":   reviewResult.PolicyName,
+			"enabled_rules": reviewResult.EnabledRules,
+			"skipped_rules": reviewResult.SkippedRules,
 		},
+	})
+}
+
+// GetReviewFindings handles GET /api/v1/change-plans/:id/review/findings
+// Retrieves stored policy findings for a change plan with optional filtering
+func (h *ChangePlanHandler) GetReviewFindings(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Get change plan
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// Get findings from repository
+	findings, err := h.policyFindingRepo.GetByChangePlanID(ctx, changePlanID)
+	if err != nil {
+		h.logger.Error("Failed to get findings", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve findings",
+		})
+	}
+
+	// Apply filters from query parameters
+	severity := c.QueryParam("severity")            // "error", "warning", "info"
+	ruleName := c.QueryParam("rule_name")           // specific rule name
+	validatorType := c.QueryParam("validator_type") // "syntax", "security", etc.
+
+	var filteredFindings []*models.PolicyFinding
+	for _, finding := range findings {
+		// Apply severity filter
+		if severity != "" && finding.Severity != severity {
+			continue
+		}
+
+		// Apply rule name filter
+		if ruleName != "" && finding.RuleName != ruleName {
+			continue
+		}
+
+		// Apply validator type filter
+		if validatorType != "" && finding.ValidatorType != validatorType {
+			continue
+		}
+
+		filteredFindings = append(filteredFindings, finding)
+	}
+
+	// Group findings by severity for summary
+	summary := map[string]int{
+		"total":   len(filteredFindings),
+		"error":   0,
+		"warning": 0,
+		"info":    0,
+	}
+	for _, finding := range filteredFindings {
+		summary[finding.Severity]++
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"change_plan_id": changePlan.ID,
+		"findings":       filteredFindings,
+		"summary":        summary,
 	})
 }
 
@@ -2428,4 +2606,74 @@ func convertProjectRoleToRBAC(role models.ProjectRole) rbac.ProjectRole {
 	default:
 		return rbac.ProjectViewer
 	}
+}
+
+// convertReviewResultV2ToLegacy converts ReviewResultV2 to ReviewResultWithSummary
+// for backward compatibility with existing code
+func convertReviewResultV2ToLegacy(v2 *review.ReviewResultV2) *review.ReviewResultWithSummary {
+	// Convert ViolationV2 to types.Advice for legacy format
+	allViolations := make([]*types.Advice, 0, len(v2.Violations)+len(v2.Warnings))
+
+	for _, v := range v2.Violations {
+		advice := &types.Advice{
+			Status:  types.Advice_ERROR,
+			Code:    v.Code,
+			Title:   v.Title,
+			Content: v.Message,
+		}
+		if v.Line > 0 || v.Column > 0 {
+			advice.StartPosition = &types.Position{
+				Line:   v.Line,
+				Column: v.Column,
+			}
+		}
+		allViolations = append(allViolations, advice)
+	}
+
+	for _, v := range v2.Warnings {
+		advice := &types.Advice{
+			Status:  types.Advice_WARNING,
+			Code:    v.Code,
+			Title:   v.Title,
+			Content: v.Message,
+		}
+		if v.Line > 0 || v.Column > 0 {
+			advice.StartPosition = &types.Position{
+				Line:   v.Line,
+				Column: v.Column,
+			}
+		}
+		allViolations = append(allViolations, advice)
+	}
+
+	return &review.ReviewResultWithSummary{
+		ReviewResult: review.ReviewResult{
+			Valid: v2.Valid,
+			Results: []review.Result{
+				{
+					ValidatorName: "sql-reviewer",
+					Valid:         v2.Valid,
+					Violations:    allViolations,
+					Error:         "",
+				},
+			},
+			TotalViolations: v2.TotalViolations,
+			Errors:          v2.ErrorCount,
+			Warnings:        v2.WarningCount,
+			Infos:           0, // V2 doesn't track info-level separately
+		},
+		PolicyID:     v2.PolicyID,
+		PolicyName:   v2.PolicyName,
+		EnabledRules: v2.EnabledRules,
+		SkippedRules: convertSkippedRules(v2.SkippedRules),
+	}
+}
+
+// convertSkippedRules converts []SkippedRule to []string for legacy format
+func convertSkippedRules(skipped []review.SkippedRule) []string {
+	result := make([]string, len(skipped))
+	for i, s := range skipped {
+		result[i] = s.RuleType
+	}
+	return result
 }

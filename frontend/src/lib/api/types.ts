@@ -208,16 +208,52 @@ export interface CreateEnvironmentRequest {
 export interface UpdateEnvironmentRequest {
   name?: string;
   description?: string;
-  policy_id?: string;
+  policy_id?: string | null;
 }
 
 // Policy Types
+export type SQLReviewRuleLevel = 'error' | 'warning';
+
+export type DatabaseType = 'mysql' | 'postgresql';
+
+export type RuleCategory =
+  | 'Engine'
+  | 'Naming'
+  | 'Table'
+  | 'Column'
+  | 'System'
+  | 'Index'
+  | 'Schema'
+  | 'Statement';
+
+export interface SQLReviewRule {
+  type: string;
+  level: SQLReviewRuleLevel;
+  payload?: Record<string, unknown>;
+  engine: DatabaseType;
+  comment?: string;
+}
+
+export interface SQLReviewPolicyConfig {
+  rules: Record<string, SQLReviewRule>;
+}
+
+export interface RuleMetadata {
+  type: string;
+  name: string;
+  description: string;
+  category: RuleCategory;
+  engine: DatabaseType;
+  parameters?: Record<string, unknown>;
+}
+
 export interface Policy {
   id: string;
   name: string;
   description?: string;
   type: 'SQL_REVIEW';
-  policy_config: Record<string, unknown>;
+  policy_config: SQLReviewPolicyConfig;
+  schema_version: string; // '1.0' = original 20 rules, '2.0' = comprehensive 101 rules
   created_at: string;
   updated_at: string;
 }
@@ -226,13 +262,18 @@ export interface CreatePolicyRequest {
   name: string;
   description?: string;
   type: 'SQL_REVIEW';
-  policy_config: Record<string, unknown>;
+  policy_config: SQLReviewPolicyConfig;
 }
 
 export interface UpdatePolicyRequest {
   name?: string;
   description?: string;
-  policy_config?: Record<string, unknown>;
+  policy_config?: SQLReviewPolicyConfig;
+}
+
+export interface SQLReviewRulesResponse {
+  mysql?: Record<RuleCategory, RuleMetadata[]>;
+  postgresql?: Record<RuleCategory, RuleMetadata[]>;
 }
 
 // List Response with Pagination
@@ -415,6 +456,55 @@ export interface AuditLogListResponse {
   limit: number;
   offset: number;
   count: number;
+}
+
+// Policy Migration Types
+export interface MigrationResult {
+  policy_id: string;
+  policy_name: string;
+  from_version: string;
+  to_version: string;
+  rules_added: number;
+  rules_updated: number;
+  rules_removed: number;
+  success: boolean;
+  error?: string;
+  migrated_at: string;
+}
+
+export interface BatchMigrationResult {
+  total_policies: number;
+  success_count: number;
+  failure_count: number;
+  results: MigrationResult[];
+  started_at: string;
+  completed_at: string;
+}
+
+export interface MigrationStatus {
+  total: number;
+  '1.0': number;
+  '2.0': number;
+  unknown: number;
+  needs_migration: number;
+}
+
+// Review Findings Filtering
+export interface ReviewFindingsFilterParams {
+  severity?: string;
+  rule_name?: string;
+  validator_type?: string;
+}
+
+export interface ReviewFindingsResponse {
+  change_plan_id: string;
+  findings: PolicyFindingItem[];
+  summary: {
+    total: number;
+    errors: number;
+    warnings: number;
+    infos: number;
+  };
 }
 
 // API Error

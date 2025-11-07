@@ -4,9 +4,11 @@ import (
 	"context"
 
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/sql-reviewer/pkg/types"
 )
 
 // Severity represents the severity level of a validation violation
+// Deprecated: Use types.Advice_Status instead
 type Severity string
 
 const (
@@ -18,21 +20,9 @@ const (
 	SeverityInfo Severity = "Info"
 )
 
-// Violation represents a single validation violation found by a validator
-type Violation struct {
-	// Rule is the name of the rule that was violated
-	Rule string `json:"rule"`
-	// Message is a human-readable description of the violation
-	Message string `json:"message"`
-	// Severity is the severity level of the violation
-	Severity Severity `json:"severity"`
-	// Line is the line number where the violation occurred (0 if not applicable)
-	Line int `json:"line,omitempty"`
-	// Column is the column number where the violation occurred (0 if not applicable)
-	Column int `json:"column,omitempty"`
-	// SQL is the SQL statement that caused the violation (optional, for context)
-	SQL string `json:"sql,omitempty"`
-}
+// Violation is deprecated - use types.Advice instead
+// Deprecated: Use types.Advice from sql-reviewer package
+type Violation = types.Advice
 
 // Result represents the result of running a validator on SQL content
 type Result struct {
@@ -40,8 +30,9 @@ type Result struct {
 	ValidatorName string `json:"validator_name"`
 	// Valid indicates whether the validation passed (true) or failed (false)
 	Valid bool `json:"valid"`
-	// Violations is a list of violations found by this validator
-	Violations []Violation `json:"violations"`
+	// Violations is a list of advice items found by this validator
+	// Using Violations name for backward compatibility, but contains types.Advice
+	Violations []*types.Advice `json:"violations"`
 	// Error is set if the validator encountered an error during validation
 	Error string `json:"error,omitempty"`
 }

@@ -7,44 +7,32 @@ import (
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/review/sqlreviewer"
+	"github.com/nsxbet/sql-reviewer/pkg/types"
 	"go.uber.org/zap"
 )
 
-// ReviewService orchestrates SQL Review by loading policies, determining enabled validators,
-// and running them to aggregate results
+// ReviewService orchestrates SQL Review using sql-reviewer package
 type ReviewService struct {
-	policyRepo     repository.PolicyRepository
-	databaseRepo   repository.DatabaseRepository
-	engine         Engine
-	logger         *zap.Logger
-	validatorNames map[string]bool // Available validator names for quick lookup
+	policyRepo   repository.PolicyRepository
+	databaseRepo repository.DatabaseRepository
+	advisor      *sqlreviewer.Advisor
+	logger       *zap.Logger
 }
 
 // NewReviewService creates a new SQL Review service
 func NewReviewService(
 	policyRepo repository.PolicyRepository,
 	databaseRepo repository.DatabaseRepository,
-	engine Engine,
+	advisor *sqlreviewer.Advisor,
 	logger *zap.Logger,
 ) *ReviewService {
 	return &ReviewService{
-		policyRepo:     policyRepo,
-		databaseRepo:   databaseRepo,
-		engine:         engine,
-		logger:         logger,
-		validatorNames: make(map[string]bool),
+		policyRepo:   policyRepo,
+		databaseRepo: databaseRepo,
+		advisor:      advisor,
+		logger:       logger,
 	}
-}
-
-// RegisterValidator registers a validator with the service
-func (s *ReviewService) RegisterValidator(validator Validator) error {
-	name := validator.GetName()
-	if err := s.engine.RegisterValidator(validator); err != nil {
-		return fmt.Errorf("failed to register validator %s: %w", name, err)
-	}
-	s.validatorNames[name] = true
-	s.logger.Info("Registered validator", zap.String("validator", name))
-	return nil
 }
 
 // ReviewOptions contains options for running SQL Review
@@ -64,25 +52,15 @@ type ReviewResultWithSummary struct {
 	PolicyID *uuid.UUID `json:"policy_id,omitempty"`
 	// PolicyName is the name of the policy used for review
 	PolicyName string `json:"policy_name,omitempty"`
-	// EnabledValidators is the list of validator names that were enabled
-	EnabledValidators []string `json:"enabled_validators"`
-	// SkippedValidators is the list of validator names that were skipped
-	SkippedValidators []string `json:"skipped_validators"`
+	// EnabledRules is the list of rule names that were enabled
+	EnabledRules []string `json:"enabled_rules"`
+	// SkippedRules is the list of rule names that were skipped
+	SkippedRules []string `json:"skipped_rules"`
 }
 
-// Review performs SQL Review for a Change Plan
-// It loads the Policy (SQL_REVIEW type) from Environment via Change Plan's target database,
-// determines which validators are enabled based on policy config,
-// runs only enabled validators, and aggregates results
+// Review performs SQL Review for a Change Plan using sql-reviewer
 func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*ReviewResultWithSummary, error) {
-	// Step 1: Load Change Plan's target database to get Environment
-	// Note: For MVP, we'll get the database type from opts.DatabaseType
-	// In a full implementation, we'd load the Change Plan and get TargetDatabaseID
-	// For now, we'll use a simplified approach: get the first SQL_REVIEW policy
-
-	// Step 2: Load Policy (SQL_REVIEW type) from Environment
-	// For MVP: Get first SQL_REVIEW policy
-	// TODO: In Phase 2, add environment_id to policies table or use a junction table
+	// Step 1: Load Policy (SQL_REVIEW type)
 	policies, err := s.policyRepo.GetByType(ctx, models.PolicyTypeSQLReview, 1, 0)
 	if err != nil {
 		s.logger.Error("Failed to load SQL_REVIEW policy", zap.Error(err))
@@ -90,9 +68,8 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 	}
 
 	if len(policies) == 0 {
-		s.logger.Warn("No SQL_REVIEW policy found, running all validators")
-		// If no policy found, run all validators
-		return s.reviewWithAllValidators(ctx, opts)
+		s.logger.Warn("No SQL_REVIEW policy found, running with no rules")
+		return s.reviewWithNoRules(ctx, opts)
 	}
 
 	policy := policies[0]
@@ -100,99 +77,112 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 		zap.String("policy_id", policy.ID.String()),
 		zap.String("policy_name", policy.Name))
 
-	// Step 3: Determine which validators are enabled based on policy config
-	enabledValidators, err := s.getEnabledValidators(policy.PolicyConfig)
+	// Step 2: Parse policy config to get enabled rules
+	config, err := models.ParseSQLReviewConfig(policy.PolicyConfig)
 	if err != nil {
 		s.logger.Error("Failed to parse policy config", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse policy config: %w", err)
 	}
 
-	// Step 4: Create a temporary engine with only enabled validators
-	tempEngine := s.createFilteredEngine(enabledValidators)
+	// Step 3: Filter rules by database type and build types.SQLReviewRule list
+	rules := s.buildRulesFromConfig(config, opts.DatabaseType)
+	enabledRuleNames := s.getEnabledRuleNames(config, opts.DatabaseType)
+	allRuleNames := s.getAllRuleNames(opts.DatabaseType)
+	skippedRuleNames := s.getSkippedRuleNames(enabledRuleNames, allRuleNames)
 
-	// Step 5: Run enabled validators
-	reviewResult := tempEngine.Review(ctx, opts.SQLContent, opts.DatabaseType)
+	// Step 4: Run sql-reviewer advisor
+	adviceList, err := s.advisor.Check(ctx, opts.SQLContent, opts.DatabaseType, rules)
+	if err != nil {
+		s.logger.Error("Failed to run sql-reviewer check", zap.Error(err))
+		return nil, fmt.Errorf("failed to run sql-reviewer check: %w", err)
+	}
 
-	// Step 6: Determine skipped validators
-	skippedValidators := s.getSkippedValidators(enabledValidators)
+	// Step 5: Build ReviewResult from Advice list
+	reviewResult := s.convertAdviceToReviewResult(adviceList, enabledRuleNames)
 
-	// Step 7: Return results with summary
+	// Step 6: Return results with summary
 	return &ReviewResultWithSummary{
-		ReviewResult:      reviewResult,
-		PolicyID:          &policy.ID,
-		PolicyName:        policy.Name,
-		EnabledValidators: enabledValidators,
-		SkippedValidators: skippedValidators,
+		ReviewResult: reviewResult,
+		PolicyID:     &policy.ID,
+		PolicyName:   policy.Name,
+		EnabledRules: enabledRuleNames,
+		SkippedRules: skippedRuleNames,
 	}, nil
 }
 
-// getEnabledValidators extracts enabled validator names from policy config
-// Policy config format: {"validators": {"postgresql-syntax": true, "mysql-syntax": false, ...}}
-func (s *ReviewService) getEnabledValidators(config models.PolicyConfig) ([]string, error) {
-	validatorsConfig, ok := config["validators"]
-	if !ok {
-		// If no validators config, enable all validators
-		return s.getAllValidatorNames(), nil
-	}
+// buildRulesFromConfig builds types.SQLReviewRule list from policy config
+func (s *ReviewService) buildRulesFromConfig(
+	config *models.SQLReviewPolicyConfig,
+	dbType models.DatabaseType,
+) []*types.SQLReviewRule {
+	rules := make([]*types.SQLReviewRule, 0)
+	allRules := GetRulesByEngine(dbType)
 
-	validatorsMap, ok := validatorsConfig.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid validators config format: expected map[string]interface{}")
-	}
-
-	var enabled []string
-	for name, enabledVal := range validatorsMap {
-		// Check if validator exists
-		if !s.validatorNames[name] {
-			s.logger.Warn("Validator not found in registry", zap.String("validator", name))
+	for ruleKey, ruleConfig := range config.Rules {
+		// Only process rules for the current database type
+		if ruleConfig.Engine != dbType {
 			continue
 		}
 
-		// Check if enabled (accepts bool true or string "true")
-		var isEnabled bool
-		switch v := enabledVal.(type) {
-		case bool:
-			isEnabled = v
-		case string:
-			isEnabled = v == "true" || v == "1"
-		default:
-			isEnabled = false
+		// Find rule metadata
+		var ruleMetadata *RuleMetadata
+		for _, categoryRules := range allRules {
+			for _, meta := range categoryRules {
+				if meta.Type == ruleConfig.Type {
+					ruleMetadata = &meta
+					break
+				}
+			}
+			if ruleMetadata != nil {
+				break
+			}
 		}
 
-		if isEnabled {
-			enabled = append(enabled, name)
+		if ruleMetadata == nil {
+			s.logger.Warn("Rule metadata not found", zap.String("rule", ruleKey), zap.String("type", ruleConfig.Type))
+			continue
 		}
+
+		// Convert to types.SQLReviewRule
+		storeRule := ConvertRuleMetadataToStoreRule(*ruleMetadata, ruleConfig.Level, ruleConfig.Payload)
+		rules = append(rules, storeRule)
 	}
 
-	// If no validators enabled, return all validators (fallback)
-	if len(enabled) == 0 {
-		s.logger.Warn("No validators enabled in policy config, enabling all validators")
-		return s.getAllValidatorNames(), nil
-	}
-
-	return enabled, nil
+	return rules
 }
 
-// getAllValidatorNames returns all registered validator names
-func (s *ReviewService) getAllValidatorNames() []string {
-	validators := s.engine.GetRegistry().GetAll()
-	names := make([]string, 0, len(validators))
-	for _, v := range validators {
-		names = append(names, v.GetName())
+// getEnabledRuleNames returns list of enabled rule names from config
+func (s *ReviewService) getEnabledRuleNames(config *models.SQLReviewPolicyConfig, dbType models.DatabaseType) []string {
+	enabled := make([]string, 0)
+	for ruleKey, ruleConfig := range config.Rules {
+		if ruleConfig.Engine == dbType {
+			enabled = append(enabled, ruleKey)
+		}
+	}
+	return enabled
+}
+
+// getAllRuleNames returns all available rule names for the database type
+func (s *ReviewService) getAllRuleNames(dbType models.DatabaseType) []string {
+	allRules := GetRulesByEngine(dbType)
+	names := make([]string, 0)
+	for _, categoryRules := range allRules {
+		for _, meta := range categoryRules {
+			names = append(names, meta.Type)
+		}
 	}
 	return names
 }
 
-// getSkippedValidators returns validator names that were not enabled
-func (s *ReviewService) getSkippedValidators(enabled []string) []string {
-	allNames := s.getAllValidatorNames()
+// getSkippedRuleNames returns rule names that were not enabled
+func (s *ReviewService) getSkippedRuleNames(enabled []string, all []string) []string {
 	enabledMap := make(map[string]bool)
 	for _, name := range enabled {
 		enabledMap[name] = true
 	}
 
-	var skipped []string
-	for _, name := range allNames {
+	skipped := make([]string, 0)
+	for _, name := range all {
 		if !enabledMap[name] {
 			skipped = append(skipped, name)
 		}
@@ -200,38 +190,52 @@ func (s *ReviewService) getSkippedValidators(enabled []string) []string {
 	return skipped
 }
 
-// createFilteredEngine creates a temporary engine with only enabled validators
-func (s *ReviewService) createFilteredEngine(enabledValidators []string) Engine {
-	tempRegistry := NewValidatorRegistry()
-	registry := s.engine.GetRegistry()
+// convertAdviceToReviewResult converts sql-reviewer Advice list to ReviewResult
+func (s *ReviewService) convertAdviceToReviewResult(adviceList []*types.Advice, enabledRuleNames []string) ReviewResult {
+	errors := 0
+	warnings := 0
+	infos := 0
 
-	for _, name := range enabledValidators {
-		validator, err := registry.Get(name)
-		if err != nil {
-			s.logger.Warn("Failed to get validator for filtered engine",
-				zap.String("validator", name),
-				zap.Error(err))
-			continue
-		}
-		if err := tempRegistry.Register(validator); err != nil {
-			s.logger.Warn("Failed to register validator in filtered engine",
-				zap.String("validator", name),
-				zap.Error(err))
+	for _, advice := range adviceList {
+		switch advice.Status {
+		case types.Advice_ERROR:
+			errors++
+		case types.Advice_WARNING:
+			warnings++
+		case types.Advice_SUCCESS, types.Advice_STATUS_UNSPECIFIED:
+			// Treat SUCCESS and UNSPECIFIED as Info level
+			infos++
+		default:
+			infos++
 		}
 	}
 
-	return NewEngineWithRegistry(tempRegistry)
+	valid := errors == 0 && len(adviceList) == 0
+
+	return ReviewResult{
+		Valid:           valid,
+		Results:         []Result{{ValidatorName: "sql-reviewer", Valid: valid, Violations: adviceList}},
+		TotalViolations: len(adviceList),
+		Errors:          errors,
+		Warnings:        warnings,
+		Infos:           infos,
+	}
 }
 
-// reviewWithAllValidators runs review with all validators (fallback when no policy found)
-func (s *ReviewService) reviewWithAllValidators(ctx context.Context, opts ReviewOptions) (*ReviewResultWithSummary, error) {
-	reviewResult := s.engine.Review(ctx, opts.SQLContent, opts.DatabaseType)
-
+// reviewWithNoRules runs review with no rules (fallback when no policy found)
+func (s *ReviewService) reviewWithNoRules(ctx context.Context, opts ReviewOptions) (*ReviewResultWithSummary, error) {
 	return &ReviewResultWithSummary{
-		ReviewResult:      reviewResult,
-		PolicyID:          nil,
-		PolicyName:        "",
-		EnabledValidators: s.getAllValidatorNames(),
-		SkippedValidators: []string{},
+		ReviewResult: ReviewResult{
+			Valid:           true,
+			Results:         []Result{},
+			TotalViolations: 0,
+			Errors:          0,
+			Warnings:        0,
+			Infos:           0,
+		},
+		PolicyID:     nil,
+		PolicyName:   "",
+		EnabledRules: []string{},
+		SkippedRules: []string{},
 	}, nil
 }

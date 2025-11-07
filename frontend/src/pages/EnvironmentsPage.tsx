@@ -179,9 +179,14 @@ export const EnvironmentsPage: React.FC = () => {
       if (formData.description !== selectedEnvironment.description) {
         updateData.description = formData.description?.trim() || undefined;
       }
+      // Always include policy_id if it changed, even when clearing to null
       if (formData.policy_id !== selectedEnvironment.policy_id) {
         updateData.policy_id = formData.policy_id || null;
       }
+
+      console.log('Update data being sent:', updateData);
+      console.log('formData.policy_id:', formData.policy_id);
+      console.log('selectedEnvironment.policy_id:', selectedEnvironment.policy_id);
 
       await environmentsService.updateEnvironment(selectedEnvironment.id, updateData);
       setIsEditOpen(false);

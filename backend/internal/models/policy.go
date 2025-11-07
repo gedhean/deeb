@@ -21,6 +21,91 @@ const (
 // PolicyConfig represents the JSONB configuration for a policy
 type PolicyConfig map[string]interface{}
 
+// SQLReviewRuleLevel represents the severity level of a SQL review rule
+type SQLReviewRuleLevel string
+
+const (
+	SQLReviewRuleLevelError   SQLReviewRuleLevel = "error"
+	SQLReviewRuleLevelWarning SQLReviewRuleLevel = "warning"
+)
+
+// SQLReviewRule represents a SQL review rule configuration
+// See: github.com/nsxbet/sql-reviewer/pkg/types
+type SQLReviewRule struct {
+	Type    string                 `json:"type"              yaml:"type"`
+	Level   SQLReviewRuleLevel     `json:"level"             yaml:"level"` // error, warning
+	Payload map[string]interface{} `json:"payload,omitempty" yaml:"payload,omitempty"`
+	Engine  DatabaseType           `json:"engine"            yaml:"engine"`
+	Comment string                 `json:"comment,omitempty" yaml:"comment,omitempty"`
+}
+
+// SQLReviewPolicyConfig represents the policy configuration for SQL_REVIEW type
+type SQLReviewPolicyConfig struct {
+	Rules map[string]SQLReviewRule `json:"rules"`
+}
+
+// ParseSQLReviewConfig parses PolicyConfig into SQLReviewPolicyConfig
+func ParseSQLReviewConfig(config PolicyConfig) (*SQLReviewPolicyConfig, error) {
+	rulesRaw, ok := config["rules"]
+	if !ok {
+		return &SQLReviewPolicyConfig{Rules: make(map[string]SQLReviewRule)}, nil
+	}
+
+	rulesMap, ok := rulesRaw.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("invalid rules format: expected map")
+	}
+
+	rules := make(map[string]SQLReviewRule)
+	for key, value := range rulesMap {
+		ruleMap, ok := value.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		rule := SQLReviewRule{}
+		if typeVal, ok := ruleMap["type"].(string); ok {
+			rule.Type = typeVal
+		}
+		if levelVal, ok := ruleMap["level"].(string); ok {
+			rule.Level = SQLReviewRuleLevel(levelVal)
+		}
+		if payloadVal, ok := ruleMap["payload"].(map[string]interface{}); ok {
+			rule.Payload = payloadVal
+		}
+		if engineVal, ok := ruleMap["engine"].(string); ok {
+			rule.Engine = DatabaseType(engineVal)
+		}
+		if commentVal, ok := ruleMap["comment"].(string); ok {
+			rule.Comment = commentVal
+		}
+
+		rules[key] = rule
+	}
+
+	return &SQLReviewPolicyConfig{Rules: rules}, nil
+}
+
+// ToPolicyConfig converts SQLReviewPolicyConfig to PolicyConfig
+func (c *SQLReviewPolicyConfig) ToPolicyConfig() PolicyConfig {
+	rulesMap := make(map[string]interface{})
+	for key, rule := range c.Rules {
+		ruleMap := map[string]interface{}{
+			"type":   rule.Type,
+			"level":  string(rule.Level),
+			"engine": string(rule.Engine),
+		}
+		if len(rule.Payload) > 0 {
+			ruleMap["payload"] = rule.Payload
+		}
+		if rule.Comment != "" {
+			ruleMap["comment"] = rule.Comment
+		}
+		rulesMap[key] = ruleMap
+	}
+	return PolicyConfig{"rules": rulesMap}
+}
+
 // MarshalJSON implements json.Marshaler for PolicyConfig
 func (pc PolicyConfig) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}(pc))
@@ -74,16 +159,23 @@ func (pc *PolicyConfig) Scan(value interface{}) error {
 	return nil
 }
 
+// PolicySchemaVersion represents the version of the policy configuration schema
+const (
+	PolicySchemaV1 = "1.0" // Original 20 rules
+	PolicySchemaV2 = "2.0" // Comprehensive 101 rules with sql-reviewer integration
+)
+
 // Policy represents a policy configuration (SQL_REVIEW type and future types)
 type Policy struct {
-	ID           uuid.UUID    `json:"id"                    db:"id"`
-	Name         string       `json:"name"                  db:"name"`
-	Description  *string      `json:"description,omitempty" db:"description"`
-	Type         PolicyType   `json:"type"                  db:"type"`
-	PolicyConfig PolicyConfig `json:"policy_config"         db:"policy_config"`
-	CreatedByID  uuid.UUID    `json:"created_by_id"         db:"created_by_id"`
-	CreatedAt    time.Time    `json:"created_at"            db:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"            db:"updated_at"`
+	ID            uuid.UUID    `json:"id"                    db:"id"`
+	Name          string       `json:"name"                  db:"name"`
+	Description   *string      `json:"description,omitempty" db:"description"`
+	Type          PolicyType   `json:"type"                  db:"type"`
+	PolicyConfig  PolicyConfig `json:"policy_config"         db:"policy_config"`
+	SchemaVersion string       `json:"schema_version"        db:"schema_version"` // Schema version for migration tracking
+	CreatedByID   uuid.UUID    `json:"created_by_id"         db:"created_by_id"`
+	CreatedAt     time.Time    `json:"created_at"            db:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"            db:"updated_at"`
 }
 
 // CreatePolicyRequest represents the request to create a new policy
@@ -103,25 +195,27 @@ type UpdatePolicyRequest struct {
 
 // PolicyResponse represents a policy response
 type PolicyResponse struct {
-	ID           uuid.UUID    `json:"id"`
-	Name         string       `json:"name"`
-	Description  *string      `json:"description,omitempty"`
-	Type         PolicyType   `json:"type"`
-	PolicyConfig PolicyConfig `json:"policy_config"`
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
+	ID            uuid.UUID    `json:"id"`
+	Name          string       `json:"name"`
+	Description   *string      `json:"description,omitempty"`
+	Type          PolicyType   `json:"type"`
+	PolicyConfig  PolicyConfig `json:"policy_config"`
+	SchemaVersion string       `json:"schema_version"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
 }
 
 // ToResponse converts a Policy to PolicyResponse
 func (p *Policy) ToResponse() *PolicyResponse {
 	return &PolicyResponse{
-		ID:           p.ID,
-		Name:         p.Name,
-		Description:  p.Description,
-		Type:         p.Type,
-		PolicyConfig: p.PolicyConfig,
-		CreatedAt:    p.CreatedAt,
-		UpdatedAt:    p.UpdatedAt,
+		ID:            p.ID,
+		Name:          p.Name,
+		Description:   p.Description,
+		Type:          p.Type,
+		PolicyConfig:  p.PolicyConfig,
+		SchemaVersion: p.SchemaVersion,
+		CreatedAt:     p.CreatedAt,
+		UpdatedAt:     p.UpdatedAt,
 	}
 }
 

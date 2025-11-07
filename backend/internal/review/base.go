@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/sql-reviewer/pkg/types"
 )
 
 // ErrValidatorNotFound is returned when a validator is not found in the registry
@@ -41,39 +42,8 @@ func (b *BaseValidator) Validate(ctx context.Context, sqlContent string, dbType 
 	panic("BaseValidator.Validate() should not be called directly - implement in concrete validator")
 }
 
-// NewViolation creates a new Violation with the given parameters
-// This is a helper function for validators to create violations consistently
-func NewViolation(rule string, message string, severity Severity) Violation {
-	return Violation{
-		Rule:     rule,
-		Message:  message,
-		Severity: severity,
-	}
-}
-
-// NewViolationWithLocation creates a new Violation with location information
-func NewViolationWithLocation(rule string, message string, severity Severity, line int, column int) Violation {
-	return Violation{
-		Rule:     rule,
-		Message:  message,
-		Severity: severity,
-		Line:     line,
-		Column:   column,
-	}
-}
-
-// NewViolationWithSQL creates a new Violation with SQL context
-func NewViolationWithSQL(rule string, message string, severity Severity, sql string) Violation {
-	return Violation{
-		Rule:     rule,
-		Message:  message,
-		Severity: severity,
-		SQL:      sql,
-	}
-}
-
 // NewResult creates a new Result for a validator
-func NewResult(validatorName string, valid bool, violations []Violation) Result {
+func NewResult(validatorName string, valid bool, violations []*types.Advice) Result {
 	return Result{
 		ValidatorName: validatorName,
 		Valid:         valid,
@@ -86,7 +56,7 @@ func NewErrorResult(validatorName string, err error) Result {
 	return Result{
 		ValidatorName: validatorName,
 		Valid:         false,
-		Violations:    []Violation{},
+		Violations:    []*types.Advice{},
 		Error:         err.Error(),
 	}
 }
@@ -251,14 +221,17 @@ func aggregateResults(results []Result) ReviewResult {
 	infos := 0
 
 	for _, result := range results {
-		for _, violation := range result.Violations {
+		for _, advice := range result.Violations {
 			totalViolations++
-			switch violation.Severity {
-			case SeverityError:
+			switch advice.Status {
+			case types.Advice_ERROR:
 				errors++
-			case SeverityWarning:
+			case types.Advice_WARNING:
 				warnings++
-			case SeverityInfo:
+			case types.Advice_SUCCESS, types.Advice_STATUS_UNSPECIFIED:
+				// Treat SUCCESS and UNSPECIFIED as Info level
+				infos++
+			default:
 				infos++
 			}
 		}
