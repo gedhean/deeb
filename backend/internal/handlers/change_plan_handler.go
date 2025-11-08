@@ -1317,6 +1317,47 @@ func (h *ChangePlanHandler) GetReviewFindings(c echo.Context) error {
 		})
 	}
 
+	// Check authorization: User must be able to view change plans in the project
+	userIDStr, _, organizationRole, ok := rbac.GetUserFromContext(ctx)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Organization admins can view any change plan
+	if organizationRole != rbac.OrganizationAdmin {
+		// Check if user is a member of the project
+		member, err := h.projectMemberRepo.GetMemberRole(ctx, changePlan.ProjectID, userID)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				return c.JSON(http.StatusForbidden, map[string]interface{}{
+					"error": "Not a member of this project",
+				})
+			}
+			h.logger.Error("Failed to check project membership", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to check project membership",
+			})
+		}
+
+		// Check if user has PermissionChangesRead
+		projectRole := convertProjectRoleToRBAC(member.Role)
+		checker := rbac.NewCheckerService()
+		if !checker.HasProjectPermission(projectRole, rbac.PermissionChangesRead) {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "Insufficient permissions to view change plans",
+			})
+		}
+	}
+
 	// Get findings from repository
 	findings, err := h.policyFindingRepo.GetByChangePlanID(ctx, changePlanID)
 	if err != nil {

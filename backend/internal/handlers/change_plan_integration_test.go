@@ -348,6 +348,14 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		logger,
 	)
 
+	// Initialize SQL Review V2 service
+	schemaCache := review.NewSchemaCache(5*time.Minute, logger)
+	reviewServiceV2 := review.NewReviewServiceV2(
+		policyRepo,
+		schemaCache,
+		logger,
+	)
+
 	// Initialize approval service
 	rbacChecker := rbac.NewCheckerService()
 	approvalService := services.NewApprovalService(
@@ -415,8 +423,11 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		databaseInstanceRepo,
 		projectMemberRepo,
 		policyFindingRepo,
+		approvalRepo,
+		environmentRepo,
 		riskAssessmentSvc,
 		reviewService,
+		reviewServiceV2,
 		approvalService,
 		executionService,
 		auditLogService,
@@ -463,6 +474,14 @@ func setupChangePlanHandlerWithTimeout(
 		policyRepo,
 		databaseRepo,
 		reviewAdvisor,
+		logger,
+	)
+
+	// Initialize SQL Review V2 service
+	schemaCache := review.NewSchemaCache(5*time.Minute, logger)
+	reviewServiceV2 := review.NewReviewServiceV2(
+		policyRepo,
+		schemaCache,
 		logger,
 	)
 
@@ -534,8 +553,11 @@ func setupChangePlanHandlerWithTimeout(
 		databaseInstanceRepo,
 		projectMemberRepo,
 		policyFindingRepo,
+		approvalRepo,
+		environmentRepo,
 		riskAssessmentSvc,
 		reviewService,
+		reviewServiceV2,
 		approvalService,
 		executionService,
 		auditLogService,
@@ -8064,4 +8086,350 @@ func TestIntegration_ChangePlan_ChangeHistoryTracking(t *testing.T) {
 	assert.Equal(t, string(newStatus), *statusChange.NewValue)
 	assert.Equal(t, author.ID, statusChange.ChangedByID)
 	assert.False(t, statusChange.ChangedAt.IsZero())
+}
+
+// TestIntegration_ChangePlan_GetReviewFindings_Forbidden tests GET /api/v1/change-plans/:id/review/findings with user not in project
+func TestIntegration_ChangePlan_GetReviewFindings_Forbidden(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
+
+	// Create project owner
+	owner := createChangePlanTestUser(t, userRepo, "owner@example.com", models.OrganizationRoleDeveloper)
+
+	// Create test user (not a member of project)
+	nonMember := createChangePlanTestUser(t, userRepo, "nonmember@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add owner to project
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    owner.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: owner.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan as owner
+	changePlan := &models.ChangePlan{
+		ProjectID:        project.ID,
+		TargetDatabaseID: database.ID,
+		Title:            "Test Change Plan",
+		Description:      "Test description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE users (id UUID PRIMARY KEY);",
+		AuthorID:         owner.ID,
+		Status:           models.ChangePlanStatusDraft,
+		RiskLevel:        models.RiskLevelLow,
+	}
+	err = changePlanRepo.Create(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Create some policy findings
+	err = policyFindingRepo.Create(ctx, &models.PolicyFinding{
+		ChangePlanID:  changePlan.ID,
+		ValidatorType: "security",
+		Severity:      models.SeverityWarning,
+		RuleName:      "test-rule",
+		Message:       "Test finding",
+	})
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for non-member user
+	token, err := tokenManager.GenerateToken(nonMember.ID, nonMember.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/change-plans/"+changePlan.ID.String()+"/review/findings", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/review/findings")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, nonMember.ID, nonMember.Email, nonMember.OrganizationRole)
+
+	// Execute
+	err = handler.GetReviewFindings(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	// Verify error response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "Not a member of this project", response["error"])
+}
+
+// TestIntegration_ChangePlan_GetReviewFindings_Success tests GET /api/v1/change-plans/:id/review/findings with authorized user
+func TestIntegration_ChangePlan_GetReviewFindings_Success(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
+
+	// Create project member with viewer role
+	member := createChangePlanTestUser(t, userRepo, "member@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add member to project with viewer role (has PermissionChangesRead)
+	projectMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    member.ID,
+		Role:      models.ProjectRoleViewer,
+		AddedByID: member.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, projectMember)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan
+	changePlan := &models.ChangePlan{
+		ProjectID:        project.ID,
+		TargetDatabaseID: database.ID,
+		Title:            "Test Change Plan",
+		Description:      "Test description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE users (id UUID PRIMARY KEY);",
+		AuthorID:         member.ID,
+		Status:           models.ChangePlanStatusDraft,
+		RiskLevel:        models.RiskLevelLow,
+	}
+	err = changePlanRepo.Create(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Create policy findings with different severities
+	finding1 := &models.PolicyFinding{
+		ChangePlanID:  changePlan.ID,
+		ValidatorType: "security",
+		Severity:      models.SeverityError,
+		RuleName:      "security-rule",
+		Message:       "Security issue found",
+	}
+	err = policyFindingRepo.Create(ctx, finding1)
+	require.NoError(t, err)
+
+	finding2 := &models.PolicyFinding{
+		ChangePlanID:  changePlan.ID,
+		ValidatorType: "performance",
+		Severity:      models.SeverityWarning,
+		RuleName:      "performance-rule",
+		Message:       "Performance warning",
+	}
+	err = policyFindingRepo.Create(ctx, finding2)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for member user
+	token, err := tokenManager.GenerateToken(member.ID, member.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/change-plans/"+changePlan.ID.String()+"/review/findings", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/review/findings")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, member.ID, member.Email, member.OrganizationRole)
+
+	// Execute
+	err = handler.GetReviewFindings(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify response contains the findings
+	var response struct {
+		Findings []models.PolicyFinding `json:"findings"`
+	}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Len(t, response.Findings, 2)
+
+	// Verify findings content
+	foundError := false
+	foundWarning := false
+	for _, finding := range response.Findings {
+		if finding.ID == finding1.ID {
+			foundError = true
+			assert.Equal(t, models.SeverityError, finding.Severity)
+			assert.Equal(t, "security-rule", finding.RuleName)
+		}
+		if finding.ID == finding2.ID {
+			foundWarning = true
+			assert.Equal(t, models.SeverityWarning, finding.Severity)
+			assert.Equal(t, "performance-rule", finding.RuleName)
+		}
+	}
+	assert.True(t, foundError, "Error finding should be present")
+	assert.True(t, foundWarning, "Warning finding should be present")
+}
+
+// TestIntegration_ChangePlan_GetReviewFindings_OrgAdmin tests that org admins can access any findings
+func TestIntegration_ChangePlan_GetReviewFindings_OrgAdmin(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
+
+	// Create org admin (not a member of project)
+	orgAdmin := createChangePlanTestUser(t, userRepo, "admin@example.com", models.OrganizationRoleAdmin)
+
+	// Create project owner
+	owner := createChangePlanTestUser(t, userRepo, "owner@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add owner to project (but NOT the org admin)
+	projectMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    owner.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: owner.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, projectMember)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan as owner
+	changePlan := &models.ChangePlan{
+		ProjectID:        project.ID,
+		TargetDatabaseID: database.ID,
+		Title:            "Test Change Plan",
+		Description:      "Test description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE users (id UUID PRIMARY KEY);",
+		AuthorID:         owner.ID,
+		Status:           models.ChangePlanStatusDraft,
+		RiskLevel:        models.RiskLevelLow,
+	}
+	err = changePlanRepo.Create(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Create policy finding
+	err = policyFindingRepo.Create(ctx, &models.PolicyFinding{
+		ChangePlanID:  changePlan.ID,
+		ValidatorType: "security",
+		Severity:      models.SeverityError,
+		RuleName:      "test-rule",
+		Message:       "Test finding",
+	})
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for org admin (not a project member)
+	token, err := tokenManager.GenerateToken(orgAdmin.ID, orgAdmin.Email, string(models.OrganizationRoleAdmin))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/change-plans/"+changePlan.ID.String()+"/review/findings", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/review/findings")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, orgAdmin.ID, orgAdmin.Email, orgAdmin.OrganizationRole)
+
+	// Execute
+	err = handler.GetReviewFindings(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify response contains the findings
+	var response struct {
+		Findings []models.PolicyFinding `json:"findings"`
+	}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Len(t, response.Findings, 1)
+	assert.Equal(t, "test-rule", response.Findings[0].RuleName)
 }
