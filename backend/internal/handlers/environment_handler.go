@@ -259,8 +259,8 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 	}
 
 	// Validate Policy if provided and not explicitly set to null
-	if policyFieldPresent && req.PolicyID != nil {
-		if err := h.validatePolicy(ctx, req.PolicyID); err != nil {
+	if policyFieldPresent {
+		if err := h.validatePolicy(ctx, req.PolicyID.UUID); err != nil {
 			return err
 		}
 	}
