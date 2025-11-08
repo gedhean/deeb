@@ -11,13 +11,21 @@ type PolicyFinding struct {
 	ID            uuid.UUID `json:"id"                      db:"id"`
 	ChangePlanID  uuid.UUID `json:"change_plan_id"          db:"change_plan_id"`
 	ValidatorType string    `json:"validator_type"          db:"validator_type"`
-	Severity      string    `json:"severity"                db:"severity"`
+	Severity      Severity  `json:"severity"                db:"severity"`
 	RuleName      string    `json:"rule_name"               db:"rule_name"`
 	Message       string    `json:"message"                 db:"message"`
 	LineNumber    *int      `json:"line_number,omitempty"   db:"line_number"`
 	ColumnNumber  *int      `json:"column_number,omitempty" db:"column_number"`
 	CreatedAt     time.Time `json:"created_at"              db:"created_at"`
 }
+
+type Severity string
+
+const (
+	SeverityError   Severity = "Error"
+	SeverityWarning Severity = "Warning"
+	SeverityInfo    Severity = "Info"
+)
 
 // Validate performs basic validation on the PolicyFinding
 func (p *PolicyFinding) Validate() error {

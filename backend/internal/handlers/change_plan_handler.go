@@ -1024,17 +1024,17 @@ func (h *ChangePlanHandler) storeReviewFindings(
 			var severity string
 			switch advice.Status {
 			case types.Advice_ERROR:
-				severity = "error"
+				severity = string(models.SeverityError)
 			case types.Advice_WARNING:
-				severity = "warning"
+				severity = string(models.SeverityWarning)
 			case types.Advice_SUCCESS, types.Advice_STATUS_UNSPECIFIED:
-				severity = "info"
+				severity = string(models.SeverityInfo)
 			default:
-				severity = "warning"
+				severity = string(models.SeverityWarning)
 			}
 
 			// Extract rule name from advice title or use a default
-			ruleName := "unknown"
+			ruleName := "Unknown"
 			if advice.Title != "" {
 				ruleName = advice.Title
 			}
@@ -1052,7 +1052,7 @@ func (h *ChangePlanHandler) storeReviewFindings(
 			finding := &models.PolicyFinding{
 				ChangePlanID:  changePlanID,
 				ValidatorType: validatorType,
-				Severity:      severity,
+				Severity:      models.Severity(severity),
 				RuleName:      ruleName,
 				Message:       message,
 			}
@@ -1334,7 +1334,7 @@ func (h *ChangePlanHandler) GetReviewFindings(c echo.Context) error {
 	var filteredFindings []*models.PolicyFinding
 	for _, finding := range findings {
 		// Apply severity filter
-		if severity != "" && finding.Severity != severity {
+		if severity != "" && string(finding.Severity) != severity {
 			continue
 		}
 
@@ -1359,7 +1359,7 @@ func (h *ChangePlanHandler) GetReviewFindings(c echo.Context) error {
 		"info":    0,
 	}
 	for _, finding := range filteredFindings {
-		summary[finding.Severity]++
+		summary[string(finding.Severity)]++
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
@@ -1521,11 +1521,11 @@ func (h *ChangePlanHandler) enrichWithPolicyFindings(
 		}
 
 		switch finding.Severity {
-		case "Error":
+		case models.SeverityError:
 			errors = append(errors, item)
-		case "Warning":
+		case models.SeverityWarning:
 			warnings = append(warnings, item)
-		case "Info":
+		case models.SeverityInfo:
 			infos = append(infos, item)
 		}
 	}
