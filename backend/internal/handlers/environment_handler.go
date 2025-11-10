@@ -231,24 +231,12 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 
 	// Parse update request into typed struct
 	var req models.UpdateEnvironmentRequest
-	reqJSON, err := json.Marshal(rawReq)
-	if err != nil {
-		h.logger.Error("Failed to marshal request body", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to process request",
-		})
-	}
+	reqJSON, _ := json.Marshal(rawReq)
 	if err := json.Unmarshal(reqJSON, &req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"error": "Invalid request body",
 		})
 	}
-
-	// Debug logging
-	h.logger.Info("Update request received",
-		zap.Bool("policy_provided", req.PolicyID.Provided),
-		zap.Any("policy_uuid", req.PolicyID.UUID),
-	)
 
 	// Validate request
 	if err := models.ValidateUpdateEnvironmentRequest(&req); err != nil {
