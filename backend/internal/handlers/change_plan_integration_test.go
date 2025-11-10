@@ -350,7 +350,7 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 
 	// Initialize SQL Review V2 service
 	schemaCache := review.NewSchemaCache(5*time.Minute, logger)
-	reviewServiceV2 := review.NewReviewServiceV2(
+	reviewService := review.NewReviewService(
 		policyRepo,
 		schemaCache,
 		logger,
@@ -427,7 +427,7 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		environmentRepo,
 		riskAssessmentSvc,
 		reviewService,
-		reviewServiceV2,
+		reviewService,
 		approvalService,
 		executionService,
 		auditLogService,
@@ -479,7 +479,7 @@ func setupChangePlanHandlerWithTimeout(
 
 	// Initialize SQL Review V2 service
 	schemaCache := review.NewSchemaCache(5*time.Minute, logger)
-	reviewServiceV2 := review.NewReviewServiceV2(
+	reviewService := review.NewReviewService(
 		policyRepo,
 		schemaCache,
 		logger,
@@ -557,7 +557,7 @@ func setupChangePlanHandlerWithTimeout(
 		environmentRepo,
 		riskAssessmentSvc,
 		reviewService,
-		reviewServiceV2,
+		reviewService,
 		approvalService,
 		executionService,
 		auditLogService,

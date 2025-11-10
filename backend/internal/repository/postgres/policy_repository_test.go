@@ -46,7 +46,7 @@ func TestPolicyRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO policies").
-			WithArgs(sqlmock.AnyArg(), policy.Name, policy.Description, policy.Type, sqlmock.AnyArg(), sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(sqlmock.AnyArg(), policy.Name, policy.Description, policy.Type, sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, policy)
@@ -72,7 +72,7 @@ func TestPolicyRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO policies").
-			WithArgs(sqlmock.AnyArg(), policy.Name, nil, policy.Type, sqlmock.AnyArg(), sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(sqlmock.AnyArg(), policy.Name, nil, policy.Type, sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, policy)
@@ -98,7 +98,7 @@ func TestPolicyRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO policies").
-			WithArgs(existingID, policy.Name, policy.Description, policy.Type, sqlmock.AnyArg(), sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(existingID, policy.Name, policy.Description, policy.Type, sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, policy)
@@ -120,7 +120,7 @@ func TestPolicyRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO policies").
-			WithArgs(sqlmock.AnyArg(), policy.Name, policy.Description, policy.Type, sqlmock.AnyArg(), sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(sqlmock.AnyArg(), policy.Name, policy.Description, policy.Type, sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, policy)
@@ -143,7 +143,7 @@ func TestPolicyRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO policies").
-			WithArgs(sqlmock.AnyArg(), policy.Name, policy.Description, policy.Type, sqlmock.AnyArg(), sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(sqlmock.AnyArg(), policy.Name, policy.Description, policy.Type, sqlmock.AnyArg(), policy.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnError(errors.New("database connection error"))
 
 		err := repo.Create(ctx, policy)
@@ -167,8 +167,8 @@ func TestPolicyRepository_GetByID(t *testing.T) {
 		now := time.Now()
 		policyConfigJSON := `{"max_query_time": 30, "require_index": true}`
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "schema_version", "created_by_id", "created_at", "updated_at"}).
-			AddRow(policyID, "Test Policy", "Test Description", models.PolicyTypeSQLReview, policyConfigJSON, "2.0", createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"}).
+			AddRow(policyID, "Test Policy", "Test Description", models.PolicyTypeSQLReview, policyConfigJSON, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM policies WHERE id =").
 			WithArgs(policyID).
@@ -194,8 +194,8 @@ func TestPolicyRepository_GetByID(t *testing.T) {
 		now := time.Now()
 		policyConfigJSON := `{"max_query_time": 30}`
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "schema_version", "created_by_id", "created_at", "updated_at"}).
-			AddRow(policyID, "Test Policy", nil, models.PolicyTypeSQLReview, policyConfigJSON, "2.0", createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"}).
+			AddRow(policyID, "Test Policy", nil, models.PolicyTypeSQLReview, policyConfigJSON, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM policies WHERE id =").
 			WithArgs(policyID).
@@ -217,8 +217,8 @@ func TestPolicyRepository_GetByID(t *testing.T) {
 		now := time.Now()
 		policyConfigJSON := `{}`
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "schema_version", "created_by_id", "created_at", "updated_at"}).
-			AddRow(policyID, "Test Policy", "Test Description", models.PolicyTypeSQLReview, policyConfigJSON, "2.0", createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"}).
+			AddRow(policyID, "Test Policy", "Test Description", models.PolicyTypeSQLReview, policyConfigJSON, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM policies WHERE id =").
 			WithArgs(policyID).
@@ -278,9 +278,9 @@ func TestPolicyRepository_List(t *testing.T) {
 		policyConfig1JSON := `{"max_query_time": 30}`
 		policyConfig2JSON := `{"require_index": true}`
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "schema_version", "created_by_id", "created_at", "updated_at"}).
-			AddRow(policyID1, "Policy 1", "Description 1", models.PolicyTypeSQLReview, policyConfig1JSON, "2.0", createdByID, now, now).
-			AddRow(policyID2, "Policy 2", "Description 2", models.PolicyTypeSQLReview, policyConfig2JSON, "2.0", createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"}).
+			AddRow(policyID1, "Policy 1", "Description 1", models.PolicyTypeSQLReview, policyConfig1JSON, createdByID, now, now).
+			AddRow(policyID2, "Policy 2", "Description 2", models.PolicyTypeSQLReview, policyConfig2JSON, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM policies ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).
@@ -305,7 +305,6 @@ func TestPolicyRepository_List(t *testing.T) {
 				"description",
 				"type",
 				"policy_config",
-				"schema_version",
 				"created_by_id",
 				"created_at",
 				"updated_at",
@@ -330,8 +329,8 @@ func TestPolicyRepository_List(t *testing.T) {
 		createdByID := uuid.New()
 		policyConfigJSON := `{"max_query_time": 30}`
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "schema_version", "created_by_id", "created_at", "updated_at"}).
-			AddRow(policyID, "Policy", "Description", models.PolicyTypeSQLReview, policyConfigJSON, "2.0", createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"}).
+			AddRow(policyID, "Policy", "Description", models.PolicyTypeSQLReview, policyConfigJSON, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM policies ORDER BY created_at DESC LIMIT").
 			WithArgs(5, 10).
@@ -400,7 +399,6 @@ func TestPolicyRepository_GetByType(t *testing.T) {
 				"description",
 				"type",
 				"policy_config",
-				"schema_version",
 				"created_by_id",
 				"created_at",
 				"updated_at",
@@ -425,8 +423,8 @@ func TestPolicyRepository_GetByType(t *testing.T) {
 		createdByID := uuid.New()
 		policyConfigJSON := `{"max_query_time": 30}`
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "schema_version", "created_by_id", "created_at", "updated_at"}).
-			AddRow(policyID, "Policy", "Description", models.PolicyTypeSQLReview, policyConfigJSON, "2.0", createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "type", "policy_config", "created_by_id", "created_at", "updated_at"}).
+			AddRow(policyID, "Policy", "Description", models.PolicyTypeSQLReview, policyConfigJSON, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM policies WHERE type =").
 			WithArgs(models.PolicyTypeSQLReview, 5, 10).
@@ -543,7 +541,7 @@ func TestPolicyRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE policies").
-			WithArgs(policyID, policy.Name, policy.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(policyID, policy.Name, policy.Description, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, policy)
@@ -570,7 +568,7 @@ func TestPolicyRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE policies").
-			WithArgs(policyID, policy.Name, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(policyID, policy.Name, nil, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, policy)
@@ -593,7 +591,7 @@ func TestPolicyRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE policies").
-			WithArgs(policyID, policy.Name, policy.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(policyID, policy.Name, policy.Description, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, policy)
@@ -618,7 +616,7 @@ func TestPolicyRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE policies").
-			WithArgs(policyID, policy.Name, policy.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(policyID, policy.Name, policy.Description, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Update(ctx, policy)
@@ -643,7 +641,7 @@ func TestPolicyRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE policies").
-			WithArgs(policyID, policy.Name, policy.Description, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(policyID, policy.Name, policy.Description, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnError(errors.New("database connection error"))
 
 		err := repo.Update(ctx, policy)

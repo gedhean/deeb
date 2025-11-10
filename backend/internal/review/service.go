@@ -3,239 +3,338 @@ package review
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
-	"github.com/nsxbet/deeb/internal/review/sqlreviewer"
+	reviewerConfig "github.com/nsxbet/sql-reviewer/pkg/config"
+	"github.com/nsxbet/sql-reviewer/pkg/reviewer"
 	"github.com/nsxbet/sql-reviewer/pkg/types"
 	"go.uber.org/zap"
 )
 
-// ReviewService orchestrates SQL Review using sql-reviewer package
+// ReviewService provides enhanced SQL review capabilities
 type ReviewService struct {
-	policyRepo   repository.PolicyRepository
-	databaseRepo repository.DatabaseRepository
-	advisor      *sqlreviewer.Advisor
-	logger       *zap.Logger
+	policyRepo  repository.PolicyRepository
+	schemaCache *SchemaCache
+	logger      *zap.Logger
+
+	// Configuration
+	defaultTimeout time.Duration
 }
 
-// NewReviewService creates a new SQL Review service
+// NewReviewService creates a new enhanced review service
 func NewReviewService(
 	policyRepo repository.PolicyRepository,
-	databaseRepo repository.DatabaseRepository,
-	advisor *sqlreviewer.Advisor,
+	schemaCache *SchemaCache,
 	logger *zap.Logger,
 ) *ReviewService {
 	return &ReviewService{
-		policyRepo:   policyRepo,
-		databaseRepo: databaseRepo,
-		advisor:      advisor,
-		logger:       logger,
+		policyRepo:     policyRepo,
+		schemaCache:    schemaCache,
+		logger:         logger,
+		defaultTimeout: 30 * time.Second,
 	}
 }
 
-// ReviewOptions contains options for running SQL Review
+// ReviewOptions contains options for running SQL review
 type ReviewOptions struct {
-	// ChangePlanID is the ID of the Change Plan being reviewed
+	// ChangePlanID is the ID of the change plan being reviewed
 	ChangePlanID uuid.UUID
-	// SQLContent is the SQL content to review
+
+	// EnvironmentID for loading the associated policy
+	EnvironmentID uuid.UUID
+
+	// DatabaseID for schema-aware validation
+	DatabaseID *uuid.UUID
+
+	// SQLContent is the SQL to review
 	SQLContent string
-	// DatabaseType is the type of database (MySQL or PostgreSQL)
+
+	// DatabaseType is the database engine
 	DatabaseType models.DatabaseType
+
+	// Schema is optional pre-loaded schema metadata
+	Schema *types.DatabaseSchemaMetadata
+
+	// Timeout for the review operation
+	Timeout time.Duration
 }
 
-// ReviewResultWithSummary extends ReviewResult with summary information
-type ReviewResultWithSummary struct {
-	ReviewResult
-	// PolicyID is the ID of the policy used for review
-	PolicyID *uuid.UUID `json:"policy_id,omitempty"`
-	// PolicyName is the name of the policy used for review
-	PolicyName string `json:"policy_name,omitempty"`
-	// EnabledRules is the list of rule names that were enabled
-	EnabledRules []string `json:"enabled_rules"`
-	// SkippedRules is the list of rule names that were skipped
-	SkippedRules []string `json:"skipped_rules"`
-}
+// Review performs SQL review using the high-level reviewer API
+func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*ReviewResult, error) {
+	start := time.Now()
 
-// Review performs SQL Review for a Change Plan using sql-reviewer
-func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*ReviewResultWithSummary, error) {
-	// Step 1: Load Policy (SQL_REVIEW type)
-	policies, err := s.policyRepo.GetByType(ctx, models.PolicyTypeSQLReview, 1, 0)
+	// Set timeout
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = s.defaultTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// Load policy for environment
+	policy, err := s.loadPolicyForEnvironment(ctx, opts.EnvironmentID)
 	if err != nil {
-		s.logger.Error("Failed to load SQL_REVIEW policy", zap.Error(err))
-		return nil, fmt.Errorf("failed to load SQL_REVIEW policy: %w", err)
+		return nil, fmt.Errorf("failed to load policy: %w", err)
 	}
 
-	if len(policies) == 0 {
-		s.logger.Warn("No SQL_REVIEW policy found, running with no rules")
-		return s.reviewWithNoRules(ctx, opts)
+	// If no policy, return clean result
+	if policy == nil {
+		return s.reviewWithNoPolicy(start), nil
 	}
 
-	policy := policies[0]
-	s.logger.Info("Loaded SQL_REVIEW policy",
-		zap.String("policy_id", policy.ID.String()),
-		zap.String("policy_name", policy.Name))
-
-	// Step 2: Parse policy config to get enabled rules
+	// Parse policy configuration
 	config, err := models.ParseSQLReviewConfig(policy.PolicyConfig)
 	if err != nil {
-		s.logger.Error("Failed to parse policy config", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse policy config: %w", err)
 	}
 
-	// Step 3: Filter rules by database type and build types.SQLReviewRule list
-	rules := s.buildRulesFromConfig(config, opts.DatabaseType)
-	enabledRuleNames := s.getEnabledRuleNames(config, opts.DatabaseType)
-	allRuleNames := s.getAllRuleNames(opts.DatabaseType)
-	skippedRuleNames := s.getSkippedRuleNames(enabledRuleNames, allRuleNames)
+	// Convert database type to sql-reviewer engine
+	engine := convertDatabaseTypeToEngine(opts.DatabaseType)
 
-	// Step 4: Run sql-reviewer advisor
-	adviceList, err := s.advisor.Check(ctx, opts.SQLContent, opts.DatabaseType, rules)
-	if err != nil {
-		s.logger.Error("Failed to run sql-reviewer check", zap.Error(err))
-		return nil, fmt.Errorf("failed to run sql-reviewer check: %w", err)
+	// Create reviewer instance
+	rev := reviewer.New(engine)
+
+	// Build rule configuration for sql-reviewer
+	rules, enabledRuleTypes := s.buildRulesForReviewer(config, opts.DatabaseType)
+
+	// Configure reviewer with rules
+	if len(rules) > 0 {
+		// Create Config for the reviewer
+		reviewConfig := &reviewerConfig.Config{
+			ID:    "policy-" + policy.ID.String(),
+			Rules: rules,
+		}
+
+		rev.WithConfigObject(reviewConfig)
 	}
 
-	// Step 5: Build ReviewResult from Advice list
-	reviewResult := s.convertAdviceToReviewResult(adviceList, enabledRuleNames)
+	// Get schema for schema-aware validation if available
+	var schema *types.DatabaseSchemaMetadata
+	if opts.Schema != nil {
+		schema = opts.Schema
+	} else if opts.DatabaseID != nil && s.schemaCache != nil {
+		schema = s.schemaCache.Get(ctx, *opts.DatabaseID)
+	}
 
-	// Step 6: Return results with summary
-	return &ReviewResultWithSummary{
-		ReviewResult: reviewResult,
-		PolicyID:     &policy.ID,
-		PolicyName:   policy.Name,
-		EnabledRules: enabledRuleNames,
-		SkippedRules: skippedRuleNames,
-	}, nil
+	// Execute review
+	var result *reviewer.ReviewResult
+	if schema != nil {
+		s.logger.Info("Running schema-aware SQL review",
+			zap.String("database_id", opts.DatabaseID.String()),
+			zap.Int("rules", len(rules)))
+		result, err = rev.ReviewWithSchema(ctx, opts.SQLContent, schema)
+	} else {
+		s.logger.Info("Running SQL review without schema",
+			zap.Int("rules", len(rules)))
+		result, err = rev.Review(ctx, opts.SQLContent)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("review failed: %w", err)
+	}
+
+	// Convert result to our format
+	reviewResult := s.convertReviewerResult(result, enabledRuleTypes, policy, start)
+
+	return reviewResult, nil
 }
 
-// buildRulesFromConfig builds types.SQLReviewRule list from policy config
-func (s *ReviewService) buildRulesFromConfig(
+// loadPolicyForEnvironment loads the SQL_REVIEW policy for an environment
+func (s *ReviewService) loadPolicyForEnvironment(ctx context.Context, environmentID uuid.UUID) (*models.Policy, error) {
+	// For now, load the first SQL_REVIEW policy
+	// TODO: In Phase 3, load policy associated with environment
+	policies, err := s.policyRepo.GetByType(ctx, models.PolicyTypeSQLReview, 1, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query policies: %w", err)
+	}
+
+	if len(policies) == 0 {
+		s.logger.Warn("No SQL_REVIEW policy found")
+		return nil, nil
+	}
+
+	return policies[0], nil
+}
+
+// buildRulesForReviewer builds sql-reviewer rules from policy config
+func (s *ReviewService) buildRulesForReviewer(
 	config *models.SQLReviewPolicyConfig,
 	dbType models.DatabaseType,
-) []*types.SQLReviewRule {
+) ([]*types.SQLReviewRule, []string) {
 	rules := make([]*types.SQLReviewRule, 0)
-	allRules := GetRulesByEngine(dbType)
+	enabledTypes := make([]string, 0)
 
 	for ruleKey, ruleConfig := range config.Rules {
 		// Only process rules for the current database type
-		if ruleConfig.Engine != dbType {
+		// Rules with "both" engine or matching engine
+		if ruleConfig.Engine != dbType && ruleConfig.Engine != "both" {
 			continue
 		}
 
 		// Find rule metadata
-		var ruleMetadata *RuleMetadata
-		for _, categoryRules := range allRules {
-			for _, meta := range categoryRules {
-				if meta.Type == ruleConfig.Type {
-					ruleMetadata = &meta
-					break
-				}
-			}
-			if ruleMetadata != nil {
-				break
-			}
-		}
-
-		if ruleMetadata == nil {
-			s.logger.Warn("Rule metadata not found", zap.String("rule", ruleKey), zap.String("type", ruleConfig.Type))
+		metadata := FindRuleMetadata(ruleConfig.Type)
+		if metadata == nil {
+			s.logger.Warn("Rule metadata not found",
+				zap.String("rule_key", ruleKey),
+				zap.String("rule_type", ruleConfig.Type))
 			continue
 		}
 
-		// Convert to types.SQLReviewRule
-		storeRule := ConvertRuleMetadataToStoreRule(*ruleMetadata, ruleConfig.Level, ruleConfig.Payload)
+		// Convert to sql-reviewer rule
+		storeRule := ConvertRuleMetadataToStoreRule(*metadata, ruleConfig.Level, ruleConfig.Payload)
 		rules = append(rules, storeRule)
+		enabledTypes = append(enabledTypes, ruleConfig.Type)
 	}
 
-	return rules
+	return rules, enabledTypes
 }
 
-// getEnabledRuleNames returns list of enabled rule names from config
-func (s *ReviewService) getEnabledRuleNames(config *models.SQLReviewPolicyConfig, dbType models.DatabaseType) []string {
-	enabled := make([]string, 0)
-	for ruleKey, ruleConfig := range config.Rules {
-		if ruleConfig.Engine == dbType {
-			enabled = append(enabled, ruleKey)
+// convertReviewerResult converts sql-reviewer result to our format
+func (s *ReviewService) convertReviewerResult(
+	result *reviewer.ReviewResult,
+	enabledRuleTypes []string,
+	policy *models.Policy,
+	startTime time.Time,
+) *ReviewResult {
+	violations := []Violation{}
+	warnings := []Violation{}
+	errorCount := 0
+	warningCount := 0
+
+	// Convert advice to violations
+	for _, advice := range result.Advices {
+		violation := ConvertAdviceToViolation(advice)
+
+		// Extract rule type from advice (if available)
+		// The title or code might give us hints about which rule triggered
+		violation.RuleType = s.extractRuleTypeFromAdvice(advice, enabledRuleTypes)
+
+		switch advice.Status {
+		case types.Advice_ERROR:
+			violations = append(violations, violation)
+			errorCount++
+		case types.Advice_WARNING:
+			warnings = append(warnings, violation)
+			warningCount++
 		}
 	}
-	return enabled
+
+	// Calculate skipped rules
+	allRuleTypes := s.getAllRuleTypes(policy)
+	skippedRules := s.calculateSkippedRules(enabledRuleTypes, allRuleTypes)
+
+	executionTime := time.Since(startTime)
+
+	return &ReviewResult{
+		Valid:           errorCount == 0,
+		Violations:      violations,
+		Warnings:        warnings,
+		TotalViolations: len(violations) + len(warnings),
+		ErrorCount:      errorCount,
+		WarningCount:    warningCount,
+		PolicyID:        &policy.ID,
+		PolicyName:      policy.Name,
+		EnabledRules:    enabledRuleTypes,
+		SkippedRules:    skippedRules,
+		ExecutedRules:   len(enabledRuleTypes),
+		ExecutionTime:   executionTime,
+		ReviewedAt:      time.Now(),
+	}
 }
 
-// getAllRuleNames returns all available rule names for the database type
-func (s *ReviewService) getAllRuleNames(dbType models.DatabaseType) []string {
-	allRules := GetRulesByEngine(dbType)
-	names := make([]string, 0)
-	for _, categoryRules := range allRules {
-		for _, meta := range categoryRules {
-			names = append(names, meta.Type)
+// extractRuleTypeFromAdvice attempts to extract rule type from advice
+func (s *ReviewService) extractRuleTypeFromAdvice(advice *types.Advice, enabledRuleTypes []string) string {
+	// Try to match title or content against enabled rule types
+	title := strings.ToLower(advice.Title)
+	content := strings.ToLower(advice.Content)
+
+	for _, ruleType := range enabledRuleTypes {
+		ruleLower := strings.ToLower(ruleType)
+		if strings.Contains(title, ruleLower) || strings.Contains(content, ruleLower) {
+			return ruleType
+		}
+
+		// Try matching last part of rule type (e.g., "no-select-all" from "statement.select.no-select-all")
+		parts := strings.Split(ruleType, ".")
+		if len(parts) > 0 {
+			lastPart := parts[len(parts)-1]
+			if strings.Contains(title, lastPart) || strings.Contains(content, lastPart) {
+				return ruleType
+			}
 		}
 	}
-	return names
+
+	return "unknown"
 }
 
-// getSkippedRuleNames returns rule names that were not enabled
-func (s *ReviewService) getSkippedRuleNames(enabled []string, all []string) []string {
+// getAllRuleTypes returns all available rule types
+func (s *ReviewService) getAllRuleTypes(policy *models.Policy) []string {
+	// Parse config to get rule keys
+	config, err := models.ParseSQLReviewConfig(policy.PolicyConfig)
+	if err != nil {
+		return []string{}
+	}
+
+	types := make([]string, 0, len(config.Rules))
+	for _, rule := range config.Rules {
+		types = append(types, rule.Type)
+	}
+
+	return types
+}
+
+// calculateSkippedRules determines which rules were not enabled
+func (s *ReviewService) calculateSkippedRules(enabled, all []string) []SkippedRule {
 	enabledMap := make(map[string]bool)
-	for _, name := range enabled {
-		enabledMap[name] = true
+	for _, ruleType := range enabled {
+		enabledMap[ruleType] = true
 	}
 
-	skipped := make([]string, 0)
-	for _, name := range all {
-		if !enabledMap[name] {
-			skipped = append(skipped, name)
+	skipped := []SkippedRule{}
+	for _, ruleType := range all {
+		if !enabledMap[ruleType] {
+			skipped = append(skipped, SkippedRule{
+				RuleType: ruleType,
+				Reason:   "not enabled in policy",
+			})
 		}
 	}
+
 	return skipped
 }
 
-// convertAdviceToReviewResult converts sql-reviewer Advice list to ReviewResult
-func (s *ReviewService) convertAdviceToReviewResult(adviceList []*types.Advice, enabledRuleNames []string) ReviewResult {
-	errors := 0
-	warnings := 0
-	infos := 0
-
-	for _, advice := range adviceList {
-		switch advice.Status {
-		case types.Advice_ERROR:
-			errors++
-		case types.Advice_WARNING:
-			warnings++
-		case types.Advice_SUCCESS, types.Advice_STATUS_UNSPECIFIED:
-			// Treat SUCCESS and UNSPECIFIED as Info level
-			infos++
-		default:
-			infos++
-		}
-	}
-
-	valid := errors == 0 && len(adviceList) == 0
-
-	return ReviewResult{
-		Valid:           valid,
-		Results:         []Result{{ValidatorName: "sql-reviewer", Valid: valid, Violations: adviceList}},
-		TotalViolations: len(adviceList),
-		Errors:          errors,
-		Warnings:        warnings,
-		Infos:           infos,
+// reviewWithNoPolicy returns a clean result when no policy is found
+func (s *ReviewService) reviewWithNoPolicy(startTime time.Time) *ReviewResult {
+	return &ReviewResult{
+		Valid:           true,
+		Violations:      []Violation{},
+		Warnings:        []Violation{},
+		TotalViolations: 0,
+		ErrorCount:      0,
+		WarningCount:    0,
+		PolicyID:        nil,
+		PolicyName:      "",
+		EnabledRules:    []string{},
+		SkippedRules:    []SkippedRule{},
+		ExecutedRules:   0,
+		ExecutionTime:   time.Since(startTime),
+		ReviewedAt:      time.Now(),
 	}
 }
 
-// reviewWithNoRules runs review with no rules (fallback when no policy found)
-func (s *ReviewService) reviewWithNoRules(ctx context.Context, opts ReviewOptions) (*ReviewResultWithSummary, error) {
-	return &ReviewResultWithSummary{
-		ReviewResult: ReviewResult{
-			Valid:           true,
-			Results:         []Result{},
-			TotalViolations: 0,
-			Errors:          0,
-			Warnings:        0,
-			Infos:           0,
-		},
-		PolicyID:     nil,
-		PolicyName:   "",
-		EnabledRules: []string{},
-		SkippedRules: []string{},
-	}, nil
+// convertDatabaseTypeToEngine converts models.DatabaseType to sql-reviewer engine
+func convertDatabaseTypeToEngine(dbType models.DatabaseType) types.Engine {
+	switch dbType {
+	case models.DatabaseTypeMySQL:
+		return types.Engine_MYSQL
+	case models.DatabaseTypePostgreSQL:
+		return types.Engine_POSTGRES
+	default:
+		return types.Engine_MYSQL
+	}
 }

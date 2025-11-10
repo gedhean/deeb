@@ -17,7 +17,6 @@ import (
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/review"
-	"github.com/nsxbet/deeb/internal/review/sqlreviewer"
 	"github.com/nsxbet/deeb/internal/services"
 )
 
@@ -88,7 +87,6 @@ func Setup(
 		auditLogService,
 	)
 	setupAuditLogRoutes(e, auditLogRepo, tokenManager)
-	setupPolicyMigrationRoutes(e, policyRepo, tokenManager)
 
 	// Setup Swagger documentation
 	SetupSwaggerRoutes(e)
@@ -502,18 +500,9 @@ func setupChangePlanRoutes(
 		logger.Get(),
 	)
 
-	// Initialize SQL Review service with sql-reviewer
-	reviewAdvisor := sqlreviewer.NewAdvisor(logger.Get())
-	reviewService := review.NewReviewService(
-		policyRepo,
-		databaseRepo,
-		reviewAdvisor,
-		logger.Get(),
-	)
-
-	// Initialize ReviewServiceV2 with enhanced capabilities
+	// Initialize SQL Review service
 	schemaCache := review.NewSchemaCache(15*time.Minute, logger.Get())
-	reviewServiceV2 := review.NewReviewServiceV2(
+	reviewService := review.NewReviewService(
 		policyRepo,
 		schemaCache,
 		logger.Get(),
@@ -590,7 +579,6 @@ func setupChangePlanRoutes(
 		environmentRepo,
 		riskAssessmentSvc,
 		reviewService,
-		reviewServiceV2,
 		approvalService,
 		executionService,
 		auditLogService,
@@ -654,25 +642,4 @@ func setupAuditLogRoutes(
 
 	// All audit log routes require authentication and admin role
 	auditLogsGroup.GET("", auditLogHandler.ListAuditLogs, authMiddleware.Authenticate)
-}
-
-// setupPolicyMigrationRoutes registers policy migration routes
-func setupPolicyMigrationRoutes(
-	e *echo.Echo,
-	policyRepo repository.PolicyRepository,
-	tokenManager *auth.TokenManager,
-) {
-	migrationService := services.NewPolicyMigrationService(policyRepo, logger.Get())
-	migrationHandler := handlers.NewPolicyMigrationHandler(migrationService, logger.Get())
-
-	// Migration routes under policies group
-	policiesGroup := e.Group("/api/v1/policies")
-
-	// Authentication middleware for protected routes
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
-
-	// All migration routes require authentication and admin role (TODO: add RBAC middleware)
-	policiesGroup.GET("/migration/status", migrationHandler.GetMigrationStatus, authMiddleware.Authenticate)
-	policiesGroup.POST("/migration/migrate-all", migrationHandler.MigrateAllPolicies, authMiddleware.Authenticate)
-	policiesGroup.POST("/:id/migrate", migrationHandler.MigratePolicy, authMiddleware.Authenticate)
 }

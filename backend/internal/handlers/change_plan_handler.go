@@ -18,7 +18,6 @@ import (
 	"github.com/nsxbet/deeb/internal/review"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/workflow"
-	"github.com/nsxbet/sql-reviewer/pkg/types"
 	"go.uber.org/zap"
 )
 
@@ -35,7 +34,6 @@ type ChangePlanHandler struct {
 	environmentRepo      repository.EnvironmentRepository
 	riskAssessmentSvc    *services.RiskAssessmentService
 	reviewService        *review.ReviewService
-	reviewServiceV2      *review.ReviewServiceV2
 	approvalService      *services.ApprovalService
 	executionService     *services.ExecutionService
 	auditService         *services.AuditLogService
@@ -55,7 +53,6 @@ func NewChangePlanHandler(
 	environmentRepo repository.EnvironmentRepository,
 	riskAssessmentSvc *services.RiskAssessmentService,
 	reviewService *review.ReviewService,
-	reviewServiceV2 *review.ReviewServiceV2,
 	approvalService *services.ApprovalService,
 	executionService *services.ExecutionService,
 	auditService *services.AuditLogService,
@@ -73,7 +70,6 @@ func NewChangePlanHandler(
 		environmentRepo:      environmentRepo,
 		riskAssessmentSvc:    riskAssessmentSvc,
 		reviewService:        reviewService,
-		reviewServiceV2:      reviewServiceV2,
 		approvalService:      approvalService,
 		executionService:     executionService,
 		auditService:         auditService,
@@ -795,9 +791,7 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 					return c.JSON(http.StatusBadRequest, map[string]interface{}{
 						"error": "SQL Review failed - cannot transition to Open status",
 						"details": map[string]interface{}{
-							"review_result":  reviewErr.ReviewResult,
-							"errors_count":   reviewErr.ReviewResult.Errors,
-							"warnings_count": reviewErr.ReviewResult.Warnings,
+							"message": reviewErr.Message,
 						},
 					})
 				}
@@ -897,9 +891,8 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 
 // SQLReviewError represents an error during SQL Review
 type SQLReviewError struct {
-	HasErrors    bool
-	ReviewResult *review.ReviewResultWithSummary
-	Message      string
+	HasErrors bool
+	Message   string
 }
 
 func (e *SQLReviewError) Error() string {
@@ -908,8 +901,8 @@ func (e *SQLReviewError) Error() string {
 
 // triggerSQLReview triggers SQL Review for a change plan and stores findings
 func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.ChangePlan) error {
-	// Check if either review service is configured
-	if h.reviewService == nil && h.reviewServiceV2 == nil {
+	// Check if review service is configured
+	if h.reviewService == nil {
 		h.logger.Warn("ReviewService not configured, skipping SQL Review")
 		return nil
 	}
@@ -933,42 +926,19 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 		}
 	}
 
-	var reviewResult *review.ReviewResultWithSummary
+	h.logger.Info("Running SQL Review")
 
-	// Try ReviewServiceV2 first (preferred), fall back to V1
-	if h.reviewServiceV2 != nil {
-		h.logger.Info("Using ReviewServiceV2 for SQL Review")
-
-		v2Result, err := h.reviewServiceV2.Review(ctx, review.ReviewOptionsV2{
-			ChangePlanID:  changePlan.ID,
-			EnvironmentID: database.EnvironmentID,
-			DatabaseID:    &database.ID,
-			SQLContent:    changePlan.SQLContent,
-			DatabaseType:  databaseInstance.DatabaseType,
-		})
-		if err != nil {
-			return &SQLReviewError{
-				HasErrors: false,
-				Message:   "Failed to run SQL Review V2: " + err.Error(),
-			}
-		}
-
-		// Convert V2 result to legacy format
-		reviewResult = convertReviewResultV2ToLegacy(v2Result)
-	} else {
-		h.logger.Info("Using ReviewService (legacy) for SQL Review")
-
-		// Run SQL Review with V1
-		reviewResult, err = h.reviewService.Review(ctx, review.ReviewOptions{
-			ChangePlanID: changePlan.ID,
-			SQLContent:   changePlan.SQLContent,
-			DatabaseType: databaseInstance.DatabaseType,
-		})
-		if err != nil {
-			return &SQLReviewError{
-				HasErrors: false,
-				Message:   "Failed to run SQL Review: " + err.Error(),
-			}
+	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
+		ChangePlanID:  changePlan.ID,
+		EnvironmentID: database.EnvironmentID,
+		DatabaseID:    &database.ID,
+		SQLContent:    changePlan.SQLContent,
+		DatabaseType:  databaseInstance.DatabaseType,
+	})
+	if err != nil {
+		return &SQLReviewError{
+			HasErrors: false,
+			Message:   "Failed to run SQL Review: " + err.Error(),
 		}
 	}
 
@@ -982,94 +952,78 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 	if err := h.storeReviewFindings(ctx, changePlan.ID, reviewResult); err != nil {
 		h.logger.Error("Failed to store review findings", zap.Error(err))
 		return &SQLReviewError{
-			HasErrors:    reviewResult.Errors > 0,
-			ReviewResult: reviewResult,
-			Message:      "Failed to store review findings: " + err.Error(),
+			HasErrors: reviewResult.ErrorCount > 0,
+			Message:   "Failed to store review findings: " + err.Error(),
 		}
 	}
 
 	// Check if there are errors that should prevent status transition
-	if reviewResult.Errors > 0 {
+	if reviewResult.ErrorCount > 0 {
 		return &SQLReviewError{
-			HasErrors:    true,
-			ReviewResult: reviewResult,
-			Message:      "SQL Review found errors that prevent status transition",
+			HasErrors: true,
+			Message:   "SQL Review found errors that prevent status transition",
 		}
 	}
 
 	h.logger.Info("SQL Review completed successfully",
 		zap.String("change_plan_id", changePlan.ID.String()),
-		zap.Int("errors", reviewResult.Errors),
-		zap.Int("warnings", reviewResult.Warnings),
-		zap.Int("infos", reviewResult.Infos),
+		zap.Int("errors", reviewResult.ErrorCount),
+		zap.Int("warnings", reviewResult.WarningCount),
 	)
 
 	return nil
 }
 
-// storeReviewFindings converts review results to policy findings and stores them
+// storeReviewFindings converts V2 review results to policy findings and stores them
 func (h *ChangePlanHandler) storeReviewFindings(
 	ctx context.Context,
 	changePlanID uuid.UUID,
-	reviewResult *review.ReviewResultWithSummary,
+	reviewResult *review.ReviewResult,
 ) error {
 	findings := make([]*models.PolicyFinding, 0)
 
-	for _, result := range reviewResult.Results {
-		for _, advice := range result.Violations {
-			// Map validator name to validator type
-			validatorType := mapValidatorNameToType(result.ValidatorName)
-
-			// Convert Advice.Status to severity string
-			var severity string
-			switch advice.Status {
-			case types.Advice_ERROR:
-				severity = string(models.SeverityError)
-			case types.Advice_WARNING:
-				severity = string(models.SeverityWarning)
-			case types.Advice_SUCCESS, types.Advice_STATUS_UNSPECIFIED:
-				severity = string(models.SeverityInfo)
-			default:
-				severity = string(models.SeverityWarning)
-			}
-
-			// Extract rule name from advice title or use a default
-			ruleName := "Unknown"
-			if advice.Title != "" {
-				ruleName = advice.Title
-			}
-
-			// Combine title and content for message
-			message := advice.Title
-			if advice.Content != "" {
-				if message != "" {
-					message += ": " + advice.Content
-				} else {
-					message = advice.Content
-				}
-			}
-
-			finding := &models.PolicyFinding{
-				ChangePlanID:  changePlanID,
-				ValidatorType: validatorType,
-				Severity:      models.Severity(severity),
-				RuleName:      ruleName,
-				Message:       message,
-			}
-
-			if advice.StartPosition != nil {
-				if advice.StartPosition.Line > 0 {
-					lineNum := int(advice.StartPosition.Line)
-					finding.LineNumber = &lineNum
-				}
-				if advice.StartPosition.Column > 0 {
-					colNum := int(advice.StartPosition.Column)
-					finding.ColumnNumber = &colNum
-				}
-			}
-
-			findings = append(findings, finding)
+	// Process violations (errors)
+	for _, violation := range reviewResult.Violations {
+		finding := &models.PolicyFinding{
+			ChangePlanID:  changePlanID,
+			ValidatorType: mapRuleTypeToValidatorType(violation.RuleType),
+			Severity:      models.SeverityError,
+			RuleName:      violation.Title,
+			Message:       violation.Message,
 		}
+
+		if violation.Line > 0 {
+			lineNum := int(violation.Line)
+			finding.LineNumber = &lineNum
+		}
+		if violation.Column > 0 {
+			colNum := int(violation.Column)
+			finding.ColumnNumber = &colNum
+		}
+
+		findings = append(findings, finding)
+	}
+
+	// Process warnings
+	for _, warning := range reviewResult.Warnings {
+		finding := &models.PolicyFinding{
+			ChangePlanID:  changePlanID,
+			ValidatorType: mapRuleTypeToValidatorType(warning.RuleType),
+			Severity:      models.SeverityWarning,
+			RuleName:      warning.Title,
+			Message:       warning.Message,
+		}
+
+		if warning.Line > 0 {
+			lineNum := int(warning.Line)
+			finding.LineNumber = &lineNum
+		}
+		if warning.Column > 0 {
+			colNum := int(warning.Column)
+			finding.ColumnNumber = &colNum
+		}
+
+		findings = append(findings, finding)
 	}
 
 	// Batch insert findings
@@ -1082,19 +1036,35 @@ func (h *ChangePlanHandler) storeReviewFindings(
 	return nil
 }
 
-// mapValidatorNameToType maps validator name to validator type string
-func mapValidatorNameToType(validatorName string) string {
-	switch validatorName {
-	case "postgresql-syntax", "mysql-syntax":
+// mapRuleTypeToValidatorType maps V2 rule type to validator type string
+// Rule types are in format "category.rule-name" (e.g., "column.required-column")
+func mapRuleTypeToValidatorType(ruleType string) string {
+	// Extract category from rule type (before the dot)
+	var category string
+	for i, ch := range ruleType {
+		if ch == '.' {
+			category = ruleType[:i]
+			break
+		}
+	}
+
+	// Default if no dot found
+	if category == "" {
+		category = ruleType
+	}
+
+	// Map category to validator type
+	switch category {
+	case "engine":
 		return "syntax_error"
-	case "security":
-		return "security_risk"
-	case "performance":
-		return "performance_issue"
-	case "backwards-compatibility":
-		return "backwards_incompatible"
-	case "best-practices":
+	case "naming":
 		return "best_practice_violation"
+	case "table", "column", "index":
+		return "best_practice_violation"
+	case "schema":
+		return "backwards_incompatible"
+	case "statement":
+		return "security_risk"
 	default:
 		return "best_practice_violation" // Default fallback
 	}
@@ -1181,7 +1151,7 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 	}
 
 	// Trigger SQL Review (without blocking on errors - manual review always returns results)
-	if h.reviewService == nil && h.reviewServiceV2 == nil {
+	if h.reviewService == nil {
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "SQL Review service not configured",
 		})
@@ -1204,43 +1174,20 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 		})
 	}
 
-	var reviewResult *review.ReviewResultWithSummary
+	h.logger.Info("Running manual SQL Review")
 
-	// Try ReviewServiceV2 first (preferred), fall back to V1
-	if h.reviewServiceV2 != nil {
-		h.logger.Info("Using ReviewServiceV2 for manual SQL Review")
-
-		v2Result, err := h.reviewServiceV2.Review(ctx, review.ReviewOptionsV2{
-			ChangePlanID:  changePlan.ID,
-			EnvironmentID: database.EnvironmentID,
-			DatabaseID:    &database.ID,
-			SQLContent:    changePlan.SQLContent,
-			DatabaseType:  databaseInstance.DatabaseType,
+	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
+		ChangePlanID:  changePlan.ID,
+		EnvironmentID: database.EnvironmentID,
+		DatabaseID:    &database.ID,
+		SQLContent:    changePlan.SQLContent,
+		DatabaseType:  databaseInstance.DatabaseType,
+	})
+	if err != nil {
+		h.logger.Error("Failed to run SQL Review", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to run SQL Review: " + err.Error(),
 		})
-		if err != nil {
-			h.logger.Error("Failed to run SQL Review V2", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to run SQL Review V2: " + err.Error(),
-			})
-		}
-
-		// Convert V2 result to legacy format
-		reviewResult = convertReviewResultV2ToLegacy(v2Result)
-	} else {
-		h.logger.Info("Using ReviewService (legacy) for manual SQL Review")
-
-		// Run SQL Review with V1
-		reviewResult, err = h.reviewService.Review(ctx, review.ReviewOptions{
-			ChangePlanID: changePlan.ID,
-			SQLContent:   changePlan.SQLContent,
-			DatabaseType: databaseInstance.DatabaseType,
-		})
-		if err != nil {
-			h.logger.Error("Failed to run SQL Review", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to run SQL Review: " + err.Error(),
-			})
-		}
 	}
 
 	// Delete existing findings for this change plan
@@ -1259,24 +1206,25 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 
 	h.logger.Info("SQL Review triggered manually",
 		zap.String("change_plan_id", changePlan.ID.String()),
-		zap.Int("errors", reviewResult.Errors),
-		zap.Int("warnings", reviewResult.Warnings),
-		zap.Int("infos", reviewResult.Infos),
+		zap.Int("errors", reviewResult.ErrorCount),
+		zap.Int("warnings", reviewResult.WarningCount),
 	)
 
 	// Return review results in response
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"change_plan_id": changePlan.ID,
 		"review_result": map[string]interface{}{
-			"valid":         reviewResult.Valid,
-			"errors":        reviewResult.Errors,
-			"warnings":      reviewResult.Warnings,
-			"infos":         reviewResult.Infos,
-			"results":       reviewResult.Results,
-			"policy_id":     reviewResult.PolicyID,
-			"policy_name":   reviewResult.PolicyName,
-			"enabled_rules": reviewResult.EnabledRules,
-			"skipped_rules": reviewResult.SkippedRules,
+			"valid":            reviewResult.Valid,
+			"error_count":      reviewResult.ErrorCount,
+			"warning_count":    reviewResult.WarningCount,
+			"total_violations": reviewResult.TotalViolations,
+			"violations":       reviewResult.Violations,
+			"warnings":         reviewResult.Warnings,
+			"policy_id":        reviewResult.PolicyID,
+			"policy_name":      reviewResult.PolicyName,
+			"enabled_rules":    reviewResult.EnabledRules,
+			"skipped_rules":    reviewResult.SkippedRules,
+			"executed_rules":   reviewResult.ExecutedRules,
 		},
 	})
 }
@@ -2647,74 +2595,4 @@ func convertProjectRoleToRBAC(role models.ProjectRole) rbac.ProjectRole {
 	default:
 		return rbac.ProjectViewer
 	}
-}
-
-// convertReviewResultV2ToLegacy converts ReviewResultV2 to ReviewResultWithSummary
-// for backward compatibility with existing code
-func convertReviewResultV2ToLegacy(v2 *review.ReviewResultV2) *review.ReviewResultWithSummary {
-	// Convert ViolationV2 to types.Advice for legacy format
-	allViolations := make([]*types.Advice, 0, len(v2.Violations)+len(v2.Warnings))
-
-	for _, v := range v2.Violations {
-		advice := &types.Advice{
-			Status:  types.Advice_ERROR,
-			Code:    v.Code,
-			Title:   v.Title,
-			Content: v.Message,
-		}
-		if v.Line > 0 || v.Column > 0 {
-			advice.StartPosition = &types.Position{
-				Line:   v.Line,
-				Column: v.Column,
-			}
-		}
-		allViolations = append(allViolations, advice)
-	}
-
-	for _, v := range v2.Warnings {
-		advice := &types.Advice{
-			Status:  types.Advice_WARNING,
-			Code:    v.Code,
-			Title:   v.Title,
-			Content: v.Message,
-		}
-		if v.Line > 0 || v.Column > 0 {
-			advice.StartPosition = &types.Position{
-				Line:   v.Line,
-				Column: v.Column,
-			}
-		}
-		allViolations = append(allViolations, advice)
-	}
-
-	return &review.ReviewResultWithSummary{
-		ReviewResult: review.ReviewResult{
-			Valid: v2.Valid,
-			Results: []review.Result{
-				{
-					ValidatorName: "sql-reviewer",
-					Valid:         v2.Valid,
-					Violations:    allViolations,
-					Error:         "",
-				},
-			},
-			TotalViolations: v2.TotalViolations,
-			Errors:          v2.ErrorCount,
-			Warnings:        v2.WarningCount,
-			Infos:           0, // V2 doesn't track info-level separately
-		},
-		PolicyID:     v2.PolicyID,
-		PolicyName:   v2.PolicyName,
-		EnabledRules: v2.EnabledRules,
-		SkippedRules: convertSkippedRules(v2.SkippedRules),
-	}
-}
-
-// convertSkippedRules converts []SkippedRule to []string for legacy format
-func convertSkippedRules(skipped []review.SkippedRule) []string {
-	result := make([]string, len(skipped))
-	for i, s := range skipped {
-		result[i] = s.RuleType
-	}
-	return result
 }

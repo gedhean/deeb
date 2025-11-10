@@ -159,23 +159,16 @@ func (pc *PolicyConfig) Scan(value interface{}) error {
 	return nil
 }
 
-// PolicySchemaVersion represents the version of the policy configuration schema
-const (
-	PolicySchemaV1 = "1.0" // Original 20 rules
-	PolicySchemaV2 = "2.0" // Comprehensive 101 rules with sql-reviewer integration
-)
-
 // Policy represents a policy configuration (SQL_REVIEW type and future types)
 type Policy struct {
-	ID            uuid.UUID    `json:"id"                    db:"id"`
-	Name          string       `json:"name"                  db:"name"`
-	Description   *string      `json:"description,omitempty" db:"description"`
-	Type          PolicyType   `json:"type"                  db:"type"`
-	PolicyConfig  PolicyConfig `json:"policy_config"         db:"policy_config"`
-	SchemaVersion string       `json:"schema_version"        db:"schema_version"` // Schema version for migration tracking
-	CreatedByID   uuid.UUID    `json:"created_by_id"         db:"created_by_id"`
-	CreatedAt     time.Time    `json:"created_at"            db:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"            db:"updated_at"`
+	ID           uuid.UUID    `json:"id"                    db:"id"`
+	Name         string       `json:"name"                  db:"name"`
+	Description  *string      `json:"description,omitempty" db:"description"`
+	Type         PolicyType   `json:"type"                  db:"type"`
+	PolicyConfig PolicyConfig `json:"policy_config"         db:"policy_config"`
+	CreatedByID  uuid.UUID    `json:"created_by_id"         db:"created_by_id"`
+	CreatedAt    time.Time    `json:"created_at"            db:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"            db:"updated_at"`
 }
 
 // CreatePolicyRequest represents the request to create a new policy
@@ -195,27 +188,25 @@ type UpdatePolicyRequest struct {
 
 // PolicyResponse represents a policy response
 type PolicyResponse struct {
-	ID            uuid.UUID    `json:"id"`
-	Name          string       `json:"name"`
-	Description   *string      `json:"description,omitempty"`
-	Type          PolicyType   `json:"type"`
-	PolicyConfig  PolicyConfig `json:"policy_config"`
-	SchemaVersion string       `json:"schema_version"`
-	CreatedAt     time.Time    `json:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"`
+	ID           uuid.UUID    `json:"id"`
+	Name         string       `json:"name"`
+	Description  *string      `json:"description,omitempty"`
+	Type         PolicyType   `json:"type"`
+	PolicyConfig PolicyConfig `json:"policy_config"`
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
 }
 
 // ToResponse converts a Policy to PolicyResponse
 func (p *Policy) ToResponse() *PolicyResponse {
 	return &PolicyResponse{
-		ID:            p.ID,
-		Name:          p.Name,
-		Description:   p.Description,
-		Type:          p.Type,
-		PolicyConfig:  p.PolicyConfig,
-		SchemaVersion: p.SchemaVersion,
-		CreatedAt:     p.CreatedAt,
-		UpdatedAt:     p.UpdatedAt,
+		ID:           p.ID,
+		Name:         p.Name,
+		Description:  p.Description,
+		Type:         p.Type,
+		PolicyConfig: p.PolicyConfig,
+		CreatedAt:    p.CreatedAt,
+		UpdatedAt:    p.UpdatedAt,
 	}
 }
 

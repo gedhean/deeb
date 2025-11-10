@@ -7,16 +7,16 @@ import (
 	"github.com/nsxbet/sql-reviewer/pkg/types"
 )
 
-// ReviewResultV2 represents enhanced review results with execution metadata
-type ReviewResultV2 struct {
+// ReviewResult represents enhanced review results with execution metadata
+type ReviewResult struct {
 	// Valid indicates if the SQL passed all checks
 	Valid bool `json:"valid"`
 
 	// Violations contains all findings from the review
-	Violations []ViolationV2 `json:"violations"`
+	Violations []Violation `json:"violations"`
 
 	// Warnings contains warnings (non-blocking)
-	Warnings []ViolationV2 `json:"warnings"`
+	Warnings []Violation `json:"warnings"`
 
 	// Summary statistics
 	TotalViolations int `json:"total_violations"`
@@ -37,9 +37,9 @@ type ReviewResultV2 struct {
 	ReviewedAt    time.Time     `json:"reviewed_at"`
 }
 
-// ViolationV2 represents a single SQL review violation
-// Note: Named ViolationV2 to avoid conflict with legacy Violation type alias
-type ViolationV2 struct {
+// Violation represents a single SQL review violation
+// Note: Named Violation to avoid conflict with legacy Violation type alias
+type Violation struct {
 	// RuleType is the rule that was violated
 	RuleType string `json:"rule_type"`
 
@@ -72,8 +72,8 @@ type SkippedRule struct {
 	Error string `json:"error,omitempty"`
 }
 
-// ConvertAdviceToViolation converts sql-reviewer Advice to ViolationV2
-func ConvertAdviceToViolation(advice *types.Advice) ViolationV2 {
+// ConvertAdviceToViolation converts sql-reviewer Advice to Violation
+func ConvertAdviceToViolation(advice *types.Advice) Violation {
 	severity := "info"
 	switch advice.Status {
 	case types.Advice_ERROR:
@@ -84,7 +84,7 @@ func ConvertAdviceToViolation(advice *types.Advice) ViolationV2 {
 		severity = "success"
 	}
 
-	violation := ViolationV2{
+	violation := Violation{
 		Severity: severity,
 		Title:    advice.Title,
 		Message:  advice.Content,
@@ -100,8 +100,8 @@ func ConvertAdviceToViolation(advice *types.Advice) ViolationV2 {
 }
 
 // FilterByStatus filters violations by severity
-func (r *ReviewResultV2) FilterByStatus(status string) []ViolationV2 {
-	filtered := []ViolationV2{}
+func (r *ReviewResult) FilterByStatus(status string) []Violation {
+	filtered := []Violation{}
 	for _, v := range r.Violations {
 		if v.Severity == status {
 			filtered = append(filtered, v)
@@ -116,8 +116,8 @@ func (r *ReviewResultV2) FilterByStatus(status string) []ViolationV2 {
 }
 
 // FilterByRuleType filters violations by rule type
-func (r *ReviewResultV2) FilterByRuleType(ruleType string) []ViolationV2 {
-	filtered := []ViolationV2{}
+func (r *ReviewResult) FilterByRuleType(ruleType string) []Violation {
+	filtered := []Violation{}
 	for _, v := range r.Violations {
 		if v.RuleType == ruleType {
 			filtered = append(filtered, v)
@@ -132,16 +132,16 @@ func (r *ReviewResultV2) FilterByRuleType(ruleType string) []ViolationV2 {
 }
 
 // HasErrors returns true if there are any error-level violations
-func (r *ReviewResultV2) HasErrors() bool {
+func (r *ReviewResult) HasErrors() bool {
 	return r.ErrorCount > 0
 }
 
 // HasWarnings returns true if there are any warning-level violations
-func (r *ReviewResultV2) HasWarnings() bool {
+func (r *ReviewResult) HasWarnings() bool {
 	return r.WarningCount > 0
 }
 
 // IsClean returns true if there are no violations
-func (r *ReviewResultV2) IsClean() bool {
+func (r *ReviewResult) IsClean() bool {
 	return r.TotalViolations == 0
 }
