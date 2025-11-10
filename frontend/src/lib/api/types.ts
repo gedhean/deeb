@@ -253,7 +253,6 @@ export interface Policy {
   description?: string;
   type: 'SQL_REVIEW';
   policy_config: SQLReviewPolicyConfig;
-  schema_version: string; // '1.0' = original 20 rules, '2.0' = comprehensive 101 rules
   created_at: string;
   updated_at: string;
 }
@@ -456,37 +455,6 @@ export interface AuditLogListResponse {
   limit: number;
   offset: number;
   count: number;
-}
-
-// Policy Migration Types
-export interface MigrationResult {
-  policy_id: string;
-  policy_name: string;
-  from_version: string;
-  to_version: string;
-  rules_added: number;
-  rules_updated: number;
-  rules_removed: number;
-  success: boolean;
-  error?: string;
-  migrated_at: string;
-}
-
-export interface BatchMigrationResult {
-  total_policies: number;
-  success_count: number;
-  failure_count: number;
-  results: MigrationResult[];
-  started_at: string;
-  completed_at: string;
-}
-
-export interface MigrationStatus {
-  total: number;
-  '1.0': number;
-  '2.0': number;
-  unknown: number;
-  needs_migration: number;
 }
 
 // Review Findings Filtering

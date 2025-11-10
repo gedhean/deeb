@@ -9,7 +9,6 @@ import type {
   SQLReviewPolicyConfig,
   UpdatePolicyRequest,
   Environment,
-  MigrationStatus,
 } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
@@ -24,9 +23,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Plus, Pencil, Trash2, AlertTriangle, Code2, ArrowUpCircle, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, Code2 } from 'lucide-react';
 import { SQLReviewRuleSelector } from '@/components/sql-review-rule-selector';
-import { toast } from 'sonner';
 
 export const PoliciesPage: React.FC = () => {
   const { user } = useAuth();
@@ -42,8 +40,6 @@ export const PoliciesPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [useJsonEditor, setUseJsonEditor] = useState(false);
   const [jsonEditorError, setJsonEditorError] = useState('');
-  const [migrationStatus, setMigrationStatus] = useState<MigrationStatus | null>(null);
-  const [isMigrating, setIsMigrating] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<CreatePolicyRequest>({
@@ -110,24 +106,6 @@ export const PoliciesPage: React.FC = () => {
 
     loadPolicies();
   }, [isAdmin, filterType]);
-
-  // Load migration status
-  useEffect(() => {
-    if (!isAdmin) {
-      return;
-    }
-
-    const loadMigrationStatus = async () => {
-      try {
-        const status = await policiesService.getMigrationStatus();
-        setMigrationStatus(status);
-      } catch (err) {
-        console.error('Failed to load migration status:', err);
-      }
-    };
-
-    loadMigrationStatus();
-  }, [isAdmin, policies]); // Reload when policies change
 
   // Validate form
   const validateForm = (): boolean => {
@@ -278,76 +256,6 @@ export const PoliciesPage: React.FC = () => {
     }
   };
 
-  // Handle migrate single policy
-  const handleMigratePolicy = async (policy: Policy) => {
-    try {
-      setIsMigrating(true);
-      const result = await policiesService.migratePolicy(policy.id);
-
-      if (result.success) {
-        toast.success(`Policy "${policy.name}" migrated successfully`, {
-          description: `Added ${result.rules_added} new rules`,
-        });
-
-        // Reload policies
-        const response = await policiesService.listPolicies({
-          type: filterType === 'SQL_REVIEW' ? 'SQL_REVIEW' : undefined,
-          limit: 100,
-        });
-        setPolicies(response.items);
-      } else {
-        toast.error(`Failed to migrate policy "${policy.name}"`, {
-          description: result.error || 'Unknown error',
-        });
-      }
-    } catch (err) {
-      if (err instanceof APIError) {
-        toast.error('Migration failed', {
-          description: err.message,
-        });
-      } else {
-        toast.error('Migration failed', {
-          description: 'An unexpected error occurred',
-        });
-      }
-      console.error('Failed to migrate policy:', err);
-    } finally {
-      setIsMigrating(false);
-    }
-  };
-
-  // Handle migrate all policies
-  const handleMigrateAll = async () => {
-    try {
-      setIsMigrating(true);
-      const result = await policiesService.migrateAllPolicies();
-
-      toast.success('Batch migration completed', {
-        description: `${result.success_count} succeeded, ${result.failure_count} failed`,
-      });
-
-      // Reload policies
-      const response = await policiesService.listPolicies({
-        type: filterType === 'SQL_REVIEW' ? 'SQL_REVIEW' : undefined,
-        limit: 100,
-      });
-      setPolicies(response.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        toast.error('Batch migration failed', {
-          description: err.message,
-        });
-      } else {
-        toast.error('Batch migration failed', {
-          description: 'An unexpected error occurred',
-        });
-      }
-      console.error('Failed to migrate all policies:', err);
-    } finally {
-      setIsMigrating(false);
-    }
-  };
-
   // Open create form
   const openCreateForm = () => {
     setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
@@ -438,68 +346,6 @@ export const PoliciesPage: React.FC = () => {
           </Button>
         </div>
 
-        {/* Migration Status Card */}
-        {migrationStatus && migrationStatus.needs_migration > 0 && (
-          <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <ArrowUpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    Policy Schema Migration Available
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    Upgrade your policies to V2 for access to 101 comprehensive SQL review rules
-                  </CardDescription>
-                </div>
-                <Button
-                  onClick={handleMigrateAll}
-                  disabled={isMigrating}
-                  className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-                >
-                  {isMigrating ? (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                      Migrating...
-                    </>
-                  ) : (
-                    <>
-                      <ArrowUpCircle className="mr-2 h-4 w-4" />
-                      Migrate All to V2
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-4 gap-4 text-sm">
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Total Policies</p>
-                  <p className="text-2xl font-bold">{migrationStatus.total}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">V1 (Legacy)</p>
-                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                    {migrationStatus['1.0']}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">V2 (Enhanced)</p>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                    {migrationStatus['2.0']}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Needs Migration</p>
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    {migrationStatus.needs_migration}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Filter */}
         <div className="flex items-center gap-4">
           <label htmlFor="filter-type" className="text-sm font-medium">
@@ -561,23 +407,10 @@ export const PoliciesPage: React.FC = () => {
             {policies.map((policy) => (
               <Card key={policy.id}>
                 <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg">{policy.name}</CardTitle>
-                      <CardDescription className="line-clamp-2 mt-1">
-                        {policy.description || 'No description'}
-                      </CardDescription>
-                    </div>
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full font-medium ${
-                        policy.schema_version === '2.0'
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                      }`}
-                    >
-                      V{policy.schema_version}
-                    </span>
-                  </div>
+                  <CardTitle className="text-lg">{policy.name}</CardTitle>
+                  <CardDescription className="line-clamp-2 mt-1">
+                    {policy.description || 'No description'}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
@@ -592,18 +425,6 @@ export const PoliciesPage: React.FC = () => {
                         ⚠️ Referenced by {getReferencingEnvironments(policy.id).length}{' '}
                         environment(s)
                       </div>
-                    )}
-                    {policy.schema_version === '1.0' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleMigratePolicy(policy)}
-                        disabled={isMigrating}
-                        className="w-full mt-2 border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/30"
-                      >
-                        <ArrowUpCircle className="mr-2 h-3 w-3" />
-                        Upgrade to V2
-                      </Button>
                     )}
                     <div className="flex items-center justify-end gap-2 pt-2">
                       <Button
