@@ -14,7 +14,7 @@ export interface RuleParameter {
   type: RuleParameterType;
   description: string;
   required: boolean;
-  default?: any;
+  default?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   templateList?: string[];
 }
 
@@ -26,7 +26,7 @@ export interface RuleMetadata {
   name: string;
   description: string;
   category: string;
-  engine: 'mysql' | 'postgresql' | 'both';
+  engine: 'mysql' | 'postgres' | 'both';
   parameters: RuleParameter[];
 }
 
