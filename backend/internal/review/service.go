@@ -139,7 +139,7 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 	}
 
 	// Convert result to our format
-	reviewResult := s.convertReviewerResult(result, enabledRuleTypes, policy, start)
+	reviewResult := s.convertReviewerResult(result, enabledRuleTypes, policy, opts.DatabaseType, start)
 
 	return reviewResult, nil
 }
@@ -199,6 +199,7 @@ func (s *ReviewService) convertReviewerResult(
 	result *reviewer.ReviewResult,
 	enabledRuleTypes []string,
 	policy *models.Policy,
+	dbType models.DatabaseType,
 	startTime time.Time,
 ) *ReviewResult {
 	violations := []Violation{}
@@ -225,7 +226,7 @@ func (s *ReviewService) convertReviewerResult(
 	}
 
 	// Calculate skipped rules
-	allRuleTypes := s.getAllRuleTypes(policy)
+	allRuleTypes := s.getAllRuleTypes(policy, dbType)
 	skippedRules := s.calculateSkippedRules(enabledRuleTypes, allRuleTypes)
 
 	executionTime := time.Since(startTime)
@@ -272,8 +273,8 @@ func (s *ReviewService) extractRuleTypeFromAdvice(advice *types.Advice, enabledR
 	return "unknown"
 }
 
-// getAllRuleTypes returns all available rule types
-func (s *ReviewService) getAllRuleTypes(policy *models.Policy) []string {
+// getAllRuleTypes returns all available rule types for the specified database type
+func (s *ReviewService) getAllRuleTypes(policy *models.Policy, dbType models.DatabaseType) []string {
 	// Parse config to get rule keys
 	config, err := models.ParseSQLReviewConfig(policy.PolicyConfig)
 	if err != nil {
@@ -282,6 +283,11 @@ func (s *ReviewService) getAllRuleTypes(policy *models.Policy) []string {
 
 	types := make([]string, 0, len(config.Rules))
 	for _, rule := range config.Rules {
+		// Only include rules for the current database type
+		// Rules with "both" engine or matching engine
+		if rule.Engine != dbType && rule.Engine != "both" {
+			continue
+		}
 		types = append(types, rule.Type)
 	}
 
