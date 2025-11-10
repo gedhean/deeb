@@ -986,7 +986,7 @@ func (h *ChangePlanHandler) storeReviewFindings(
 	for _, violation := range reviewResult.Violations {
 		finding := &models.PolicyFinding{
 			ChangePlanID:  changePlanID,
-			ValidatorType: mapRuleTypeToValidatorType(violation.RuleType),
+			ValidatorType: h.mapRuleTypeToValidatorType(violation.RuleType, changePlanID),
 			Severity:      models.SeverityError,
 			RuleName:      violation.Title,
 			Message:       violation.Message,
@@ -1008,7 +1008,7 @@ func (h *ChangePlanHandler) storeReviewFindings(
 	for _, warning := range reviewResult.Warnings {
 		finding := &models.PolicyFinding{
 			ChangePlanID:  changePlanID,
-			ValidatorType: mapRuleTypeToValidatorType(warning.RuleType),
+			ValidatorType: h.mapRuleTypeToValidatorType(warning.RuleType, changePlanID),
 			Severity:      models.SeverityWarning,
 			RuleName:      warning.Title,
 			Message:       warning.Message,
@@ -1038,7 +1038,7 @@ func (h *ChangePlanHandler) storeReviewFindings(
 
 // mapRuleTypeToValidatorType maps V2 rule type to validator type string
 // Rule types are in format "category.rule-name" (e.g., "column.required-column")
-func mapRuleTypeToValidatorType(ruleType string) string {
+func (h *ChangePlanHandler) mapRuleTypeToValidatorType(ruleType string, changePlanID uuid.UUID) string {
 	// Extract category from rule type (before the dot)
 	var category string
 	for i, ch := range ruleType {
@@ -1053,6 +1053,14 @@ func mapRuleTypeToValidatorType(ruleType string) string {
 		category = ruleType
 	}
 
+	// Check for unknown rule type and log it
+	if ruleType == "unknown" {
+		h.logger.Warn("Unclassified rule type detected",
+			zap.String("rule_type", ruleType),
+			zap.String("change_plan_id", changePlanID.String()))
+		return "best_practice_violation"
+	}
+
 	// Map category to validator type
 	switch category {
 	case "engine":
@@ -1065,6 +1073,13 @@ func mapRuleTypeToValidatorType(ruleType string) string {
 		return "backwards_incompatible"
 	case "statement":
 		return "security_risk"
+	case "unknown":
+		// Unclassified rule - log warning
+		h.logger.Warn("Unclassified rule category detected",
+			zap.String("rule_type", ruleType),
+			zap.String("category", category),
+			zap.String("change_plan_id", changePlanID.String()))
+		return "best_practice_violation"
 	default:
 		return "best_practice_violation" // Default fallback
 	}

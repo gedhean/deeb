@@ -270,6 +270,17 @@ func (s *ReviewService) extractRuleTypeFromAdvice(advice *types.Advice, enabledR
 		}
 	}
 
+	// Log when we can't classify the rule type
+	contentSnippet := content
+	if len(contentSnippet) > 100 {
+		contentSnippet = contentSnippet[:100] + "..."
+	}
+	s.logger.Warn("Failed to classify rule type from advice",
+		zap.String("advice_title", advice.Title),
+		zap.String("content_snippet", contentSnippet),
+		zap.Int("enabled_rules_count", len(enabledRuleTypes)),
+		zap.Strings("enabled_rule_types", enabledRuleTypes))
+
 	return "unknown"
 }
 
