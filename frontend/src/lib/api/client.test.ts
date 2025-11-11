@@ -5,7 +5,7 @@ import { checkAuthStatus } from './auth';
 
 // Mock axios.create to return a mock instance
 vi.mock('axios', async () => {
-  const actual = await vi.importActual('axios');
+  const actual = await vi.importActual<typeof import('axios')>('axios');
   const mockAxiosInstance = {
     interceptors: {
       request: {
@@ -26,7 +26,7 @@ vi.mock('axios', async () => {
   return {
     ...actual,
     default: {
-      ...actual.default,
+      ...(actual.default as object),
       create: vi.fn(() => mockAxiosInstance),
     },
   };

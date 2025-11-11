@@ -10,62 +10,72 @@ export type OrganizationRole = 'OrganizationAdmin' | 'OrganizationDBA' | 'Organi
 export type ProjectRole = 'ProjectOwner' | 'ProjectDeveloper' | 'ProjectApprover' | 'ProjectViewer';
 
 // Organization-level permissions
-export enum OrganizationPermission {
+const OrganizationPermissionValues = {
   // User management
-  UsersCreate = 'users.create',
-  UsersRead = 'users.read',
-  UsersUpdate = 'users.update',
-  UsersDelete = 'users.delete',
+  UsersCreate: 'users.create',
+  UsersRead: 'users.read',
+  UsersUpdate: 'users.update',
+  UsersDelete: 'users.delete',
 
   // Organization management
-  OrganizationUpdate = 'organization.update',
-  OrganizationDelete = 'organization.delete',
+  OrganizationUpdate: 'organization.update',
+  OrganizationDelete: 'organization.delete',
 
   // Database management
-  DatabasesCreate = 'databases.create',
-  DatabasesRead = 'databases.read',
-  DatabasesUpdate = 'databases.update',
-  DatabasesDelete = 'databases.delete',
+  DatabasesCreate: 'databases.create',
+  DatabasesRead: 'databases.read',
+  DatabasesUpdate: 'databases.update',
+  DatabasesDelete: 'databases.delete',
 
   // Project management
-  ProjectsCreate = 'projects.create',
-  ProjectsRead = 'projects.read',
-  ProjectsUpdate = 'projects.update',
-  ProjectsDelete = 'projects.delete',
+  ProjectsCreate: 'projects.create',
+  ProjectsRead: 'projects.read',
+  ProjectsUpdate: 'projects.update',
+  ProjectsDelete: 'projects.delete',
 
   // Audit logs
-  AuditLogsRead = 'audit_logs.read',
+  AuditLogsRead: 'audit_logs.read',
 
   // Wildcard permission (admin only)
-  All = '*',
-}
+  All: '*',
+} as const;
+
+export const OrganizationPermission = OrganizationPermissionValues;
+// eslint-disable-next-line no-redeclare
+export type OrganizationPermission =
+  (typeof OrganizationPermissionValues)[keyof typeof OrganizationPermissionValues];
 
 // Project-level permissions
-export enum ProjectPermission {
+const ProjectPermissionValues = {
   // Project settings
-  ProjectSettingsUpdate = 'project.settings.update',
+  ProjectSettingsUpdate: 'project.settings.update',
 
   // Project members
-  ProjectMembersCreate = 'project.members.create',
-  ProjectMembersRead = 'project.members.read',
-  ProjectMembersUpdate = 'project.members.update',
-  ProjectMembersDelete = 'project.members.delete',
+  ProjectMembersCreate: 'project.members.create',
+  ProjectMembersRead: 'project.members.read',
+  ProjectMembersUpdate: 'project.members.update',
+  ProjectMembersDelete: 'project.members.delete',
 
   // Change requests
-  ChangesCreate = 'changes.create',
-  ChangesRead = 'changes.read',
-  ChangesUpdate = 'changes.update',
-  ChangesDelete = 'changes.delete',
-  ChangesApprove = 'changes.approve',
-  ChangesReject = 'changes.reject',
-  ChangesExecute = 'changes.execute',
+  ChangesCreate: 'changes.create',
+  ChangesRead: 'changes.read',
+  ChangesUpdate: 'changes.update',
+  ChangesDelete: 'changes.delete',
+  ChangesApprove: 'changes.approve',
+  ChangesReject: 'changes.reject',
+  ChangesExecute: 'changes.execute',
 
   // Policy rules
-  PolicyRulesCreate = 'policy_rules.create',
-  PolicyRulesRead = 'policy_rules.read',
-  PolicyRulesUpdate = 'policy_rules.update',
-  PolicyRulesDelete = 'policy_rules.delete',
-}
+  PolicyRulesCreate: 'policy_rules.create',
+  PolicyRulesRead: 'policy_rules.read',
+  PolicyRulesUpdate: 'policy_rules.update',
+  PolicyRulesDelete: 'policy_rules.delete',
+} as const;
+
+export const ProjectPermission = ProjectPermissionValues;
+// eslint-disable-next-line no-redeclare
+export type ProjectPermission =
+  (typeof ProjectPermissionValues)[keyof typeof ProjectPermissionValues];
 
 // Organization role permissions mapping (matching backend)
 const organizationRolePermissions: Record<OrganizationRole, OrganizationPermission[]> = {

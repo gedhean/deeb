@@ -15,11 +15,14 @@ const mockChangePlans: ChangePlan[] = [
   {
     id: '1',
     title: 'Test Change Plan',
-    status: 'draft',
+    description: 'Test description',
+    status: 'Draft',
     project_id: '1',
-    database_id: '1',
+    target_database_id: '1',
     author_id: '1',
-    sql_statements: [],
+    change_type: 'DDL',
+    sql_content: 'ALTER TABLE test ADD COLUMN new_column VARCHAR(255);',
+    risk_level: 'Low',
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   },
@@ -34,8 +37,6 @@ describe('useChangePlans', () => {
     vi.mocked(changePlanService.listChangePlans).mockResolvedValue({
       change_plans: mockChangePlans,
       total: 1,
-      limit: 100,
-      offset: 0,
     });
 
     const { result } = renderHook(() => useChangePlans());
@@ -70,8 +71,6 @@ describe('useChangePlans', () => {
     vi.mocked(changePlanService.listChangePlans).mockResolvedValue({
       change_plans: mockChangePlans,
       total: 1,
-      limit: 100,
-      offset: 0,
     });
 
     const { result } = renderHook(() => useChangePlans());
@@ -83,8 +82,6 @@ describe('useChangePlans', () => {
     vi.mocked(changePlanService.listChangePlans).mockResolvedValue({
       change_plans: [...mockChangePlans, { ...mockChangePlans[0], id: '2' }],
       total: 2,
-      limit: 100,
-      offset: 0,
     });
 
     await waitFor(async () => {

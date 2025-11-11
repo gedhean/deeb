@@ -281,7 +281,7 @@ export interface UpdatePolicyRequest {
 
 export interface SQLReviewRulesResponse {
   mysql?: Record<RuleCategory, RuleMetadata[]>;
-  postgresql?: Record<RuleCategory, RuleMetadata[]>;
+  postgres?: Record<RuleCategory, RuleMetadata[]>;
 }
 
 // List Response with Pagination
@@ -486,12 +486,13 @@ export interface ReviewFindingsResponse {
 
 // API Error
 export class APIError extends Error {
-  constructor(
-    message: string,
-    public statusCode: number,
-    public response?: ErrorResponse,
-  ) {
+  statusCode: number;
+  response?: ErrorResponse;
+
+  constructor(message: string, statusCode: number, response?: ErrorResponse) {
     super(message);
     this.name = 'APIError';
+    this.statusCode = statusCode;
+    this.response = response;
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { create } from 'zustand';
+import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { createProjectSlice, type ProjectSlice } from '@/store/slices/projectSlice';
 
 const mockProject = {
@@ -11,10 +11,10 @@ const mockProject = {
 };
 
 describe('projectSlice', () => {
-  let useStore: ReturnType<typeof create<ProjectSlice>>;
+  let useStore: UseBoundStore<StoreApi<ProjectSlice>>;
 
   beforeEach(() => {
-    useStore = create<ProjectSlice>()(createProjectSlice);
+    useStore = create(createProjectSlice);
   });
 
   it('should initialize with null current project', () => {

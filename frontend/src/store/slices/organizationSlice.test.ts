@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { create } from 'zustand';
+import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { createOrganizationSlice, type OrganizationSlice } from '@/store/slices/organizationSlice';
 
 const mockOrganization = {
@@ -10,10 +10,10 @@ const mockOrganization = {
 };
 
 describe('organizationSlice', () => {
-  let useStore: ReturnType<typeof create<OrganizationSlice>>;
+  let useStore: UseBoundStore<StoreApi<OrganizationSlice>>;
 
   beforeEach(() => {
-    useStore = create<OrganizationSlice>()(createOrganizationSlice);
+    useStore = create(createOrganizationSlice);
   });
 
   it('should initialize with null organization', () => {

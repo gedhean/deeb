@@ -120,7 +120,7 @@ export const ProfilePage: React.FC = () => {
       // The AuthContext will pick up the changes on next getCurrentUser call
       window.location.reload();
     } catch (err) {
-      handleApiError(err, 'Failed to update profile');
+      handleApiError(err, { fallbackMessage: 'Failed to update profile' });
       console.error('Failed to update profile:', err);
     } finally {
       setIsSubmitting(false);

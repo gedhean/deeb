@@ -1,20 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { create } from 'zustand';
+import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { createAuthSlice, type AuthSlice } from '@/store/slices/authSlice';
 
 const mockUser = {
   id: '1',
   email: 'test@example.com',
   organization_role: 'OrganizationAdmin' as const,
+  is_active: true,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };
 
 describe('authSlice', () => {
-  let useStore: ReturnType<typeof create<AuthSlice>>;
+  let useStore: UseBoundStore<StoreApi<AuthSlice>>;
 
   beforeEach(() => {
-    useStore = create<AuthSlice>()(createAuthSlice);
+    useStore = create(createAuthSlice);
   });
 
   it('should initialize with null user and false isAuthenticated', () => {

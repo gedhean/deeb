@@ -554,7 +554,7 @@ export const PoliciesPage: React.FC = () => {
                       onChange={(e) => {
                         setFormData({
                           ...formData,
-                          policy_config: e.target.value as unknown as Record<string, unknown>,
+                          policy_config: e.target.value as unknown as SQLReviewPolicyConfig,
                         });
                         // Validate JSON on change
                         try {
@@ -694,7 +694,7 @@ export const PoliciesPage: React.FC = () => {
                       onChange={(e) => {
                         setFormData({
                           ...formData,
-                          policy_config: e.target.value as unknown as Record<string, unknown>,
+                          policy_config: e.target.value as unknown as SQLReviewPolicyConfig,
                         });
                         // Validate JSON on change
                         try {

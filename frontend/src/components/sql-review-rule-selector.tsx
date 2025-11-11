@@ -189,7 +189,7 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
                       <Select
                         value={String(currentValue)}
                         onValueChange={(value) =>
-                          handleParameterChange(ruleKey, param.name, value === 'true')
+                          handleParameterChange(ruleKey, param.name, String(value === 'true'))
                         }
                       >
                         <SelectTrigger

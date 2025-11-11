@@ -2,8 +2,8 @@
 
 ### P0 (High Priority)
 
-- [ ] Change SQL Review engine to use https://github.com/nsxbet/sql-reviewer pkg
-- [ ] Update the create policy UI to use https://github.com/nsxbet/sql-reviewer rules
+- [x] Change SQL Review engine to use https://github.com/nsxbet/sql-reviewer pkg
+- [x] Update the create policy UI to use https://github.com/nsxbet/sql-reviewer rules
 
 ### P1 (Medium Priority)
 
