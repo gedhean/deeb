@@ -22,6 +22,7 @@ import type {
   DatabaseType,
   RuleCategory,
   RuleMetadata,
+  RuleParameter,
   SQLReviewPolicyConfig,
   SQLReviewRule,
   SQLReviewRuleLevel,
@@ -60,6 +61,21 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
     loadRules();
   }, []);
 
+  const convertParametersToPayload = (parameters?: RuleParameter[]): Record<string, unknown> => {
+    if (!parameters || !Array.isArray(parameters)) {
+      return {};
+    }
+
+    // Convert array of parameter objects to a map of name -> default value
+    const payload: Record<string, unknown> = {};
+    for (const param of parameters) {
+      if (param.name && param.default !== undefined) {
+        payload[param.name] = param.default;
+      }
+    }
+    return payload;
+  };
+
   const handleRuleToggle = (ruleKey: string, ruleMetadata: RuleMetadata, enabled: boolean) => {
     const newConfig = { ...config };
     if (!newConfig.rules) {
@@ -71,7 +87,7 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
         type: ruleMetadata.type,
         level: 'warning',
         engine: ruleMetadata.engine,
-        payload: ruleMetadata.parameters ? { ...ruleMetadata.parameters } : {},
+        payload: convertParametersToPayload(ruleMetadata.parameters),
       };
     } else {
       delete newConfig.rules[ruleKey];
@@ -147,31 +163,52 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
             </div>
 
             {ruleMetadata.parameters &&
-              Object.entries(ruleMetadata.parameters).map(([paramName, paramValue]) => {
-                const paramType = typeof paramValue;
-                const currentValue = ruleConfig?.payload?.[paramName] ?? paramValue;
+              ruleMetadata.parameters.map((param) => {
+                const currentValue = ruleConfig?.payload?.[param.name] ?? param.default;
+                const paramType = param.type; // Use the type from parameter definition
 
                 return (
-                  <div key={paramName} className="space-y-2">
-                    <Label htmlFor={`param-${ruleKey}-${paramName}`} className="text-xs capitalize">
-                      {paramName.replace(/_/g, ' ')}
+                  <div key={param.name} className="space-y-2">
+                    <Label
+                      htmlFor={`param-${ruleKey}-${param.name}`}
+                      className="text-xs capitalize"
+                    >
+                      {param.name.replace(/_/g, ' ')}
                     </Label>
-                    {paramType === 'number' ? (
+                    {paramType === 'NUMBER' ? (
                       <Input
-                        id={`param-${ruleKey}-${paramName}`}
+                        id={`param-${ruleKey}-${param.name}`}
                         type="number"
                         value={currentValue as number}
                         onChange={(e) =>
-                          handleParameterChange(ruleKey, paramName, Number(e.target.value))
+                          handleParameterChange(ruleKey, param.name, Number(e.target.value))
                         }
                         className="h-8 text-xs"
                       />
+                    ) : paramType === 'BOOLEAN' ? (
+                      <Select
+                        value={String(currentValue)}
+                        onValueChange={(value) =>
+                          handleParameterChange(ruleKey, param.name, value === 'true')
+                        }
+                      >
+                        <SelectTrigger
+                          id={`param-${ruleKey}-${param.name}`}
+                          className="h-8 text-xs"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="true">True</SelectItem>
+                          <SelectItem value="false">False</SelectItem>
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <Input
-                        id={`param-${ruleKey}-${paramName}`}
+                        id={`param-${ruleKey}-${param.name}`}
                         type="text"
                         value={String(currentValue)}
-                        onChange={(e) => handleParameterChange(ruleKey, paramName, e.target.value)}
+                        onChange={(e) => handleParameterChange(ruleKey, param.name, e.target.value)}
                         className="h-8 text-xs"
                       />
                     )}

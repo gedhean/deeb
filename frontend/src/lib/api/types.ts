@@ -238,13 +238,22 @@ export interface SQLReviewPolicyConfig {
   rules: Record<string, SQLReviewRule>;
 }
 
+export interface RuleParameter {
+  name: string;
+  type: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'STRING_ARRAY' | 'TEMPLATE';
+  description: string;
+  required: boolean;
+  default?: unknown;
+  templateList?: string[];
+}
+
 export interface RuleMetadata {
   type: string;
   name: string;
   description: string;
   category: RuleCategory;
   engine: DatabaseType;
-  parameters?: Record<string, unknown>;
+  parameters?: RuleParameter[];
 }
 
 export interface Policy {
