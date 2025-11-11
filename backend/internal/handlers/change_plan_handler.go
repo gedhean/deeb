@@ -31,6 +31,7 @@ type ChangePlanHandler struct {
 	projectMemberRepo    repository.ProjectMemberRepository
 	policyFindingRepo    repository.PolicyFindingRepository
 	approvalRepo         repository.ApprovalRepository
+	environmentRepo      repository.EnvironmentRepository
 	riskAssessmentSvc    *services.RiskAssessmentService
 	reviewService        *review.ReviewService
 	approvalService      *services.ApprovalService
@@ -49,6 +50,7 @@ func NewChangePlanHandler(
 	projectMemberRepo repository.ProjectMemberRepository,
 	policyFindingRepo repository.PolicyFindingRepository,
 	approvalRepo repository.ApprovalRepository,
+	environmentRepo repository.EnvironmentRepository,
 	riskAssessmentSvc *services.RiskAssessmentService,
 	reviewService *review.ReviewService,
 	approvalService *services.ApprovalService,
@@ -65,6 +67,7 @@ func NewChangePlanHandler(
 		projectMemberRepo:    projectMemberRepo,
 		policyFindingRepo:    policyFindingRepo,
 		approvalRepo:         approvalRepo,
+		environmentRepo:      environmentRepo,
 		riskAssessmentSvc:    riskAssessmentSvc,
 		reviewService:        reviewService,
 		approvalService:      approvalService,
@@ -788,9 +791,7 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 					return c.JSON(http.StatusBadRequest, map[string]interface{}{
 						"error": "SQL Review failed - cannot transition to Open status",
 						"details": map[string]interface{}{
-							"review_result":  reviewErr.ReviewResult,
-							"errors_count":   reviewErr.ReviewResult.Errors,
-							"warnings_count": reviewErr.ReviewResult.Warnings,
+							"message": reviewErr.Message,
 						},
 					})
 				}
@@ -890,9 +891,8 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 
 // SQLReviewError represents an error during SQL Review
 type SQLReviewError struct {
-	HasErrors    bool
-	ReviewResult *review.ReviewResultWithSummary
-	Message      string
+	HasErrors bool
+	Message   string
 }
 
 func (e *SQLReviewError) Error() string {
@@ -901,6 +901,7 @@ func (e *SQLReviewError) Error() string {
 
 // triggerSQLReview triggers SQL Review for a change plan and stores findings
 func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.ChangePlan) error {
+	// Check if review service is configured
 	if h.reviewService == nil {
 		h.logger.Warn("ReviewService not configured, skipping SQL Review")
 		return nil
@@ -925,11 +926,14 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 		}
 	}
 
-	// Run SQL Review
+	h.logger.Info("Running SQL Review")
+
 	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
-		ChangePlanID: changePlan.ID,
-		SQLContent:   changePlan.SQLContent,
-		DatabaseType: databaseInstance.DatabaseType,
+		ChangePlanID:   changePlan.ID,
+		EnvironmentID:  database.EnvironmentID,
+		DatabaseID:     &database.ID,
+		SQLContent:     changePlan.SQLContent,
+		DatabaseEngine: databaseInstance.DatabaseEngine,
 	})
 	if err != nil {
 		return &SQLReviewError{
@@ -948,64 +952,78 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 	if err := h.storeReviewFindings(ctx, changePlan.ID, reviewResult); err != nil {
 		h.logger.Error("Failed to store review findings", zap.Error(err))
 		return &SQLReviewError{
-			HasErrors:    reviewResult.Errors > 0,
-			ReviewResult: reviewResult,
-			Message:      "Failed to store review findings: " + err.Error(),
+			HasErrors: reviewResult.ErrorCount > 0,
+			Message:   "Failed to store review findings: " + err.Error(),
 		}
 	}
 
 	// Check if there are errors that should prevent status transition
-	if reviewResult.Errors > 0 {
+	if reviewResult.ErrorCount > 0 {
 		return &SQLReviewError{
-			HasErrors:    true,
-			ReviewResult: reviewResult,
-			Message:      "SQL Review found errors that prevent status transition",
+			HasErrors: true,
+			Message:   "SQL Review found errors that prevent status transition",
 		}
 	}
 
 	h.logger.Info("SQL Review completed successfully",
 		zap.String("change_plan_id", changePlan.ID.String()),
-		zap.Int("errors", reviewResult.Errors),
-		zap.Int("warnings", reviewResult.Warnings),
-		zap.Int("infos", reviewResult.Infos),
+		zap.Int("errors", reviewResult.ErrorCount),
+		zap.Int("warnings", reviewResult.WarningCount),
 	)
 
 	return nil
 }
 
-// storeReviewFindings converts review results to policy findings and stores them
+// storeReviewFindings converts V2 review results to policy findings and stores them
 func (h *ChangePlanHandler) storeReviewFindings(
 	ctx context.Context,
 	changePlanID uuid.UUID,
-	reviewResult *review.ReviewResultWithSummary,
+	reviewResult *review.ReviewResult,
 ) error {
 	findings := make([]*models.PolicyFinding, 0)
 
-	for _, result := range reviewResult.Results {
-		for _, violation := range result.Violations {
-			// Map validator name to validator type
-			validatorType := mapValidatorNameToType(result.ValidatorName)
-
-			finding := &models.PolicyFinding{
-				ChangePlanID:  changePlanID,
-				ValidatorType: validatorType,
-				Severity:      string(violation.Severity),
-				RuleName:      violation.Rule,
-				Message:       violation.Message,
-			}
-
-			if violation.Line > 0 {
-				lineNum := violation.Line
-				finding.LineNumber = &lineNum
-			}
-
-			if violation.Column > 0 {
-				colNum := violation.Column
-				finding.ColumnNumber = &colNum
-			}
-
-			findings = append(findings, finding)
+	// Process violations (errors)
+	for _, violation := range reviewResult.Violations {
+		finding := &models.PolicyFinding{
+			ChangePlanID:  changePlanID,
+			ValidatorType: h.mapRuleTypeToValidatorType(violation.RuleType, changePlanID),
+			Severity:      models.SeverityError,
+			RuleName:      violation.Title,
+			Message:       violation.Message,
 		}
+
+		if violation.Line > 0 {
+			lineNum := int(violation.Line)
+			finding.LineNumber = &lineNum
+		}
+		if violation.Column > 0 {
+			colNum := int(violation.Column)
+			finding.ColumnNumber = &colNum
+		}
+
+		findings = append(findings, finding)
+	}
+
+	// Process warnings
+	for _, warning := range reviewResult.Warnings {
+		finding := &models.PolicyFinding{
+			ChangePlanID:  changePlanID,
+			ValidatorType: h.mapRuleTypeToValidatorType(warning.RuleType, changePlanID),
+			Severity:      models.SeverityWarning,
+			RuleName:      warning.Title,
+			Message:       warning.Message,
+		}
+
+		if warning.Line > 0 {
+			lineNum := int(warning.Line)
+			finding.LineNumber = &lineNum
+		}
+		if warning.Column > 0 {
+			colNum := int(warning.Column)
+			finding.ColumnNumber = &colNum
+		}
+
+		findings = append(findings, finding)
 	}
 
 	// Batch insert findings
@@ -1018,18 +1036,49 @@ func (h *ChangePlanHandler) storeReviewFindings(
 	return nil
 }
 
-// mapValidatorNameToType maps validator name to validator type string
-func mapValidatorNameToType(validatorName string) string {
-	switch validatorName {
-	case "postgresql-syntax", "mysql-syntax":
+// mapRuleTypeToValidatorType maps V2 rule type to validator type string
+// Rule types are in format "category.rule-name" (e.g., "column.required-column")
+func (h *ChangePlanHandler) mapRuleTypeToValidatorType(ruleType string, changePlanID uuid.UUID) string {
+	// Extract category from rule type (before the dot)
+	var category string
+	for i, ch := range ruleType {
+		if ch == '.' {
+			category = ruleType[:i]
+			break
+		}
+	}
+
+	// Default if no dot found
+	if category == "" {
+		category = ruleType
+	}
+
+	// Check for unknown rule type and log it
+	if ruleType == "unknown" {
+		h.logger.Warn("Unclassified rule type detected",
+			zap.String("rule_type", ruleType),
+			zap.String("change_plan_id", changePlanID.String()))
+		return "best_practice_violation"
+	}
+
+	// Map category to validator type
+	switch category {
+	case "engine":
 		return "syntax_error"
-	case "security":
-		return "security_risk"
-	case "performance":
-		return "performance_issue"
-	case "backwards-compatibility":
+	case "naming":
+		return "best_practice_violation"
+	case "table", "column", "index":
+		return "best_practice_violation"
+	case "schema":
 		return "backwards_incompatible"
-	case "best-practices":
+	case "statement":
+		return "security_risk"
+	case "unknown":
+		// Unclassified rule - log warning
+		h.logger.Warn("Unclassified rule category detected",
+			zap.String("rule_type", ruleType),
+			zap.String("category", category),
+			zap.String("change_plan_id", changePlanID.String()))
 		return "best_practice_violation"
 	default:
 		return "best_practice_violation" // Default fallback
@@ -1140,11 +1189,14 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 		})
 	}
 
-	// Run SQL Review
+	h.logger.Info("Running manual SQL Review")
+
 	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
-		ChangePlanID: changePlan.ID,
-		SQLContent:   changePlan.SQLContent,
-		DatabaseType: databaseInstance.DatabaseType,
+		ChangePlanID:   changePlan.ID,
+		EnvironmentID:  database.EnvironmentID,
+		DatabaseID:     &database.ID,
+		SQLContent:     changePlan.SQLContent,
+		DatabaseEngine: databaseInstance.DatabaseEngine,
 	})
 	if err != nil {
 		h.logger.Error("Failed to run SQL Review", zap.Error(err))
@@ -1169,25 +1221,155 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 
 	h.logger.Info("SQL Review triggered manually",
 		zap.String("change_plan_id", changePlan.ID.String()),
-		zap.Int("errors", reviewResult.Errors),
-		zap.Int("warnings", reviewResult.Warnings),
-		zap.Int("infos", reviewResult.Infos),
+		zap.Int("errors", reviewResult.ErrorCount),
+		zap.Int("warnings", reviewResult.WarningCount),
 	)
 
 	// Return review results in response
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"change_plan_id": changePlan.ID,
 		"review_result": map[string]interface{}{
-			"valid":              reviewResult.Valid,
-			"errors":             reviewResult.Errors,
-			"warnings":           reviewResult.Warnings,
-			"infos":              reviewResult.Infos,
-			"results":            reviewResult.Results,
-			"policy_id":          reviewResult.PolicyID,
-			"policy_name":        reviewResult.PolicyName,
-			"enabled_validators": reviewResult.EnabledValidators,
-			"skipped_validators": reviewResult.SkippedValidators,
+			"valid":            reviewResult.Valid,
+			"error_count":      reviewResult.ErrorCount,
+			"warning_count":    reviewResult.WarningCount,
+			"total_violations": reviewResult.TotalViolations,
+			"violations":       reviewResult.Violations,
+			"warnings":         reviewResult.Warnings,
+			"policy_id":        reviewResult.PolicyID,
+			"policy_name":      reviewResult.PolicyName,
+			"enabled_rules":    reviewResult.EnabledRules,
+			"skipped_rules":    reviewResult.SkippedRules,
+			"executed_rules":   reviewResult.ExecutedRules,
 		},
+	})
+}
+
+// GetReviewFindings handles GET /api/v1/change-plans/:id/review/findings
+// Retrieves stored policy findings for a change plan with optional filtering
+func (h *ChangePlanHandler) GetReviewFindings(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Get change plan
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// Check authorization: User must be able to view change plans in the project
+	userIDStr, _, organizationRole, ok := rbac.GetUserFromContext(ctx)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Organization admins can view any change plan
+	if organizationRole != rbac.OrganizationAdmin {
+		// Check if user is a member of the project
+		member, err := h.projectMemberRepo.GetMemberRole(ctx, changePlan.ProjectID, userID)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				return c.JSON(http.StatusForbidden, map[string]interface{}{
+					"error": "Not a member of this project",
+				})
+			}
+			h.logger.Error("Failed to check project membership", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to check project membership",
+			})
+		}
+
+		// Check if user has PermissionChangesRead
+		projectRole := convertProjectRoleToRBAC(member.Role)
+		checker := rbac.NewCheckerService()
+		if !checker.HasProjectPermission(projectRole, rbac.PermissionChangesRead) {
+			return c.JSON(http.StatusForbidden, map[string]interface{}{
+				"error": "Insufficient permissions to view change plans",
+			})
+		}
+	}
+
+	// Get findings from repository
+	findings, err := h.policyFindingRepo.GetByChangePlanID(ctx, changePlanID)
+	if err != nil {
+		h.logger.Error("Failed to get findings", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve findings",
+		})
+	}
+
+	// Apply filters from query parameters
+	severity := c.QueryParam("severity")            // "error", "warning", "info"
+	ruleName := c.QueryParam("rule_name")           // specific rule name
+	validatorType := c.QueryParam("validator_type") // "syntax", "security", etc.
+
+	var filteredFindings []*models.PolicyFinding
+	for _, finding := range findings {
+		// Apply severity filter
+		if severity != "" && string(finding.Severity) != severity {
+			continue
+		}
+
+		// Apply rule name filter
+		if ruleName != "" && finding.RuleName != ruleName {
+			continue
+		}
+
+		// Apply validator type filter
+		if validatorType != "" && finding.ValidatorType != validatorType {
+			continue
+		}
+
+		filteredFindings = append(filteredFindings, finding)
+	}
+
+	// Group findings by severity for summary
+	summary := map[string]int{
+		"total":   len(filteredFindings),
+		"error":   0,
+		"warning": 0,
+		"info":    0,
+	}
+	for _, finding := range filteredFindings {
+		summary[string(finding.Severity)]++
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"change_plan_id": changePlan.ID,
+		"findings":       filteredFindings,
+		"summary":        summary,
 	})
 }
 
@@ -1343,11 +1525,11 @@ func (h *ChangePlanHandler) enrichWithPolicyFindings(
 		}
 
 		switch finding.Severity {
-		case "Error":
+		case models.SeverityError:
 			errors = append(errors, item)
-		case "Warning":
+		case models.SeverityWarning:
 			warnings = append(warnings, item)
-		case "Info":
+		case models.SeverityInfo:
 			infos = append(infos, item)
 		}
 	}

@@ -21,6 +21,91 @@ const (
 // PolicyConfig represents the JSONB configuration for a policy
 type PolicyConfig map[string]interface{}
 
+// SQLReviewRuleLevel represents the severity level of a SQL review rule
+type SQLReviewRuleLevel string
+
+const (
+	SQLReviewRuleLevelError   SQLReviewRuleLevel = "error"
+	SQLReviewRuleLevelWarning SQLReviewRuleLevel = "warning"
+)
+
+// SQLReviewRule represents a SQL review rule configuration
+// See: github.com/nsxbet/sql-reviewer/pkg/types
+type SQLReviewRule struct {
+	Type    string                 `json:"type"              yaml:"type"`
+	Level   SQLReviewRuleLevel     `json:"level"             yaml:"level"` // error, warning
+	Payload map[string]interface{} `json:"payload,omitempty" yaml:"payload,omitempty"`
+	Engine  DatabaseEngine         `json:"engine"            yaml:"engine"`
+	Comment string                 `json:"comment,omitempty" yaml:"comment,omitempty"`
+}
+
+// SQLReviewPolicyConfig represents the policy configuration for SQL_REVIEW type
+type SQLReviewPolicyConfig struct {
+	Rules map[string]SQLReviewRule `json:"rules"`
+}
+
+// ParseSQLReviewConfig parses PolicyConfig into SQLReviewPolicyConfig
+func ParseSQLReviewConfig(config PolicyConfig) (*SQLReviewPolicyConfig, error) {
+	rulesRaw, ok := config["rules"]
+	if !ok {
+		return &SQLReviewPolicyConfig{Rules: make(map[string]SQLReviewRule)}, nil
+	}
+
+	rulesMap, ok := rulesRaw.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("invalid rules format: expected map")
+	}
+
+	rules := make(map[string]SQLReviewRule)
+	for key, value := range rulesMap {
+		ruleMap, ok := value.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		rule := SQLReviewRule{}
+		if typeVal, ok := ruleMap["type"].(string); ok {
+			rule.Type = typeVal
+		}
+		if levelVal, ok := ruleMap["level"].(string); ok {
+			rule.Level = SQLReviewRuleLevel(levelVal)
+		}
+		if payloadVal, ok := ruleMap["payload"].(map[string]interface{}); ok {
+			rule.Payload = payloadVal
+		}
+		if engineVal, ok := ruleMap["engine"].(string); ok {
+			rule.Engine = DatabaseEngine(engineVal)
+		}
+		if commentVal, ok := ruleMap["comment"].(string); ok {
+			rule.Comment = commentVal
+		}
+
+		rules[key] = rule
+	}
+
+	return &SQLReviewPolicyConfig{Rules: rules}, nil
+}
+
+// ToPolicyConfig converts SQLReviewPolicyConfig to PolicyConfig
+func (c *SQLReviewPolicyConfig) ToPolicyConfig() PolicyConfig {
+	rulesMap := make(map[string]interface{})
+	for key, rule := range c.Rules {
+		ruleMap := map[string]interface{}{
+			"type":   rule.Type,
+			"level":  string(rule.Level),
+			"engine": string(rule.Engine),
+		}
+		if len(rule.Payload) > 0 {
+			ruleMap["payload"] = rule.Payload
+		}
+		if rule.Comment != "" {
+			ruleMap["comment"] = rule.Comment
+		}
+		rulesMap[key] = ruleMap
+	}
+	return PolicyConfig{"rules": rulesMap}
+}
+
 // MarshalJSON implements json.Marshaler for PolicyConfig
 func (pc PolicyConfig) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}(pc))

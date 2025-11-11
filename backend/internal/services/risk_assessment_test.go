@@ -186,7 +186,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 		sqlContent   string
 		changeType   models.ChangeType
 		envName      string
-		dbType       models.DatabaseType
+		dbType       models.DatabaseEngine
 		expectedRisk models.RiskLevel
 		setupMocks   func(*MockDatabaseRepository, *MockEnvironmentRepository, *MockDatabaseInstanceRepository)
 	}{
@@ -195,7 +195,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 			sqlContent:   "SELECT * FROM users",
 			changeType:   models.ChangeTypeDML,
 			envName:      "Development",
-			dbType:       models.DatabaseTypePostgreSQL,
+			dbType:       models.DatabaseEnginePostgreSQL,
 			expectedRisk: models.RiskLevelLow,
 			setupMocks: func(dbRepo *MockDatabaseRepository, envRepo *MockEnvironmentRepository, instanceRepo *MockDatabaseInstanceRepository) {
 				dbID := uuid.New()
@@ -214,8 +214,8 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 				}, nil)
 
 				instanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-					ID:           instanceID,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				}, nil)
 			},
 		},
@@ -224,7 +224,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 			sqlContent:   "ALTER TABLE users ADD COLUMN email VARCHAR(255)",
 			changeType:   models.ChangeTypeDDL,
 			envName:      "Staging",
-			dbType:       models.DatabaseTypeMySQL,
+			dbType:       models.DatabaseEngineMySQL,
 			expectedRisk: models.RiskLevelMedium,
 			setupMocks: func(dbRepo *MockDatabaseRepository, envRepo *MockEnvironmentRepository, instanceRepo *MockDatabaseInstanceRepository) {
 				dbID := uuid.New()
@@ -243,8 +243,8 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 				}, nil)
 
 				instanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-					ID:           instanceID,
-					DatabaseType: models.DatabaseTypeMySQL,
+					ID:             instanceID,
+					DatabaseEngine: models.DatabaseEngineMySQL,
 				}, nil)
 			},
 		},
@@ -253,7 +253,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 			sqlContent:   "DROP TABLE users",
 			changeType:   models.ChangeTypeDDL,
 			envName:      "Production",
-			dbType:       models.DatabaseTypePostgreSQL,
+			dbType:       models.DatabaseEnginePostgreSQL,
 			expectedRisk: models.RiskLevelHigh,
 			setupMocks: func(dbRepo *MockDatabaseRepository, envRepo *MockEnvironmentRepository, instanceRepo *MockDatabaseInstanceRepository) {
 				dbID := uuid.New()
@@ -272,8 +272,8 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 				}, nil)
 
 				instanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-					ID:           instanceID,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				}, nil)
 			},
 		},
@@ -282,7 +282,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 			sqlContent:   "TRUNCATE TABLE orders",
 			changeType:   models.ChangeTypeDDL,
 			envName:      "Production",
-			dbType:       models.DatabaseTypeMySQL,
+			dbType:       models.DatabaseEngineMySQL,
 			expectedRisk: models.RiskLevelHigh,
 			setupMocks: func(dbRepo *MockDatabaseRepository, envRepo *MockEnvironmentRepository, instanceRepo *MockDatabaseInstanceRepository) {
 				dbID := uuid.New()
@@ -301,8 +301,8 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 				}, nil)
 
 				instanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-					ID:           instanceID,
-					DatabaseType: models.DatabaseTypeMySQL,
+					ID:             instanceID,
+					DatabaseEngine: models.DatabaseEngineMySQL,
 				}, nil)
 			},
 		},
@@ -311,7 +311,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 			sqlContent:   "DELETE FROM users",
 			changeType:   models.ChangeTypeDML,
 			envName:      "Production",
-			dbType:       models.DatabaseTypePostgreSQL,
+			dbType:       models.DatabaseEnginePostgreSQL,
 			expectedRisk: models.RiskLevelHigh,
 			setupMocks: func(dbRepo *MockDatabaseRepository, envRepo *MockEnvironmentRepository, instanceRepo *MockDatabaseInstanceRepository) {
 				dbID := uuid.New()
@@ -330,8 +330,8 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 				}, nil)
 
 				instanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-					ID:           instanceID,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				}, nil)
 			},
 		},
@@ -340,7 +340,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 			sqlContent:   "DELETE FROM users WHERE id = 1",
 			changeType:   models.ChangeTypeDML,
 			envName:      "Production",
-			dbType:       models.DatabaseTypePostgreSQL,
+			dbType:       models.DatabaseEnginePostgreSQL,
 			expectedRisk: models.RiskLevelHigh,
 			setupMocks: func(dbRepo *MockDatabaseRepository, envRepo *MockEnvironmentRepository, instanceRepo *MockDatabaseInstanceRepository) {
 				dbID := uuid.New()
@@ -359,8 +359,8 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 				}, nil)
 
 				instanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-					ID:           instanceID,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				}, nil)
 			},
 		},
@@ -369,7 +369,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 			sqlContent:   "UPDATE users SET status = 'active'",
 			changeType:   models.ChangeTypeDML,
 			envName:      "Staging",
-			dbType:       models.DatabaseTypeMySQL,
+			dbType:       models.DatabaseEngineMySQL,
 			expectedRisk: models.RiskLevelMedium,
 			setupMocks: func(dbRepo *MockDatabaseRepository, envRepo *MockEnvironmentRepository, instanceRepo *MockDatabaseInstanceRepository) {
 				dbID := uuid.New()
@@ -388,8 +388,8 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 				}, nil)
 
 				instanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-					ID:           instanceID,
-					DatabaseType: models.DatabaseTypeMySQL,
+					ID:             instanceID,
+					DatabaseEngine: models.DatabaseEngineMySQL,
 				}, nil)
 			},
 		},
@@ -398,7 +398,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 			sqlContent:   "INSERT INTO users (name, email) VALUES ('John', 'john@example.com')",
 			changeType:   models.ChangeTypeDML,
 			envName:      "Development",
-			dbType:       models.DatabaseTypePostgreSQL,
+			dbType:       models.DatabaseEnginePostgreSQL,
 			expectedRisk: models.RiskLevelLow,
 			setupMocks: func(dbRepo *MockDatabaseRepository, envRepo *MockEnvironmentRepository, instanceRepo *MockDatabaseInstanceRepository) {
 				dbID := uuid.New()
@@ -417,8 +417,8 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 				}, nil)
 
 				instanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-					ID:           instanceID,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				}, nil)
 			},
 		},
@@ -596,30 +596,30 @@ func TestRiskAssessmentService_analyzeEnvironment(t *testing.T) {
 	}
 }
 
-func TestRiskAssessmentService_analyzeDatabaseType(t *testing.T) {
+func TestRiskAssessmentService_analyzeDatabaseEngine(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	service := &RiskAssessmentService{logger: logger}
 
 	tests := []struct {
 		name     string
-		dbType   models.DatabaseType
+		dbType   models.DatabaseEngine
 		expected int
 	}{
 		{
 			name:     "PostgreSQL - no additional risk",
-			dbType:   models.DatabaseTypePostgreSQL,
+			dbType:   models.DatabaseEnginePostgreSQL,
 			expected: 0,
 		},
 		{
 			name:     "MySQL - no additional risk",
-			dbType:   models.DatabaseTypeMySQL,
+			dbType:   models.DatabaseEngineMySQL,
 			expected: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			score := service.analyzeDatabaseType(tt.dbType)
+			score := service.analyzeDatabaseEngine(tt.dbType)
 			assert.Equal(t, tt.expected, score)
 		})
 	}
@@ -809,8 +809,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(
@@ -851,8 +851,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(
@@ -893,8 +893,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(
@@ -936,8 +936,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(
@@ -979,8 +979,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(
@@ -1022,8 +1022,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(
@@ -1090,8 +1090,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 				}, nil)
 
 				mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-					ID:           instanceID,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				}, nil)
 
 				service := NewRiskAssessmentService(
@@ -1140,8 +1140,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(
@@ -1183,8 +1183,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(
@@ -1226,8 +1226,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(
@@ -1269,8 +1269,8 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 		}, nil)
 
 		mockInstanceRepo.On("GetByID", ctx, instanceID).Return(&models.DatabaseInstance{
-			ID:           instanceID,
-			DatabaseType: models.DatabaseTypePostgreSQL,
+			ID:             instanceID,
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
 		}, nil)
 
 		service := NewRiskAssessmentService(

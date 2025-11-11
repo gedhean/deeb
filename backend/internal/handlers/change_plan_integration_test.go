@@ -33,7 +33,6 @@ import (
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/review"
-	"github.com/nsxbet/deeb/internal/review/validators"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/utils"
 	"github.com/stretchr/testify/assert"
@@ -197,7 +196,7 @@ func createTestDatabaseInstance(
 	t *testing.T,
 	dbInstanceRepo *postgres.DatabaseInstanceRepository,
 	name string,
-	dbType models.DatabaseType,
+	dbType models.DatabaseEngine,
 ) *models.DatabaseInstance {
 	t.Helper()
 
@@ -207,7 +206,7 @@ func createTestDatabaseInstance(
 	dbInstance := &models.DatabaseInstance{
 		Name:                       name,
 		Description:                &desc,
-		DatabaseType:               dbType,
+		DatabaseEngine:             dbType,
 		Host:                       "localhost",
 		Port:                       5432,
 		Username:                   "testuser",
@@ -339,22 +338,14 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		logger,
 	)
 
-	// Initialize SQL Review engine and service
-	reviewEngine := review.NewEngine()
+	// Initialize SQL Review V2 service
+	schemaCache := review.NewSchemaCache(5*time.Minute, logger)
 	reviewService := review.NewReviewService(
 		policyRepo,
-		databaseRepo,
-		reviewEngine,
+		environmentRepo,
+		schemaCache,
 		logger,
 	)
-
-	// Register all validators
-	require.NoError(t, reviewService.RegisterValidator(validators.NewPostgreSQLSyntaxValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewMySQLSyntaxValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewSecurityValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewPerformanceValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewBackwardsCompatibilityValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewBestPracticesValidator()))
 
 	// Initialize approval service
 	rbacChecker := rbac.NewCheckerService()
@@ -423,7 +414,10 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		databaseInstanceRepo,
 		projectMemberRepo,
 		policyFindingRepo,
+		approvalRepo,
+		environmentRepo,
 		riskAssessmentSvc,
+		reviewService,
 		reviewService,
 		approvalService,
 		executionService,
@@ -465,22 +459,14 @@ func setupChangePlanHandlerWithTimeout(
 		logger,
 	)
 
-	// Initialize SQL Review engine and service
-	reviewEngine := review.NewEngine()
+	// Initialize SQL Review V2 service
+	schemaCache := review.NewSchemaCache(5*time.Minute, logger)
 	reviewService := review.NewReviewService(
 		policyRepo,
-		databaseRepo,
-		reviewEngine,
+		environmentRepo,
+		schemaCache,
 		logger,
 	)
-
-	// Register all validators
-	require.NoError(t, reviewService.RegisterValidator(validators.NewPostgreSQLSyntaxValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewMySQLSyntaxValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewSecurityValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewPerformanceValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewBackwardsCompatibilityValidator()))
-	require.NoError(t, reviewService.RegisterValidator(validators.NewBestPracticesValidator()))
 
 	// Initialize approval service
 	rbacChecker := rbac.NewCheckerService()
@@ -550,7 +536,10 @@ func setupChangePlanHandlerWithTimeout(
 		databaseInstanceRepo,
 		projectMemberRepo,
 		policyFindingRepo,
+		approvalRepo,
+		environmentRepo,
 		riskAssessmentSvc,
+		reviewService,
 		reviewService,
 		approvalService,
 		executionService,
@@ -608,7 +597,7 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_Success(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -727,7 +716,7 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_ErrorsBlockTransition(t *test
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -847,7 +836,7 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_OnlyWarnings(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -974,7 +963,7 @@ func TestIntegration_ChangePlan_ManualSQLReview(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -1073,7 +1062,7 @@ func TestIntegration_ChangePlan_ManualSQLReview_Unauthorized(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -1163,7 +1152,7 @@ func TestIntegration_ChangePlan_ListWithFilters(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -1394,7 +1383,7 @@ func TestIntegration_ChangePlan_GetWithPolicyFindings(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -1548,7 +1537,7 @@ func TestIntegration_ChangePlan_GetWithoutPolicyFindings(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -1653,7 +1642,7 @@ func TestIntegration_ChangePlan_ApprovalWithErrors(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -1796,7 +1785,7 @@ func TestIntegration_ChangePlan_ApprovalWithOnlyWarnings(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -1932,7 +1921,7 @@ func TestIntegration_ChangePlan_ExecutionWithErrors(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -2062,7 +2051,7 @@ func TestIntegration_ChangePlan_ExecutionWithOnlyWarnings(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -2188,7 +2177,7 @@ func TestIntegration_ChangePlan_Resubmission(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -2354,7 +2343,7 @@ func TestIntegration_ChangePlan_Resubmission_Unauthorized(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -2451,7 +2440,7 @@ func TestIntegration_ChangePlan_Resubmission_InvalidStatus(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -2536,7 +2525,7 @@ func TestIntegration_ChangePlan_Create(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -2646,7 +2635,7 @@ func TestIntegration_ChangePlan_Create_Forbidden(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -2722,7 +2711,7 @@ func TestIntegration_ChangePlan_Create_SQLContentTooLarge(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -2807,7 +2796,7 @@ func TestIntegration_ChangePlan_GetByID(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -2937,7 +2926,7 @@ func TestIntegration_ChangePlan_List(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -3042,7 +3031,7 @@ func TestIntegration_ChangePlan_Update(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -3145,7 +3134,7 @@ func TestIntegration_ChangePlan_Update_Forbidden(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -3234,7 +3223,7 @@ func TestIntegration_ChangePlan_Delete(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -3317,7 +3306,7 @@ func TestIntegration_ChangePlan_Delete_Forbidden(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -3395,7 +3384,7 @@ func TestIntegration_ChangePlan_Delete_InvalidStatus(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "development")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -3508,7 +3497,7 @@ func TestIntegration_ChangePlan_AssignReviewer(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -3654,7 +3643,7 @@ func TestIntegration_ChangePlan_AssignReviewer_Forbidden(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -3776,7 +3765,7 @@ func TestIntegration_ChangePlan_AssignReviewer_InvalidReviewer(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -3879,7 +3868,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -4017,7 +4006,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Unauthorized(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -4122,7 +4111,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_InvalidStatus(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -4281,7 +4270,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Success(t *testing.T) {
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -4481,7 +4470,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Failure(t *testing.T) {
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -4672,7 +4661,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SnapshotCapture(t *testing.T) 
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -4883,7 +4872,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase(t *test
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -5133,7 +5122,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases(t
 	dbInstance1 := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance 1",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost1,
 		Port:                       targetPort1,
 		Username:                   "deeb",
@@ -5177,7 +5166,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases(t
 	dbInstance2 := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance 2",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost2,
 		Port:                       targetPort2,
 		Username:                   "deeb",
@@ -5410,7 +5399,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_LockRelease(t *testing.T) {
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -5586,7 +5575,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling(t *testing.T) {
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -5834,7 +5823,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SQLSyntaxError(t *testing.T) {
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -5995,7 +5984,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Timeout(t *testing.T) {
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -6131,7 +6120,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConnectionFailure(t *testing.T
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance (Invalid)",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       "localhost",
 		Port:                       5432,
 		Username:                   "invalid_user",
@@ -6277,7 +6266,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_RollbackVerification(t *testin
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -6457,7 +6446,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ErrorLogging(t *testing.T) {
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -6598,7 +6587,7 @@ func TestIntegration_ChangePlan_CloseChangePlan(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -6751,7 +6740,7 @@ func TestIntegration_ChangePlan_CloseChangePlan_Unauthorized(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -6865,7 +6854,7 @@ func TestIntegration_ChangePlan_GetApprovalHistory(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -7044,7 +7033,7 @@ func TestIntegration_ChangePlan_ApproveChangePlan_Unauthorized(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -7149,7 +7138,7 @@ func TestIntegration_ChangePlan_ApproveChangePlan_OrganizationAdmin(t *testing.T
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -7272,7 +7261,7 @@ func TestIntegration_ChangePlan_AuditLogging_ApproveChangePlan(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -7423,7 +7412,7 @@ func TestIntegration_ChangePlan_AuditLogging_CloseChangePlan(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -7599,7 +7588,7 @@ func TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Success(t *testin
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -7799,7 +7788,7 @@ func TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Failure(t *testin
 	dbInstance := &models.DatabaseInstance{
 		ID:                         uuid.New(),
 		Name:                       "Test Execution Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
 		Port:                       targetPort,
 		Username:                   "deeb",
@@ -7966,7 +7955,7 @@ func TestIntegration_ChangePlan_ChangeHistoryTracking(t *testing.T) {
 	env := createTestEnvironment(t, envRepo, "production")
 
 	// Create database instance
-	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseTypePostgreSQL)
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
 
 	// Create database
 	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
@@ -8080,4 +8069,350 @@ func TestIntegration_ChangePlan_ChangeHistoryTracking(t *testing.T) {
 	assert.Equal(t, string(newStatus), *statusChange.NewValue)
 	assert.Equal(t, author.ID, statusChange.ChangedByID)
 	assert.False(t, statusChange.ChangedAt.IsZero())
+}
+
+// TestIntegration_ChangePlan_GetReviewFindings_Forbidden tests GET /api/v1/change-plans/:id/review/findings with user not in project
+func TestIntegration_ChangePlan_GetReviewFindings_Forbidden(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
+
+	// Create project owner
+	owner := createChangePlanTestUser(t, userRepo, "owner@example.com", models.OrganizationRoleDeveloper)
+
+	// Create test user (not a member of project)
+	nonMember := createChangePlanTestUser(t, userRepo, "nonmember@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add owner to project
+	member := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    owner.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: owner.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan as owner
+	changePlan := &models.ChangePlan{
+		ProjectID:        project.ID,
+		TargetDatabaseID: database.ID,
+		Title:            "Test Change Plan",
+		Description:      "Test description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE users (id UUID PRIMARY KEY);",
+		AuthorID:         owner.ID,
+		Status:           models.ChangePlanStatusDraft,
+		RiskLevel:        models.RiskLevelLow,
+	}
+	err = changePlanRepo.Create(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Create some policy findings
+	err = policyFindingRepo.Create(ctx, &models.PolicyFinding{
+		ChangePlanID:  changePlan.ID,
+		ValidatorType: "security",
+		Severity:      models.SeverityWarning,
+		RuleName:      "test-rule",
+		Message:       "Test finding",
+	})
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for non-member user
+	token, err := tokenManager.GenerateToken(nonMember.ID, nonMember.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/change-plans/"+changePlan.ID.String()+"/review/findings", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/review/findings")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, nonMember.ID, nonMember.Email, nonMember.OrganizationRole)
+
+	// Execute
+	err = handler.GetReviewFindings(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	// Verify error response
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "Not a member of this project", response["error"])
+}
+
+// TestIntegration_ChangePlan_GetReviewFindings_Success tests GET /api/v1/change-plans/:id/review/findings with authorized user
+func TestIntegration_ChangePlan_GetReviewFindings_Success(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
+
+	// Create project member with viewer role
+	member := createChangePlanTestUser(t, userRepo, "member@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add member to project with viewer role (has PermissionChangesRead)
+	projectMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    member.ID,
+		Role:      models.ProjectRoleViewer,
+		AddedByID: member.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, projectMember)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan
+	changePlan := &models.ChangePlan{
+		ProjectID:        project.ID,
+		TargetDatabaseID: database.ID,
+		Title:            "Test Change Plan",
+		Description:      "Test description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE users (id UUID PRIMARY KEY);",
+		AuthorID:         member.ID,
+		Status:           models.ChangePlanStatusDraft,
+		RiskLevel:        models.RiskLevelLow,
+	}
+	err = changePlanRepo.Create(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Create policy findings with different severities
+	finding1 := &models.PolicyFinding{
+		ChangePlanID:  changePlan.ID,
+		ValidatorType: "security",
+		Severity:      models.SeverityError,
+		RuleName:      "security-rule",
+		Message:       "Security issue found",
+	}
+	err = policyFindingRepo.Create(ctx, finding1)
+	require.NoError(t, err)
+
+	finding2 := &models.PolicyFinding{
+		ChangePlanID:  changePlan.ID,
+		ValidatorType: "performance",
+		Severity:      models.SeverityWarning,
+		RuleName:      "performance-rule",
+		Message:       "Performance warning",
+	}
+	err = policyFindingRepo.Create(ctx, finding2)
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for member user
+	token, err := tokenManager.GenerateToken(member.ID, member.Email, string(models.OrganizationRoleDeveloper))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/change-plans/"+changePlan.ID.String()+"/review/findings", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/review/findings")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, member.ID, member.Email, member.OrganizationRole)
+
+	// Execute
+	err = handler.GetReviewFindings(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify response contains the findings
+	var response struct {
+		Findings []models.PolicyFinding `json:"findings"`
+	}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Len(t, response.Findings, 2)
+
+	// Verify findings content
+	foundError := false
+	foundWarning := false
+	for _, finding := range response.Findings {
+		if finding.ID == finding1.ID {
+			foundError = true
+			assert.Equal(t, models.SeverityError, finding.Severity)
+			assert.Equal(t, "security-rule", finding.RuleName)
+		}
+		if finding.ID == finding2.ID {
+			foundWarning = true
+			assert.Equal(t, models.SeverityWarning, finding.Severity)
+			assert.Equal(t, "performance-rule", finding.RuleName)
+		}
+	}
+	assert.True(t, foundError, "Error finding should be present")
+	assert.True(t, foundWarning, "Warning finding should be present")
+}
+
+// TestIntegration_ChangePlan_GetReviewFindings_OrgAdmin tests that org admins can access any findings
+func TestIntegration_ChangePlan_GetReviewFindings_OrgAdmin(t *testing.T) {
+	db, cleanup := setupTestDBForChangePlans(t)
+	defer cleanup()
+	cleanupChangePlanTestData(t, db)
+	defer cleanupChangePlanTestData(t, db)
+
+	ctx := context.Background()
+
+	tokenManager, err := auth.NewTokenManager("test-secret-key-min-32-chars-for-testing", time.Hour)
+	require.NoError(t, err)
+
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(db)
+	projectRepo := postgres.NewProjectRepository(db)
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	envRepo := postgres.NewEnvironmentRepository(db)
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, "test-encryption-key-min-32-chars")
+	dbRepo := postgres.NewDatabaseRepository(db)
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
+
+	// Create org admin (not a member of project)
+	orgAdmin := createChangePlanTestUser(t, userRepo, "admin@example.com", models.OrganizationRoleAdmin)
+
+	// Create project owner
+	owner := createChangePlanTestUser(t, userRepo, "owner@example.com", models.OrganizationRoleDeveloper)
+
+	// Create project
+	project := createTestProject(t, projectRepo, "test-project")
+
+	// Add owner to project (but NOT the org admin)
+	projectMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    owner.ID,
+		Role:      models.ProjectRoleOwner,
+		AddedByID: owner.ID,
+	}
+	err = projectMemberRepo.AddMember(ctx, projectMember)
+	require.NoError(t, err)
+
+	// Create environment
+	env := createTestEnvironment(t, envRepo, "development")
+
+	// Create database instance
+	dbInstance := createTestDatabaseInstance(t, dbInstanceRepo, "test-instance", models.DatabaseEnginePostgreSQL)
+
+	// Create database
+	database := createTestDatabase(t, dbRepo, project.ID, env.ID, dbInstance.ID, "testdb")
+
+	// Create change plan as owner
+	changePlan := &models.ChangePlan{
+		ProjectID:        project.ID,
+		TargetDatabaseID: database.ID,
+		Title:            "Test Change Plan",
+		Description:      "Test description",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       "CREATE TABLE users (id UUID PRIMARY KEY);",
+		AuthorID:         owner.ID,
+		Status:           models.ChangePlanStatusDraft,
+		RiskLevel:        models.RiskLevelLow,
+	}
+	err = changePlanRepo.Create(ctx, changePlan)
+	require.NoError(t, err)
+
+	// Create policy finding
+	err = policyFindingRepo.Create(ctx, &models.PolicyFinding{
+		ChangePlanID:  changePlan.ID,
+		ValidatorType: "security",
+		Severity:      models.SeverityError,
+		RuleName:      "test-rule",
+		Message:       "Test finding",
+	})
+	require.NoError(t, err)
+
+	// Setup handler
+	handler := setupChangePlanHandler(t, db, tokenManager)
+
+	// Create token for org admin (not a project member)
+	token, err := tokenManager.GenerateToken(orgAdmin.ID, orgAdmin.Email, string(models.OrganizationRoleAdmin))
+	require.NoError(t, err)
+
+	// Create request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/change-plans/"+changePlan.ID.String()+"/review/findings", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/change-plans/:id/review/findings")
+	c.SetParamNames("id")
+	c.SetParamValues(changePlan.ID.String())
+	setUserContext(c, orgAdmin.ID, orgAdmin.Email, orgAdmin.OrganizationRole)
+
+	// Execute
+	err = handler.GetReviewFindings(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify response contains the findings
+	var response struct {
+		Findings []models.PolicyFinding `json:"findings"`
+	}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Len(t, response.Findings, 1)
+	assert.Equal(t, "test-rule", response.Findings[0].RuleName)
 }

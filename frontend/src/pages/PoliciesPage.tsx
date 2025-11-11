@@ -6,6 +6,7 @@ import { environmentsService } from '@/lib/api/services/environments';
 import type {
   CreatePolicyRequest,
   Policy,
+  SQLReviewPolicyConfig,
   UpdatePolicyRequest,
   Environment,
 } from '@/lib/api/types';
@@ -23,32 +24,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Plus, Pencil, Trash2, AlertTriangle, Code2 } from 'lucide-react';
-
-// Available SQL_REVIEW validators
-const SQL_REVIEW_VALIDATORS = [
-  {
-    name: 'postgresql-syntax',
-    label: 'PostgreSQL Syntax',
-    description: 'Validates PostgreSQL SQL syntax',
-  },
-  { name: 'mysql-syntax', label: 'MySQL Syntax', description: 'Validates MySQL SQL syntax' },
-  {
-    name: 'security',
-    label: 'Security',
-    description: 'Detects security risks and destructive operations',
-  },
-  { name: 'performance', label: 'Performance', description: 'Identifies performance issues' },
-  {
-    name: 'backwards-compatibility',
-    label: 'Backwards Compatibility',
-    description: 'Checks for breaking changes',
-  },
-  {
-    name: 'best-practices',
-    label: 'Best Practices',
-    description: 'Enforces coding best practices',
-  },
-];
+import { SQLReviewRuleSelector } from '@/components/sql-review-rule-selector';
 
 export const PoliciesPage: React.FC = () => {
   const { user } = useAuth();
@@ -70,9 +46,8 @@ export const PoliciesPage: React.FC = () => {
     name: '',
     description: '',
     type: 'SQL_REVIEW',
-    policy_config: {},
+    policy_config: { rules: {} },
   });
-  const [validatorStates, setValidatorStates] = useState<Record<string, boolean>>({});
   const [formErrors, setFormErrors] = useState<{
     name?: string;
     description?: string;
@@ -132,25 +107,6 @@ export const PoliciesPage: React.FC = () => {
     loadPolicies();
   }, [isAdmin, filterType]);
 
-  // Initialize validator states from policy config
-  const initValidatorStates = (config: Record<string, unknown>) => {
-    const states: Record<string, boolean> = {};
-    SQL_REVIEW_VALIDATORS.forEach((validator) => {
-      const validatorsConfig = config.validators as Record<string, boolean> | undefined;
-      states[validator.name] = validatorsConfig?.[validator.name] === true;
-    });
-    setValidatorStates(states);
-  };
-
-  // Build policy config from validator states
-  const buildPolicyConfig = (): Record<string, unknown> => {
-    const validators: Record<string, boolean> = {};
-    SQL_REVIEW_VALIDATORS.forEach((validator) => {
-      validators[validator.name] = validatorStates[validator.name] === true;
-    });
-    return { validators };
-  };
-
   // Validate form
   const validateForm = (): boolean => {
     const errors: { name?: string; description?: string; policy_config?: string } = {};
@@ -162,17 +118,17 @@ export const PoliciesPage: React.FC = () => {
     }
 
     if (!useJsonEditor) {
-      // Validate that at least one validator is enabled
-      const enabledCount = Object.values(validatorStates).filter((v) => v).length;
+      // Validate that at least one rule is enabled
+      const enabledCount = Object.keys(formData.policy_config.rules || {}).length;
       if (enabledCount === 0) {
-        errors.policy_config = 'At least one validator must be enabled';
+        errors.policy_config = 'At least one rule must be enabled';
       }
     } else {
       // Validate JSON
       try {
         const config = JSON.parse(formData.policy_config as unknown as string);
-        if (!config || typeof config !== 'object') {
-          errors.policy_config = 'Policy config must be a valid JSON object';
+        if (!config || typeof config !== 'object' || !config.rules) {
+          errors.policy_config = 'Policy config must have a rules object';
         }
       } catch {
         errors.policy_config = 'Invalid JSON format';
@@ -196,13 +152,12 @@ export const PoliciesPage: React.FC = () => {
         description: formData.description?.trim() || undefined,
         type: 'SQL_REVIEW',
         policy_config: useJsonEditor
-          ? (JSON.parse(formData.policy_config as unknown as string) as Record<string, unknown>)
-          : buildPolicyConfig(),
+          ? (JSON.parse(formData.policy_config as unknown as string) as SQLReviewPolicyConfig)
+          : formData.policy_config,
       };
       await policiesService.createPolicy(createData);
       setIsCreateOpen(false);
-      setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: {} });
-      setValidatorStates({});
+      setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
       setFormErrors({});
       setUseJsonEditor(false);
       // Reload policies
@@ -240,8 +195,8 @@ export const PoliciesPage: React.FC = () => {
       }
 
       const newConfig = useJsonEditor
-        ? (JSON.parse(formData.policy_config as unknown as string) as Record<string, unknown>)
-        : buildPolicyConfig();
+        ? (JSON.parse(formData.policy_config as unknown as string) as SQLReviewPolicyConfig)
+        : formData.policy_config;
 
       // Only update if config changed
       if (JSON.stringify(newConfig) !== JSON.stringify(selectedPolicy.policy_config)) {
@@ -251,8 +206,7 @@ export const PoliciesPage: React.FC = () => {
       await policiesService.updatePolicy(selectedPolicy.id, updateData);
       setIsEditOpen(false);
       setSelectedPolicy(null);
-      setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: {} });
-      setValidatorStates({});
+      setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
       setFormErrors({});
       setUseJsonEditor(false);
       // Reload policies
@@ -304,8 +258,7 @@ export const PoliciesPage: React.FC = () => {
 
   // Open create form
   const openCreateForm = () => {
-    setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: {} });
-    setValidatorStates({});
+    setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
     setFormErrors({});
     setUseJsonEditor(false);
     setJsonEditorError('');
@@ -315,13 +268,13 @@ export const PoliciesPage: React.FC = () => {
   // Open edit form
   const openEditForm = (policy: Policy) => {
     setSelectedPolicy(policy);
+    const config = policy.policy_config as SQLReviewPolicyConfig;
     setFormData({
       name: policy.name,
       description: policy.description || '',
       type: policy.type,
-      policy_config: policy.policy_config,
+      policy_config: config.rules ? config : { rules: {} },
     });
-    initValidatorStates(policy.policy_config);
     setFormErrors({});
     setUseJsonEditor(false);
     setJsonEditorError('');
@@ -455,7 +408,7 @@ export const PoliciesPage: React.FC = () => {
               <Card key={policy.id}>
                 <CardHeader>
                   <CardTitle className="text-lg">{policy.name}</CardTitle>
-                  <CardDescription className="line-clamp-2">
+                  <CardDescription className="line-clamp-2 mt-1">
                     {policy.description || 'No description'}
                   </CardDescription>
                 </CardHeader>
@@ -561,25 +514,27 @@ export const PoliciesPage: React.FC = () => {
                     size="sm"
                     onClick={() => {
                       if (useJsonEditor) {
-                        // Switch to checkbox editor
+                        // Switch to rule selector
                         try {
                           const config = JSON.parse(
                             formData.policy_config as unknown as string,
-                          ) as Record<string, unknown>;
-                          initValidatorStates(config);
+                          ) as SQLReviewPolicyConfig;
+                          setFormData({
+                            ...formData,
+                            policy_config: config,
+                          });
                         } catch {
-                          // Invalid JSON, initialize with empty states
-                          setValidatorStates({});
+                          // Invalid JSON, keep current config
                         }
                       } else {
                         // Switch to JSON editor
-                        const config = buildPolicyConfig();
                         setFormData({
                           ...formData,
-                          policy_config: JSON.stringify(config, null, 2) as unknown as Record<
-                            string,
-                            unknown
-                          >,
+                          policy_config: JSON.stringify(
+                            formData.policy_config,
+                            null,
+                            2,
+                          ) as unknown as SQLReviewPolicyConfig,
                         });
                       }
                       setUseJsonEditor(!useJsonEditor);
@@ -588,7 +543,7 @@ export const PoliciesPage: React.FC = () => {
                     className="h-8"
                   >
                     <Code2 className="mr-2 h-4 w-4" />
-                    {useJsonEditor ? 'Use Checkboxes' : 'Use JSON Editor'}
+                    {useJsonEditor ? 'Use Rule Selector' : 'Use JSON Editor'}
                   </Button>
                 </div>
                 {useJsonEditor ? (
@@ -609,7 +564,7 @@ export const PoliciesPage: React.FC = () => {
                           setJsonEditorError('Invalid JSON format');
                         }
                       }}
-                      placeholder='{"validators": {"postgresql-syntax": true, "mysql-syntax": false, ...}}'
+                      placeholder='{"rules": {"mysql.engine.no-select-all": {"type": "mysql.engine.no-select-all", "level": "error", "engine": "mysql"}}}'
                       className="flex min-h-[200px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                       aria-invalid={!!formErrors.policy_config || !!jsonEditorError}
                     />
@@ -619,37 +574,18 @@ export const PoliciesPage: React.FC = () => {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Format: {`{"validators": {"validator-name": true/false}}`}
+                      Format:{' '}
+                      {`{"rules": {"rule-key": {"type": "...", "level": "error|warning", "engine": "mysql|postgresql", "payload": {...}}}}`}
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3 rounded-md border border-input p-4">
-                    <p className="text-sm font-medium">Enable Validators:</p>
-                    {SQL_REVIEW_VALIDATORS.map((validator) => (
-                      <div key={validator.name} className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          id={`validator-${validator.name}`}
-                          checked={validatorStates[validator.name] === true}
-                          onChange={(e) =>
-                            setValidatorStates({
-                              ...validatorStates,
-                              [validator.name]: e.target.checked,
-                            })
-                          }
-                          className="mt-1 h-4 w-4 rounded border-gray-300"
-                        />
-                        <label
-                          htmlFor={`validator-${validator.name}`}
-                          className="flex-1 cursor-pointer text-sm"
-                        >
-                          <div className="font-medium">{validator.label}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {validator.description}
-                          </div>
-                        </label>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    <SQLReviewRuleSelector
+                      config={formData.policy_config}
+                      onChange={(newConfig) =>
+                        setFormData({ ...formData, policy_config: newConfig })
+                      }
+                    />
                     {formErrors.policy_config && (
                       <p className="text-sm text-destructive">{formErrors.policy_config}</p>
                     )}
@@ -718,24 +654,27 @@ export const PoliciesPage: React.FC = () => {
                     size="sm"
                     onClick={() => {
                       if (useJsonEditor) {
-                        // Switch to checkbox editor
+                        // Switch to rule selector
                         try {
                           const config = JSON.parse(
                             formData.policy_config as unknown as string,
-                          ) as Record<string, unknown>;
-                          initValidatorStates(config);
+                          ) as SQLReviewPolicyConfig;
+                          setFormData({
+                            ...formData,
+                            policy_config: config,
+                          });
                         } catch {
-                          // Invalid JSON, keep current states
+                          // Invalid JSON, keep current config
                         }
                       } else {
                         // Switch to JSON editor
-                        const config = buildPolicyConfig();
                         setFormData({
                           ...formData,
-                          policy_config: JSON.stringify(config, null, 2) as unknown as Record<
-                            string,
-                            unknown
-                          >,
+                          policy_config: JSON.stringify(
+                            formData.policy_config,
+                            null,
+                            2,
+                          ) as unknown as SQLReviewPolicyConfig,
                         });
                       }
                       setUseJsonEditor(!useJsonEditor);
@@ -744,7 +683,7 @@ export const PoliciesPage: React.FC = () => {
                     className="h-8"
                   >
                     <Code2 className="mr-2 h-4 w-4" />
-                    {useJsonEditor ? 'Use Checkboxes' : 'Use JSON Editor'}
+                    {useJsonEditor ? 'Use Rule Selector' : 'Use JSON Editor'}
                   </Button>
                 </div>
                 {useJsonEditor ? (
@@ -765,7 +704,7 @@ export const PoliciesPage: React.FC = () => {
                           setJsonEditorError('Invalid JSON format');
                         }
                       }}
-                      placeholder='{"validators": {"postgresql-syntax": true, ...}}'
+                      placeholder='{"rules": {"mysql.engine.no-select-all": {"type": "mysql.engine.no-select-all", "level": "error", "engine": "mysql"}}}'
                       className="flex min-h-[200px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                       aria-invalid={!!formErrors.policy_config || !!jsonEditorError}
                     />
@@ -774,35 +713,19 @@ export const PoliciesPage: React.FC = () => {
                         {formErrors.policy_config || jsonEditorError}
                       </p>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      Format:{' '}
+                      {`{"rules": {"rule-key": {"type": "...", "level": "error|warning", "engine": "mysql|postgresql", "payload": {...}}}}`}
+                    </p>
                   </div>
                 ) : (
-                  <div className="space-y-3 rounded-md border border-input p-4">
-                    <p className="text-sm font-medium">Enable Validators:</p>
-                    {SQL_REVIEW_VALIDATORS.map((validator) => (
-                      <div key={validator.name} className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          id={`edit-validator-${validator.name}`}
-                          checked={validatorStates[validator.name] === true}
-                          onChange={(e) =>
-                            setValidatorStates({
-                              ...validatorStates,
-                              [validator.name]: e.target.checked,
-                            })
-                          }
-                          className="mt-1 h-4 w-4 rounded border-gray-300"
-                        />
-                        <label
-                          htmlFor={`edit-validator-${validator.name}`}
-                          className="flex-1 cursor-pointer text-sm"
-                        >
-                          <div className="font-medium">{validator.label}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {validator.description}
-                          </div>
-                        </label>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    <SQLReviewRuleSelector
+                      config={formData.policy_config}
+                      onChange={(newConfig) =>
+                        setFormData({ ...formData, policy_config: newConfig })
+                      }
+                    />
                     {formErrors.policy_config && (
                       <p className="text-sm text-destructive">{formErrors.policy_config}</p>
                     )}

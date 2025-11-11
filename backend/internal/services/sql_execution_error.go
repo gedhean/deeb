@@ -14,10 +14,10 @@ import (
 // SQLExecutionError represents a structured error from SQL execution
 type SQLExecutionError struct {
 	// Database information
-	DatabaseType string
-	DatabaseName string
-	DatabaseID   string
-	InstanceName string
+	DatabaseEngine string
+	DatabaseName   string
+	DatabaseID     string
+	InstanceName   string
 
 	// SQL content (may be masked)
 	SQLContent       string
@@ -70,13 +70,13 @@ func NewSQLExecutionError(
 	err error,
 ) *SQLExecutionError {
 	sqlErr := &SQLExecutionError{
-		DatabaseType: dbType,
-		DatabaseName: dbName,
-		DatabaseID:   dbID,
-		InstanceName: instanceName,
-		SQLContent:   sqlContent,
-		Underlying:   err,
-		StackTrace:   captureStackTrace(3), // Skip NewSQLExecutionError, caller, and their caller
+		DatabaseEngine: dbType,
+		DatabaseName:   dbName,
+		DatabaseID:     dbID,
+		InstanceName:   instanceName,
+		SQLContent:     sqlContent,
+		Underlying:     err,
+		StackTrace:     captureStackTrace(3), // Skip NewSQLExecutionError, caller, and their caller
 	}
 
 	// Extract database-specific error details
@@ -119,8 +119,8 @@ func (e *SQLExecutionError) generateUserMessage() string {
 
 	// Add database-specific context
 	if e.DatabaseErrorCode != "" {
-		switch e.DatabaseType {
-		case "postgresql":
+		switch e.DatabaseEngine {
+		case "postgres":
 			msg.WriteString(fmt.Sprintf(" (PostgreSQL error code: %s)", e.DatabaseErrorCode))
 		case "mysql":
 			msg.WriteString(fmt.Sprintf(" (MySQL error code: %s)", e.DatabaseErrorCode))

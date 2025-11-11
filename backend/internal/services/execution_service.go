@@ -184,7 +184,7 @@ func (s *ExecutionService) Execute(
 		zap.String("database_name", db.DatabaseName),
 		zap.String("database_instance_id", dbInstance.ID.String()),
 		zap.String("database_instance_name", dbInstance.Name),
-		zap.String("database_type", string(dbInstance.DatabaseType)),
+		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 		zap.Int("sql_content_length", sqlContentLength),
 	)
 
@@ -262,17 +262,17 @@ func (s *ExecutionService) Execute(
 	s.logger.Info("Capturing before snapshot",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("database_id", db.ID.String()),
-		zap.String("database_type", string(dbInstance.DatabaseType)),
+		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 	)
 
 	var beforeSnapshot *models.SchemaSnapshot
-	switch dbInstance.DatabaseType {
-	case models.DatabaseTypePostgreSQL:
+	switch dbInstance.DatabaseEngine {
+	case models.DatabaseEnginePostgreSQL:
 		beforeSnapshot, err = s.snapshotService.CapturePostgreSQL(ctx, changePlanID, db.ID, models.SnapshotTypeBefore)
-	case models.DatabaseTypeMySQL:
+	case models.DatabaseEngineMySQL:
 		beforeSnapshot, err = s.snapshotService.CaptureMySQL(ctx, changePlanID, db.ID, models.SnapshotTypeBefore)
 	default:
-		return nil, fmt.Errorf("unsupported database type: %s", dbInstance.DatabaseType)
+		return nil, fmt.Errorf("unsupported database type: %s", dbInstance.DatabaseEngine)
 	}
 
 	if err != nil {
@@ -303,7 +303,7 @@ func (s *ExecutionService) Execute(
 	s.logger.Info("Starting SQL execution",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("database_id", db.ID.String()),
-		zap.String("database_type", string(dbInstance.DatabaseType)),
+		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 		zap.Int("sql_content_length", sqlContentLength),
 		zap.Duration("execution_timeout", s.executionTimeout),
 	)
@@ -349,7 +349,7 @@ func (s *ExecutionService) Execute(
 				zap.String("database_id", db.ID.String()),
 				zap.String("database_name", db.DatabaseName),
 				zap.String("database_instance_name", dbInstance.Name),
-				zap.String("database_type", string(dbInstance.DatabaseType)),
+				zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 				zap.String("database_error_code", sqlErr.DatabaseErrorCode),
 				zap.String("user_message", userFriendlyMsg),
 				zap.Duration("execution_duration", duration),
@@ -370,7 +370,7 @@ func (s *ExecutionService) Execute(
 				zap.String("database_id", db.ID.String()),
 				zap.String("database_name", db.DatabaseName),
 				zap.String("database_instance_name", dbInstance.Name),
-				zap.String("database_type", string(dbInstance.DatabaseType)),
+				zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 				zap.Error(err),
 				zap.Duration("execution_duration", duration),
 				zap.Int("sql_content_length", sqlContentLength),
@@ -390,7 +390,7 @@ func (s *ExecutionService) Execute(
 
 		// Create execution log entry for failed execution with full context
 		if s.executionLogRepo != nil {
-			dbType := string(dbInstance.DatabaseType)
+			dbType := string(dbInstance.DatabaseEngine)
 			sqlContent := changePlan.SQLContent
 			executionLog := &models.ExecutionLog{
 				ChangePlanID:         changePlanID,
@@ -403,7 +403,7 @@ func (s *ExecutionService) Execute(
 				DatabaseID:           &db.ID,
 				DatabaseName:         &db.DatabaseName,
 				DatabaseInstanceName: &dbInstance.Name,
-				DatabaseType:         &dbType,
+				DatabaseEngine:       &dbType,
 				StartedAt:            executionStartTime,
 				CompletedAt:          time.Now(),
 			}
@@ -432,17 +432,17 @@ func (s *ExecutionService) Execute(
 	s.logger.Info("Capturing after snapshot",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("database_id", db.ID.String()),
-		zap.String("database_type", string(dbInstance.DatabaseType)),
+		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 	)
 
 	var afterSnapshot *models.SchemaSnapshot
-	switch dbInstance.DatabaseType {
-	case models.DatabaseTypePostgreSQL:
+	switch dbInstance.DatabaseEngine {
+	case models.DatabaseEnginePostgreSQL:
 		afterSnapshot, err = s.snapshotService.CapturePostgreSQL(ctx, changePlanID, db.ID, models.SnapshotTypeAfter)
-	case models.DatabaseTypeMySQL:
+	case models.DatabaseEngineMySQL:
 		afterSnapshot, err = s.snapshotService.CaptureMySQL(ctx, changePlanID, db.ID, models.SnapshotTypeAfter)
 	default:
-		return nil, fmt.Errorf("unsupported database type: %s", dbInstance.DatabaseType)
+		return nil, fmt.Errorf("unsupported database type: %s", dbInstance.DatabaseEngine)
 	}
 
 	if err != nil {
@@ -490,7 +490,7 @@ func (s *ExecutionService) Execute(
 		zap.String("database_id", db.ID.String()),
 		zap.String("database_name", db.DatabaseName),
 		zap.String("database_instance_name", dbInstance.Name),
-		zap.String("database_type", string(dbInstance.DatabaseType)),
+		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 		zap.Int("rows_affected", result.RowsAffected),
 		zap.Duration("sql_execution_duration", duration),
 		zap.Duration("before_snapshot_duration", snapshotBeforeDuration),
@@ -501,7 +501,7 @@ func (s *ExecutionService) Execute(
 
 	// Create execution log entry for successful execution with full context
 	if s.executionLogRepo != nil {
-		dbType := string(dbInstance.DatabaseType)
+		dbType := string(dbInstance.DatabaseEngine)
 		sqlContent := changePlan.SQLContent
 		rowsAffected := result.RowsAffected
 		executionLog := &models.ExecutionLog{
@@ -515,7 +515,7 @@ func (s *ExecutionService) Execute(
 			DatabaseID:           &db.ID,
 			DatabaseName:         &db.DatabaseName,
 			DatabaseInstanceName: &dbInstance.Name,
-			DatabaseType:         &dbType,
+			DatabaseEngine:       &dbType,
 			StartedAt:            executionStartTime,
 			CompletedAt:          time.Now(),
 		}
@@ -633,7 +633,7 @@ func (s *ExecutionService) executeInTransaction(
 	if err != nil {
 		// Create structured SQL execution error
 		sqlErr := NewSQLExecutionError(
-			string(dbInstance.DatabaseType),
+			string(dbInstance.DatabaseEngine),
 			db.DatabaseName,
 			db.ID.String(),
 			dbInstance.Name,
@@ -651,7 +651,7 @@ func (s *ExecutionService) executeInTransaction(
 			zap.String("database_id", db.ID.String()),
 			zap.String("database_name", db.DatabaseName),
 			zap.String("database_instance_name", dbInstance.Name),
-			zap.String("database_type", string(dbInstance.DatabaseType)),
+			zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 			zap.Duration("execution_duration", execDuration),
 			zap.Int("sql_content_length", len(sqlContent)),
 			zap.String("sql_content_masked", maskedSQL),

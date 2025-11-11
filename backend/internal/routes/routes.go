@@ -3,6 +3,7 @@ package routes
 
 import (
 	"context"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -16,9 +17,7 @@ import (
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/review"
-	"github.com/nsxbet/deeb/internal/review/validators"
 	"github.com/nsxbet/deeb/internal/services"
-	"go.uber.org/zap"
 )
 
 // Setup registers all application routes including health checks, authentication,
@@ -341,6 +340,8 @@ func setupPolicyRoutes(
 		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationAdmin(),
 	)
+	// SQL Review rules endpoint - accessible to all authenticated users
+	policiesGroup.GET("/sql-review/rules", policyHandler.GetSQLReviewRules, authMiddleware.Authenticate)
 }
 
 // setupDatabaseInstanceRoutes registers database instance management routes
@@ -499,34 +500,14 @@ func setupChangePlanRoutes(
 		logger.Get(),
 	)
 
-	// Initialize SQL Review engine and register validators
-	reviewEngine := review.NewEngine()
+	// Initialize SQL Review service
+	schemaCache := review.NewSchemaCache(15*time.Minute, logger.Get())
 	reviewService := review.NewReviewService(
 		policyRepo,
-		databaseRepo,
-		reviewEngine,
+		environmentRepo,
+		schemaCache,
 		logger.Get(),
 	)
-
-	// Register all validators
-	if err := reviewService.RegisterValidator(validators.NewPostgreSQLSyntaxValidator()); err != nil {
-		logger.Get().Warn("Failed to register PostgreSQL syntax validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewMySQLSyntaxValidator()); err != nil {
-		logger.Get().Warn("Failed to register MySQL syntax validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewSecurityValidator()); err != nil {
-		logger.Get().Warn("Failed to register security validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewPerformanceValidator()); err != nil {
-		logger.Get().Warn("Failed to register performance validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewBackwardsCompatibilityValidator()); err != nil {
-		logger.Get().Warn("Failed to register backwards compatibility validator", zap.Error(err))
-	}
-	if err := reviewService.RegisterValidator(validators.NewBestPracticesValidator()); err != nil {
-		logger.Get().Warn("Failed to register best practices validator", zap.Error(err))
-	}
 
 	// Initialize approval service
 	rbacChecker := rbac.NewCheckerService()
@@ -596,6 +577,7 @@ func setupChangePlanRoutes(
 		projectMemberRepo,
 		policyFindingRepo,
 		approvalRepo,
+		environmentRepo,
 		riskAssessmentSvc,
 		reviewService,
 		approvalService,
@@ -630,6 +612,7 @@ func setupChangePlanRoutes(
 	)
 	changePlansGroup.DELETE("/:id", changePlanHandler.DeleteChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/review", changePlanHandler.TriggerSQLReview, authMiddleware.Authenticate)
+	changePlansGroup.GET("/:id/review/findings", changePlanHandler.GetReviewFindings, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/approve", changePlanHandler.ApproveChangePlan, authMiddleware.Authenticate)
 	changePlansGroup.POST("/:id/close", changePlanHandler.CloseChangePlan, authMiddleware.Authenticate)
 	// Initialize execution auth middleware

@@ -231,18 +231,18 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 
 	// Parse update request into typed struct
 	var req models.UpdateEnvironmentRequest
-	reqJSON, err := json.Marshal(rawReq)
-	if err != nil {
-		h.logger.Error("Failed to marshal request body", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to process request",
-		})
-	}
+	reqJSON, _ := json.Marshal(rawReq)
 	if err := json.Unmarshal(reqJSON, &req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"error": "Invalid request body",
 		})
 	}
+
+	// Debug logging
+	h.logger.Info("Update request received",
+		zap.Bool("policy_provided", req.PolicyID.Provided),
+		zap.Any("policy_uuid", req.PolicyID.UUID),
+	)
 
 	// Validate request
 	if err := models.ValidateUpdateEnvironmentRequest(&req); err != nil {
@@ -253,8 +253,8 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 	}
 
 	// Validate Policy if provided and not explicitly set to null
-	if policyFieldPresent && req.PolicyID != nil {
-		if err := h.validatePolicy(ctx, req.PolicyID); err != nil {
+	if policyFieldPresent {
+		if err := h.validatePolicy(ctx, req.PolicyID.UUID); err != nil {
 			return err
 		}
 	}
@@ -286,7 +286,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 	}
 	// Update policy if the field was explicitly provided (even if null)
 	if policyFieldPresent {
-		environment.PolicyID = req.PolicyID
+		environment.PolicyID = req.PolicyID.UUID
 	}
 
 	// Update environment in repository

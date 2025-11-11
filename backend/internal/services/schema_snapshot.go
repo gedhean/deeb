@@ -71,8 +71,8 @@ func (s *SchemaSnapshotService) CapturePostgreSQL(
 	}
 
 	// Validate database type
-	if dbInstance.DatabaseType != models.DatabaseTypePostgreSQL {
-		return nil, fmt.Errorf("invalid database type: expected postgresql, got %s", dbInstance.DatabaseType)
+	if dbInstance.DatabaseEngine != models.DatabaseEnginePostgreSQL {
+		return nil, fmt.Errorf("invalid database type: expected postgres, got %s", dbInstance.DatabaseEngine)
 	}
 
 	// Decrypt password
@@ -192,8 +192,8 @@ func (s *SchemaSnapshotService) CaptureMySQL(
 	}
 
 	// Validate database type
-	if dbInstance.DatabaseType != models.DatabaseTypeMySQL {
-		return nil, fmt.Errorf("invalid database type: expected mysql, got %s", dbInstance.DatabaseType)
+	if dbInstance.DatabaseEngine != models.DatabaseEngineMySQL {
+		return nil, fmt.Errorf("invalid database type: expected mysql, got %s", dbInstance.DatabaseEngine)
 	}
 
 	// Decrypt password

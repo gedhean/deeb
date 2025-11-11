@@ -9,6 +9,7 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/review"
 	"go.uber.org/zap"
 )
 
@@ -295,4 +296,22 @@ func (h *PolicyHandler) DeletePolicy(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Policy deleted successfully",
 	})
+}
+
+// GetSQLReviewRules handles GET /api/v1/policies/sql-review/rules - get available SQL review rules
+func (h *PolicyHandler) GetSQLReviewRules(c echo.Context) error {
+	// Get all available rules organized by engine and category
+	allRules := review.GetAvailableRules()
+
+	// Convert to response format
+	response := make(map[string]interface{})
+	for engine, categories := range allRules {
+		engineRules := make(map[string][]review.RuleMetadata)
+		for category, rules := range categories {
+			engineRules[string(category)] = rules
+		}
+		response[string(engine)] = engineRules
+	}
+
+	return c.JSON(http.StatusOK, response)
 }

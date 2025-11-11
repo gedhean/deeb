@@ -190,7 +190,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			"name": "Production DB",
 			"host": "localhost",
 			"port": 5432,
-			"database_type": "postgresql",
+			"database_engine": "postgres",
 			"username": "testuser",
 			"password": "testpassword"
 		}`
@@ -236,8 +236,8 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			t.Errorf("Expected name 'Production DB', got %s", response.Name)
 		}
 
-		if response.DatabaseType != models.DatabaseTypePostgreSQL {
-			t.Errorf("Expected database_type 'postgresql', got %s", response.DatabaseType)
+		if response.DatabaseEngine != models.DatabaseEnginePostgreSQL {
+			t.Errorf("Expected database_engine 'postgres', got %s", response.DatabaseEngine)
 		}
 	})
 
@@ -258,7 +258,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			"name": "",
 			"host": "prod-db.example.com",
 			"port": 5432,
-			"database_type": "postgresql",
+			"database_engine": "postgres",
 			"username": "testuser",
 			"password": "testpassword"
 		}`
@@ -335,18 +335,18 @@ func TestListDatabaseInstances(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
-					ID:           uuid.New(),
-					Name:         "Production DB",
-					Host:         "prod-db.example.com",
-					Port:         5432,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             uuid.New(),
+					Name:           "Production DB",
+					Host:           "prod-db.example.com",
+					Port:           5432,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				},
 				{
-					ID:           uuid.New(),
-					Name:         "Staging DB",
-					Host:         "staging-db.example.com",
-					Port:         3306,
-					DatabaseType: models.DatabaseTypeMySQL,
+					ID:             uuid.New(),
+					Name:           "Staging DB",
+					Host:           "staging-db.example.com",
+					Port:           3306,
+					DatabaseEngine: models.DatabaseEngineMySQL,
 				},
 			},
 		}
@@ -431,11 +431,11 @@ func TestGetDatabaseInstance(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
-					ID:           instanceID,
-					Name:         "Production DB",
-					Host:         "prod-db.example.com",
-					Port:         5432,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					Name:           "Production DB",
+					Host:           "prod-db.example.com",
+					Port:           5432,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				},
 			},
 		}
@@ -542,11 +542,11 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
-					ID:           instanceID,
-					Name:         "Production DB",
-					Host:         "prod-db.example.com",
-					Port:         5432,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					Name:           "Production DB",
+					Host:           "prod-db.example.com",
+					Port:           5432,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				},
 			},
 		}
@@ -595,11 +595,11 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
-					ID:           instanceID,
-					Name:         "Production DB",
-					Host:         "prod-db.example.com",
-					Port:         5432,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					Name:           "Production DB",
+					Host:           "prod-db.example.com",
+					Port:           5432,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				},
 			},
 		}
@@ -720,11 +720,11 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 		repo := &mockDatabaseInstanceRepository{
 			instances: []*models.DatabaseInstance{
 				{
-					ID:           instanceID,
-					Name:         "Production DB",
-					Host:         "prod-db.example.com",
-					Port:         5432,
-					DatabaseType: models.DatabaseTypePostgreSQL,
+					ID:             instanceID,
+					Name:           "Production DB",
+					Host:           "prod-db.example.com",
+					Port:           5432,
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
 				},
 			},
 		}

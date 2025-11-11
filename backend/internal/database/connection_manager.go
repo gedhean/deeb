@@ -47,8 +47,8 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 	}
 
 	// Validate database type
-	if params.DatabaseInstance.DatabaseType != models.DatabaseTypeMySQL {
-		return nil, fmt.Errorf("invalid database type: expected mysql, got %s", params.DatabaseInstance.DatabaseType)
+	if params.DatabaseInstance.DatabaseEngine != models.DatabaseEngineMySQL {
+		return nil, fmt.Errorf("invalid database type: expected mysql, got %s", params.DatabaseInstance.DatabaseEngine)
 	}
 
 	// Decrypt password
@@ -89,7 +89,7 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 	if err != nil {
 		// Create structured connection error
 		connErr := NewConnectionError(
-			string(params.DatabaseInstance.DatabaseType),
+			string(params.DatabaseInstance.DatabaseEngine),
 			params.Database.DatabaseName,
 			params.Database.ID.String(),
 			params.DatabaseInstance.Name,
@@ -106,7 +106,7 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 			zap.String("database_id", params.Database.ID.String()),
 			zap.String("database_name", params.Database.DatabaseName),
 			zap.String("database_instance_name", params.DatabaseInstance.Name),
-			zap.String("database_type", string(params.DatabaseInstance.DatabaseType)),
+			zap.String("database_engine", string(params.DatabaseInstance.DatabaseEngine)),
 			zap.String("host", params.DatabaseInstance.Host),
 			zap.Int("port", params.DatabaseInstance.Port),
 			zap.String("username", params.DatabaseInstance.Username),
@@ -157,7 +157,7 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 		_ = db.Close()
 		// Create structured connection error for ping failure
 		connErr := NewConnectionError(
-			string(params.DatabaseInstance.DatabaseType),
+			string(params.DatabaseInstance.DatabaseEngine),
 			params.Database.DatabaseName,
 			params.Database.ID.String(),
 			params.DatabaseInstance.Name,
@@ -174,7 +174,7 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 			zap.String("database_id", params.Database.ID.String()),
 			zap.String("database_name", params.Database.DatabaseName),
 			zap.String("database_instance_name", params.DatabaseInstance.Name),
-			zap.String("database_type", string(params.DatabaseInstance.DatabaseType)),
+			zap.String("database_engine", string(params.DatabaseInstance.DatabaseEngine)),
 			zap.String("host", params.DatabaseInstance.Host),
 			zap.Int("port", params.DatabaseInstance.Port),
 			zap.String("error_type", connErr.ErrorType),
@@ -212,8 +212,8 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 	}
 
 	// Validate database type
-	if params.DatabaseInstance.DatabaseType != models.DatabaseTypePostgreSQL {
-		return nil, fmt.Errorf("invalid database type: expected postgresql, got %s", params.DatabaseInstance.DatabaseType)
+	if params.DatabaseInstance.DatabaseEngine != models.DatabaseEnginePostgreSQL {
+		return nil, fmt.Errorf("invalid database type: expected postgres, got %s", params.DatabaseInstance.DatabaseEngine)
 	}
 
 	// Decrypt password
@@ -265,7 +265,7 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 	if err != nil {
 		// Create structured connection error
 		connErr := NewConnectionError(
-			string(params.DatabaseInstance.DatabaseType),
+			string(params.DatabaseInstance.DatabaseEngine),
 			params.Database.DatabaseName,
 			params.Database.ID.String(),
 			params.DatabaseInstance.Name,
@@ -282,7 +282,7 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 			zap.String("database_id", params.Database.ID.String()),
 			zap.String("database_name", params.Database.DatabaseName),
 			zap.String("database_instance_name", params.DatabaseInstance.Name),
-			zap.String("database_type", string(params.DatabaseInstance.DatabaseType)),
+			zap.String("database_engine", string(params.DatabaseInstance.DatabaseEngine)),
 			zap.String("host", params.DatabaseInstance.Host),
 			zap.Int("port", params.DatabaseInstance.Port),
 			zap.String("username", params.DatabaseInstance.Username),
@@ -334,7 +334,7 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 		_ = db.Close()
 		// Create structured connection error for ping failure
 		connErr := NewConnectionError(
-			string(params.DatabaseInstance.DatabaseType),
+			string(params.DatabaseInstance.DatabaseEngine),
 			params.Database.DatabaseName,
 			params.Database.ID.String(),
 			params.DatabaseInstance.Name,
@@ -351,7 +351,7 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 			zap.String("database_id", params.Database.ID.String()),
 			zap.String("database_name", params.Database.DatabaseName),
 			zap.String("database_instance_name", params.DatabaseInstance.Name),
-			zap.String("database_type", string(params.DatabaseInstance.DatabaseType)),
+			zap.String("database_engine", string(params.DatabaseInstance.DatabaseEngine)),
 			zap.String("host", params.DatabaseInstance.Host),
 			zap.Int("port", params.DatabaseInstance.Port),
 			zap.String("error_type", connErr.ErrorType),
@@ -385,12 +385,12 @@ func (cm *ConnectionManager) Connect(ctx context.Context, params ConnectionParam
 		return nil, fmt.Errorf("database instance is required")
 	}
 
-	switch params.DatabaseInstance.DatabaseType {
-	case models.DatabaseTypeMySQL:
+	switch params.DatabaseInstance.DatabaseEngine {
+	case models.DatabaseEngineMySQL:
 		return cm.ConnectMySQL(ctx, params)
-	case models.DatabaseTypePostgreSQL:
+	case models.DatabaseEnginePostgreSQL:
 		return cm.ConnectPostgreSQL(ctx, params)
 	default:
-		return nil, fmt.Errorf("unsupported database type: %s", params.DatabaseInstance.DatabaseType)
+		return nil, fmt.Errorf("unsupported database type: %s", params.DatabaseInstance.DatabaseEngine)
 	}
 }

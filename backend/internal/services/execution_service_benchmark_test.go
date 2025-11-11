@@ -26,11 +26,11 @@ func BenchmarkExecutionService_ExecuteInTransaction(b *testing.B) {
 	changePlanID := uuid.New()
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           uuid.New(),
-		DatabaseType: models.DatabaseTypePostgreSQL,
-		Host:         "localhost",
-		Port:         5432,
-		Username:     "testuser",
+		ID:             uuid.New(),
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
+		Host:           "localhost",
+		Port:           5432,
+		Username:       "testuser",
 	}
 	db := &models.Database{
 		ID:                 uuid.New(),

@@ -120,7 +120,7 @@ export interface DatabaseInstance {
   id: string;
   name: string;
   description?: string;
-  database_type: 'mysql' | 'postgresql';
+  database_engine: 'mysql' | 'postgres';
   host: string;
   port: number;
   username: string;
@@ -135,7 +135,7 @@ export interface DatabaseInstance {
 export interface CreateDatabaseInstanceRequest {
   name: string;
   description?: string;
-  database_type: 'mysql' | 'postgresql';
+  database_engine: 'mysql' | 'postgres';
   host: string;
   port: number;
   username: string;
@@ -148,7 +148,7 @@ export interface CreateDatabaseInstanceRequest {
 export interface UpdateDatabaseInstanceRequest {
   name?: string;
   description?: string;
-  database_type?: 'mysql' | 'postgresql';
+  database_engine?: 'mysql' | 'postgres';
   host?: string;
   port?: number;
   username?: string;
@@ -208,16 +208,60 @@ export interface CreateEnvironmentRequest {
 export interface UpdateEnvironmentRequest {
   name?: string;
   description?: string;
-  policy_id?: string;
+  policy_id?: string | null;
 }
 
 // Policy Types
+export type SQLReviewRuleLevel = 'error' | 'warning';
+
+export type DatabaseEngine = 'mysql' | 'postgres';
+
+export type RuleCategory =
+  | 'Engine'
+  | 'Naming'
+  | 'Table'
+  | 'Column'
+  | 'System'
+  | 'Index'
+  | 'Schema'
+  | 'Statement';
+
+export interface SQLReviewRule {
+  type: string;
+  level: SQLReviewRuleLevel;
+  payload?: Record<string, unknown>;
+  engine: DatabaseEngine;
+  comment?: string;
+}
+
+export interface SQLReviewPolicyConfig {
+  rules: Record<string, SQLReviewRule>;
+}
+
+export interface RuleParameter {
+  name: string;
+  type: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'STRING_ARRAY' | 'TEMPLATE';
+  description: string;
+  required: boolean;
+  default?: unknown;
+  templateList?: string[];
+}
+
+export interface RuleMetadata {
+  type: string;
+  name: string;
+  description: string;
+  category: RuleCategory;
+  engine: DatabaseEngine;
+  parameters?: RuleParameter[];
+}
+
 export interface Policy {
   id: string;
   name: string;
   description?: string;
   type: 'SQL_REVIEW';
-  policy_config: Record<string, unknown>;
+  policy_config: SQLReviewPolicyConfig;
   created_at: string;
   updated_at: string;
 }
@@ -226,13 +270,18 @@ export interface CreatePolicyRequest {
   name: string;
   description?: string;
   type: 'SQL_REVIEW';
-  policy_config: Record<string, unknown>;
+  policy_config: SQLReviewPolicyConfig;
 }
 
 export interface UpdatePolicyRequest {
   name?: string;
   description?: string;
-  policy_config?: Record<string, unknown>;
+  policy_config?: SQLReviewPolicyConfig;
+}
+
+export interface SQLReviewRulesResponse {
+  mysql?: Record<RuleCategory, RuleMetadata[]>;
+  postgresql?: Record<RuleCategory, RuleMetadata[]>;
 }
 
 // List Response with Pagination
@@ -373,7 +422,7 @@ export interface ExecutionLog {
   database_id?: string;
   database_name?: string;
   database_instance_name?: string;
-  database_type?: string;
+  database_engine?: string;
   started_at: string;
   completed_at: string;
   created_at: string;
@@ -415,6 +464,24 @@ export interface AuditLogListResponse {
   limit: number;
   offset: number;
   count: number;
+}
+
+// Review Findings Filtering
+export interface ReviewFindingsFilterParams {
+  severity?: string;
+  rule_name?: string;
+  validator_type?: string;
+}
+
+export interface ReviewFindingsResponse {
+  change_plan_id: string;
+  findings: PolicyFindingItem[];
+  summary: {
+    total: number;
+    errors: number;
+    warnings: number;
+    infos: number;
+  };
 }
 
 // API Error

@@ -658,15 +658,15 @@ func TestIntegration_DatabaseInstances_CRUD(t *testing.T) {
 	t.Run("Create Database Instance - Admin", func(t *testing.T) {
 		// Note: Connection test will fail without a real database, but we can test the endpoint structure
 		reqBody := models.CreateDatabaseInstanceRequest{
-			Name:          "Test Database Instance",
-			Description:   stringPtr("Test Description"),
-			DatabaseType:  models.DatabaseTypePostgreSQL,
-			Host:          "localhost",
-			Port:          5432,
-			Username:      "testuser",
-			Password:      "testpassword",
-			UseRDSIAMAuth: false,
-			RequireSSL:    false,
+			Name:           "Test Database Instance",
+			Description:    stringPtr("Test Description"),
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
+			Host:           "localhost",
+			Port:           5432,
+			Username:       "testuser",
+			Password:       "testpassword",
+			UseRDSIAMAuth:  false,
+			RequireSSL:     false,
 		}
 		body, _ := json.Marshal(reqBody)
 
@@ -679,12 +679,12 @@ func TestIntegration_DatabaseInstances_CRUD(t *testing.T) {
 
 	t.Run("Create Database Instance - Developer (Should Fail)", func(t *testing.T) {
 		reqBody := models.CreateDatabaseInstanceRequest{
-			Name:         "Test Database Instance 2",
-			DatabaseType: models.DatabaseTypePostgreSQL,
-			Host:         "localhost",
-			Port:         5432,
-			Username:     "testuser",
-			Password:     "testpassword",
+			Name:           "Test Database Instance 2",
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
+			Host:           "localhost",
+			Port:           5432,
+			Username:       "testuser",
+			Password:       "testpassword",
 		}
 		body, _ := json.Marshal(reqBody)
 
@@ -748,7 +748,7 @@ func TestIntegration_Databases_CRUD_WithConstraints(t *testing.T) {
 	encryptedDetails := "encrypted-details"
 	instance := &models.DatabaseInstance{
 		Name:                       "Test Instance",
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       "localhost",
 		Port:                       5432,
 		Username:                   "testuser",

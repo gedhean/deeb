@@ -294,11 +294,11 @@ func TestExecutionService_executeInTransaction_Success(t *testing.T) {
 	sqlContent := "CREATE TABLE test (id UUID PRIMARY KEY);"
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           uuid.New(),
-		DatabaseType: models.DatabaseTypePostgreSQL,
-		Host:         "localhost",
-		Port:         5432,
-		Username:     "testuser",
+		ID:             uuid.New(),
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
+		Host:           "localhost",
+		Port:           5432,
+		Username:       "testuser",
 	}
 	dbModel := &models.Database{
 		ID:                 uuid.New(),
@@ -352,11 +352,11 @@ func TestExecutionService_executeInTransaction_WithRowsAffected(t *testing.T) {
 	sqlContent := "INSERT INTO users (id, name) VALUES (gen_random_uuid(), 'test');"
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           uuid.New(),
-		DatabaseType: models.DatabaseTypePostgreSQL,
-		Host:         "localhost",
-		Port:         5432,
-		Username:     "testuser",
+		ID:             uuid.New(),
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
+		Host:           "localhost",
+		Port:           5432,
+		Username:       "testuser",
 	}
 	dbModel := &models.Database{
 		ID:                 uuid.New(),
@@ -410,11 +410,11 @@ func TestExecutionService_executeInTransaction_ExecutionError(t *testing.T) {
 	sqlContent := "CREATE TABLE test (id UUID PRIMARY KEY);"
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           uuid.New(),
-		DatabaseType: models.DatabaseTypePostgreSQL,
-		Host:         "localhost",
-		Port:         5432,
-		Username:     "testuser",
+		ID:             uuid.New(),
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
+		Host:           "localhost",
+		Port:           5432,
+		Username:       "testuser",
 	}
 	dbModel := &models.Database{
 		ID:                 uuid.New(),
@@ -466,11 +466,11 @@ func TestExecutionService_executeInTransaction_CommitError(t *testing.T) {
 	sqlContent := "CREATE TABLE test (id UUID PRIMARY KEY);"
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           uuid.New(),
-		DatabaseType: models.DatabaseTypePostgreSQL,
-		Host:         "localhost",
-		Port:         5432,
-		Username:     "testuser",
+		ID:             uuid.New(),
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
+		Host:           "localhost",
+		Port:           5432,
+		Username:       "testuser",
 	}
 	dbModel := &models.Database{
 		ID:                 uuid.New(),
@@ -525,11 +525,11 @@ func TestExecutionService_executeInTransaction_BeginError(t *testing.T) {
 	sqlContent := "CREATE TABLE test (id UUID PRIMARY KEY);"
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           uuid.New(),
-		DatabaseType: models.DatabaseTypePostgreSQL,
-		Host:         "localhost",
-		Port:         5432,
-		Username:     "testuser",
+		ID:             uuid.New(),
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
+		Host:           "localhost",
+		Port:           5432,
+		Username:       "testuser",
 	}
 	dbModel := &models.Database{
 		ID:                 uuid.New(),
@@ -581,11 +581,11 @@ func TestExecutionService_Execute_Success_PostgreSQL(t *testing.T) {
 	}
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           databaseInstanceID,
-		DatabaseType: models.DatabaseTypePostgreSQL,
-		Host:         "localhost",
-		Port:         5432,
-		Username:     "testuser",
+		ID:             databaseInstanceID,
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
+		Host:           "localhost",
+		Port:           5432,
+		Username:       "testuser",
 	}
 
 	beforeSnapshot := &models.SchemaSnapshot{
@@ -738,11 +738,11 @@ func TestExecutionService_Execute_Success_MySQL(t *testing.T) {
 	}
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           databaseInstanceID,
-		DatabaseType: models.DatabaseTypeMySQL,
-		Host:         "localhost",
-		Port:         3306,
-		Username:     "testuser",
+		ID:             databaseInstanceID,
+		DatabaseEngine: models.DatabaseEngineMySQL,
+		Host:           "localhost",
+		Port:           3306,
+		Username:       "testuser",
 	}
 
 	beforeSnapshot := &models.SchemaSnapshot{
@@ -1072,8 +1072,8 @@ func TestExecutionService_Execute_DatabaseLocked_WithQueue(t *testing.T) {
 	}
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           databaseInstanceID,
-		DatabaseType: models.DatabaseTypePostgreSQL,
+		ID:             databaseInstanceID,
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
 	}
 
 	queueItem := &models.ExecutionQueue{
@@ -1165,8 +1165,8 @@ func TestExecutionService_Execute_DatabaseLocked_WithoutQueue(t *testing.T) {
 	}
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           databaseInstanceID,
-		DatabaseType: models.DatabaseTypePostgreSQL,
+		ID:             databaseInstanceID,
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
 	}
 
 	changePlanRepo := new(MockChangePlanRepository)
@@ -1239,8 +1239,8 @@ func TestExecutionService_Execute_BeforeSnapshotFailure(t *testing.T) {
 	}
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           databaseInstanceID,
-		DatabaseType: models.DatabaseTypePostgreSQL,
+		ID:             databaseInstanceID,
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
 	}
 
 	changePlanRepo := new(MockChangePlanRepository)
@@ -1329,11 +1329,11 @@ func TestExecutionService_Execute_AfterSnapshotFailure(t *testing.T) {
 	}
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           databaseInstanceID,
-		DatabaseType: models.DatabaseTypePostgreSQL,
-		Host:         "localhost",
-		Port:         5432,
-		Username:     "testuser",
+		ID:             databaseInstanceID,
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
+		Host:           "localhost",
+		Port:           5432,
+		Username:       "testuser",
 	}
 
 	beforeSnapshot := &models.SchemaSnapshot{
@@ -1452,11 +1452,11 @@ func TestExecutionService_Execute_Timeout(t *testing.T) {
 	}
 
 	dbInstance := &models.DatabaseInstance{
-		ID:           databaseInstanceID,
-		DatabaseType: models.DatabaseTypePostgreSQL,
-		Host:         "localhost",
-		Port:         5432,
-		Username:     "testuser",
+		ID:             databaseInstanceID,
+		DatabaseEngine: models.DatabaseEnginePostgreSQL,
+		Host:           "localhost",
+		Port:           5432,
+		Username:       "testuser",
 	}
 
 	beforeSnapshot := &models.SchemaSnapshot{

@@ -78,34 +78,34 @@ func TestTestMySQLConnection_InvalidParams(t *testing.T) {
 		{
 			name: "missing host",
 			params: ConnectionTestParams{
-				DatabaseType: "mysql",
-				Port:         3306,
-				Username:     "test",
-				Password:     "pass",
-				Database:     "testdb",
+				DatabaseEngine: "mysql",
+				Port:           3306,
+				Username:       "test",
+				Password:       "pass",
+				Database:       "testdb",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid port",
 			params: ConnectionTestParams{
-				DatabaseType: "mysql",
-				Host:         "localhost",
-				Port:         0,
-				Username:     "test",
-				Password:     "pass",
-				Database:     "testdb",
+				DatabaseEngine: "mysql",
+				Host:           "localhost",
+				Port:           0,
+				Username:       "test",
+				Password:       "pass",
+				Database:       "testdb",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing username",
 			params: ConnectionTestParams{
-				DatabaseType: "mysql",
-				Host:         "localhost",
-				Port:         3306,
-				Password:     "pass",
-				Database:     "testdb",
+				DatabaseEngine: "mysql",
+				Host:           "localhost",
+				Port:           3306,
+				Password:       "pass",
+				Database:       "testdb",
 			},
 			wantErr: true,
 		},
@@ -132,34 +132,34 @@ func TestTestPostgreSQLConnection_InvalidParams(t *testing.T) {
 		{
 			name: "missing host",
 			params: ConnectionTestParams{
-				DatabaseType: "postgresql",
-				Port:         5432,
-				Username:     "test",
-				Password:     "pass",
-				Database:     "testdb",
+				DatabaseEngine: "postgres",
+				Port:           5432,
+				Username:       "test",
+				Password:       "pass",
+				Database:       "testdb",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid port",
 			params: ConnectionTestParams{
-				DatabaseType: "postgresql",
-				Host:         "localhost",
-				Port:         0,
-				Username:     "test",
-				Password:     "pass",
-				Database:     "testdb",
+				DatabaseEngine: "postgres",
+				Host:           "localhost",
+				Port:           0,
+				Username:       "test",
+				Password:       "pass",
+				Database:       "testdb",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing username",
 			params: ConnectionTestParams{
-				DatabaseType: "postgresql",
-				Host:         "localhost",
-				Port:         5432,
-				Password:     "pass",
-				Database:     "testdb",
+				DatabaseEngine: "postgres",
+				Host:           "localhost",
+				Port:           5432,
+				Password:       "pass",
+				Database:       "testdb",
 			},
 			wantErr: true,
 		},
@@ -180,7 +180,7 @@ func TestTestMySQLConnection_Timeout(t *testing.T) {
 
 	// Test with invalid host that will timeout
 	params := ConnectionTestParams{
-		DatabaseType:             "mysql",
+		DatabaseEngine:           "mysql",
 		Host:                     "192.0.2.0", // Non-routable IP (RFC 3330)
 		Port:                     3306,
 		Username:                 "test",
@@ -199,7 +199,7 @@ func TestTestPostgreSQLConnection_Timeout(t *testing.T) {
 
 	// Test with invalid host that will timeout
 	params := ConnectionTestParams{
-		DatabaseType:             "postgresql",
+		DatabaseEngine:           "postgres",
 		Host:                     "192.0.2.0", // Non-routable IP (RFC 3330)
 		Port:                     5432,
 		Username:                 "test",
@@ -220,7 +220,7 @@ func TestTestMySQLConnection_EncryptedPassword(t *testing.T) {
 
 	// Test with invalid host (will fail connection, but password decryption should work)
 	params := ConnectionTestParams{
-		DatabaseType:             "mysql",
+		DatabaseEngine:           "mysql",
 		Host:                     "192.0.2.0",
 		Port:                     3306,
 		Username:                 "test",
@@ -244,7 +244,7 @@ func TestTestPostgreSQLConnection_EncryptedPassword(t *testing.T) {
 
 	// Test with invalid host (will fail connection, but password decryption should work)
 	params := ConnectionTestParams{
-		DatabaseType:             "postgresql",
+		DatabaseEngine:           "postgres",
 		Host:                     "192.0.2.0",
 		Port:                     5432,
 		Username:                 "test",

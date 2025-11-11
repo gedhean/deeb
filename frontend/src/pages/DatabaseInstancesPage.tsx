@@ -73,7 +73,7 @@ export const DatabaseInstancesPage: React.FC = () => {
   // Filter state
   const [filters, setFilters] = useState<{
     search?: string;
-    database_type?: string;
+    database_engine?: string;
     status?: string;
     environment_id?: string;
   }>({});
@@ -82,7 +82,7 @@ export const DatabaseInstancesPage: React.FC = () => {
   const [formData, setFormData] = useState<CreateDatabaseInstanceRequest>({
     name: '',
     description: '',
-    database_type: 'postgresql',
+    database_engine: 'postgres',
     host: '',
     port: 5432,
     username: '',
@@ -252,7 +252,7 @@ export const DatabaseInstancesPage: React.FC = () => {
       const createData: CreateDatabaseInstanceRequest = {
         name: formData.name.trim(),
         description: formData.description?.trim() || undefined,
-        database_type: formData.database_type,
+        database_engine: formData.database_engine,
         host: formData.host.trim(),
         port: formData.port,
         username: formData.username.trim(),
@@ -266,7 +266,7 @@ export const DatabaseInstancesPage: React.FC = () => {
       setFormData({
         name: '',
         description: '',
-        database_type: 'postgresql',
+        database_engine: 'postgres',
         host: '',
         port: 5432,
         username: '',
@@ -305,8 +305,8 @@ export const DatabaseInstancesPage: React.FC = () => {
       if (formData.description !== selectedInstance.description) {
         updateData.description = formData.description?.trim() || undefined;
       }
-      if (formData.database_type !== selectedInstance.database_type) {
-        updateData.database_type = formData.database_type;
+      if (formData.database_engine !== selectedInstance.database_engine) {
+        updateData.database_engine = formData.database_engine;
       }
       if (formData.host !== selectedInstance.host) {
         updateData.host = formData.host.trim();
@@ -336,7 +336,7 @@ export const DatabaseInstancesPage: React.FC = () => {
       setFormData({
         name: '',
         description: '',
-        database_type: 'postgresql',
+        database_engine: 'postgres',
         host: '',
         port: 5432,
         username: '',
@@ -389,7 +389,7 @@ export const DatabaseInstancesPage: React.FC = () => {
     setFormData({
       name: '',
       description: '',
-      database_type: 'postgresql',
+      database_engine: 'postgres',
       host: '',
       port: 5432,
       username: '',
@@ -408,7 +408,7 @@ export const DatabaseInstancesPage: React.FC = () => {
     setFormData({
       name: instance.name,
       description: instance.description || '',
-      database_type: instance.database_type,
+      database_engine: instance.database_engine,
       host: instance.host,
       port: instance.port,
       username: instance.username,
@@ -487,7 +487,7 @@ export const DatabaseInstancesPage: React.FC = () => {
     }
 
     // Database type filter
-    if (filters.database_type && instance.database_type !== filters.database_type) {
+    if (filters.database_engine && instance.database_engine !== filters.database_engine) {
       return false;
     }
 
@@ -576,15 +576,15 @@ export const DatabaseInstancesPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Database Type Filter */}
+              {/* Database Engine Filter */}
               <div className="space-y-2">
                 <label htmlFor="filter-type" className="text-sm font-medium">
-                  Database Type
+                  Database Engine
                 </label>
                 <select
                   id="filter-type"
-                  value={filters.database_type || ''}
-                  onChange={(e) => handleFilterChange('database_type', e.target.value)}
+                  value={filters.database_engine || ''}
+                  onChange={(e) => handleFilterChange('database_engine', e.target.value)}
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <option value="">All Types</option>
@@ -756,7 +756,7 @@ export const DatabaseInstancesPage: React.FC = () => {
                       >
                         <TableCell className="font-medium">{instance.name}</TableCell>
                         <TableCell className="text-muted-foreground">
-                          {instance.database_type}
+                          {instance.database_engine}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {instance.host}:{instance.port}
@@ -851,15 +851,15 @@ export const DatabaseInstancesPage: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <label htmlFor="create-type" className="text-sm font-medium">
-                  Database Type *
+                  Database Engine *
                 </label>
                 <select
                   id="create-type"
-                  value={formData.database_type}
+                  value={formData.database_engine}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      database_type: e.target.value as 'mysql' | 'postgresql',
+                      database_engine: e.target.value as 'mysql' | 'postgres',
                       port: e.target.value === 'mysql' ? 3306 : 5432,
                     })
                   }
@@ -1077,15 +1077,15 @@ export const DatabaseInstancesPage: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <label htmlFor="edit-type" className="text-sm font-medium">
-                  Database Type *
+                  Database Engine *
                 </label>
                 <select
                   id="edit-type"
-                  value={formData.database_type}
+                  value={formData.database_engine}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      database_type: e.target.value as 'mysql' | 'postgresql',
+                      database_engine: e.target.value as 'mysql' | 'postgres',
                     })
                   }
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"

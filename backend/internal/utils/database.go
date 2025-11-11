@@ -20,11 +20,13 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	// ErrConnectionFailed is returned when connection cannot be established
 	ErrConnectionFailed = errors.New("connection failed")
+	// ErrMissingParameter is returned when required parameter is missing
+	ErrMissingParameter = errors.New("missing required parameter")
 )
 
 // ConnectionTestParams represents parameters for testing a database connection
 type ConnectionTestParams struct {
-	DatabaseType             string // "mysql" or "postgresql"
+	DatabaseEngine           string // "mysql" or "postgres"
 	Host                     string
 	Port                     int
 	Username                 string
@@ -45,6 +47,23 @@ type connectionDetails struct {
 // This is a public wrapper around the private decryptPassword function
 func DecryptPassword(encrypted *string, encryptionKey string) (string, error) {
 	return decryptPassword(encrypted, encryptionKey)
+}
+
+// validateConnectionParams validates required connection parameters
+func validateConnectionParams(params ConnectionTestParams) error {
+	if params.Host == "" {
+		return fmt.Errorf("%w: host is required", ErrMissingParameter)
+	}
+	if params.Port <= 0 {
+		return fmt.Errorf("%w: valid port is required", ErrMissingParameter)
+	}
+	if params.Username == "" {
+		return fmt.Errorf("%w: username is required", ErrMissingParameter)
+	}
+	if params.DatabaseEngine == "" {
+		return fmt.Errorf("%w: database_engine is required", ErrMissingParameter)
+	}
+	return nil
 }
 
 // decryptPassword decrypts password from encrypted JSON string
@@ -68,6 +87,11 @@ func decryptPassword(encrypted *string, encryptionKey string) (string, error) {
 
 // TestMySQLConnection tests a MySQL database connection with the provided parameters
 func TestMySQLConnection(ctx context.Context, params ConnectionTestParams) error {
+	// Validate required parameters
+	if err := validateConnectionParams(params); err != nil {
+		return err
+	}
+
 	// Determine password to use
 	password := params.Password
 	if params.EncryptedPassword != nil && params.EncryptionKey != "" {
@@ -143,6 +167,11 @@ func TestMySQLConnection(ctx context.Context, params ConnectionTestParams) error
 
 // TestPostgreSQLConnection tests a PostgreSQL database connection with the provided parameters
 func TestPostgreSQLConnection(ctx context.Context, params ConnectionTestParams) error {
+	// Validate required parameters
+	if err := validateConnectionParams(params); err != nil {
+		return err
+	}
+
 	// Determine password to use
 	password := params.Password
 	if params.EncryptedPassword != nil && params.EncryptionKey != "" {

@@ -1,5 +1,11 @@
 import { apiClient } from '../client';
-import type { CreatePolicyRequest, ListResponse, Policy, UpdatePolicyRequest } from '../types';
+import type {
+  CreatePolicyRequest,
+  ListResponse,
+  Policy,
+  SQLReviewRulesResponse,
+  UpdatePolicyRequest,
+} from '../types';
 
 export const policiesService = {
   /**
@@ -73,5 +79,16 @@ export const policiesService = {
    */
   async deletePolicy(id: string): Promise<void> {
     await apiClient.delete(`/api/v1/policies/${id}`);
+  },
+
+  /**
+   * Get available SQL review rules
+   * Returns rules organized by engine and category
+   */
+  async getSQLReviewRules(): Promise<SQLReviewRulesResponse> {
+    const response = await apiClient.get<SQLReviewRulesResponse>(
+      '/api/v1/policies/sql-review/rules',
+    );
+    return response;
   },
 };

@@ -1,12 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { PolicyFindingsSummary, PolicyFindingItem, ChangePlanStatus } from '@/lib/api/types';
 import { changePlanService } from '@/lib/api/services/changePlans';
 import { APIError } from '@/lib/api/types';
-import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw, Filter } from 'lucide-react';
 
 interface SQLReviewResultsProps {
   changePlanId: string;
@@ -23,6 +32,10 @@ export const SQLReviewResults: React.FC<SQLReviewResultsProps> = ({
 }) => {
   const [isTriggeringReview, setIsTriggeringReview] = useState(false);
   const [error, setError] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [ruleNameFilter, setRuleNameFilter] = useState<string>('');
+  const [validatorTypeFilter, setValidatorTypeFilter] = useState<string>('');
 
   const handleTriggerReview = async () => {
     try {
@@ -47,6 +60,74 @@ export const SQLReviewResults: React.FC<SQLReviewResultsProps> = ({
       setIsTriggeringReview(false);
     }
   };
+
+  // Apply filters to findings (must be before early returns to satisfy React Hooks rules)
+  const filteredFindings = useMemo(() => {
+    if (!findings) {
+      return {
+        errors: [],
+        warnings: [],
+        infos: [],
+        counts: { errors: 0, warnings: 0, infos: 0 },
+      };
+    }
+
+    const filterItems = (items: PolicyFindingItem[]) => {
+      return items.filter((item) => {
+        // Filter by rule name
+        if (
+          ruleNameFilter &&
+          !item.rule_name.toLowerCase().includes(ruleNameFilter.toLowerCase())
+        ) {
+          return false;
+        }
+        // Filter by validator type
+        if (
+          validatorTypeFilter &&
+          item.validator_type &&
+          !item.validator_type.toLowerCase().includes(validatorTypeFilter.toLowerCase())
+        ) {
+          return false;
+        }
+        return true;
+      });
+    };
+
+    const filteredErrors = filterItems(findings.errors);
+    const filteredWarnings = filterItems(findings.warnings);
+    const filteredInfos = filterItems(findings.infos);
+
+    // Apply severity filter
+    let displayedErrors = filteredErrors;
+    let displayedWarnings = filteredWarnings;
+    let displayedInfos = filteredInfos;
+
+    if (severityFilter === 'errors') {
+      displayedWarnings = [];
+      displayedInfos = [];
+    } else if (severityFilter === 'warnings') {
+      displayedErrors = [];
+      displayedInfos = [];
+    } else if (severityFilter === 'infos') {
+      displayedErrors = [];
+      displayedWarnings = [];
+    }
+
+    return {
+      errors: displayedErrors,
+      warnings: displayedWarnings,
+      infos: displayedInfos,
+      counts: {
+        errors: displayedErrors.length,
+        warnings: displayedWarnings.length,
+        infos: displayedInfos.length,
+      },
+    };
+  }, [findings, severityFilter, ruleNameFilter, validatorTypeFilter]);
+
+  // Check if any filters are active
+  const hasActiveFilters =
+    severityFilter !== 'all' || ruleNameFilter !== '' || validatorTypeFilter !== '';
 
   // If no findings provided, show appropriate message or loading state
   if (!findings) {
@@ -141,7 +222,7 @@ export const SQLReviewResults: React.FC<SQLReviewResultsProps> = ({
     );
   }
 
-  const { errors, warnings, infos, counts } = findings;
+  const { errors, warnings, infos, counts } = filteredFindings;
   const hasErrors = errors.length > 0;
   const hasWarnings = warnings.length > 0;
   const hasInfos = infos.length > 0;
@@ -208,27 +289,109 @@ export const SQLReviewResults: React.FC<SQLReviewResultsProps> = ({
             <CardTitle>SQL Review Results</CardTitle>
             <CardDescription>Automated SQL review findings grouped by severity</CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleTriggerReview}
-            disabled={isTriggeringReview}
-          >
-            {isTriggeringReview ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Running Review...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Run Review
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className={hasActiveFilters ? 'border-blue-500 text-blue-600' : ''}
+            >
+              <Filter className="mr-2 h-4 w-4" />
+              {hasActiveFilters ? 'Filters Active' : 'Filter'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTriggerReview}
+              disabled={isTriggeringReview}
+            >
+              {isTriggeringReview ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Running Review...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Run Review
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Filter controls */}
+        {showFilters && (
+          <div className="p-4 rounded-md border bg-muted/50">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="severity-filter" className="text-xs font-medium">
+                  Severity
+                </Label>
+                <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                  <SelectTrigger id="severity-filter" className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Severities</SelectItem>
+                    <SelectItem value="errors">Errors Only</SelectItem>
+                    <SelectItem value="warnings">Warnings Only</SelectItem>
+                    <SelectItem value="infos">Info Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rule-name-filter" className="text-xs font-medium">
+                  Rule Name
+                </Label>
+                <Input
+                  id="rule-name-filter"
+                  placeholder="Filter by rule name..."
+                  value={ruleNameFilter}
+                  onChange={(e) => setRuleNameFilter(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="validator-type-filter" className="text-xs font-medium">
+                  Validator Type
+                </Label>
+                <Input
+                  id="validator-type-filter"
+                  placeholder="Filter by validator..."
+                  value={validatorTypeFilter}
+                  onChange={(e) => setValidatorTypeFilter(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+            </div>
+
+            {hasActiveFilters && (
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  Showing {counts.errors + counts.warnings + counts.infos} of{' '}
+                  {findings.counts.errors + findings.counts.warnings + findings.counts.infos}{' '}
+                  findings
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSeverityFilter('all');
+                    setRuleNameFilter('');
+                    setValidatorTypeFilter('');
+                  }}
+                  className="h-7 text-xs"
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
         {/* Error message */}
         {error && (
           <div className="p-3 rounded-md border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20">

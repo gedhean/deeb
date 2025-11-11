@@ -53,11 +53,11 @@ func TestConnectionManager_ConnectMySQL_InvalidParams(t *testing.T) {
 			name: "nil database",
 			params: ConnectionParams{
 				DatabaseInstance: &models.DatabaseInstance{
-					ID:           uuid.New(),
-					DatabaseType: models.DatabaseTypeMySQL,
-					Host:         "localhost",
-					Port:         3306,
-					Username:     "testuser",
+					ID:             uuid.New(),
+					DatabaseEngine: models.DatabaseEngineMySQL,
+					Host:           "localhost",
+					Port:           3306,
+					Username:       "testuser",
 				},
 				Database: nil,
 			},
@@ -68,11 +68,11 @@ func TestConnectionManager_ConnectMySQL_InvalidParams(t *testing.T) {
 			name: "invalid database type",
 			params: ConnectionParams{
 				DatabaseInstance: &models.DatabaseInstance{
-					ID:           uuid.New(),
-					DatabaseType: models.DatabaseTypePostgreSQL,
-					Host:         "localhost",
-					Port:         3306,
-					Username:     "testuser",
+					ID:             uuid.New(),
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
+					Host:           "localhost",
+					Port:           3306,
+					Username:       "testuser",
 				},
 				Database: &models.Database{
 					ID:           uuid.New(),
@@ -87,7 +87,7 @@ func TestConnectionManager_ConnectMySQL_InvalidParams(t *testing.T) {
 			params: ConnectionParams{
 				DatabaseInstance: &models.DatabaseInstance{
 					ID:                         uuid.New(),
-					DatabaseType:               models.DatabaseTypeMySQL,
+					DatabaseEngine:             models.DatabaseEngineMySQL,
 					Host:                       "localhost",
 					Port:                       3306,
 					Username:                   "testuser",
@@ -149,11 +149,11 @@ func TestConnectionManager_ConnectPostgreSQL_InvalidParams(t *testing.T) {
 			name: "nil database",
 			params: ConnectionParams{
 				DatabaseInstance: &models.DatabaseInstance{
-					ID:           uuid.New(),
-					DatabaseType: models.DatabaseTypePostgreSQL,
-					Host:         "localhost",
-					Port:         5432,
-					Username:     "testuser",
+					ID:             uuid.New(),
+					DatabaseEngine: models.DatabaseEnginePostgreSQL,
+					Host:           "localhost",
+					Port:           5432,
+					Username:       "testuser",
 				},
 				Database: nil,
 			},
@@ -164,11 +164,11 @@ func TestConnectionManager_ConnectPostgreSQL_InvalidParams(t *testing.T) {
 			name: "invalid database type",
 			params: ConnectionParams{
 				DatabaseInstance: &models.DatabaseInstance{
-					ID:           uuid.New(),
-					DatabaseType: models.DatabaseTypeMySQL,
-					Host:         "localhost",
-					Port:         5432,
-					Username:     "testuser",
+					ID:             uuid.New(),
+					DatabaseEngine: models.DatabaseEngineMySQL,
+					Host:           "localhost",
+					Port:           5432,
+					Username:       "testuser",
 				},
 				Database: &models.Database{
 					ID:           uuid.New(),
@@ -183,7 +183,7 @@ func TestConnectionManager_ConnectPostgreSQL_InvalidParams(t *testing.T) {
 			params: ConnectionParams{
 				DatabaseInstance: &models.DatabaseInstance{
 					ID:                         uuid.New(),
-					DatabaseType:               models.DatabaseTypePostgreSQL,
+					DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 					Host:                       "localhost",
 					Port:                       5432,
 					Username:                   "testuser",
@@ -225,11 +225,11 @@ func TestConnectionManager_Connect_UnsupportedType(t *testing.T) {
 
 	params := ConnectionParams{
 		DatabaseInstance: &models.DatabaseInstance{
-			ID:           uuid.New(),
-			DatabaseType: "invalid_type",
-			Host:         "localhost",
-			Port:         5432,
-			Username:     "testuser",
+			ID:             uuid.New(),
+			DatabaseEngine: "invalid_type",
+			Host:           "localhost",
+			Port:           5432,
+			Username:       "testuser",
 		},
 		Database: &models.Database{
 			ID:           uuid.New(),
