@@ -120,7 +120,7 @@ export interface DatabaseInstance {
   id: string;
   name: string;
   description?: string;
-  database_type: 'mysql' | 'postgresql';
+  database_engine: 'mysql' | 'postgres';
   host: string;
   port: number;
   username: string;
@@ -135,7 +135,7 @@ export interface DatabaseInstance {
 export interface CreateDatabaseInstanceRequest {
   name: string;
   description?: string;
-  database_type: 'mysql' | 'postgresql';
+  database_engine: 'mysql' | 'postgres';
   host: string;
   port: number;
   username: string;
@@ -148,7 +148,7 @@ export interface CreateDatabaseInstanceRequest {
 export interface UpdateDatabaseInstanceRequest {
   name?: string;
   description?: string;
-  database_type?: 'mysql' | 'postgresql';
+  database_engine?: 'mysql' | 'postgres';
   host?: string;
   port?: number;
   username?: string;
@@ -214,7 +214,7 @@ export interface UpdateEnvironmentRequest {
 // Policy Types
 export type SQLReviewRuleLevel = 'error' | 'warning';
 
-export type DatabaseType = 'mysql' | 'postgresql';
+export type DatabaseEngine = 'mysql' | 'postgres';
 
 export type RuleCategory =
   | 'Engine'
@@ -230,7 +230,7 @@ export interface SQLReviewRule {
   type: string;
   level: SQLReviewRuleLevel;
   payload?: Record<string, unknown>;
-  engine: DatabaseType;
+  engine: DatabaseEngine;
   comment?: string;
 }
 
@@ -252,7 +252,7 @@ export interface RuleMetadata {
   name: string;
   description: string;
   category: RuleCategory;
-  engine: DatabaseType;
+  engine: DatabaseEngine;
   parameters?: RuleParameter[];
 }
 
@@ -422,7 +422,7 @@ export interface ExecutionLog {
   database_id?: string;
   database_name?: string;
   database_instance_name?: string;
-  database_type?: string;
+  database_engine?: string;
   started_at: string;
   completed_at: string;
   created_at: string;

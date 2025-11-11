@@ -56,8 +56,8 @@ type ReviewOptions struct {
 	// SQLContent is the SQL to review
 	SQLContent string
 
-	// DatabaseType is the database engine
-	DatabaseType models.DatabaseType
+	// DatabaseEngine is the database engine
+	DatabaseEngine models.DatabaseEngine
 
 	// Schema is optional pre-loaded schema metadata
 	Schema *types.DatabaseSchemaMetadata
@@ -97,13 +97,13 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 	}
 
 	// Convert database type to sql-reviewer engine
-	engine := convertDatabaseTypeToEngine(opts.DatabaseType)
+	engine := convertDatabaseEngineToEngine(opts.DatabaseEngine)
 
 	// Create reviewer instance
 	rev := reviewer.New(engine)
 
 	// Build rule configuration for sql-reviewer
-	rules, enabledRuleTypes := s.buildRulesForReviewer(config, opts.DatabaseType)
+	rules, enabledRuleTypes := s.buildRulesForReviewer(config, opts.DatabaseEngine)
 
 	// Log detailed rule information for debugging
 	s.logger.Debug("Built rules for reviewer",
@@ -159,7 +159,7 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 		s.logger.Info("Running SQL review without schema",
 			zap.Int("rules", len(rules)),
 			zap.String("sql_content", opts.SQLContent),
-			zap.String("database_type", string(opts.DatabaseType)))
+			zap.String("database_engine", string(opts.DatabaseEngine)))
 		result, err = rev.Review(ctx, opts.SQLContent)
 	}
 
@@ -173,7 +173,7 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 		zap.Any("advices", result.Advices))
 
 	// Convert result to our format
-	reviewResult := s.convertReviewerResult(result, enabledRuleTypes, policy, opts.DatabaseType, start)
+	reviewResult := s.convertReviewerResult(result, enabledRuleTypes, policy, opts.DatabaseEngine, start)
 
 	return reviewResult, nil
 }
@@ -220,7 +220,7 @@ func (s *ReviewService) loadPolicyForEnvironment(ctx context.Context, environmen
 // buildRulesForReviewer builds sql-reviewer rules from policy config
 func (s *ReviewService) buildRulesForReviewer(
 	config *models.SQLReviewPolicyConfig,
-	dbType models.DatabaseType,
+	dbType models.DatabaseEngine,
 ) ([]*types.SQLReviewRule, []string) {
 	rules := make([]*types.SQLReviewRule, 0)
 	enabledTypes := make([]string, 0)
@@ -255,7 +255,7 @@ func (s *ReviewService) convertReviewerResult(
 	result *reviewer.ReviewResult,
 	enabledRuleTypes []string,
 	policy *models.Policy,
-	dbType models.DatabaseType,
+	dbType models.DatabaseEngine,
 	startTime time.Time,
 ) *ReviewResult {
 	violations := []Violation{}
@@ -341,7 +341,7 @@ func (s *ReviewService) extractRuleTypeFromAdvice(advice *types.Advice, enabledR
 }
 
 // getAllRuleTypes returns all available rule types for the specified database type
-func (s *ReviewService) getAllRuleTypes(policy *models.Policy, dbType models.DatabaseType) []string {
+func (s *ReviewService) getAllRuleTypes(policy *models.Policy, dbType models.DatabaseEngine) []string {
 	// Parse config to get rule keys
 	config, err := models.ParseSQLReviewConfig(policy.PolicyConfig)
 	if err != nil {
@@ -400,12 +400,12 @@ func (s *ReviewService) reviewWithNoPolicy(startTime time.Time) *ReviewResult {
 	}
 }
 
-// convertDatabaseTypeToEngine converts models.DatabaseType to sql-reviewer engine
-func convertDatabaseTypeToEngine(dbType models.DatabaseType) types.Engine {
+// convertDatabaseEngineToEngine converts models.DatabaseEngine to sql-reviewer engine
+func convertDatabaseEngineToEngine(dbType models.DatabaseEngine) types.Engine {
 	switch dbType {
-	case models.DatabaseTypeMySQL:
+	case models.DatabaseEngineMySQL:
 		return types.Engine_MYSQL
-	case models.DatabaseTypePostgreSQL:
+	case models.DatabaseEnginePostgreSQL:
 		return types.Engine_POSTGRES
 	default:
 		return types.Engine_MYSQL

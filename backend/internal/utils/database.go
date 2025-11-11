@@ -26,7 +26,7 @@ var (
 
 // ConnectionTestParams represents parameters for testing a database connection
 type ConnectionTestParams struct {
-	DatabaseType             string // "mysql" or "postgres"
+	DatabaseEngine           string // "mysql" or "postgres"
 	Host                     string
 	Port                     int
 	Username                 string
@@ -60,8 +60,8 @@ func validateConnectionParams(params ConnectionTestParams) error {
 	if params.Username == "" {
 		return fmt.Errorf("%w: username is required", ErrMissingParameter)
 	}
-	if params.DatabaseType == "" {
-		return fmt.Errorf("%w: database_type is required", ErrMissingParameter)
+	if params.DatabaseEngine == "" {
+		return fmt.Errorf("%w: database_engine is required", ErrMissingParameter)
 	}
 	return nil
 }

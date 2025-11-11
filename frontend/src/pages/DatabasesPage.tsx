@@ -839,7 +839,7 @@ export const DatabasesPage: React.FC = () => {
                     <option value="">Select a database instance</option>
                     {databaseInstances.map((instance) => (
                       <option key={instance.id} value={instance.id}>
-                        {instance.name} ({instance.database_type})
+                        {instance.name} ({instance.database_engine})
                       </option>
                     ))}
                   </select>

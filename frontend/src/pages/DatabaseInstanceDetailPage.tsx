@@ -243,8 +243,8 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
                   <Badge className={getStatusColor(instance.status)}>{instance.status}</Badge>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Database Type</p>
-                  <p className="text-sm font-mono">{instance.database_type}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Database Engine</p>
+                  <p className="text-sm font-mono">{instance.database_engine}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Host</p>

@@ -82,15 +82,15 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 	// Test database connection before saving
 	// Use a default database name for connection testing (e.g., "mysql" for MySQL, "postgres" for PostgreSQL)
 	testDatabase := ""
-	switch req.DatabaseType {
-	case models.DatabaseTypeMySQL:
+	switch req.DatabaseEngine {
+	case models.DatabaseEngineMySQL:
 		testDatabase = "mysql"
-	case models.DatabaseTypePostgreSQL:
+	case models.DatabaseEnginePostgreSQL:
 		testDatabase = "postgres"
 	}
 
 	connectionParams := utils.ConnectionTestParams{
-		DatabaseType:             string(req.DatabaseType),
+		DatabaseEngine:           string(req.DatabaseEngine),
 		Host:                     req.Host,
 		Port:                     req.Port,
 		Username:                 req.Username,
@@ -101,10 +101,10 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 	}
 
 	var connectionErr error
-	switch req.DatabaseType {
-	case models.DatabaseTypeMySQL:
+	switch req.DatabaseEngine {
+	case models.DatabaseEngineMySQL:
 		connectionErr = utils.TestMySQLConnection(ctx, connectionParams)
-	case models.DatabaseTypePostgreSQL:
+	case models.DatabaseEnginePostgreSQL:
 		connectionErr = utils.TestPostgreSQLConnection(ctx, connectionParams)
 	}
 
@@ -134,7 +134,7 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 	instance := &models.DatabaseInstance{
 		Name:                       req.Name,
 		Description:                req.Description,
-		DatabaseType:               req.DatabaseType,
+		DatabaseEngine:             req.DatabaseEngine,
 		Host:                       req.Host,
 		Port:                       req.Port,
 		Username:                   req.Username,
@@ -163,12 +163,12 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 	// Log audit entry
 	if h.auditService != nil {
 		detailsJSON, _ := json.Marshal(map[string]interface{}{
-			"name":          instance.Name,
-			"description":   instance.Description,
-			"database_type": string(instance.DatabaseType),
-			"host":          instance.Host,
-			"port":          instance.Port,
-			"username":      instance.Username,
+			"name":            instance.Name,
+			"description":     instance.Description,
+			"database_engine": string(instance.DatabaseEngine),
+			"host":            instance.Host,
+			"port":            instance.Port,
+			"username":        instance.Username,
 		})
 		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeDatabaseInstance, instance.ID, c.Request(), detailsJSON); err != nil {
 			h.logger.Error("Failed to log audit entry for database instance creation", zap.Error(err))
@@ -317,7 +317,7 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 	if req.Password != nil && *req.Password != "" {
 		passwordToTest = *req.Password
 		credentialsUpdated = true
-	} else if req.Host != nil || req.Port != nil || req.Username != nil || req.DatabaseType != nil || req.RequireSSL != nil {
+	} else if req.Host != nil || req.Port != nil || req.Username != nil || req.DatabaseEngine != nil || req.RequireSSL != nil {
 		// If connection params are being updated but password is not, we need to decrypt existing password for testing
 		credentialsUpdated = true
 		// Decrypt existing password for connection testing
@@ -351,9 +351,9 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 			testUsername = *req.Username
 		}
 
-		testDatabaseType := instance.DatabaseType
-		if req.DatabaseType != nil {
-			testDatabaseType = *req.DatabaseType
+		testDatabaseEngine := instance.DatabaseEngine
+		if req.DatabaseEngine != nil {
+			testDatabaseEngine = *req.DatabaseEngine
 		}
 
 		testRequireSSL := instance.RequireSSL
@@ -363,15 +363,15 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 
 		// Use a default database name for connection testing
 		testDatabase := ""
-		switch testDatabaseType {
-		case models.DatabaseTypeMySQL:
+		switch testDatabaseEngine {
+		case models.DatabaseEngineMySQL:
 			testDatabase = "mysql"
-		case models.DatabaseTypePostgreSQL:
+		case models.DatabaseEnginePostgreSQL:
 			testDatabase = "postgres"
 		}
 
 		connectionParams := utils.ConnectionTestParams{
-			DatabaseType:             string(testDatabaseType),
+			DatabaseEngine:           string(testDatabaseEngine),
 			Host:                     testHost,
 			Port:                     testPort,
 			Username:                 testUsername,
@@ -382,10 +382,10 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 		}
 
 		var connectionErr error
-		switch testDatabaseType {
-		case models.DatabaseTypeMySQL:
+		switch testDatabaseEngine {
+		case models.DatabaseEngineMySQL:
 			connectionErr = utils.TestMySQLConnection(ctx, connectionParams)
-		case models.DatabaseTypePostgreSQL:
+		case models.DatabaseEnginePostgreSQL:
 			connectionErr = utils.TestPostgreSQLConnection(ctx, connectionParams)
 		}
 
@@ -422,8 +422,8 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 	if req.Description != nil {
 		instance.Description = req.Description
 	}
-	if req.DatabaseType != nil {
-		instance.DatabaseType = *req.DatabaseType
+	if req.DatabaseEngine != nil {
+		instance.DatabaseEngine = *req.DatabaseEngine
 	}
 	if req.Host != nil {
 		instance.Host = *req.Host
@@ -467,12 +467,12 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 		claims, ok := auth.GetUserFromEchoContext(c)
 		if ok && claims != nil {
 			detailsJSON, _ := json.Marshal(map[string]interface{}{
-				"name":          instance.Name,
-				"description":   instance.Description,
-				"database_type": string(instance.DatabaseType),
-				"host":          instance.Host,
-				"port":          instance.Port,
-				"username":      instance.Username,
+				"name":            instance.Name,
+				"description":     instance.Description,
+				"database_engine": string(instance.DatabaseEngine),
+				"host":            instance.Host,
+				"port":            instance.Port,
+				"username":        instance.Username,
 			})
 			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionUpdate, services.ResourceTypeDatabaseInstance, id, c.Request(), detailsJSON); err != nil {
 				h.logger.Error("Failed to log audit entry for database instance update", zap.Error(err))

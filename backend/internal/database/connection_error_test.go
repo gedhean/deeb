@@ -33,7 +33,7 @@ func TestNewConnectionError_NetworkError(t *testing.T) {
 
 	// Verify error classification
 	assert.Equal(t, "network", connErr.ErrorType)
-	assert.Equal(t, "postgres", connErr.DatabaseType)
+	assert.Equal(t, "postgres", connErr.DatabaseEngine)
 	assert.Equal(t, "testdb", connErr.DatabaseName)
 	assert.Equal(t, "localhost", connErr.Host)
 	assert.Equal(t, 5432, connErr.Port)

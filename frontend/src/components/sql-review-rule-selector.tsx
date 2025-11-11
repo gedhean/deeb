@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/accordion';
 import { policiesService } from '@/lib/api/services/policies';
 import type {
-  DatabaseType,
+  DatabaseEngine,
   RuleCategory,
   RuleMetadata,
   RuleParameter,
@@ -37,11 +37,11 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
   config,
   onChange,
 }) => {
-  const [rules, setRules] = useState<Record<DatabaseType, Record<RuleCategory, RuleMetadata[]>>>(
-    {} as Record<DatabaseType, Record<RuleCategory, RuleMetadata[]>>,
+  const [rules, setRules] = useState<Record<DatabaseEngine, Record<RuleCategory, RuleMetadata[]>>>(
+    {} as Record<DatabaseEngine, Record<RuleCategory, RuleMetadata[]>>,
   );
   const [loading, setLoading] = useState(true);
-  const [selectedEngine, setSelectedEngine] = useState<DatabaseType>('mysql');
+  const [selectedEngine, setSelectedEngine] = useState<DatabaseEngine>('mysql');
 
   useEffect(() => {
     const loadRules = async () => {
@@ -49,7 +49,7 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
         const response = await policiesService.getSQLReviewRules();
         setRules({
           mysql: (response.mysql || {}) as Record<RuleCategory, RuleMetadata[]>,
-          postgresql: (response.postgresql || {}) as Record<RuleCategory, RuleMetadata[]>,
+          postgres: (response.postgres || {}) as Record<RuleCategory, RuleMetadata[]>,
         });
       } catch (error) {
         console.error('Failed to load rules:', error);
@@ -247,11 +247,11 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
     <div className="space-y-4">
       <Tabs
         value={selectedEngine}
-        onValueChange={(value) => setSelectedEngine(value as DatabaseType)}
+        onValueChange={(value) => setSelectedEngine(value as DatabaseEngine)}
       >
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="mysql">MySQL</TabsTrigger>
-          <TabsTrigger value="postgresql">PostgreSQL</TabsTrigger>
+          <TabsTrigger value="postgres">PostgreSQL</TabsTrigger>
         </TabsList>
 
         <TabsContent value="mysql" className="mt-4">
@@ -260,7 +260,7 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
           </Accordion>
         </TabsContent>
 
-        <TabsContent value="postgresql" className="mt-4">
+        <TabsContent value="postgres" className="mt-4">
           <Accordion type="multiple" className="w-full">
             {categories.map((category) => renderCategory(category, engineRules[category] || []))}
           </Accordion>

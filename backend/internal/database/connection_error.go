@@ -19,13 +19,13 @@ import (
 // ConnectionError represents a structured error from database connection attempts
 type ConnectionError struct {
 	// Database information
-	DatabaseType string
-	DatabaseName string
-	DatabaseID   string
-	InstanceName string
-	Host         string
-	Port         int
-	Username     string
+	DatabaseEngine string
+	DatabaseName   string
+	DatabaseID     string
+	InstanceName   string
+	Host           string
+	Port           int
+	Username       string
 
 	// Connection details
 	SSLRequired       bool
@@ -83,7 +83,7 @@ func NewConnectionError(
 	err error,
 ) *ConnectionError {
 	connErr := &ConnectionError{
-		DatabaseType:      dbType,
+		DatabaseEngine:    dbType,
 		DatabaseName:      dbName,
 		DatabaseID:        dbID,
 		InstanceName:      instanceName,
@@ -316,7 +316,7 @@ func (cm *ConnectionManager) connectWithRetry(
 	for attempt := 0; attempt <= retryConfig.MaxAttempts; attempt++ {
 		if attempt > 0 {
 			cm.logger.Info("Retrying database connection",
-				zap.String("database_type", dbType),
+				zap.String("database_engine", dbType),
 				zap.String("database_name", dbName),
 				zap.String("host", host),
 				zap.Int("port", port),
@@ -343,7 +343,7 @@ func (cm *ConnectionManager) connectWithRetry(
 		if err == nil {
 			if attempt > 0 {
 				cm.logger.Info("Database connection succeeded after retry",
-					zap.String("database_type", dbType),
+					zap.String("database_engine", dbType),
 					zap.String("database_name", dbName),
 					zap.Int("attempts", attempt+1),
 				)

@@ -46,7 +46,7 @@ func (r *DatabaseInstanceRepository) Create(ctx context.Context, instance *model
 
 	query := `
 		INSERT INTO database_instances (
-			id, name, description, database_type, host, port, username,
+			id, name, description, database_engine, host, port, username,
 			connection_details_encrypted, use_rds_iam_auth, require_ssl,
 			status, environment_id, created_by_id, created_at, updated_at
 		)
@@ -57,7 +57,7 @@ func (r *DatabaseInstanceRepository) Create(ctx context.Context, instance *model
 		instance.ID,
 		instance.Name,
 		instance.Description,
-		instance.DatabaseType,
+		instance.DatabaseEngine,
 		instance.Host,
 		instance.Port,
 		instance.Username,
@@ -80,7 +80,7 @@ func (r *DatabaseInstanceRepository) Create(ctx context.Context, instance *model
 // GetByID retrieves a database instance by its ID
 func (r *DatabaseInstanceRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.DatabaseInstance, error) {
 	query := `
-		SELECT id, name, description, database_type, host, port, username,
+		SELECT id, name, description, database_engine, host, port, username,
 		       connection_details_encrypted, use_rds_iam_auth, require_ssl,
 		       status, environment_id, created_by_id, created_at, updated_at
 		FROM database_instances
@@ -105,7 +105,7 @@ func (r *DatabaseInstanceRepository) GetByID(ctx context.Context, id uuid.UUID) 
 // List retrieves all database instances with pagination
 func (r *DatabaseInstanceRepository) List(ctx context.Context, limit, offset int) ([]*models.DatabaseInstance, error) {
 	query := `
-		SELECT id, name, description, database_type, host, port, username,
+		SELECT id, name, description, database_engine, host, port, username,
 		       connection_details_encrypted, use_rds_iam_auth, require_ssl,
 		       status, environment_id, created_by_id, created_at, updated_at
 		FROM database_instances
@@ -134,7 +134,7 @@ func (r *DatabaseInstanceRepository) ListByEnvironment(
 	limit, offset int,
 ) ([]*models.DatabaseInstance, error) {
 	query := `
-		SELECT id, name, description, database_type, host, port, username,
+		SELECT id, name, description, database_engine, host, port, username,
 		       connection_details_encrypted, use_rds_iam_auth, require_ssl,
 		       status, environment_id, created_by_id, created_at, updated_at
 		FROM database_instances
@@ -198,7 +198,7 @@ func (r *DatabaseInstanceRepository) Update(ctx context.Context, instance *model
 
 	query := `
 		UPDATE database_instances
-		SET name = $2, description = $3, database_type = $4, host = $5, port = $6,
+		SET name = $2, description = $3, database_engine = $4, host = $5, port = $6,
 		    username = $7, connection_details_encrypted = $8, use_rds_iam_auth = $9,
 		    require_ssl = $10, status = $11, environment_id = $12, updated_at = $13
 		WHERE id = $1
@@ -208,7 +208,7 @@ func (r *DatabaseInstanceRepository) Update(ctx context.Context, instance *model
 		instance.ID,
 		instance.Name,
 		instance.Description,
-		instance.DatabaseType,
+		instance.DatabaseEngine,
 		instance.Host,
 		instance.Port,
 		instance.Username,

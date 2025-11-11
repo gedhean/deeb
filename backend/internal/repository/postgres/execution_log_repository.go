@@ -37,7 +37,7 @@ func (r *executionLogRepository) Create(ctx context.Context, log *models.Executi
 		INSERT INTO execution_logs (
 			id, change_plan_id, executor_id, status,
 			execution_duration_ms, rows_affected, error_message,
-			sql_content, database_id, database_name, database_instance_name, database_type,
+			sql_content, database_id, database_name, database_instance_name, database_engine,
 			started_at, completed_at, created_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
@@ -58,7 +58,7 @@ func (r *executionLogRepository) Create(ctx context.Context, log *models.Executi
 		log.DatabaseID,
 		log.DatabaseName,
 		log.DatabaseInstanceName,
-		log.DatabaseType,
+		log.DatabaseEngine,
 		log.StartedAt,
 		log.CompletedAt,
 		log.CreatedAt,
@@ -77,7 +77,7 @@ func (r *executionLogRepository) GetByChangePlanID(ctx context.Context, changePl
 	query := `
 		SELECT id, change_plan_id, executor_id, status,
 		       execution_duration_ms, rows_affected, error_message,
-		       sql_content, database_id, database_name, database_instance_name, database_type,
+		       sql_content, database_id, database_name, database_instance_name, database_engine,
 		       started_at, completed_at, created_at
 		FROM execution_logs
 		WHERE change_plan_id = $1
@@ -99,7 +99,7 @@ func (r *executionLogRepository) GetByID(ctx context.Context, id uuid.UUID) (*mo
 	query := `
 		SELECT id, change_plan_id, executor_id, status,
 		       execution_duration_ms, rows_affected, error_message,
-		       sql_content, database_id, database_name, database_instance_name, database_type,
+		       sql_content, database_id, database_name, database_instance_name, database_engine,
 		       started_at, completed_at, created_at
 		FROM execution_logs
 		WHERE id = $1
@@ -126,7 +126,7 @@ func (r *executionLogRepository) GetLatestByChangePlanID(
 	query := `
 		SELECT id, change_plan_id, executor_id, status,
 		       execution_duration_ms, rows_affected, error_message,
-		       sql_content, database_id, database_name, database_instance_name, database_type,
+		       sql_content, database_id, database_name, database_instance_name, database_engine,
 		       started_at, completed_at, created_at
 		FROM execution_logs
 		WHERE change_plan_id = $1

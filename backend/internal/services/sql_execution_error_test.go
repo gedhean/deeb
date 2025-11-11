@@ -29,7 +29,7 @@ func TestNewSQLExecutionError_PostgreSQL(t *testing.T) {
 	sqlErr := NewSQLExecutionError(dbType, dbName, dbID, instanceName, sqlContent, pqErr)
 
 	// Verify database-specific fields
-	assert.Equal(t, dbType, sqlErr.DatabaseType)
+	assert.Equal(t, dbType, sqlErr.DatabaseEngine)
 	assert.Equal(t, dbName, sqlErr.DatabaseName)
 	assert.Equal(t, dbID, sqlErr.DatabaseID)
 	assert.Equal(t, instanceName, sqlErr.InstanceName)
@@ -72,7 +72,7 @@ func TestNewSQLExecutionError_MySQL(t *testing.T) {
 	sqlErr := NewSQLExecutionError(dbType, dbName, dbID, instanceName, sqlContent, mysqlErr)
 
 	// Verify database-specific fields
-	assert.Equal(t, dbType, sqlErr.DatabaseType)
+	assert.Equal(t, dbType, sqlErr.DatabaseEngine)
 	assert.Equal(t, dbName, sqlErr.DatabaseName)
 	assert.Equal(t, dbID, sqlErr.DatabaseID)
 	assert.Equal(t, instanceName, sqlErr.InstanceName)
@@ -107,7 +107,7 @@ func TestNewSQLExecutionError_GenericError(t *testing.T) {
 	sqlErr := NewSQLExecutionError(dbType, dbName, dbID, instanceName, sqlContent, genericErr)
 
 	// Verify database-specific fields
-	assert.Equal(t, dbType, sqlErr.DatabaseType)
+	assert.Equal(t, dbType, sqlErr.DatabaseEngine)
 	assert.Equal(t, dbName, sqlErr.DatabaseName)
 	assert.Equal(t, dbID, sqlErr.DatabaseID)
 	assert.Equal(t, instanceName, sqlErr.InstanceName)

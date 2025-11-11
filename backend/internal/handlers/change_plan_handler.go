@@ -929,11 +929,11 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 	h.logger.Info("Running SQL Review")
 
 	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
-		ChangePlanID:  changePlan.ID,
-		EnvironmentID: database.EnvironmentID,
-		DatabaseID:    &database.ID,
-		SQLContent:    changePlan.SQLContent,
-		DatabaseType:  databaseInstance.DatabaseType,
+		ChangePlanID:   changePlan.ID,
+		EnvironmentID:  database.EnvironmentID,
+		DatabaseID:     &database.ID,
+		SQLContent:     changePlan.SQLContent,
+		DatabaseEngine: databaseInstance.DatabaseEngine,
 	})
 	if err != nil {
 		return &SQLReviewError{
@@ -1192,11 +1192,11 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 	h.logger.Info("Running manual SQL Review")
 
 	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
-		ChangePlanID:  changePlan.ID,
-		EnvironmentID: database.EnvironmentID,
-		DatabaseID:    &database.ID,
-		SQLContent:    changePlan.SQLContent,
-		DatabaseType:  databaseInstance.DatabaseType,
+		ChangePlanID:   changePlan.ID,
+		EnvironmentID:  database.EnvironmentID,
+		DatabaseID:     &database.ID,
+		SQLContent:     changePlan.SQLContent,
+		DatabaseEngine: databaseInstance.DatabaseEngine,
 	})
 	if err != nil {
 		h.logger.Error("Failed to run SQL Review", zap.Error(err))

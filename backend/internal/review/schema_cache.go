@@ -115,7 +115,7 @@ func NewSchemaFetcher(db *sql.DB, logger *zap.Logger) *SchemaFetcher {
 // FetchSchema retrieves complete schema metadata for a database
 func (f *SchemaFetcher) FetchSchema(
 	ctx context.Context,
-	dbType models.DatabaseType,
+	dbType models.DatabaseEngine,
 	dbName string,
 ) (*types.DatabaseSchemaMetadata, error) {
 	start := time.Now()
@@ -127,9 +127,9 @@ func (f *SchemaFetcher) FetchSchema(
 	}()
 
 	switch dbType {
-	case models.DatabaseTypeMySQL:
+	case models.DatabaseEngineMySQL:
 		return f.fetchMySQLSchema(ctx, dbName)
-	case models.DatabaseTypePostgreSQL:
+	case models.DatabaseEnginePostgreSQL:
 		return f.fetchPostgreSQLSchema(ctx, dbName)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", dbType)

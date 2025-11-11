@@ -8,7 +8,7 @@ import (
 )
 
 // GetRulesByEngine returns all rules for a specific database engine
-func GetRulesByEngine(dbType models.DatabaseType) map[string][]RuleMetadata {
+func GetRulesByEngine(dbType models.DatabaseEngine) map[string][]RuleMetadata {
 	engine := strings.ToLower(string(dbType))
 
 	// Get rules catalog
@@ -28,7 +28,7 @@ func ConvertRuleMetadataToStoreRule(
 	metadata RuleMetadata,
 	level models.SQLReviewRuleLevel,
 	payload map[string]interface{},
-	targetEngine models.DatabaseType,
+	targetEngine models.DatabaseEngine,
 ) *types.SQLReviewRule {
 	// Convert level to sql-reviewer format
 	var ruleLevel types.SQLReviewRuleLevel
@@ -67,7 +67,7 @@ func ConvertRuleMetadataToStoreRule(
 }
 
 // GetAllRulesForEngine returns a flat list of all rules for an engine
-func GetAllRulesForEngine(dbType models.DatabaseType) []RuleMetadata {
+func GetAllRulesForEngine(dbType models.DatabaseEngine) []RuleMetadata {
 	rules := []RuleMetadata{}
 	rulesByCategory := GetRulesByEngine(dbType)
 

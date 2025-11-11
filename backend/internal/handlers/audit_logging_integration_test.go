@@ -292,15 +292,15 @@ func TestIntegration_AuditLogging_ResourceCRUD(t *testing.T) {
 
 	t.Run("Database Instance Create Audit Logging", func(t *testing.T) {
 		reqBody := models.CreateDatabaseInstanceRequest{
-			Name:          "Test Database Instance for Audit",
-			Description:   stringPtr("Test Description"),
-			DatabaseType:  models.DatabaseTypePostgreSQL,
-			Host:          "localhost",
-			Port:          5432,
-			Username:      "testuser",
-			Password:      "testpassword",
-			UseRDSIAMAuth: false,
-			RequireSSL:    false,
+			Name:           "Test Database Instance for Audit",
+			Description:    stringPtr("Test Description"),
+			DatabaseEngine: models.DatabaseEnginePostgreSQL,
+			Host:           "localhost",
+			Port:           5432,
+			Username:       "testuser",
+			Password:       "testpassword",
+			UseRDSIAMAuth:  false,
+			RequireSSL:     false,
 		}
 		body, _ := json.Marshal(reqBody)
 
@@ -361,7 +361,7 @@ func TestIntegration_AuditLogging_ResourceCRUD(t *testing.T) {
 		instance := &models.DatabaseInstance{
 			Name:                       "Test Instance for Audit",
 			Description:                stringPtr("Test Description"),
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Host:                       "localhost",
 			Port:                       5432,
 			Username:                   "testuser",
@@ -453,7 +453,7 @@ func TestIntegration_AuditLogging_ChangePlanCRUD(t *testing.T) {
 	instance := &models.DatabaseInstance{
 		Name:                       "Test Instance for Change Plan Audit",
 		Description:                stringPtr("Test Description"),
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       "localhost",
 		Port:                       5432,
 		Username:                   "testuser",
@@ -662,7 +662,7 @@ func TestIntegration_AuditLogging_ChangePlanStateTransitions(t *testing.T) {
 	instance := &models.DatabaseInstance{
 		Name:                       "Test Instance for State Transitions",
 		Description:                stringPtr("Test Description"),
-		DatabaseType:               models.DatabaseTypePostgreSQL,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       "localhost",
 		Port:                       5432,
 		Username:                   "testuser",

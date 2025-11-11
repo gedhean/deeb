@@ -27,7 +27,7 @@ type ExecutionLog struct {
 	DatabaseID           *uuid.UUID         `json:"database_id,omitempty"            db:"database_id"`
 	DatabaseName         *string            `json:"database_name,omitempty"          db:"database_name"`
 	DatabaseInstanceName *string            `json:"database_instance_name,omitempty" db:"database_instance_name"`
-	DatabaseType         *string            `json:"database_type,omitempty"          db:"database_type"`
+	DatabaseEngine       *string            `json:"database_engine,omitempty"        db:"database_engine"`
 	StartedAt            time.Time          `json:"started_at"                       db:"started_at"`
 	CompletedAt          time.Time          `json:"completed_at"                     db:"completed_at"`
 	CreatedAt            time.Time          `json:"created_at"                       db:"created_at"`
@@ -46,7 +46,7 @@ type ExecutionLogResponse struct {
 	DatabaseID           *uuid.UUID         `json:"database_id,omitempty"`
 	DatabaseName         *string            `json:"database_name,omitempty"`
 	DatabaseInstanceName *string            `json:"database_instance_name,omitempty"`
-	DatabaseType         *string            `json:"database_type,omitempty"`
+	DatabaseEngine       *string            `json:"database_engine,omitempty"`
 	StartedAt            time.Time          `json:"started_at"`
 	CompletedAt          time.Time          `json:"completed_at"`
 	CreatedAt            time.Time          `json:"created_at"`
@@ -66,7 +66,7 @@ func (l *ExecutionLog) ToResponse() *ExecutionLogResponse {
 		DatabaseID:           l.DatabaseID,
 		DatabaseName:         l.DatabaseName,
 		DatabaseInstanceName: l.DatabaseInstanceName,
-		DatabaseType:         l.DatabaseType,
+		DatabaseEngine:       l.DatabaseEngine,
 		StartedAt:            l.StartedAt,
 		CompletedAt:          l.CompletedAt,
 		CreatedAt:            l.CreatedAt,

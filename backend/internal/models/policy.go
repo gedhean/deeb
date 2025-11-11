@@ -35,7 +35,7 @@ type SQLReviewRule struct {
 	Type    string                 `json:"type"              yaml:"type"`
 	Level   SQLReviewRuleLevel     `json:"level"             yaml:"level"` // error, warning
 	Payload map[string]interface{} `json:"payload,omitempty" yaml:"payload,omitempty"`
-	Engine  DatabaseType           `json:"engine"            yaml:"engine"`
+	Engine  DatabaseEngine         `json:"engine"            yaml:"engine"`
 	Comment string                 `json:"comment,omitempty" yaml:"comment,omitempty"`
 }
 
@@ -74,7 +74,7 @@ func ParseSQLReviewConfig(config PolicyConfig) (*SQLReviewPolicyConfig, error) {
 			rule.Payload = payloadVal
 		}
 		if engineVal, ok := ruleMap["engine"].(string); ok {
-			rule.Engine = DatabaseType(engineVal)
+			rule.Engine = DatabaseEngine(engineVal)
 		}
 		if commentVal, ok := ruleMap["comment"].(string); ok {
 			rule.Comment = commentVal

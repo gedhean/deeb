@@ -71,7 +71,7 @@ func (s *RiskAssessmentService) AssessRisk(
 		s.logger.Error("Failed to get database instance for risk assessment", zap.Error(err))
 		return models.RiskLevelMedium, err
 	}
-	dbTypeRiskScore := s.analyzeDatabaseType(instance.DatabaseType)
+	dbTypeRiskScore := s.analyzeDatabaseEngine(instance.DatabaseEngine)
 	riskScore += dbTypeRiskScore
 
 	// Calculate final risk level
@@ -181,9 +181,9 @@ func (s *RiskAssessmentService) analyzeEnvironment(envName string) int {
 	return 1
 }
 
-// analyzeDatabaseType analyzes the database type and returns a risk score
+// analyzeDatabaseEngine analyzes the database type and returns a risk score
 // This can be extended in the future for database-specific risk factors
-func (s *RiskAssessmentService) analyzeDatabaseType(dbType models.DatabaseType) int {
+func (s *RiskAssessmentService) analyzeDatabaseEngine(dbType models.DatabaseEngine) int {
 	// For now, all database types have the same base risk
 	// This can be extended in the future to differentiate between MySQL and PostgreSQL
 	// based on specific features or known issues

@@ -183,7 +183,7 @@ func ValidateTemplate(template string, templateList []string) error {
 }
 
 // ValidateRuleTypeForEngine checks if a rule type is valid for a specific engine
-func ValidateRuleTypeForEngine(ruleType string, engine models.DatabaseType) error {
+func ValidateRuleTypeForEngine(ruleType string, engine models.DatabaseEngine) error {
 	metadata, ok := GetRuleMetadata(ruleType)
 	if !ok {
 		return fmt.Errorf("unknown rule type: %s", ruleType)

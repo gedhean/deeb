@@ -41,7 +41,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 			Description:                &description,
 			Host:                       "localhost",
 			Port:                       5432,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			UseRDSIAMAuth:              false,
@@ -51,7 +51,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO database_instances").
-			WithArgs(sqlmock.AnyArg(), instance.Name, instance.Description, instance.DatabaseType,
+			WithArgs(sqlmock.AnyArg(), instance.Name, instance.Description, instance.DatabaseEngine,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
 				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
 				instance.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -74,7 +74,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 			Description:                nil,
 			Host:                       "localhost",
 			Port:                       5432,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			UseRDSIAMAuth:              false,
@@ -84,7 +84,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO database_instances").
-			WithArgs(sqlmock.AnyArg(), instance.Name, nil, instance.DatabaseType,
+			WithArgs(sqlmock.AnyArg(), instance.Name, nil, instance.DatabaseEngine,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
 				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
 				instance.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -109,7 +109,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 			Description:                &description,
 			Host:                       "localhost",
 			Port:                       5432,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			UseRDSIAMAuth:              false,
@@ -119,7 +119,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO database_instances").
-			WithArgs(existingID, instance.Name, instance.Description, instance.DatabaseType,
+			WithArgs(existingID, instance.Name, instance.Description, instance.DatabaseEngine,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
 				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
 				instance.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -138,7 +138,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 			Name:                       "",
 			Host:                       "localhost",
 			Port:                       5432,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			Status:                     models.DatabaseInstanceStatusActive,
@@ -155,7 +155,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 			Name:                       "Test Instance",
 			Host:                       "localhost",
 			Port:                       0,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			Status:                     models.DatabaseInstanceStatusActive,
@@ -172,7 +172,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 			Name:                       "Test Instance",
 			Host:                       "localhost",
 			Port:                       5432,
-			DatabaseType:               "invalid",
+			DatabaseEngine:             "invalid",
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			Status:                     models.DatabaseInstanceStatusActive,
@@ -180,7 +180,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 		}
 
 		err := repo.Create(ctx, instance)
-		assert.Equal(t, models.ErrDatabaseTypeInvalid, err)
+		assert.Equal(t, models.ErrDatabaseEngineInvalid, err)
 	})
 
 	t.Run("database error", func(t *testing.T) {
@@ -192,7 +192,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 			Description:                &description,
 			Host:                       "localhost",
 			Port:                       5432,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			UseRDSIAMAuth:              false,
@@ -202,7 +202,7 @@ func TestDatabaseInstanceRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO database_instances").
-			WithArgs(sqlmock.AnyArg(), instance.Name, instance.Description, instance.DatabaseType,
+			WithArgs(sqlmock.AnyArg(), instance.Name, instance.Description, instance.DatabaseEngine,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
 				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
 				instance.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -232,7 +232,7 @@ func TestDatabaseInstanceRepository_GetByID(t *testing.T) {
 		encryptedDetails := "encrypted-data"
 
 		rows := sqlmock.NewRows([]string{
-			"id", "name", "description", "database_type", "host", "port", "username",
+			"id", "name", "description", "database_engine", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID, "Test Instance", description, "postgres", "localhost", 5432, "postgres",
@@ -248,7 +248,7 @@ func TestDatabaseInstanceRepository_GetByID(t *testing.T) {
 		assert.Equal(t, instanceID, instance.ID)
 		assert.Equal(t, "Test Instance", instance.Name)
 		assert.Equal(t, &description, instance.Description)
-		assert.Equal(t, models.DatabaseTypePostgreSQL, instance.DatabaseType)
+		assert.Equal(t, models.DatabaseEnginePostgreSQL, instance.DatabaseEngine)
 		assert.Equal(t, "localhost", instance.Host)
 		assert.Equal(t, 5432, instance.Port)
 		assert.Equal(t, "postgres", instance.Username)
@@ -268,7 +268,7 @@ func TestDatabaseInstanceRepository_GetByID(t *testing.T) {
 		encryptedDetails := "encrypted-data"
 
 		rows := sqlmock.NewRows([]string{
-			"id", "name", "description", "database_type", "host", "port", "username",
+			"id", "name", "description", "database_engine", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID, "Test Instance", nil, "mysql", "localhost", 3306, "root",
@@ -282,7 +282,7 @@ func TestDatabaseInstanceRepository_GetByID(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, instance)
 		assert.Nil(t, instance.Description)
-		assert.Equal(t, models.DatabaseTypeMySQL, instance.DatabaseType)
+		assert.Equal(t, models.DatabaseEngineMySQL, instance.DatabaseEngine)
 
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -333,7 +333,7 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 		encryptedDetails := "encrypted-data"
 
 		rows := sqlmock.NewRows([]string{
-			"id", "name", "description", "database_type", "host", "port", "username",
+			"id", "name", "description", "database_engine", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID1, "Instance 1", nil, "postgres", "localhost", 5432, "postgres",
@@ -356,7 +356,7 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 
 	t.Run("empty list", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{
-			"id", "name", "description", "database_type", "host", "port", "username",
+			"id", "name", "description", "database_engine", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		})
 
@@ -379,7 +379,7 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 		encryptedDetails := "encrypted-data"
 
 		rows := sqlmock.NewRows([]string{
-			"id", "name", "description", "database_type", "host", "port", "username",
+			"id", "name", "description", "database_engine", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
 			AddRow(instanceID, "Instance 1", nil, "postgres", "localhost", 5432, "postgres",
@@ -483,7 +483,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 			Description:                &description,
 			Host:                       "newhost",
 			Port:                       5433,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			UseRDSIAMAuth:              false,
@@ -493,7 +493,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE database_instances").
-			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseType,
+			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseEngine,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
 				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
 				sqlmock.AnyArg()).
@@ -516,7 +516,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 			Description:                nil,
 			Host:                       "newhost",
 			Port:                       5433,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			UseRDSIAMAuth:              false,
@@ -526,7 +526,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE database_instances").
-			WithArgs(instanceID, instance.Name, nil, instance.DatabaseType,
+			WithArgs(instanceID, instance.Name, nil, instance.DatabaseEngine,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
 				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
 				sqlmock.AnyArg()).
@@ -547,7 +547,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 			Name:                       "Updated Instance",
 			Host:                       "newhost",
 			Port:                       5433,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			Status:                     models.DatabaseInstanceStatusActive,
@@ -555,7 +555,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE database_instances").
-			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseType,
+			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseEngine,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
 				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
 				sqlmock.AnyArg()).
@@ -574,7 +574,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 			Name:                       "",
 			Host:                       "newhost",
 			Port:                       5433,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			Status:                     models.DatabaseInstanceStatusActive,
@@ -592,7 +592,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 			Name:                       "Updated Instance",
 			Host:                       "newhost",
 			Port:                       0,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			Status:                     models.DatabaseInstanceStatusActive,
@@ -611,7 +611,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 			Name:                       "Updated Instance",
 			Host:                       "newhost",
 			Port:                       5433,
-			DatabaseType:               models.DatabaseTypePostgreSQL,
+			DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 			Username:                   "postgres",
 			ConnectionDetailsEncrypted: &encryptedDetails,
 			UseRDSIAMAuth:              false,
@@ -621,7 +621,7 @@ func TestDatabaseInstanceRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE database_instances").
-			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseType,
+			WithArgs(instanceID, instance.Name, instance.Description, instance.DatabaseEngine,
 				instance.Host, instance.Port, instance.Username, instance.ConnectionDetailsEncrypted,
 				instance.UseRDSIAMAuth, instance.RequireSSL, instance.Status, instance.EnvironmentID,
 				sqlmock.AnyArg()).

@@ -14,7 +14,7 @@ export interface RuleParameter {
   type: RuleParameterType;
   description: string;
   required: boolean;
-  default?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  default?: unknown;
   templateList?: string[];
 }
 
@@ -52,6 +52,7 @@ export type RuleType =
   | 'column.disallow-change'
   | 'column.disallow-change-type'
   | 'column.disallow-changing-order'
+  | 'column.disallow-drop'
   | 'column.disallow-drop-in-index'
   | 'column.disallow-set-charset'
   | 'column.maximum-character-length'
@@ -84,6 +85,7 @@ export type RuleType =
   | 'naming.table'
   | 'schema.backward-compatibility'
   | 'statement.add-check-not-valid'
+  | 'statement.add-column-without-position'
   | 'statement.add-foreign-key-not-valid'
   | 'statement.affected-row-limit'
   | 'statement.check-set-role-variable'
@@ -111,6 +113,7 @@ export type RuleType =
   | 'statement.merge-alter-table'
   | 'statement.non-transactional'
   | 'statement.object-owner-check'
+  | 'statement.prior-backup-check'
   | 'statement.query.minimum-plan-level'
   | 'statement.require-algorithm-option'
   | 'statement.require-lock-option'
@@ -186,7 +189,7 @@ export const RULES_CATALOG: RulesCatalog = {
         name: 'Auto Increment Must Integer',
         description: 'Require auto-increment columns to be integer type',
         category: 'column',
-        engine: 'mysql',
+        engine: 'both',
         parameters: [],
       },
       {
@@ -194,7 +197,7 @@ export const RULES_CATALOG: RulesCatalog = {
         name: 'Auto Increment Must Unsigned',
         description: 'Require auto-increment columns to be UNSIGNED',
         category: 'column',
-        engine: 'mysql',
+        engine: 'both',
         parameters: [],
       },
       {
@@ -253,6 +256,14 @@ export const RULES_CATALOG: RulesCatalog = {
         type: 'column.disallow-changing-order',
         name: 'Disallow Changing Order',
         description: 'Prevent column reordering',
+        category: 'column',
+        engine: 'mysql',
+        parameters: [],
+      },
+      {
+        type: 'column.disallow-drop',
+        name: 'Disallow Drop',
+        description: 'Rule: Disallow Drop',
         category: 'column',
         engine: 'mysql',
         parameters: [],
@@ -318,7 +329,7 @@ export const RULES_CATALOG: RulesCatalog = {
         name: 'Require Charset',
         description: 'Enforce specific charset for columns',
         category: 'column',
-        engine: 'mysql',
+        engine: 'both',
         parameters: [],
       },
       {
@@ -358,7 +369,7 @@ export const RULES_CATALOG: RulesCatalog = {
         name: 'Set Default For Not Null',
         description: 'Require default value for NOT NULL columns',
         category: 'column',
-        engine: 'mysql',
+        engine: 'both',
         parameters: [],
       },
       {
@@ -654,6 +665,14 @@ export const RULES_CATALOG: RulesCatalog = {
     ],
     statement: [
       {
+        type: 'statement.add-column-without-position',
+        name: 'Add Column Without Position',
+        description: 'Rule: Add Column Without Position',
+        category: 'statement',
+        engine: 'mysql',
+        parameters: [],
+      },
+      {
         type: 'statement.affected-row-limit',
         name: 'Affected Row Limit',
         description: 'Limit number of affected rows in DML statements',
@@ -682,7 +701,7 @@ export const RULES_CATALOG: RulesCatalog = {
         name: 'Disallow Limit',
         description: 'Disallow LIMIT in UPDATE/DELETE statements',
         category: 'statement',
-        engine: 'mysql',
+        engine: 'both',
         parameters: [],
       },
       {
@@ -706,7 +725,7 @@ export const RULES_CATALOG: RulesCatalog = {
         name: 'Disallow Order By',
         description: 'Disallow ORDER BY in UPDATE/DELETE statements',
         category: 'statement',
-        engine: 'mysql',
+        engine: 'both',
         parameters: [],
       },
       {
@@ -1017,7 +1036,7 @@ export const RULES_CATALOG: RulesCatalog = {
         name: 'Disallow Create',
         description: 'Disallow creating views',
         category: 'system',
-        engine: 'mysql',
+        engine: 'both',
         parameters: [],
       },
     ],
@@ -1101,7 +1120,7 @@ export const RULES_CATALOG: RulesCatalog = {
         name: 'Disallow Trigger',
         description: 'Disallow triggers on tables',
         category: 'table',
-        engine: 'mysql',
+        engine: 'both',
         parameters: [],
       },
       {
@@ -1197,161 +1216,21 @@ export const RULES_CATALOG: RulesCatalog = {
   postgres: {
     column: [
       {
-        type: 'column.default-disallow-volatile',
-        name: 'Default Disallow Volatile',
-        description: 'Disallow volatile default values',
+        type: 'column.auto-increment-must-integer',
+        name: 'Auto Increment Must Integer',
+        description: 'Require auto-increment columns to be integer type',
         category: 'column',
-        engine: 'postgres',
-        parameters: [],
-      },
-    ],
-    index: [
-      {
-        type: 'index.create-concurrently',
-        name: 'Create Concurrently',
-        description: 'Require CREATE INDEX CONCURRENTLY',
-        category: 'index',
-        engine: 'postgres',
-        parameters: [],
-      },
-    ],
-    naming: [
-      {
-        type: 'naming.fully-qualified',
-        name: 'Fully Qualified',
-        description: 'Require fully qualified object names',
-        category: 'naming',
-        engine: 'postgres',
+        engine: 'both',
         parameters: [],
       },
       {
-        type: 'naming.index.pk',
-        name: 'Pk',
-        description: 'Enforce primary key naming convention',
-        category: 'naming',
-        engine: 'postgres',
-        parameters: [
-          {
-            name: 'format',
-            type: 'TEMPLATE',
-            description: 'Regular expression pattern for naming validation',
-            required: false,
-            default: '^pk_{{table}}_{{column_list}}$',
-            templateList: ['table', 'column_list'],
-          },
-          {
-            name: 'maxLength',
-            type: 'NUMBER',
-            description: 'Maximum length for identifiers',
-            required: false,
-            default: 63,
-          },
-        ],
-      },
-    ],
-    statement: [
-      {
-        type: 'statement.add-check-not-valid',
-        name: 'Add Check Not Valid',
-        description: 'Require NOT VALID for CHECK constraints',
-        category: 'statement',
-        engine: 'postgres',
+        type: 'column.auto-increment-must-unsigned',
+        name: 'Auto Increment Must Unsigned',
+        description: 'Require auto-increment columns to be UNSIGNED',
+        category: 'column',
+        engine: 'both',
         parameters: [],
       },
-      {
-        type: 'statement.add-foreign-key-not-valid',
-        name: 'Add Foreign Key Not Valid',
-        description: 'Require NOT VALID for foreign key constraints',
-        category: 'statement',
-        engine: 'postgres',
-        parameters: [],
-      },
-      {
-        type: 'statement.check-set-role-variable',
-        name: 'Check Set Role Variable',
-        description: 'Check SET ROLE variable usage',
-        category: 'statement',
-        engine: 'postgres',
-        parameters: [],
-      },
-      {
-        type: 'statement.create-specify-schema',
-        name: 'Create Specify Schema',
-        description: 'Require schema specification in CREATE statements',
-        category: 'statement',
-        engine: 'postgres',
-        parameters: [],
-      },
-      {
-        type: 'statement.disallow-add-column-with-default',
-        name: 'Disallow Add Column With Default',
-        description: 'Prevent ADD COLUMN WITH DEFAULT in PostgreSQL',
-        category: 'statement',
-        engine: 'postgres',
-        parameters: [],
-      },
-      {
-        type: 'statement.disallow-add-not-null',
-        name: 'Disallow Add Not Null',
-        description: 'Prevent adding NOT NULL constraint directly',
-        category: 'statement',
-        engine: 'postgres',
-        parameters: [],
-      },
-      {
-        type: 'statement.disallow-on-del-cascade',
-        name: 'Disallow On Del Cascade',
-        description: 'Disallow ON DELETE CASCADE',
-        category: 'statement',
-        engine: 'postgres',
-        parameters: [],
-      },
-      {
-        type: 'statement.disallow-rm-tbl-cascade',
-        name: 'Disallow Rm Tbl Cascade',
-        description: 'Disallow DROP TABLE CASCADE',
-        category: 'statement',
-        engine: 'postgres',
-        parameters: [],
-      },
-      {
-        type: 'statement.non-transactional',
-        name: 'Non Transactional',
-        description: 'Detect non-transactional operations',
-        category: 'statement',
-        engine: 'postgres',
-        parameters: [],
-      },
-      {
-        type: 'statement.object-owner-check',
-        name: 'Object Owner Check',
-        description: 'Verify object ownership before operations',
-        category: 'statement',
-        engine: 'postgres',
-        parameters: [],
-      },
-    ],
-    system: [
-      {
-        type: 'system.comment.length',
-        name: 'Length',
-        description: 'Limit comment length',
-        category: 'system',
-        engine: 'postgres',
-        parameters: [
-          {
-            name: 'number',
-            type: 'NUMBER',
-            description: 'Numeric limit or threshold',
-            required: false,
-            default: 64,
-          },
-        ],
-      },
-    ],
-  },
-  postgresql: {
-    column: [
       {
         type: 'column.comment',
         name: 'Comment',
@@ -1379,6 +1258,14 @@ export const RULES_CATALOG: RulesCatalog = {
             default: 64,
           },
         ],
+      },
+      {
+        type: 'column.default-disallow-volatile',
+        name: 'Default Disallow Volatile',
+        description: 'Disallow volatile default values',
+        category: 'column',
+        engine: 'postgres',
+        parameters: [],
       },
       {
         type: 'column.disallow-change-type',
@@ -1413,6 +1300,14 @@ export const RULES_CATALOG: RulesCatalog = {
         parameters: [],
       },
       {
+        type: 'column.require-charset',
+        name: 'Require Charset',
+        description: 'Enforce specific charset for columns',
+        category: 'column',
+        engine: 'both',
+        parameters: [],
+      },
+      {
         type: 'column.require-default',
         name: 'Require Default',
         description: 'Require default values for columns',
@@ -1437,6 +1332,14 @@ export const RULES_CATALOG: RulesCatalog = {
         ],
       },
       {
+        type: 'column.set-default-for-not-null',
+        name: 'Set Default For Not Null',
+        description: 'Require default value for NOT NULL columns',
+        category: 'column',
+        engine: 'both',
+        parameters: [],
+      },
+      {
         type: 'column.type-disallow-list',
         name: 'Type Disallow List',
         description: 'Disallow specific column types',
@@ -1453,6 +1356,14 @@ export const RULES_CATALOG: RulesCatalog = {
       },
     ],
     index: [
+      {
+        type: 'index.create-concurrently',
+        name: 'Create Concurrently',
+        description: 'Require CREATE INDEX CONCURRENTLY',
+        category: 'index',
+        engine: 'postgres',
+        parameters: [],
+      },
       {
         type: 'index.key-number-limit',
         name: 'Key Number Limit',
@@ -1534,6 +1445,14 @@ export const RULES_CATALOG: RulesCatalog = {
         ],
       },
       {
+        type: 'naming.fully-qualified',
+        name: 'Fully Qualified',
+        description: 'Require fully qualified object names',
+        category: 'naming',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
         type: 'naming.index.fk',
         name: 'Fk',
         description: 'Enforce foreign key naming convention',
@@ -1584,6 +1503,30 @@ export const RULES_CATALOG: RulesCatalog = {
             description: 'Maximum length for identifiers',
             required: false,
             default: 64,
+          },
+        ],
+      },
+      {
+        type: 'naming.index.pk',
+        name: 'Pk',
+        description: 'Enforce primary key naming convention',
+        category: 'naming',
+        engine: 'postgres',
+        parameters: [
+          {
+            name: 'format',
+            type: 'TEMPLATE',
+            description: 'Regular expression pattern for naming validation',
+            required: false,
+            default: '^pk_{{table}}_{{column_list}}$',
+            templateList: ['table', 'column_list'],
+          },
+          {
+            name: 'maxLength',
+            type: 'NUMBER',
+            description: 'Maximum length for identifiers',
+            required: false,
+            default: 63,
           },
         ],
       },
@@ -1647,6 +1590,22 @@ export const RULES_CATALOG: RulesCatalog = {
     ],
     statement: [
       {
+        type: 'statement.add-check-not-valid',
+        name: 'Add Check Not Valid',
+        description: 'Require NOT VALID for CHECK constraints',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
+        type: 'statement.add-foreign-key-not-valid',
+        name: 'Add Foreign Key Not Valid',
+        description: 'Require NOT VALID for foreign key constraints',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
         type: 'statement.affected-row-limit',
         name: 'Affected Row Limit',
         description: 'Limit number of affected rows in DML statements',
@@ -1663,9 +1622,49 @@ export const RULES_CATALOG: RulesCatalog = {
         ],
       },
       {
+        type: 'statement.check-set-role-variable',
+        name: 'Check Set Role Variable',
+        description: 'Check SET ROLE variable usage',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
+        type: 'statement.create-specify-schema',
+        name: 'Create Specify Schema',
+        description: 'Require schema specification in CREATE statements',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
+        type: 'statement.disallow-add-column-with-default',
+        name: 'Disallow Add Column With Default',
+        description: 'Prevent ADD COLUMN WITH DEFAULT in PostgreSQL',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
+        type: 'statement.disallow-add-not-null',
+        name: 'Disallow Add Not Null',
+        description: 'Prevent adding NOT NULL constraint directly',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
         type: 'statement.disallow-commit',
         name: 'Disallow Commit',
         description: 'Disallow explicit COMMIT statements',
+        category: 'statement',
+        engine: 'both',
+        parameters: [],
+      },
+      {
+        type: 'statement.disallow-limit',
+        name: 'Disallow Limit',
+        description: 'Disallow LIMIT in UPDATE/DELETE statements',
         category: 'statement',
         engine: 'both',
         parameters: [],
@@ -1684,6 +1683,30 @@ export const RULES_CATALOG: RulesCatalog = {
         description: 'Disallow mixing DDL in DML statements',
         category: 'statement',
         engine: 'both',
+        parameters: [],
+      },
+      {
+        type: 'statement.disallow-on-del-cascade',
+        name: 'Disallow On Del Cascade',
+        description: 'Disallow ON DELETE CASCADE',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
+        type: 'statement.disallow-order-by',
+        name: 'Disallow Order By',
+        description: 'Disallow ORDER BY in UPDATE/DELETE statements',
+        category: 'statement',
+        engine: 'both',
+        parameters: [],
+      },
+      {
+        type: 'statement.disallow-rm-tbl-cascade',
+        name: 'Disallow Rm Tbl Cascade',
+        description: 'Disallow DROP TABLE CASCADE',
+        category: 'statement',
+        engine: 'postgres',
         parameters: [],
       },
       {
@@ -1751,6 +1774,30 @@ export const RULES_CATALOG: RulesCatalog = {
         parameters: [],
       },
       {
+        type: 'statement.non-transactional',
+        name: 'Non Transactional',
+        description: 'Detect non-transactional operations',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
+        type: 'statement.object-owner-check',
+        name: 'Object Owner Check',
+        description: 'Verify object ownership before operations',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
+        type: 'statement.prior-backup-check',
+        name: 'Prior Backup Check',
+        description: 'Rule: Prior Backup Check',
+        category: 'statement',
+        engine: 'postgres',
+        parameters: [],
+      },
+      {
         type: 'statement.select.no-select-all',
         name: 'No Select All',
         description: 'Disallow SELECT * in queries',
@@ -1814,6 +1861,30 @@ export const RULES_CATALOG: RulesCatalog = {
           },
         ],
       },
+      {
+        type: 'system.comment.length',
+        name: 'Length',
+        description: 'Limit comment length',
+        category: 'system',
+        engine: 'postgres',
+        parameters: [
+          {
+            name: 'number',
+            type: 'NUMBER',
+            description: 'Numeric limit or threshold',
+            required: false,
+            default: 64,
+          },
+        ],
+      },
+      {
+        type: 'system.view.disallow-create',
+        name: 'Disallow Create',
+        description: 'Disallow creating views',
+        category: 'system',
+        engine: 'both',
+        parameters: [],
+      },
     ],
     table: [
       {
@@ -1848,6 +1919,14 @@ export const RULES_CATALOG: RulesCatalog = {
         type: 'table.disallow-partition',
         name: 'Disallow Partition',
         description: 'Disallow table partitions',
+        category: 'table',
+        engine: 'both',
+        parameters: [],
+      },
+      {
+        type: 'table.disallow-trigger',
+        name: 'Disallow Trigger',
+        description: 'Disallow triggers on tables',
         category: 'table',
         engine: 'both',
         parameters: [],
@@ -1913,7 +1992,7 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     name: 'Auto Increment Must Integer',
     description: 'Require auto-increment columns to be integer type',
     category: 'column',
-    engine: 'mysql',
+    engine: 'both',
     parameters: [],
   },
   'column.auto-increment-must-unsigned': {
@@ -1921,7 +2000,7 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     name: 'Auto Increment Must Unsigned',
     description: 'Require auto-increment columns to be UNSIGNED',
     category: 'column',
-    engine: 'mysql',
+    engine: 'both',
     parameters: [],
   },
   'column.comment': {
@@ -1992,6 +2071,14 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     engine: 'mysql',
     parameters: [],
   },
+  'column.disallow-drop': {
+    type: 'column.disallow-drop',
+    name: 'Disallow Drop',
+    description: 'Rule: Disallow Drop',
+    category: 'column',
+    engine: 'mysql',
+    parameters: [],
+  },
   'column.disallow-drop-in-index': {
     type: 'column.disallow-drop-in-index',
     name: 'Disallow Drop In Index',
@@ -2053,7 +2140,7 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     name: 'Require Charset',
     description: 'Enforce specific charset for columns',
     category: 'column',
-    engine: 'mysql',
+    engine: 'both',
     parameters: [],
   },
   'column.require-collation': {
@@ -2093,7 +2180,7 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     name: 'Set Default For Not Null',
     description: 'Require default value for NOT NULL columns',
     category: 'column',
-    engine: 'mysql',
+    engine: 'both',
     parameters: [],
   },
   'column.type-disallow-list': {
@@ -2424,6 +2511,14 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     engine: 'postgres',
     parameters: [],
   },
+  'statement.add-column-without-position': {
+    type: 'statement.add-column-without-position',
+    name: 'Add Column Without Position',
+    description: 'Rule: Add Column Without Position',
+    category: 'statement',
+    engine: 'mysql',
+    parameters: [],
+  },
   'statement.add-foreign-key-not-valid': {
     type: 'statement.add-foreign-key-not-valid',
     name: 'Add Foreign Key Not Valid',
@@ -2493,7 +2588,7 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     name: 'Disallow Limit',
     description: 'Disallow LIMIT in UPDATE/DELETE statements',
     category: 'statement',
-    engine: 'mysql',
+    engine: 'both',
     parameters: [],
   },
   'statement.disallow-mix-in-ddl': {
@@ -2525,7 +2620,7 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     name: 'Disallow Order By',
     description: 'Disallow ORDER BY in UPDATE/DELETE statements',
     category: 'statement',
-    engine: 'mysql',
+    engine: 'both',
     parameters: [],
   },
   'statement.disallow-rm-tbl-cascade': {
@@ -2676,6 +2771,14 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     type: 'statement.object-owner-check',
     name: 'Object Owner Check',
     description: 'Verify object ownership before operations',
+    category: 'statement',
+    engine: 'postgres',
+    parameters: [],
+  },
+  'statement.prior-backup-check': {
+    type: 'statement.prior-backup-check',
+    name: 'Prior Backup Check',
+    description: 'Rule: Prior Backup Check',
     category: 'statement',
     engine: 'postgres',
     parameters: [],
@@ -2874,7 +2977,7 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     name: 'Disallow Create',
     description: 'Disallow creating views',
     category: 'system',
-    engine: 'mysql',
+    engine: 'both',
     parameters: [],
   },
   'table.comment': {
@@ -2956,7 +3059,7 @@ export const RULES_INDEX: Record<string, RuleMetadata> = {
     name: 'Disallow Trigger',
     description: 'Disallow triggers on tables',
     category: 'table',
-    engine: 'mysql',
+    engine: 'both',
     parameters: [],
   },
   'table.drop-naming-convention': {
@@ -3059,10 +3162,7 @@ export function getRuleMetadata(ruleType: string): RuleMetadata | undefined {
 /**
  * Get rules by engine and category
  */
-export function getRulesByCategory(
-  engine: 'mysql' | 'postgresql',
-  category: string,
-): RuleMetadata[] {
+export function getRulesByCategory(engine: 'mysql' | 'postgres', category: string): RuleMetadata[] {
   return RULES_CATALOG[engine]?.[category] || [];
 }
 
@@ -3083,14 +3183,14 @@ export function validateRuleType(ruleType: string): boolean {
 /**
  * Get all categories for an engine
  */
-export function getCategories(engine: 'mysql' | 'postgresql'): string[] {
+export function getCategories(engine: 'mysql' | 'postgres'): string[] {
   return Object.keys(RULES_CATALOG[engine] || {});
 }
 
 /**
  * Get all rules for an engine
  */
-export function getAllRules(engine: 'mysql' | 'postgresql'): RuleMetadata[] {
+export function getAllRules(engine: 'mysql' | 'postgres'): RuleMetadata[] {
   const categories = RULES_CATALOG[engine] || {};
   const rules: RuleMetadata[] = [];
   for (const categoryRules of Object.values(categories)) {

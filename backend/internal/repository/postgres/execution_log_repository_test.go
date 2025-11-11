@@ -55,7 +55,7 @@ func TestExecutionLogRepository_Create(t *testing.T) {
 		DatabaseID:           &dbID,
 		DatabaseName:         &dbName,
 		DatabaseInstanceName: &dbInstanceName,
-		DatabaseType:         &dbType,
+		DatabaseEngine:       &dbType,
 		StartedAt:            time.Now(),
 		CompletedAt:          time.Now(),
 		CreatedAt:            time.Now(),
@@ -74,7 +74,7 @@ func TestExecutionLogRepository_Create(t *testing.T) {
 			log.DatabaseID,
 			log.DatabaseName,
 			log.DatabaseInstanceName,
-			log.DatabaseType,
+			log.DatabaseEngine,
 			log.StartedAt,
 			log.CompletedAt,
 			log.CreatedAt,
@@ -107,7 +107,7 @@ func TestExecutionLogRepository_GetByChangePlanID(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"id", "change_plan_id", "executor_id", "status",
 		"execution_duration_ms", "rows_affected", "error_message",
-		"sql_content", "database_id", "database_name", "database_instance_name", "database_type",
+		"sql_content", "database_id", "database_name", "database_instance_name", "database_engine",
 		"started_at", "completed_at", "created_at",
 	}).
 		AddRow(
@@ -156,7 +156,7 @@ func TestExecutionLogRepository_GetByID(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"id", "change_plan_id", "executor_id", "status",
 		"execution_duration_ms", "rows_affected", "error_message",
-		"sql_content", "database_id", "database_name", "database_instance_name", "database_type",
+		"sql_content", "database_id", "database_name", "database_instance_name", "database_engine",
 		"started_at", "completed_at", "created_at",
 	}).
 		AddRow(
@@ -223,7 +223,7 @@ func TestExecutionLogRepository_GetLatestByChangePlanID(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"id", "change_plan_id", "executor_id", "status",
 		"execution_duration_ms", "rows_affected", "error_message",
-		"sql_content", "database_id", "database_name", "database_instance_name", "database_type",
+		"sql_content", "database_id", "database_name", "database_instance_name", "database_engine",
 		"started_at", "completed_at", "created_at",
 	}).
 		AddRow(
