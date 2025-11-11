@@ -20,7 +20,7 @@ func TestNewSQLExecutionError_PostgreSQL(t *testing.T) {
 	}
 
 	sqlContent := "INSERT INTO users (id, name) VALUES (123, 'John');"
-	dbType := "postgresql"
+	dbType := "postgres"
 	dbName := "testdb"
 	dbID := "db-123"
 	instanceName := "test-instance"
@@ -98,7 +98,7 @@ func TestNewSQLExecutionError_GenericError(t *testing.T) {
 	genericErr := errors.New("connection timeout")
 
 	sqlContent := "SELECT * FROM users;"
-	dbType := "postgresql"
+	dbType := "postgres"
 	dbName := "testdb"
 	dbID := "db-123"
 	instanceName := "test-instance"
@@ -135,7 +135,7 @@ func TestSQLExecutionError_ErrorInterface(t *testing.T) {
 		Position: "50",
 	}
 
-	sqlErr := NewSQLExecutionError("postgresql", "testdb", "db-123", "test-instance", "SELECT * FROM INVALID;", pqErr)
+	sqlErr := NewSQLExecutionError("postgres", "testdb", "db-123", "test-instance", "SELECT * FROM INVALID;", pqErr)
 
 	// Test Error() method
 	errorMsg := sqlErr.Error()
@@ -149,7 +149,7 @@ func TestSQLExecutionError_Unwrap(t *testing.T) {
 		Message: "duplicate key",
 	}
 
-	sqlErr := NewSQLExecutionError("postgresql", "testdb", "db-123", "test-instance", "INSERT...", pqErr)
+	sqlErr := NewSQLExecutionError("postgres", "testdb", "db-123", "test-instance", "INSERT...", pqErr)
 
 	// Test Unwrap() method
 	unwrapped := sqlErr.Unwrap()
@@ -218,7 +218,7 @@ func TestGenerateUserMessage_PostgreSQLErrorCodes(t *testing.T) {
 				Position: tc.position,
 			}
 
-			sqlErr := NewSQLExecutionError("postgresql", "testdb", "db-123", "test-instance", "SELECT...", pqErr)
+			sqlErr := NewSQLExecutionError("postgres", "testdb", "db-123", "test-instance", "SELECT...", pqErr)
 			assert.Contains(t, sqlErr.Message, tc.expectedPhrase)
 		})
 	}

@@ -132,7 +132,7 @@ func TestTestPostgreSQLConnection_InvalidParams(t *testing.T) {
 		{
 			name: "missing host",
 			params: ConnectionTestParams{
-				DatabaseType: "postgresql",
+				DatabaseType: "postgres",
 				Port:         5432,
 				Username:     "test",
 				Password:     "pass",
@@ -143,7 +143,7 @@ func TestTestPostgreSQLConnection_InvalidParams(t *testing.T) {
 		{
 			name: "invalid port",
 			params: ConnectionTestParams{
-				DatabaseType: "postgresql",
+				DatabaseType: "postgres",
 				Host:         "localhost",
 				Port:         0,
 				Username:     "test",
@@ -155,7 +155,7 @@ func TestTestPostgreSQLConnection_InvalidParams(t *testing.T) {
 		{
 			name: "missing username",
 			params: ConnectionTestParams{
-				DatabaseType: "postgresql",
+				DatabaseType: "postgres",
 				Host:         "localhost",
 				Port:         5432,
 				Password:     "pass",
@@ -199,7 +199,7 @@ func TestTestPostgreSQLConnection_Timeout(t *testing.T) {
 
 	// Test with invalid host that will timeout
 	params := ConnectionTestParams{
-		DatabaseType:             "postgresql",
+		DatabaseType:             "postgres",
 		Host:                     "192.0.2.0", // Non-routable IP (RFC 3330)
 		Port:                     5432,
 		Username:                 "test",
@@ -244,7 +244,7 @@ func TestTestPostgreSQLConnection_EncryptedPassword(t *testing.T) {
 
 	// Test with invalid host (will fail connection, but password decryption should work)
 	params := ConnectionTestParams{
-		DatabaseType:             "postgresql",
+		DatabaseType:             "postgres",
 		Host:                     "192.0.2.0",
 		Port:                     5432,
 		Username:                 "test",

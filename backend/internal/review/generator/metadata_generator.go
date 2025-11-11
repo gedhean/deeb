@@ -25,7 +25,7 @@ func GenerateGoMetadata(rules []ParsedRule, outputPath string) error {
 	for _, rule := range rules {
 		var engines []string
 		if rule.Engine == "both" {
-			engines = []string{"mysql", "postgresql"}
+			engines = []string{"mysql", "postgres"}
 		} else {
 			engines = []string{rule.Engine}
 		}
@@ -125,7 +125,7 @@ type RuleMetadata struct {
 	Name        string          ` + "`json:\"name\"`" + `
 	Description string          ` + "`json:\"description\"`" + `
 	Category    string          ` + "`json:\"category\"`" + `
-	Engine      string          ` + "`json:\"engine\"`" + ` // "mysql", "postgresql", or "both"
+	Engine      string          ` + "`json:\"engine\"`" + ` // "mysql", "postgres", or "both"
 	Parameters  []RuleParameter ` + "`json:\"parameters\"`" + `
 }
 

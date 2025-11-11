@@ -105,6 +105,21 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 	// Build rule configuration for sql-reviewer
 	rules, enabledRuleTypes := s.buildRulesForReviewer(config, opts.DatabaseType)
 
+	// Log detailed rule information for debugging
+	s.logger.Debug("Built rules for reviewer",
+		zap.Int("total_rules", len(rules)),
+		zap.Strings("enabled_rule_types", enabledRuleTypes))
+
+	// Log each rule for debugging
+	for i, rule := range rules {
+		s.logger.Debug("Rule details",
+			zap.Int("rule_index", i),
+			zap.String("rule_type", rule.Type),
+			zap.String("rule_level", string(rule.Level)),
+			zap.String("rule_engine", rule.Engine.String()),
+			zap.Any("rule_payload", rule.Payload))
+	}
+
 	// Configure reviewer with rules
 	if len(rules) > 0 {
 		// Create Config for the reviewer
@@ -113,7 +128,16 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 			Rules: rules,
 		}
 
-		rev.WithConfigObject(reviewConfig)
+		s.logger.Debug("Configuring reviewer with rules",
+			zap.String("config_id", reviewConfig.ID),
+			zap.Int("config_rules_count", len(reviewConfig.Rules)))
+
+		// WithConfigObject returns the reviewer for method chaining - must capture it!
+		rev = rev.WithConfigObject(reviewConfig)
+
+		s.logger.Debug("Reviewer configured successfully")
+	} else {
+		s.logger.Warn("No rules to configure - reviewer will run without rules")
 	}
 
 	// Get schema for schema-aware validation if available
@@ -133,13 +157,20 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 		result, err = rev.ReviewWithSchema(ctx, opts.SQLContent, schema)
 	} else {
 		s.logger.Info("Running SQL review without schema",
-			zap.Int("rules", len(rules)))
+			zap.Int("rules", len(rules)),
+			zap.String("sql_content", opts.SQLContent),
+			zap.String("database_type", string(opts.DatabaseType)))
 		result, err = rev.Review(ctx, opts.SQLContent)
 	}
 
 	if err != nil {
 		return nil, fmt.Errorf("review failed: %w", err)
 	}
+
+	// Log raw reviewer result for debugging
+	s.logger.Debug("SQL Reviewer returned result",
+		zap.Int("advice_count", len(result.Advices)),
+		zap.Any("advices", result.Advices))
 
 	// Convert result to our format
 	reviewResult := s.convertReviewerResult(result, enabledRuleTypes, policy, opts.DatabaseType, start)
@@ -210,8 +241,8 @@ func (s *ReviewService) buildRulesForReviewer(
 			continue
 		}
 
-		// Convert to sql-reviewer rule
-		storeRule := ConvertRuleMetadataToStoreRule(*metadata, ruleConfig.Level, ruleConfig.Payload)
+		// Convert to sql-reviewer rule (pass target database type for "both" engine rules)
+		storeRule := ConvertRuleMetadataToStoreRule(*metadata, ruleConfig.Level, ruleConfig.Payload, dbType)
 		rules = append(rules, storeRule)
 		enabledTypes = append(enabledTypes, ruleConfig.Type)
 	}

@@ -72,7 +72,7 @@ func (s *SchemaSnapshotService) CapturePostgreSQL(
 
 	// Validate database type
 	if dbInstance.DatabaseType != models.DatabaseTypePostgreSQL {
-		return nil, fmt.Errorf("invalid database type: expected postgresql, got %s", dbInstance.DatabaseType)
+		return nil, fmt.Errorf("invalid database type: expected postgres, got %s", dbInstance.DatabaseType)
 	}
 
 	// Decrypt password

@@ -213,7 +213,7 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 
 	// Validate database type
 	if params.DatabaseInstance.DatabaseType != models.DatabaseTypePostgreSQL {
-		return nil, fmt.Errorf("invalid database type: expected postgresql, got %s", params.DatabaseInstance.DatabaseType)
+		return nil, fmt.Errorf("invalid database type: expected postgres, got %s", params.DatabaseInstance.DatabaseType)
 	}
 
 	// Decrypt password

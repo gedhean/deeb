@@ -24,7 +24,7 @@ func GenerateTypeScriptTypes(rules []ParsedRule, outputPath string) error {
 	for _, rule := range rules {
 		var engines []string
 		if rule.Engine == "both" {
-			engines = []string{"mysql", "postgresql"}
+			engines = []string{"mysql", "postgres"}
 		} else {
 			engines = []string{rule.Engine}
 		}
@@ -159,7 +159,7 @@ export interface RuleMetadata {
   name: string;
   description: string;
   category: string;
-  engine: 'mysql' | 'postgresql' | 'both';
+  engine: 'mysql' | 'postgres' | 'both';
   parameters: RuleParameter[];
 }
 
@@ -269,7 +269,7 @@ export function getRuleMetadata(ruleType: string): RuleMetadata | undefined {
  * Get rules by engine and category
  */
 export function getRulesByCategory(
-  engine: 'mysql' | 'postgresql',
+  engine: 'mysql' | 'postgres',
   category: string
 ): RuleMetadata[] {
   return RULES_CATALOG[engine]?.[category] || [];
@@ -292,14 +292,14 @@ export function validateRuleType(ruleType: string): boolean {
 /**
  * Get all categories for an engine
  */
-export function getCategories(engine: 'mysql' | 'postgresql'): string[] {
+export function getCategories(engine: 'mysql' | 'postgres'): string[] {
   return Object.keys(RULES_CATALOG[engine] || {});
 }
 
 /**
  * Get all rules for an engine
  */
-export function getAllRules(engine: 'mysql' | 'postgresql'): RuleMetadata[] {
+export function getAllRules(engine: 'mysql' | 'postgres'): RuleMetadata[] {
   const categories = RULES_CATALOG[engine] || {};
   const rules: RuleMetadata[] = [];
   for (const categoryRules of Object.values(categories)) {

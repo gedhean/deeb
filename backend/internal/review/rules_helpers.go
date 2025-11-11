@@ -23,10 +23,12 @@ func GetRulesByEngine(dbType models.DatabaseType) map[string][]RuleMetadata {
 }
 
 // ConvertRuleMetadataToStoreRule converts RuleMetadata to sql-reviewer's SQLReviewRule type
+// When the rule's engine is "both", it will use the targetEngine parameter
 func ConvertRuleMetadataToStoreRule(
 	metadata RuleMetadata,
 	level models.SQLReviewRuleLevel,
 	payload map[string]interface{},
+	targetEngine models.DatabaseType,
 ) *types.SQLReviewRule {
 	// Convert level to sql-reviewer format
 	var ruleLevel types.SQLReviewRuleLevel
@@ -39,12 +41,18 @@ func ConvertRuleMetadataToStoreRule(
 		ruleLevel = types.SQLReviewRuleLevel_WARNING
 	}
 
-	// Convert engine
+	// Convert engine - if rule engine is "both", use the target engine
 	var engine types.Engine
-	switch strings.ToLower(metadata.Engine) {
+	engineStr := strings.ToLower(metadata.Engine)
+	if engineStr == "both" {
+		// Use target engine for "both" rules
+		engineStr = strings.ToLower(string(targetEngine))
+	}
+
+	switch engineStr {
 	case "mysql":
 		engine = types.Engine_MYSQL
-	case "postgresql", "postgres":
+	case "postgres":
 		engine = types.Engine_POSTGRES
 	default:
 		engine = types.Engine_ENGINE_UNSPECIFIED

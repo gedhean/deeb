@@ -235,7 +235,7 @@ func TestDatabaseInstanceRepository_GetByID(t *testing.T) {
 			"id", "name", "description", "database_type", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
-			AddRow(instanceID, "Test Instance", description, "postgresql", "localhost", 5432, "postgres",
+			AddRow(instanceID, "Test Instance", description, "postgres", "localhost", 5432, "postgres",
 				encryptedDetails, false, true, "Active", nil, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances WHERE id =").
@@ -336,7 +336,7 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 			"id", "name", "description", "database_type", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
-			AddRow(instanceID1, "Instance 1", nil, "postgresql", "localhost", 5432, "postgres",
+			AddRow(instanceID1, "Instance 1", nil, "postgres", "localhost", 5432, "postgres",
 				encryptedDetails, false, true, "Active", nil, createdByID, now, now).
 			AddRow(instanceID2, "Instance 2", nil, "mysql", "localhost", 3306, "root",
 				encryptedDetails, false, false, "Active", nil, createdByID, now, now)
@@ -382,7 +382,7 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 			"id", "name", "description", "database_type", "host", "port", "username",
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		}).
-			AddRow(instanceID, "Instance 1", nil, "postgresql", "localhost", 5432, "postgres",
+			AddRow(instanceID, "Instance 1", nil, "postgres", "localhost", 5432, "postgres",
 				encryptedDetails, false, true, "Active", nil, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").

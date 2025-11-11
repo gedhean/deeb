@@ -26,7 +26,7 @@ var (
 
 // ConnectionTestParams represents parameters for testing a database connection
 type ConnectionTestParams struct {
-	DatabaseType             string // "mysql" or "postgresql"
+	DatabaseType             string // "mysql" or "postgres"
 	Host                     string
 	Port                     int
 	Username                 string

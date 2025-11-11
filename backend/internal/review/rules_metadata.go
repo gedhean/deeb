@@ -9,7 +9,7 @@ type RuleMetadata struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Category    string          `json:"category"`
-	Engine      string          `json:"engine"` // "mysql", "postgresql", or "both"
+	Engine      string          `json:"engine"` // "mysql", "postgres", or "both"
 	Parameters  []RuleParameter `json:"parameters"`
 }
 
@@ -85,7 +85,7 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Name:        "Auto Increment Must Integer",
 				Description: "Require auto-increment columns to be integer type",
 				Category:    "column",
-				Engine:      "mysql",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
 			{
@@ -93,7 +93,7 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Name:        "Auto Increment Must Unsigned",
 				Description: "Require auto-increment columns to be UNSIGNED",
 				Category:    "column",
-				Engine:      "mysql",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
 			{
@@ -159,6 +159,14 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Parameters:  []RuleParameter{},
 			},
 			{
+				Type:        "column.disallow-drop",
+				Name:        "Disallow Drop",
+				Description: "Rule: Disallow Drop",
+				Category:    "column",
+				Engine:      "mysql",
+				Parameters:  []RuleParameter{},
+			},
+			{
 				Type:        "column.disallow-drop-in-index",
 				Name:        "Disallow Drop In Index",
 				Description: "Prevent dropping columns that are in indexes",
@@ -219,7 +227,7 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Name:        "Require Charset",
 				Description: "Enforce specific charset for columns",
 				Category:    "column",
-				Engine:      "mysql",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
 			{
@@ -259,7 +267,7 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Name:        "Set Default For Not Null",
 				Description: "Require default value for NOT NULL columns",
 				Category:    "column",
-				Engine:      "mysql",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
 			{
@@ -552,6 +560,14 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 		},
 		"statement": {
 			{
+				Type:        "statement.add-column-without-position",
+				Name:        "Add Column Without Position",
+				Description: "Rule: Add Column Without Position",
+				Category:    "statement",
+				Engine:      "mysql",
+				Parameters:  []RuleParameter{},
+			},
+			{
 				Type:        "statement.affected-row-limit",
 				Name:        "Affected Row Limit",
 				Description: "Limit number of affected rows in DML statements",
@@ -580,7 +596,7 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Name:        "Disallow Limit",
 				Description: "Disallow LIMIT in UPDATE/DELETE statements",
 				Category:    "statement",
-				Engine:      "mysql",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
 			{
@@ -604,7 +620,7 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Name:        "Disallow Order By",
 				Description: "Disallow ORDER BY in UPDATE/DELETE statements",
 				Category:    "statement",
-				Engine:      "mysql",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
 			{
@@ -918,7 +934,7 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Name:        "Disallow Create",
 				Description: "Disallow creating views",
 				Category:    "system",
-				Engine:      "mysql",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
 		},
@@ -1006,7 +1022,7 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Name:        "Disallow Trigger",
 				Description: "Disallow triggers on tables",
 				Category:    "table",
-				Engine:      "mysql",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
 			{
@@ -1102,161 +1118,21 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 	"postgres": {
 		"column": {
 			{
-				Type:        "column.default-disallow-volatile",
-				Name:        "Default Disallow Volatile",
-				Description: "Disallow volatile default values",
+				Type:        "column.auto-increment-must-integer",
+				Name:        "Auto Increment Must Integer",
+				Description: "Require auto-increment columns to be integer type",
 				Category:    "column",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-		},
-		"index": {
-			{
-				Type:        "index.create-concurrently",
-				Name:        "Create Concurrently",
-				Description: "Require CREATE INDEX CONCURRENTLY",
-				Category:    "index",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-		},
-		"naming": {
-			{
-				Type:        "naming.fully-qualified",
-				Name:        "Fully Qualified",
-				Description: "Require fully qualified object names",
-				Category:    "naming",
-				Engine:      "postgres",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
 			{
-				Type:        "naming.index.pk",
-				Name:        "Pk",
-				Description: "Enforce primary key naming convention",
-				Category:    "naming",
-				Engine:      "postgres",
-				Parameters: []RuleParameter{
-					{
-						Name:         "format",
-						Type:         "TEMPLATE",
-						Description:  "Regular expression pattern for naming validation",
-						Required:     false,
-						Default:      "^pk_{{table}}_{{column_list}}$",
-						TemplateList: []string{"table", "column_list"},
-					},
-					{
-						Name:        "maxLength",
-						Type:        "NUMBER",
-						Description: "Maximum length for identifiers",
-						Required:    false,
-						Default:     63,
-					},
-				},
-			},
-		},
-		"statement": {
-			{
-				Type:        "statement.add-check-not-valid",
-				Name:        "Add Check Not Valid",
-				Description: "Require NOT VALID for CHECK constraints",
-				Category:    "statement",
-				Engine:      "postgres",
+				Type:        "column.auto-increment-must-unsigned",
+				Name:        "Auto Increment Must Unsigned",
+				Description: "Require auto-increment columns to be UNSIGNED",
+				Category:    "column",
+				Engine:      "both",
 				Parameters:  []RuleParameter{},
 			},
-			{
-				Type:        "statement.add-foreign-key-not-valid",
-				Name:        "Add Foreign Key Not Valid",
-				Description: "Require NOT VALID for foreign key constraints",
-				Category:    "statement",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-			{
-				Type:        "statement.check-set-role-variable",
-				Name:        "Check Set Role Variable",
-				Description: "Check SET ROLE variable usage",
-				Category:    "statement",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-			{
-				Type:        "statement.create-specify-schema",
-				Name:        "Create Specify Schema",
-				Description: "Require schema specification in CREATE statements",
-				Category:    "statement",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-			{
-				Type:        "statement.disallow-add-column-with-default",
-				Name:        "Disallow Add Column With Default",
-				Description: "Prevent ADD COLUMN WITH DEFAULT in PostgreSQL",
-				Category:    "statement",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-			{
-				Type:        "statement.disallow-add-not-null",
-				Name:        "Disallow Add Not Null",
-				Description: "Prevent adding NOT NULL constraint directly",
-				Category:    "statement",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-			{
-				Type:        "statement.disallow-on-del-cascade",
-				Name:        "Disallow On Del Cascade",
-				Description: "Disallow ON DELETE CASCADE",
-				Category:    "statement",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-			{
-				Type:        "statement.disallow-rm-tbl-cascade",
-				Name:        "Disallow Rm Tbl Cascade",
-				Description: "Disallow DROP TABLE CASCADE",
-				Category:    "statement",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-			{
-				Type:        "statement.non-transactional",
-				Name:        "Non Transactional",
-				Description: "Detect non-transactional operations",
-				Category:    "statement",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-			{
-				Type:        "statement.object-owner-check",
-				Name:        "Object Owner Check",
-				Description: "Verify object ownership before operations",
-				Category:    "statement",
-				Engine:      "postgres",
-				Parameters:  []RuleParameter{},
-			},
-		},
-		"system": {
-			{
-				Type:        "system.comment.length",
-				Name:        "Length",
-				Description: "Limit comment length",
-				Category:    "system",
-				Engine:      "postgres",
-				Parameters: []RuleParameter{
-					{
-						Name:        "number",
-						Type:        "NUMBER",
-						Description: "Numeric limit or threshold",
-						Required:    false,
-						Default:     64,
-					},
-				},
-			},
-		},
-	},
-	"postgresql": {
-		"column": {
 			{
 				Type:        "column.comment",
 				Name:        "Comment",
@@ -1286,6 +1162,14 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 						Default:     64,
 					},
 				},
+			},
+			{
+				Type:        "column.default-disallow-volatile",
+				Name:        "Default Disallow Volatile",
+				Description: "Disallow volatile default values",
+				Category:    "column",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
 			},
 			{
 				Type:        "column.disallow-change-type",
@@ -1320,6 +1204,14 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Parameters:  []RuleParameter{},
 			},
 			{
+				Type:        "column.require-charset",
+				Name:        "Require Charset",
+				Description: "Enforce specific charset for columns",
+				Category:    "column",
+				Engine:      "both",
+				Parameters:  []RuleParameter{},
+			},
+			{
 				Type:        "column.require-default",
 				Name:        "Require Default",
 				Description: "Require default values for columns",
@@ -1344,6 +1236,14 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				},
 			},
 			{
+				Type:        "column.set-default-for-not-null",
+				Name:        "Set Default For Not Null",
+				Description: "Require default value for NOT NULL columns",
+				Category:    "column",
+				Engine:      "both",
+				Parameters:  []RuleParameter{},
+			},
+			{
 				Type:        "column.type-disallow-list",
 				Name:        "Type Disallow List",
 				Description: "Disallow specific column types",
@@ -1361,6 +1261,14 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 			},
 		},
 		"index": {
+			{
+				Type:        "index.create-concurrently",
+				Name:        "Create Concurrently",
+				Description: "Require CREATE INDEX CONCURRENTLY",
+				Category:    "index",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
 			{
 				Type:        "index.key-number-limit",
 				Name:        "Key Number Limit",
@@ -1443,6 +1351,14 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				},
 			},
 			{
+				Type:        "naming.fully-qualified",
+				Name:        "Fully Qualified",
+				Description: "Require fully qualified object names",
+				Category:    "naming",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
 				Type:        "naming.index.fk",
 				Name:        "Fk",
 				Description: "Enforce foreign key naming convention",
@@ -1487,6 +1403,30 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 						Description: "Maximum length for identifiers",
 						Required:    false,
 						Default:     64,
+					},
+				},
+			},
+			{
+				Type:        "naming.index.pk",
+				Name:        "Pk",
+				Description: "Enforce primary key naming convention",
+				Category:    "naming",
+				Engine:      "postgres",
+				Parameters: []RuleParameter{
+					{
+						Name:         "format",
+						Type:         "TEMPLATE",
+						Description:  "Regular expression pattern for naming validation",
+						Required:     false,
+						Default:      "^pk_{{table}}_{{column_list}}$",
+						TemplateList: []string{"table", "column_list"},
+					},
+					{
+						Name:        "maxLength",
+						Type:        "NUMBER",
+						Description: "Maximum length for identifiers",
+						Required:    false,
+						Default:     63,
 					},
 				},
 			},
@@ -1550,6 +1490,22 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 		},
 		"statement": {
 			{
+				Type:        "statement.add-check-not-valid",
+				Name:        "Add Check Not Valid",
+				Description: "Require NOT VALID for CHECK constraints",
+				Category:    "statement",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.add-foreign-key-not-valid",
+				Name:        "Add Foreign Key Not Valid",
+				Description: "Require NOT VALID for foreign key constraints",
+				Category:    "statement",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
 				Type:        "statement.affected-row-limit",
 				Name:        "Affected Row Limit",
 				Description: "Limit number of affected rows in DML statements",
@@ -1566,9 +1522,49 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				},
 			},
 			{
+				Type:        "statement.check-set-role-variable",
+				Name:        "Check Set Role Variable",
+				Description: "Check SET ROLE variable usage",
+				Category:    "statement",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.create-specify-schema",
+				Name:        "Create Specify Schema",
+				Description: "Require schema specification in CREATE statements",
+				Category:    "statement",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.disallow-add-column-with-default",
+				Name:        "Disallow Add Column With Default",
+				Description: "Prevent ADD COLUMN WITH DEFAULT in PostgreSQL",
+				Category:    "statement",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.disallow-add-not-null",
+				Name:        "Disallow Add Not Null",
+				Description: "Prevent adding NOT NULL constraint directly",
+				Category:    "statement",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
 				Type:        "statement.disallow-commit",
 				Name:        "Disallow Commit",
 				Description: "Disallow explicit COMMIT statements",
+				Category:    "statement",
+				Engine:      "both",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.disallow-limit",
+				Name:        "Disallow Limit",
+				Description: "Disallow LIMIT in UPDATE/DELETE statements",
 				Category:    "statement",
 				Engine:      "both",
 				Parameters:  []RuleParameter{},
@@ -1587,6 +1583,30 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Description: "Disallow mixing DDL in DML statements",
 				Category:    "statement",
 				Engine:      "both",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.disallow-on-del-cascade",
+				Name:        "Disallow On Del Cascade",
+				Description: "Disallow ON DELETE CASCADE",
+				Category:    "statement",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.disallow-order-by",
+				Name:        "Disallow Order By",
+				Description: "Disallow ORDER BY in UPDATE/DELETE statements",
+				Category:    "statement",
+				Engine:      "both",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.disallow-rm-tbl-cascade",
+				Name:        "Disallow Rm Tbl Cascade",
+				Description: "Disallow DROP TABLE CASCADE",
+				Category:    "statement",
+				Engine:      "postgres",
 				Parameters:  []RuleParameter{},
 			},
 			{
@@ -1651,6 +1671,30 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Description: "Suggest merging multiple ALTER TABLE statements",
 				Category:    "statement",
 				Engine:      "both",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.non-transactional",
+				Name:        "Non Transactional",
+				Description: "Detect non-transactional operations",
+				Category:    "statement",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.object-owner-check",
+				Name:        "Object Owner Check",
+				Description: "Verify object ownership before operations",
+				Category:    "statement",
+				Engine:      "postgres",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "statement.prior-backup-check",
+				Name:        "Prior Backup Check",
+				Description: "Rule: Prior Backup Check",
+				Category:    "statement",
+				Engine:      "postgres",
 				Parameters:  []RuleParameter{},
 			},
 			{
@@ -1719,6 +1763,30 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 					},
 				},
 			},
+			{
+				Type:        "system.comment.length",
+				Name:        "Length",
+				Description: "Limit comment length",
+				Category:    "system",
+				Engine:      "postgres",
+				Parameters: []RuleParameter{
+					{
+						Name:        "number",
+						Type:        "NUMBER",
+						Description: "Numeric limit or threshold",
+						Required:    false,
+						Default:     64,
+					},
+				},
+			},
+			{
+				Type:        "system.view.disallow-create",
+				Name:        "Disallow Create",
+				Description: "Disallow creating views",
+				Category:    "system",
+				Engine:      "both",
+				Parameters:  []RuleParameter{},
+			},
 		},
 		"table": {
 			{
@@ -1755,6 +1823,14 @@ var rulesCatalog = map[string]map[string][]RuleMetadata{
 				Type:        "table.disallow-partition",
 				Name:        "Disallow Partition",
 				Description: "Disallow table partitions",
+				Category:    "table",
+				Engine:      "both",
+				Parameters:  []RuleParameter{},
+			},
+			{
+				Type:        "table.disallow-trigger",
+				Name:        "Disallow Trigger",
+				Description: "Disallow triggers on tables",
 				Category:    "table",
 				Engine:      "both",
 				Parameters:  []RuleParameter{},
@@ -1818,7 +1894,7 @@ var rulesIndex = map[string]*RuleMetadata{
 		Name:        "Auto Increment Must Integer",
 		Description: "Require auto-increment columns to be integer type",
 		Category:    "column",
-		Engine:      "mysql",
+		Engine:      "both",
 		Parameters:  []RuleParameter{},
 	},
 	"column.auto-increment-must-unsigned": {
@@ -1826,7 +1902,7 @@ var rulesIndex = map[string]*RuleMetadata{
 		Name:        "Auto Increment Must Unsigned",
 		Description: "Require auto-increment columns to be UNSIGNED",
 		Category:    "column",
-		Engine:      "mysql",
+		Engine:      "both",
 		Parameters:  []RuleParameter{},
 	},
 	"column.comment": {
@@ -1899,6 +1975,14 @@ var rulesIndex = map[string]*RuleMetadata{
 		Engine:      "mysql",
 		Parameters:  []RuleParameter{},
 	},
+	"column.disallow-drop": {
+		Type:        "column.disallow-drop",
+		Name:        "Disallow Drop",
+		Description: "Rule: Disallow Drop",
+		Category:    "column",
+		Engine:      "mysql",
+		Parameters:  []RuleParameter{},
+	},
 	"column.disallow-drop-in-index": {
 		Type:        "column.disallow-drop-in-index",
 		Name:        "Disallow Drop In Index",
@@ -1960,7 +2044,7 @@ var rulesIndex = map[string]*RuleMetadata{
 		Name:        "Require Charset",
 		Description: "Enforce specific charset for columns",
 		Category:    "column",
-		Engine:      "mysql",
+		Engine:      "both",
 		Parameters:  []RuleParameter{},
 	},
 	"column.require-collation": {
@@ -2000,7 +2084,7 @@ var rulesIndex = map[string]*RuleMetadata{
 		Name:        "Set Default For Not Null",
 		Description: "Require default value for NOT NULL columns",
 		Category:    "column",
-		Engine:      "mysql",
+		Engine:      "both",
 		Parameters:  []RuleParameter{},
 	},
 	"column.type-disallow-list": {
@@ -2328,6 +2412,14 @@ var rulesIndex = map[string]*RuleMetadata{
 		Engine:      "postgres",
 		Parameters:  []RuleParameter{},
 	},
+	"statement.add-column-without-position": {
+		Type:        "statement.add-column-without-position",
+		Name:        "Add Column Without Position",
+		Description: "Rule: Add Column Without Position",
+		Category:    "statement",
+		Engine:      "mysql",
+		Parameters:  []RuleParameter{},
+	},
 	"statement.add-foreign-key-not-valid": {
 		Type:        "statement.add-foreign-key-not-valid",
 		Name:        "Add Foreign Key Not Valid",
@@ -2397,7 +2489,7 @@ var rulesIndex = map[string]*RuleMetadata{
 		Name:        "Disallow Limit",
 		Description: "Disallow LIMIT in UPDATE/DELETE statements",
 		Category:    "statement",
-		Engine:      "mysql",
+		Engine:      "both",
 		Parameters:  []RuleParameter{},
 	},
 	"statement.disallow-mix-in-ddl": {
@@ -2429,7 +2521,7 @@ var rulesIndex = map[string]*RuleMetadata{
 		Name:        "Disallow Order By",
 		Description: "Disallow ORDER BY in UPDATE/DELETE statements",
 		Category:    "statement",
-		Engine:      "mysql",
+		Engine:      "both",
 		Parameters:  []RuleParameter{},
 	},
 	"statement.disallow-rm-tbl-cascade": {
@@ -2580,6 +2672,14 @@ var rulesIndex = map[string]*RuleMetadata{
 		Type:        "statement.object-owner-check",
 		Name:        "Object Owner Check",
 		Description: "Verify object ownership before operations",
+		Category:    "statement",
+		Engine:      "postgres",
+		Parameters:  []RuleParameter{},
+	},
+	"statement.prior-backup-check": {
+		Type:        "statement.prior-backup-check",
+		Name:        "Prior Backup Check",
+		Description: "Rule: Prior Backup Check",
 		Category:    "statement",
 		Engine:      "postgres",
 		Parameters:  []RuleParameter{},
@@ -2781,7 +2881,7 @@ var rulesIndex = map[string]*RuleMetadata{
 		Name:        "Disallow Create",
 		Description: "Disallow creating views",
 		Category:    "system",
-		Engine:      "mysql",
+		Engine:      "both",
 		Parameters:  []RuleParameter{},
 	},
 	"table.comment": {
@@ -2867,7 +2967,7 @@ var rulesIndex = map[string]*RuleMetadata{
 		Name:        "Disallow Trigger",
 		Description: "Disallow triggers on tables",
 		Category:    "table",
-		Engine:      "mysql",
+		Engine:      "both",
 		Parameters:  []RuleParameter{},
 	},
 	"table.drop-naming-convention": {

@@ -190,7 +190,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			"name": "Production DB",
 			"host": "localhost",
 			"port": 5432,
-			"database_type": "postgresql",
+			"database_type": "postgres",
 			"username": "testuser",
 			"password": "testpassword"
 		}`
@@ -237,7 +237,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 		}
 
 		if response.DatabaseType != models.DatabaseTypePostgreSQL {
-			t.Errorf("Expected database_type 'postgresql', got %s", response.DatabaseType)
+			t.Errorf("Expected database_type 'postgres', got %s", response.DatabaseType)
 		}
 	})
 
@@ -258,7 +258,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			"name": "",
 			"host": "prod-db.example.com",
 			"port": 5432,
-			"database_type": "postgresql",
+			"database_type": "postgres",
 			"username": "testuser",
 			"password": "testpassword"
 		}`

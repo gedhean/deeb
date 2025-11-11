@@ -13,7 +13,7 @@ type DatabaseType string
 
 const (
 	DatabaseTypeMySQL      DatabaseType = "mysql"
-	DatabaseTypePostgreSQL DatabaseType = "postgresql"
+	DatabaseTypePostgreSQL DatabaseType = "postgres"
 )
 
 // DatabaseInstanceStatus represents the status of a database instance
@@ -48,7 +48,7 @@ type DatabaseInstance struct {
 type CreateDatabaseInstanceRequest struct {
 	Name          string       `json:"name"                  validate:"required,max=100"`
 	Description   *string      `json:"description,omitempty"`
-	DatabaseType  DatabaseType `json:"database_type"         validate:"required,oneof=mysql postgresql"`
+	DatabaseType  DatabaseType `json:"database_type"         validate:"required,oneof=mysql postgres"`
 	Host          string       `json:"host"                  validate:"required,max=255"`
 	Port          int          `json:"port"                  validate:"required,min=1,max=65535"`
 	Username      string       `json:"username"              validate:"required,max=255"`
@@ -62,7 +62,7 @@ type CreateDatabaseInstanceRequest struct {
 type UpdateDatabaseInstanceRequest struct {
 	Name          *string                 `json:"name,omitempty"             validate:"omitempty,max=100"`
 	Description   *string                 `json:"description,omitempty"`
-	DatabaseType  *DatabaseType           `json:"database_type,omitempty"    validate:"omitempty,oneof=mysql postgresql"`
+	DatabaseType  *DatabaseType           `json:"database_type,omitempty"    validate:"omitempty,oneof=mysql postgres"`
 	Host          *string                 `json:"host,omitempty"             validate:"omitempty,max=255"`
 	Port          *int                    `json:"port,omitempty"             validate:"omitempty,min=1,max=65535"`
 	Username      *string                 `json:"username,omitempty"         validate:"omitempty,max=255"`
@@ -118,7 +118,7 @@ var (
 	ErrPortRequired                 = errors.New("port is required")
 	ErrPortInvalid                  = errors.New("port must be between 1 and 65535")
 	ErrDatabaseTypeRequired         = errors.New("database type is required")
-	ErrDatabaseTypeInvalid          = errors.New("database type must be mysql or postgresql")
+	ErrDatabaseTypeInvalid          = errors.New("database type must be mysql or postgres")
 	ErrUsernameRequired             = errors.New("username is required")
 	ErrPasswordRequired             = errors.New("password is required")
 )

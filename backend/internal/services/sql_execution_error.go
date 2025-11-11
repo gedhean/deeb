@@ -120,7 +120,7 @@ func (e *SQLExecutionError) generateUserMessage() string {
 	// Add database-specific context
 	if e.DatabaseErrorCode != "" {
 		switch e.DatabaseType {
-		case "postgresql":
+		case "postgres":
 			msg.WriteString(fmt.Sprintf(" (PostgreSQL error code: %s)", e.DatabaseErrorCode))
 		case "mysql":
 			msg.WriteString(fmt.Sprintf(" (MySQL error code: %s)", e.DatabaseErrorCode))

@@ -35,7 +35,7 @@ type ParsedRule struct {
 	Name        string
 	Description string
 	Category    string
-	Engine      string // "mysql", "postgresql", or "both"
+	Engine      string // "mysql", "postgres", or "both"
 	Parameters  []RuleParameter
 }
 

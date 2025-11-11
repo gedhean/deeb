@@ -19,7 +19,7 @@ func TestNewConnectionError_NetworkError(t *testing.T) {
 	}
 
 	connErr := NewConnectionError(
-		"postgresql",
+		"postgres",
 		"testdb",
 		"db-123",
 		"test-instance",
@@ -33,7 +33,7 @@ func TestNewConnectionError_NetworkError(t *testing.T) {
 
 	// Verify error classification
 	assert.Equal(t, "network", connErr.ErrorType)
-	assert.Equal(t, "postgresql", connErr.DatabaseType)
+	assert.Equal(t, "postgres", connErr.DatabaseType)
 	assert.Equal(t, "testdb", connErr.DatabaseName)
 	assert.Equal(t, "localhost", connErr.Host)
 	assert.Equal(t, 5432, connErr.Port)
@@ -84,7 +84,7 @@ func TestNewConnectionError_PostgreSQLError(t *testing.T) {
 	}
 
 	connErr := NewConnectionError(
-		"postgresql",
+		"postgres",
 		"testdb",
 		"db-123",
 		"test-instance",
@@ -139,7 +139,7 @@ func TestNewConnectionError_DatabaseNotFound(t *testing.T) {
 	}
 
 	connErr := NewConnectionError(
-		"postgresql",
+		"postgres",
 		"nonexistent",
 		"db-123",
 		"test-instance",
@@ -166,7 +166,7 @@ func TestNewConnectionError_ContextTimeout(t *testing.T) {
 	<-ctx.Done()
 
 	connErr := NewConnectionError(
-		"postgresql",
+		"postgres",
 		"testdb",
 		"db-123",
 		"test-instance",
@@ -186,7 +186,7 @@ func TestNewConnectionError_GenericError(t *testing.T) {
 	genericErr := errors.New("unexpected connection error")
 
 	connErr := NewConnectionError(
-		"postgresql",
+		"postgres",
 		"testdb",
 		"db-123",
 		"test-instance",
@@ -208,7 +208,7 @@ func TestNewConnectionError_GenericError(t *testing.T) {
 func TestConnectionError_ErrorInterface(t *testing.T) {
 	err := errors.New("connection error")
 	connErr := NewConnectionError(
-		"postgresql",
+		"postgres",
 		"testdb",
 		"db-123",
 		"test-instance",
@@ -229,7 +229,7 @@ func TestConnectionError_ErrorInterface(t *testing.T) {
 func TestConnectionError_Unwrap(t *testing.T) {
 	err := errors.New("connection error")
 	connErr := NewConnectionError(
-		"postgresql",
+		"postgres",
 		"testdb",
 		"db-123",
 		"test-instance",
@@ -384,7 +384,7 @@ func TestConnectionError_ErrorTypeClassification(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			connErr := NewConnectionError(
-				"postgresql",
+				"postgres",
 				"testdb",
 				"db-123",
 				"test-instance",
