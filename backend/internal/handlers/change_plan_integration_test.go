@@ -33,7 +33,6 @@ import (
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/review"
-	"github.com/nsxbet/deeb/internal/review/sqlreviewer"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/utils"
 	"github.com/stretchr/testify/assert"
@@ -339,19 +338,11 @@ func setupChangePlanHandler(t *testing.T, db *sqlx.DB, tokenManager *auth.TokenM
 		logger,
 	)
 
-	// Initialize SQL Review service with sql-reviewer
-	reviewAdvisor := sqlreviewer.NewAdvisor(logger)
-	reviewService := review.NewReviewService(
-		policyRepo,
-		databaseRepo,
-		reviewAdvisor,
-		logger,
-	)
-
 	// Initialize SQL Review V2 service
 	schemaCache := review.NewSchemaCache(5*time.Minute, logger)
 	reviewService := review.NewReviewService(
 		policyRepo,
+		environmentRepo,
 		schemaCache,
 		logger,
 	)
@@ -468,19 +459,11 @@ func setupChangePlanHandlerWithTimeout(
 		logger,
 	)
 
-	// Initialize SQL Review service with sql-reviewer
-	reviewAdvisor := sqlreviewer.NewAdvisor(logger)
-	reviewService := review.NewReviewService(
-		policyRepo,
-		databaseRepo,
-		reviewAdvisor,
-		logger,
-	)
-
 	// Initialize SQL Review V2 service
 	schemaCache := review.NewSchemaCache(5*time.Minute, logger)
 	reviewService := review.NewReviewService(
 		policyRepo,
+		environmentRepo,
 		schemaCache,
 		logger,
 	)

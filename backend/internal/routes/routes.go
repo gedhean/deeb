@@ -504,6 +504,7 @@ func setupChangePlanRoutes(
 	schemaCache := review.NewSchemaCache(15*time.Minute, logger.Get())
 	reviewService := review.NewReviewService(
 		policyRepo,
+		environmentRepo,
 		schemaCache,
 		logger.Get(),
 	)

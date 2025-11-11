@@ -17,9 +17,10 @@ import (
 
 // ReviewService provides enhanced SQL review capabilities
 type ReviewService struct {
-	policyRepo  repository.PolicyRepository
-	schemaCache *SchemaCache
-	logger      *zap.Logger
+	policyRepo      repository.PolicyRepository
+	environmentRepo repository.EnvironmentRepository
+	schemaCache     *SchemaCache
+	logger          *zap.Logger
 
 	// Configuration
 	defaultTimeout time.Duration
@@ -28,14 +29,16 @@ type ReviewService struct {
 // NewReviewService creates a new enhanced review service
 func NewReviewService(
 	policyRepo repository.PolicyRepository,
+	environmentRepo repository.EnvironmentRepository,
 	schemaCache *SchemaCache,
 	logger *zap.Logger,
 ) *ReviewService {
 	return &ReviewService{
-		policyRepo:     policyRepo,
-		schemaCache:    schemaCache,
-		logger:         logger,
-		defaultTimeout: 30 * time.Second,
+		policyRepo:      policyRepo,
+		environmentRepo: environmentRepo,
+		schemaCache:     schemaCache,
+		logger:          logger,
+		defaultTimeout:  30 * time.Second,
 	}
 }
 
@@ -146,19 +149,41 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 
 // loadPolicyForEnvironment loads the SQL_REVIEW policy for an environment
 func (s *ReviewService) loadPolicyForEnvironment(ctx context.Context, environmentID uuid.UUID) (*models.Policy, error) {
-	// For now, load the first SQL_REVIEW policy
-	// TODO: In Phase 3, load policy associated with environment
-	policies, err := s.policyRepo.GetByType(ctx, models.PolicyTypeSQLReview, 1, 0)
+	// Fetch the environment
+	environment, err := s.environmentRepo.GetByID(ctx, environmentID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query policies: %w", err)
+		return nil, fmt.Errorf("failed to fetch environment: %w", err)
 	}
 
-	if len(policies) == 0 {
-		s.logger.Warn("No SQL_REVIEW policy found")
+	// If environment has no associated policy, return nil (no policy to apply)
+	if environment.PolicyID == nil {
+		s.logger.Info("No policy associated with environment",
+			zap.String("environment_id", environmentID.String()),
+			zap.String("environment_name", environment.Name))
 		return nil, nil
 	}
 
-	return policies[0], nil
+	// Load the policy
+	policy, err := s.policyRepo.GetByID(ctx, *environment.PolicyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load policy: %w", err)
+	}
+
+	// Verify it's a SQL_REVIEW policy
+	if policy.Type != models.PolicyTypeSQLReview {
+		s.logger.Warn("Environment policy is not SQL_REVIEW type",
+			zap.String("environment_id", environmentID.String()),
+			zap.String("policy_id", policy.ID.String()),
+			zap.String("policy_type", string(policy.Type)))
+		return nil, nil
+	}
+
+	s.logger.Debug("Loaded policy for environment",
+		zap.String("environment_id", environmentID.String()),
+		zap.String("policy_id", policy.ID.String()),
+		zap.String("policy_name", policy.Name))
+
+	return policy, nil
 }
 
 // buildRulesForReviewer builds sql-reviewer rules from policy config
