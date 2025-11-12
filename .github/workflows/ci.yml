@@ -6,10 +6,48 @@ on:
   pull_request:
     branches: [main]
 
+# Phase 5: Cancel in-progress runs when new commits are pushed to the same PR
+# This saves CI resources and provides faster feedback
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
+  # Phase 4: Detect which parts of the codebase changed
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    # Always run on main branch, only use filters on PRs
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
+
   backend:
     name: Backend Tests and Linting
     runs-on: ubuntu-latest
+    # Phase 4: Only run when backend code changes, or always on main branch
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main'
     defaults:
       run:
         working-directory: backend
@@ -18,22 +56,48 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Phase 2: Optimize Go caching using setup-go's built-in cache parameter
+      # This is more efficient than using a separate cache action
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version-file: backend/go.mod
+          cache: true
+          cache-dependency-path: backend/go.sum
 
-      - name: Cache Go modules
+      # Phase 2: Cache Go build artifacts to speed up compilation
+      # This includes test binaries which significantly speeds up test runs
+      - name: Cache Go build cache
         uses: actions/cache@v4
         with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('backend/go.sum') }}
+          path: |
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-${{ hashFiles('backend/**/*.go') }}
           restore-keys: |
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-go-build-
+
+      # Phase 2: Cache golangci-lint data to speed up linting
+      - name: Cache golangci-lint
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ runner.os }}-golangci-lint-${{ hashFiles('backend/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-golangci-lint-
+
+      # Phase 2: Cache CI tools (linting and formatting tools installed via go install)
+      - name: Cache CI tools
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin
+          key: ${{ runner.os }}-go-tools-${{ hashFiles('backend/scripts/ci/*.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-go-tools-
 
       - name: Install dependencies
         run: go mod download
 
+      # Phase 6: Run tests with parallel execution
       - name: Run tests
         run: make test
 
@@ -43,6 +107,9 @@ jobs:
   frontend:
     name: Frontend Tests and Linting
     runs-on: ubuntu-latest
+    # Phase 4: Only run when frontend code changes, or always on main branch
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
     defaults:
       run:
         working-directory: frontend
@@ -56,6 +123,7 @@ jobs:
         with:
           version: 9
 
+      # Phase 3: Node.js caching is already optimized with pnpm cache
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -63,6 +131,7 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
 
+      # Phase 3: Use frozen lockfile for faster, more reliable installs
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -71,3 +140,44 @@ jobs:
 
       - name: Run type checking
         run: pnpm run build
+
+  # Phase 1: Add status check job for branch protection
+  # This provides a single merge gate that depends on all other jobs
+  status-check:
+    name: CI Status Check
+    runs-on: ubuntu-latest
+    needs: [changes, backend, frontend]
+    if: always()
+    steps:
+      - name: Check all jobs status
+        run: |
+          # A job is considered passing if it succeeded or was skipped
+          changes_ok=false
+          backend_ok=false
+          frontend_ok=false
+
+          if [[ "${{ needs.changes.result }}" == "success" ]] || [[ "${{ needs.changes.result }}" == "skipped" ]]; then
+            changes_ok=true
+          fi
+
+          if [[ "${{ needs.backend.result }}" == "success" ]] || [[ "${{ needs.backend.result }}" == "skipped" ]]; then
+            backend_ok=true
+          fi
+
+          if [[ "${{ needs.frontend.result }}" == "success" ]] || [[ "${{ needs.frontend.result }}" == "skipped" ]]; then
+            frontend_ok=true
+          fi
+
+          if [[ "$changes_ok" == "true" ]] && [[ "$backend_ok" == "true" ]] && [[ "$frontend_ok" == "true" ]]; then
+            echo "✓ All jobs passed or were skipped"
+            echo "Changes: ${{ needs.changes.result }}"
+            echo "Backend: ${{ needs.backend.result }}"
+            echo "Frontend: ${{ needs.frontend.result }}"
+            exit 0
+          else
+            echo "✗ One or more jobs failed:"
+            echo "Changes: ${{ needs.changes.result }}"
+            echo "Backend: ${{ needs.backend.result }}"
+            echo "Frontend: ${{ needs.frontend.result }}"
+            exit 1
+          fi

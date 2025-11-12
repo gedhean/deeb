@@ -33,3 +33,5 @@
 - [ ] Use Monaco Editor for SQL editor (https://github.com/react-monaco-editor/react-monaco-editor)
 - [ ] Update the Change Plan actions buttons to have single for main action based on status (Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled) and a three dots dropdown for other actions.
 - [ ] Update Tables to have pagination.
+- [ ] Create Helm Chart for Deeb deployment
+- [ ] Create Deeb CI/CD pipeline with GitHub Actions

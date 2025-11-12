@@ -4,9 +4,10 @@
 ensure-gotestsum:
 	@which gotestsum > /dev/null || (echo "Installing gotestsum..." && go install gotest.tools/gotestsum@latest)
 
-# Run tests using gotestsum
+# Run tests using gotestsum with parallel execution
+# -p=4 runs up to 4 packages in parallel
 test: ensure-gotestsum
-	@gotestsum --format testname -- -race ./...
+	@gotestsum --format testname -- -race -p=4 ./...
 
 # Run integration tests with testcontainers
 test-integration: ensure-gotestsum
