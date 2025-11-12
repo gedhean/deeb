@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
+	"github.com/nsxbet/deeb/internal/database"
 	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
@@ -18,27 +20,39 @@ import (
 
 // DatabaseInstanceHandler handles HTTP requests for database instances
 type DatabaseInstanceHandler struct {
-	dbInstanceRepo repository.DatabaseInstanceRepository
-	databaseRepo   repository.DatabaseRepository // For cascade delete checks
-	encryptionKey  string
-	auditService   *services.AuditLogService
-	logger         *zap.Logger
+	dbInstanceRepo  repository.DatabaseInstanceRepository
+	databaseRepo    repository.DatabaseRepository // For cascade delete checks
+	projectRepo     repository.ProjectRepository
+	environmentRepo repository.EnvironmentRepository
+	changePlanRepo  repository.ChangePlanRepository
+	connManager     *database.ConnectionManager
+	encryptionKey   string
+	auditService    *services.AuditLogService
+	logger          *zap.Logger
 }
 
 // NewDatabaseInstanceHandler creates a new database instance handler
 func NewDatabaseInstanceHandler(
 	dbInstanceRepo repository.DatabaseInstanceRepository,
 	databaseRepo repository.DatabaseRepository,
+	projectRepo repository.ProjectRepository,
+	environmentRepo repository.EnvironmentRepository,
+	changePlanRepo repository.ChangePlanRepository,
+	connManager *database.ConnectionManager,
 	encryptionKey string,
 	auditService *services.AuditLogService,
 	logger *zap.Logger,
 ) *DatabaseInstanceHandler {
 	return &DatabaseInstanceHandler{
-		dbInstanceRepo: dbInstanceRepo,
-		databaseRepo:   databaseRepo,
-		encryptionKey:  encryptionKey,
-		auditService:   auditService,
-		logger:         logger,
+		dbInstanceRepo:  dbInstanceRepo,
+		databaseRepo:    databaseRepo,
+		projectRepo:     projectRepo,
+		environmentRepo: environmentRepo,
+		changePlanRepo:  changePlanRepo,
+		connManager:     connManager,
+		encryptionKey:   encryptionKey,
+		auditService:    auditService,
+		logger:          logger,
 	}
 }
 
@@ -556,4 +570,234 @@ func (h *DatabaseInstanceHandler) DeleteDatabaseInstance(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Database instance deleted successfully",
 	})
+}
+
+// CreateDatabaseForInstance handles POST /api/v1/database-instances/:id/databases
+func (h *DatabaseInstanceHandler) CreateDatabaseForInstance(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Get instance ID from URL
+	instanceIDStr := c.Param("id")
+	instanceID, err := uuid.Parse(instanceIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid instance ID",
+		})
+	}
+
+	// Parse request
+	var req models.CreateDatabaseRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error("Failed to bind request", zap.Error(err))
+		return middleware.HandleValidationError(c, err)
+	}
+
+	// Set the database instance ID from URL
+	req.DatabaseInstanceID = instanceID
+
+	// Validate request
+	if err := models.ValidateCreateDatabaseRequest(&req); err != nil {
+		h.logger.Error("Validation failed", zap.Error(err))
+		return middleware.HandleValidationError(c, err)
+	}
+
+	// Validate that project exists
+	_, err = h.projectRepo.GetByID(ctx, req.ProjectID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Project not found",
+			})
+		}
+		h.logger.Error("Failed to validate project", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to validate project",
+		})
+	}
+
+	// Validate that database instance exists
+	instance, err := h.dbInstanceRepo.GetByID(ctx, instanceID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Database instance not found",
+			})
+		}
+		h.logger.Error("Failed to validate database instance", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to validate database instance",
+		})
+	}
+
+	// Validate that environment exists
+	_, err = h.environmentRepo.GetByID(ctx, req.EnvironmentID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Environment not found",
+			})
+		}
+		h.logger.Error("Failed to validate environment", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to validate environment",
+		})
+	}
+
+	// Check if database already exists in Deeb registry
+	existingDB, err := h.databaseRepo.GetByInstanceAndName(ctx, instanceID, req.DatabaseName)
+	if err != nil && err != repository.ErrNotFound {
+		h.logger.Error("Failed to check existing database", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to check existing database",
+		})
+	}
+
+	// If database exists in Deeb, return it
+	if existingDB != nil {
+		h.logger.Info("Database already exists in Deeb", zap.String("id", existingDB.ID.String()))
+		return c.JSON(http.StatusOK, existingDB)
+	}
+
+	// Check if database physically exists on the instance
+	dbExists, err := h.connManager.DatabaseExistsOnInstance(ctx, instance, req.DatabaseName)
+	if err != nil {
+		h.logger.Error("Failed to check database existence on instance", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": fmt.Sprintf("Failed to check database existence: %v", err),
+		})
+	}
+
+	if dbExists {
+		// Database exists physically, create Active record
+		database := &models.Database{
+			DatabaseName:       req.DatabaseName,
+			DatabaseInstanceID: instanceID,
+			ProjectID:          req.ProjectID,
+			EnvironmentID:      req.EnvironmentID,
+			Description:        req.Description,
+			Status:             models.DatabaseStatusActive,
+			CreatedByID:        claims.UserID,
+		}
+
+		if err := h.databaseRepo.Create(ctx, database); err != nil {
+			h.logger.Error("Failed to create database", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to create database",
+			})
+		}
+
+		h.logger.Info("Database imported", zap.String("id", database.ID.String()), zap.String("name", database.DatabaseName))
+
+		// Log audit entry
+		if h.auditService != nil {
+			detailsJSON, _ := json.Marshal(map[string]interface{}{
+				"database_name":        database.DatabaseName,
+				"description":          database.Description,
+				"project_id":           database.ProjectID.String(),
+				"environment_id":       database.EnvironmentID.String(),
+				"database_instance_id": database.DatabaseInstanceID.String(),
+				"imported":             true,
+			})
+			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeDatabase, database.ID, c.Request(), detailsJSON); err != nil {
+				h.logger.Error("Failed to log audit entry for database import", zap.Error(err))
+			}
+		}
+
+		return c.JSON(http.StatusOK, database)
+	}
+
+	// Database doesn't exist, create Pending record and change plan
+	database := &models.Database{
+		DatabaseName:       req.DatabaseName,
+		DatabaseInstanceID: instanceID,
+		ProjectID:          req.ProjectID,
+		EnvironmentID:      req.EnvironmentID,
+		Description:        req.Description,
+		Status:             models.DatabaseStatusPending,
+		CreatedByID:        claims.UserID,
+	}
+
+	if err := h.databaseRepo.Create(ctx, database); err != nil {
+		h.logger.Error("Failed to create pending database", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to create database",
+		})
+	}
+
+	// Generate CREATE DATABASE SQL
+	var sqlContent string
+	switch instance.DatabaseEngine {
+	case models.DatabaseEngineMySQL:
+		sqlContent = fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`;", req.DatabaseName)
+	case models.DatabaseEnginePostgreSQL:
+		// Set the database owner to the instance username
+		sqlContent = fmt.Sprintf("CREATE DATABASE \"%s\" OWNER \"%s\";", req.DatabaseName, instance.Username)
+	default:
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Unsupported database engine",
+		})
+	}
+
+	// Create change plan
+	changePlan := &models.ChangePlan{
+		ProjectID:        req.ProjectID,
+		TargetDatabaseID: database.ID,
+		Title:            fmt.Sprintf("Create database: %s", req.DatabaseName),
+		Description:      fmt.Sprintf("Create database %s on instance %s", req.DatabaseName, instance.Name),
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       sqlContent,
+		Status:           models.ChangePlanStatusDraft,
+		RiskLevel:        models.RiskLevelMedium,
+		AuthorID:         claims.UserID,
+	}
+
+	if req.Description != nil {
+		changePlan.Description = *req.Description
+	}
+
+	if err := h.changePlanRepo.Create(ctx, changePlan); err != nil {
+		h.logger.Error("Failed to create change plan", zap.Error(err))
+		// Cleanup: delete the orphaned database record
+		if deleteErr := h.databaseRepo.Delete(ctx, database.ID); deleteErr != nil {
+			h.logger.Error("Failed to cleanup orphaned database record",
+				zap.String("database_id", database.ID.String()),
+				zap.Error(deleteErr),
+			)
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to create change plan",
+		})
+	}
+
+	h.logger.Info(
+		"Change plan created for database",
+		zap.String("change_plan_id", changePlan.ID.String()),
+		zap.String("database_id", database.ID.String()),
+	)
+
+	// Log audit entry
+	if h.auditService != nil {
+		detailsJSON, _ := json.Marshal(map[string]interface{}{
+			"database_name":        database.DatabaseName,
+			"description":          database.Description,
+			"project_id":           database.ProjectID.String(),
+			"environment_id":       database.EnvironmentID.String(),
+			"database_instance_id": database.DatabaseInstanceID.String(),
+			"change_plan_id":       changePlan.ID.String(),
+			"pending":              true,
+		})
+		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeDatabase, database.ID, c.Request(), detailsJSON); err != nil {
+			h.logger.Error("Failed to log audit entry for pending database creation", zap.Error(err))
+		}
+	}
+
+	return c.JSON(http.StatusOK, changePlan)
 }

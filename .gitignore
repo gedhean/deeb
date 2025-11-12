@@ -1,5 +1,6 @@
 # Local files
 .local/
+.todos/
 
 # Claude Code local settings
 .claude/settings.local.json

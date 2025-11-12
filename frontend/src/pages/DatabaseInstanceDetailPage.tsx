@@ -33,8 +33,10 @@ import {
   Calendar,
   Database as DatabaseIcon,
   ExternalLink,
+  Plus,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
 
 export const DatabaseInstanceDetailPage: React.FC = () => {
   const navigate = useNavigate();
@@ -47,6 +49,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDatabases, setIsLoadingDatabases] = useState(false);
   const [error, setError] = useState('');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
@@ -287,16 +290,27 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
         {/* Databases Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Databases</CardTitle>
-            <CardDescription>
-              {isLoadingDatabases ? (
-                'Loading databases...'
-              ) : (
-                <>
-                  {databases.length} database{databases.length === 1 ? '' : 's'} using this instance
-                </>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Databases</CardTitle>
+                <CardDescription>
+                  {isLoadingDatabases ? (
+                    'Loading databases...'
+                  ) : (
+                    <>
+                      {databases.length} database{databases.length === 1 ? '' : 's'} using this
+                      instance
+                    </>
+                  )}
+                </CardDescription>
+              </div>
+              {isAdmin && instance && (
+                <Button onClick={() => setShowCreateDialog(true)} size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Database
+                </Button>
               )}
-            </CardDescription>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoadingDatabases ? (
@@ -404,6 +418,15 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Create Database Dialog */}
+      {id && (
+        <CreateDatabaseDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+          databaseInstanceId={id}
+        />
+      )}
     </DefaultLayout>
   );
 };

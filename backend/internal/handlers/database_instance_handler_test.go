@@ -169,6 +169,167 @@ func (m *mockDatabaseRepositoryForInstance) Delete(ctx context.Context, id uuid.
 	return nil
 }
 
+func (m *mockDatabaseRepositoryForInstance) GetByInstanceAndName(
+	ctx context.Context,
+	instanceID uuid.UUID,
+	databaseName string,
+) (*models.Database, error) {
+	return nil, repository.ErrNotFound
+}
+
+// Mock repositories for other dependencies
+type mockProjectRepositoryForInstance struct{}
+
+func (m *mockProjectRepositoryForInstance) Create(ctx context.Context, project *models.Project) error {
+	return nil
+}
+
+func (m *mockProjectRepositoryForInstance) GetByID(ctx context.Context, id uuid.UUID) (*models.Project, error) {
+	return nil, nil
+}
+
+func (m *mockProjectRepositoryForInstance) List(ctx context.Context, limit, offset int) ([]*models.Project, error) {
+	return nil, nil
+}
+func (m *mockProjectRepositoryForInstance) Count(ctx context.Context) (int64, error) { return 0, nil }
+func (m *mockProjectRepositoryForInstance) Update(ctx context.Context, project *models.Project) error {
+	return nil
+}
+
+func (m *mockProjectRepositoryForInstance) Delete(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
+func (m *mockProjectRepositoryForInstance) ListByOrganization(
+	ctx context.Context,
+	organizationID uuid.UUID,
+	limit, offset int,
+) ([]*models.Project, error) {
+	return nil, nil
+}
+
+type mockEnvironmentRepositoryForInstance struct{}
+
+func (m *mockEnvironmentRepositoryForInstance) Create(ctx context.Context, env *models.Environment) error {
+	return nil
+}
+
+func (m *mockEnvironmentRepositoryForInstance) GetByID(ctx context.Context, id uuid.UUID) (*models.Environment, error) {
+	return nil, nil
+}
+
+func (m *mockEnvironmentRepositoryForInstance) List(ctx context.Context, limit, offset int) ([]*models.Environment, error) {
+	return nil, nil
+}
+
+func (m *mockEnvironmentRepositoryForInstance) Count(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockEnvironmentRepositoryForInstance) Update(ctx context.Context, env *models.Environment) error {
+	return nil
+}
+
+func (m *mockEnvironmentRepositoryForInstance) Delete(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
+type mockChangePlanRepositoryForInstance struct{}
+
+func (m *mockChangePlanRepositoryForInstance) Create(ctx context.Context, cp *models.ChangePlan) error {
+	return nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) GetByID(ctx context.Context, id uuid.UUID) (*models.ChangePlan, error) {
+	return nil, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) List(ctx context.Context, limit, offset int) ([]*models.ChangePlan, error) {
+	return nil, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) Count(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) CountWithFilters(
+	ctx context.Context,
+	filters repository.ChangePlanListFilters,
+) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) Update(ctx context.Context, cp *models.ChangePlan) error {
+	return nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) Delete(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) ListByProject(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
+	return nil, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) ListByDatabase(
+	ctx context.Context,
+	databaseID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
+	return nil, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) ListByCreator(
+	ctx context.Context,
+	creatorID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
+	return nil, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) GetByAuthorID(
+	ctx context.Context,
+	authorID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
+	return nil, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) ListWithFilters(
+	ctx context.Context,
+	filters repository.ChangePlanListFilters,
+) ([]*models.ChangePlan, error) {
+	return nil, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) GetByStatus(
+	ctx context.Context,
+	status models.ChangePlanStatus,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
+	return nil, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) GetByProjectID(
+	ctx context.Context,
+	projectID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
+	return nil, nil
+}
+
+func (m *mockChangePlanRepositoryForInstance) GetByDatabaseID(
+	ctx context.Context,
+	databaseID uuid.UUID,
+	limit, offset int,
+) ([]*models.ChangePlan, error) {
+	return nil, nil
+}
+
 func TestCreateDatabaseInstance(t *testing.T) {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
@@ -178,8 +339,12 @@ func TestCreateDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -246,8 +411,12 @@ func TestCreateDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -292,8 +461,12 @@ func TestCreateDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -353,8 +526,12 @@ func TestListDatabaseInstances(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -388,8 +565,12 @@ func TestListDatabaseInstances(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -442,8 +623,12 @@ func TestGetDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -482,8 +667,12 @@ func TestGetDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -509,8 +698,12 @@ func TestGetDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -553,8 +746,12 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -606,8 +803,12 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -649,8 +850,12 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -683,8 +888,12 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -731,8 +940,12 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -767,8 +980,12 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 
@@ -795,8 +1012,12 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 		handler := NewDatabaseInstanceHandler(
 			repo,
 			&mockDatabaseRepositoryForInstance{},
+			&mockProjectRepositoryForInstance{},
+			&mockEnvironmentRepositoryForInstance{},
+			&mockChangePlanRepositoryForInstance{},
+			nil, // connManager
 			"12345678901234567890123456789012",
-			nil,
+			nil, // auditService
 			logger,
 		)
 

@@ -98,6 +98,22 @@ func (m *mockDatabaseRepository) Delete(ctx context.Context, id uuid.UUID) error
 	return repository.ErrNotFound
 }
 
+func (m *mockDatabaseRepository) GetByInstanceAndName(
+	ctx context.Context,
+	instanceID uuid.UUID,
+	databaseName string,
+) (*models.Database, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	for _, database := range m.databases {
+		if database.DatabaseInstanceID == instanceID && database.DatabaseName == databaseName {
+			return database, nil
+		}
+	}
+	return nil, repository.ErrNotFound
+}
+
 func (m *mockDatabaseRepository) Count(ctx context.Context) (int, error) {
 	return len(m.databases), nil
 }

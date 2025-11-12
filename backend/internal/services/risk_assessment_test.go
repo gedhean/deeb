@@ -84,6 +84,18 @@ func (m *MockDatabaseRepository) Delete(ctx context.Context, id uuid.UUID) error
 	return args.Error(0)
 }
 
+func (m *MockDatabaseRepository) GetByInstanceAndName(
+	ctx context.Context,
+	instanceID uuid.UUID,
+	databaseName string,
+) (*models.Database, error) {
+	args := m.Called(ctx, instanceID, databaseName)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Database), args.Error(1)
+}
+
 // MockEnvironmentRepository is a mock implementation of EnvironmentRepository
 type MockEnvironmentRepository struct {
 	mock.Mock

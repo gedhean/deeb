@@ -3,6 +3,8 @@ package database
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -393,4 +395,140 @@ func (cm *ConnectionManager) Connect(ctx context.Context, params ConnectionParam
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", params.DatabaseInstance.DatabaseEngine)
 	}
+}
+
+// DatabaseExistsOnInstance checks if a database physically exists on the database instance
+func (cm *ConnectionManager) DatabaseExistsOnInstance(
+	ctx context.Context,
+	instance *models.DatabaseInstance,
+	databaseName string,
+) (bool, error) {
+	if instance == nil {
+		return false, fmt.Errorf("database instance is required")
+	}
+
+	switch instance.DatabaseEngine {
+	case models.DatabaseEngineMySQL:
+		return cm.checkMySQLDatabaseExists(ctx, instance, databaseName)
+	case models.DatabaseEnginePostgreSQL:
+		return cm.checkPostgreSQLDatabaseExists(ctx, instance, databaseName)
+	default:
+		return false, fmt.Errorf("unsupported database type: %s", instance.DatabaseEngine)
+	}
+}
+
+// checkMySQLDatabaseExists checks if a database exists on a MySQL instance
+func (cm *ConnectionManager) checkMySQLDatabaseExists(
+	ctx context.Context,
+	instance *models.DatabaseInstance,
+	databaseName string,
+) (bool, error) {
+	// Decrypt password
+	password, err := utils.DecryptPassword(instance.ConnectionDetailsEncrypted, cm.encryptionKey)
+	if err != nil {
+		return false, fmt.Errorf("failed to decrypt password: %w", err)
+	}
+
+	// Build MySQL DSN without database name to connect to the server
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/",
+		instance.Username,
+		password,
+		instance.Host,
+		instance.Port,
+	)
+
+	// Add SSL parameter if required
+	if instance.RequireSSL {
+		dsn += "?tls=true"
+	} else {
+		dsn += "?tls=false"
+	}
+
+	// Connect to MySQL server
+	db, err := sqlx.ConnectContext(ctx, "mysql", dsn)
+	if err != nil {
+		return false, fmt.Errorf("failed to connect to MySQL instance: %w", err)
+	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			cm.logger.Error("Failed to close MySQL connection", zap.Error(closeErr))
+		}
+	}()
+
+	// Query for database existence
+	query := "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?"
+	var foundName string
+	err = db.GetContext(ctx, &foundName, query, databaseName)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check database existence: %w", err)
+	}
+
+	return true, nil
+}
+
+// checkPostgreSQLDatabaseExists checks if a database exists on a PostgreSQL instance
+func (cm *ConnectionManager) checkPostgreSQLDatabaseExists(
+	ctx context.Context,
+	instance *models.DatabaseInstance,
+	databaseName string,
+) (bool, error) {
+	// Decrypt password
+	password, err := utils.DecryptPassword(instance.ConnectionDetailsEncrypted, cm.encryptionKey)
+	if err != nil {
+		return false, fmt.Errorf("failed to decrypt password: %w", err)
+	}
+
+	// Determine SSL mode
+	sslMode := "disable"
+	if instance.RequireSSL {
+		sslMode = "require"
+	}
+
+	// Build PostgreSQL DSN connecting to postgres database (default)
+	var dsn string
+	if password != "" {
+		dsn = fmt.Sprintf(
+			"postgres://%s:%s@%s:%d/postgres?sslmode=%s",
+			instance.Username,
+			password,
+			instance.Host,
+			instance.Port,
+			sslMode,
+		)
+	} else {
+		dsn = fmt.Sprintf(
+			"postgres://%s@%s:%d/postgres?sslmode=%s",
+			instance.Username,
+			instance.Host,
+			instance.Port,
+			sslMode,
+		)
+	}
+
+	// Connect to PostgreSQL server
+	db, err := sqlx.ConnectContext(ctx, "postgres", dsn)
+	if err != nil {
+		return false, fmt.Errorf("failed to connect to PostgreSQL instance: %w", err)
+	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			cm.logger.Error("Failed to close PostgreSQL connection", zap.Error(closeErr))
+		}
+	}()
+
+	// Query for database existence
+	query := "SELECT datname FROM pg_database WHERE datname = $1"
+	var foundName string
+	err = db.GetContext(ctx, &foundName, query, databaseName)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check database existence: %w", err)
+	}
+
+	return true, nil
 }

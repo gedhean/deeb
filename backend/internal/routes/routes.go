@@ -48,6 +48,9 @@ func Setup(
 	auditLogRepo := postgres.NewAuditLogRepository(db)
 	auditLogService := services.NewAuditLogService(auditLogRepo, logger.Get())
 
+	// Initialize connection manager
+	connectionMgr := database.NewConnectionManager(cfg.Security.EncryptionKey, logger.Get())
+
 	// Setup API routes
 	setupHealthRoute(e, db, version)
 	setupSetupRoutes(e, userRepo)
@@ -56,7 +59,18 @@ func Setup(
 	setupProjectRoutes(e, projectRepo, dbRepo, projectMemberRepo, userRepo, tokenManager, auditLogService)
 	setupEnvironmentRoutes(e, envRepo, db, tokenManager, auditLogService)
 	setupPolicyRoutes(e, policyRepo, envRepo, tokenManager)
-	setupDatabaseInstanceRoutes(e, dbInstanceRepo, dbRepo, cfg.Security.EncryptionKey, tokenManager, auditLogService)
+	setupDatabaseInstanceRoutes(
+		e,
+		dbInstanceRepo,
+		dbRepo,
+		projectRepo,
+		envRepo,
+		changePlanRepo,
+		connectionMgr,
+		cfg.Security.EncryptionKey,
+		tokenManager,
+		auditLogService,
+	)
 	setupDatabaseRoutes(
 		e,
 		dbRepo,
@@ -82,6 +96,7 @@ func Setup(
 		policyRepo,
 		approvalRepo,
 		db,
+		connectionMgr,
 		cfg.Security.EncryptionKey,
 		tokenManager,
 		auditLogService,
@@ -349,6 +364,10 @@ func setupDatabaseInstanceRoutes(
 	e *echo.Echo,
 	dbInstanceRepo repository.DatabaseInstanceRepository,
 	databaseRepo repository.DatabaseRepository,
+	projectRepo repository.ProjectRepository,
+	envRepo repository.EnvironmentRepository,
+	changePlanRepo repository.ChangePlanRepository,
+	connManager *database.ConnectionManager,
 	encryptionKey string,
 	tokenManager *auth.TokenManager,
 	auditLogService *services.AuditLogService,
@@ -356,6 +375,10 @@ func setupDatabaseInstanceRoutes(
 	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(
 		dbInstanceRepo,
 		databaseRepo,
+		projectRepo,
+		envRepo,
+		changePlanRepo,
+		connManager,
 		encryptionKey,
 		auditLogService,
 		logger.Get(),
@@ -393,6 +416,12 @@ func setupDatabaseInstanceRoutes(
 	dbInstancesGroup.DELETE(
 		"/:id",
 		dbInstanceHandler.DeleteDatabaseInstance,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationAdmin(),
+	)
+	dbInstancesGroup.POST(
+		"/:id/databases",
+		dbInstanceHandler.CreateDatabaseForInstance,
 		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationAdmin(),
 	)
@@ -488,6 +517,7 @@ func setupChangePlanRoutes(
 	policyRepo repository.PolicyRepository,
 	approvalRepo repository.ApprovalRepository,
 	db *sqlx.DB,
+	connectionMgr *database.ConnectionManager,
 	encryptionKey string,
 	tokenManager *auth.TokenManager,
 	auditLogService *services.AuditLogService,
@@ -522,9 +552,6 @@ func setupChangePlanRoutes(
 
 	// Initialize schema snapshot repository
 	snapshotRepo := postgres.NewSchemaSnapshotRepository(db)
-
-	// Initialize connection manager
-	connectionMgr := database.NewConnectionManager(encryptionKey, logger.Get())
 
 	// Initialize schema snapshot service
 	snapshotService := services.NewSchemaSnapshotService(

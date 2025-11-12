@@ -157,17 +157,17 @@ func (h *DatabaseHandler) ToResponseWithDetails(ctx context.Context, database *m
 
 	// Fetch project
 	if project, err := h.projectRepo.GetByID(ctx, database.ProjectID); err == nil {
-		resp.Project = project.ToResponse()
+		resp.Project = project
 	}
 
 	// Fetch database instance
 	if instance, err := h.databaseInstanceRepo.GetByID(ctx, database.DatabaseInstanceID); err == nil {
-		resp.DatabaseInstance = instance.ToResponse()
+		resp.DatabaseInstance = instance
 	}
 
 	// Fetch environment
 	if env, err := h.environmentRepo.GetByID(ctx, database.EnvironmentID); err == nil {
-		resp.Environment = env.ToResponse()
+		resp.Environment = env
 	}
 
 	return resp

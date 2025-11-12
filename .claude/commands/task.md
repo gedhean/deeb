@@ -26,26 +26,66 @@ Follow these steps in order:
   - Any specific implementation preferences
   - Expected behavior and edge cases
   - Whether this affects databases, APIs, UI, or all layers
-- **Create a clear implementation plan** that breaks down the work into logical steps
-- **Get user approval** on the plan before proceeding
+- **Create a phased implementation plan** that breaks down the work into logical phases
+- **Save the plan** to `.todos/<branch-name>-plan.md` using this format:
 
-### 3. Create Todo List with Acceptance Criteria
-Use the TodoWrite tool to create a comprehensive todo list where **each todo item includes**:
-- Clear description of what needs to be done
-- Specific acceptance criteria (what "done" looks like for this item)
-- Testing requirements for that item
+```markdown
+# Task: <Task Description>
 
-Example format:
-- "Implement user authentication endpoint - Criteria: POST /api/auth/login accepts email/password, returns JWT token, handles invalid credentials with 401"
-- "Add frontend login form - Criteria: Form validates input, displays errors, redirects on success, shows loading state"
-- "Write unit tests for auth service - Criteria: Tests cover success case, invalid credentials, missing fields, token generation"
+## Overview
+<Brief description of what will be accomplished>
+
+### Phase 1: <What needs to be done>
+**Status**: Open
+
+**Todo**: <Description of work to be done in this phase>
+
+**Acceptance Criteria**
+- [ ] Acceptance criterion 1
+- [ ] Acceptance criterion 2
+- [ ] Acceptance criterion 3
+
+### Phase 2: <What needs to be done>
+**Status**: Open
+
+**Todo**: <Description of work to be done in this phase>
+
+**Acceptance Criteria**
+- [ ] Acceptance criterion 1
+- [ ] Acceptance criterion 2
+
+### Phase 3: <What needs to be done>
+**Status**: Open
+
+**Todo**: <Description of work to be done in this phase>
+
+**Acceptance Criteria**
+- [ ] Acceptance criterion 1
+- [ ] Acceptance criterion 2
+```
+
+- **Inform the user** that the plan has been saved to `.todos/<branch-name>-plan.md` and they can review/edit it before you proceed
+- **Wait for user approval** on the plan before proceeding
+- **Do NOT use TodoWrite until the user confirms the plan is ready to implement**
+
+### 3. Execute Phases with Todo Tracking
+Once the user approves the plan:
+- Use the TodoWrite tool to create todos based on all phases in the approved plan
+- Each todo should reference its phase and include the phase's acceptance criteria
 
 ### 4. Implementation
-- Work through each todo item systematically
-- Mark each todo as in_progress when starting
-- Mark each todo as completed only when its acceptance criteria are fully met
+- Work through each phase systematically in order
+- For each phase:
+  - Update the phase status to `InProgress` in the plan file
+  - Mark the corresponding todo as in_progress when starting the phase
+  - Complete the work according to the acceptance criteria
+  - Update all acceptance criteria checkboxes to `[x]` when completed in the plan file
+  - Mark the todo as completed when the phase is done
+  - Update the phase status to `Complete` in the plan file
+  - Move to the next phase
 - If you encounter blockers or need clarification, ask the user before proceeding
 - Follow the project's development practices from CLAUDE.md
+- Keep the `.todos/<branch-name>-plan.md` file updated as you progress through phases
 
 ### 5. Quality Checks
 After implementation is complete, run the appropriate quality tools based on what was changed:

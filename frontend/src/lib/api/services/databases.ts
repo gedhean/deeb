@@ -4,6 +4,7 @@ import type {
   ListResponse,
   Database,
   UpdateDatabaseRequest,
+  ChangePlan,
 } from '../types';
 
 export const databasesService = {
@@ -85,5 +86,22 @@ export const databasesService = {
    */
   async deleteDatabase(id: string): Promise<void> {
     await apiClient.delete(`/api/v1/databases/${id}`);
+  },
+
+  /**
+   * Create a database for a specific database instance
+   * If the database exists physically on the instance, creates an Active record
+   * If the database doesn't exist, creates a Pending record and a Change Plan
+   * Requires Organization Admin role
+   */
+  async createDatabaseForInstance(
+    instanceId: string,
+    data: CreateDatabaseRequest,
+  ): Promise<Database | ChangePlan> {
+    const response = await apiClient.post<Database | ChangePlan>(
+      `/api/v1/database-instances/${instanceId}/databases`,
+      data,
+    );
+    return response;
   },
 };

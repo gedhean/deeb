@@ -257,46 +257,55 @@ func (s *ExecutionService) Execute(
 		zap.String("change_plan_id", changePlanID.String()),
 	)
 
-	// Step 2: Capture before snapshot
-	snapshotBeforeStartTime := time.Now()
-	s.logger.Info("Capturing before snapshot",
-		zap.String("change_plan_id", changePlanID.String()),
-		zap.String("database_id", db.ID.String()),
-		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
-	)
-
+	// Step 2: Capture before snapshot (skip if database doesn't exist yet)
 	var beforeSnapshot *models.SchemaSnapshot
-	switch dbInstance.DatabaseEngine {
-	case models.DatabaseEnginePostgreSQL:
-		beforeSnapshot, err = s.snapshotService.CapturePostgreSQL(ctx, changePlanID, db.ID, models.SnapshotTypeBefore)
-	case models.DatabaseEngineMySQL:
-		beforeSnapshot, err = s.snapshotService.CaptureMySQL(ctx, changePlanID, db.ID, models.SnapshotTypeBefore)
-	default:
-		return nil, fmt.Errorf("unsupported database type: %s", dbInstance.DatabaseEngine)
-	}
-
-	if err != nil {
-		s.logger.Error("Failed to capture before snapshot",
+	var snapshotBeforeDuration time.Duration
+	if db.Status != models.DatabaseStatusPending {
+		snapshotBeforeStartTime := time.Now()
+		s.logger.Info("Capturing before snapshot",
 			zap.String("change_plan_id", changePlanID.String()),
-			zap.Error(err),
+			zap.String("database_id", db.ID.String()),
+			zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 		)
-		// Update status to Failed
-		changePlan.Status = models.ChangePlanStatusFailed
-		errorMsg := fmt.Sprintf("failed to capture before snapshot: %v", err)
-		changePlan.ErrorMessage = &errorMsg
-		changePlan.UpdatedAt = time.Now()
-		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
-			s.logger.Error("Failed to update change plan status to Failed", zap.Error(updateErr))
-		}
-		return nil, fmt.Errorf("failed to capture before snapshot: %w", err)
-	}
 
-	snapshotBeforeDuration := time.Since(snapshotBeforeStartTime)
-	s.logger.Info("Before snapshot captured successfully",
-		zap.String("change_plan_id", changePlanID.String()),
-		zap.String("snapshot_id", beforeSnapshot.ID.String()),
-		zap.Duration("snapshot_capture_duration", snapshotBeforeDuration),
-	)
+		switch dbInstance.DatabaseEngine {
+		case models.DatabaseEnginePostgreSQL:
+			beforeSnapshot, err = s.snapshotService.CapturePostgreSQL(ctx, changePlanID, db.ID, models.SnapshotTypeBefore)
+		case models.DatabaseEngineMySQL:
+			beforeSnapshot, err = s.snapshotService.CaptureMySQL(ctx, changePlanID, db.ID, models.SnapshotTypeBefore)
+		default:
+			return nil, fmt.Errorf("unsupported database type: %s", dbInstance.DatabaseEngine)
+		}
+
+		if err != nil {
+			s.logger.Error("Failed to capture before snapshot",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.Error(err),
+			)
+			// Update status to Failed
+			changePlan.Status = models.ChangePlanStatusFailed
+			errorMsg := fmt.Sprintf("failed to capture before snapshot: %v", err)
+			changePlan.ErrorMessage = &errorMsg
+			changePlan.UpdatedAt = time.Now()
+			if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
+				s.logger.Error("Failed to update change plan status to Failed", zap.Error(updateErr))
+			}
+			return nil, fmt.Errorf("failed to capture before snapshot: %w", err)
+		}
+
+		snapshotBeforeDuration = time.Since(snapshotBeforeStartTime)
+		s.logger.Info("Before snapshot captured successfully",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("snapshot_id", beforeSnapshot.ID.String()),
+			zap.Duration("snapshot_capture_duration", snapshotBeforeDuration),
+		)
+	} else {
+		s.logger.Info("Skipping before snapshot - database does not exist yet",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("database_id", db.ID.String()),
+			zap.String("database_status", string(db.Status)),
+		)
+	}
 
 	// Step 3: Execute SQL in transaction with timeout
 	executionStartTime := time.Now()
@@ -484,6 +493,24 @@ func (s *ExecutionService) Execute(
 		return nil, fmt.Errorf("failed to update change plan with execution results: %w", err)
 	}
 
+	// Step 7: Update database status from Pending to Active if this was a CREATE DATABASE operation
+	if db.Status == models.DatabaseStatusPending {
+		db.Status = models.DatabaseStatusActive
+		db.UpdatedAt = time.Now()
+		if err := s.databaseRepo.Update(ctx, db); err != nil {
+			s.logger.Error("Failed to update database status to Active",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_id", db.ID.String()),
+				zap.Error(err),
+			)
+			return nil, fmt.Errorf("failed to update database status to Active: %w", err)
+		}
+		s.logger.Info("Database status updated to Active",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("database_id", db.ID.String()),
+		)
+	}
+
 	overallDuration := time.Since(overallStartTime)
 	s.logger.Info("Execution workflow completed successfully",
 		zap.String("change_plan_id", changePlanID.String()),
@@ -552,11 +579,52 @@ func (s *ExecutionService) executeInTransaction(
 	changePlanID uuid.UUID,
 ) (*ExecutionResult, error) {
 	// Get database connection
+	// For CREATE DATABASE operations (Pending status), connect to system database
 	connectStartTime := time.Now()
-	dbConn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
-		DatabaseInstance: dbInstance,
-		Database:         db,
-	})
+	var dbConn *sqlx.DB
+	var err error
+
+	if db.Status == models.DatabaseStatusPending {
+		// Create a temporary database object for system database connection
+		systemDB := &models.Database{
+			ID:                 db.ID,
+			ProjectID:          db.ProjectID,
+			DatabaseInstanceID: db.DatabaseInstanceID,
+			EnvironmentID:      db.EnvironmentID,
+			Status:             db.Status,
+			CreatedByID:        db.CreatedByID,
+			CreatedAt:          db.CreatedAt,
+			UpdatedAt:          db.UpdatedAt,
+		}
+
+		// Use system database based on engine type
+		switch dbInstance.DatabaseEngine {
+		case models.DatabaseEnginePostgreSQL:
+			systemDB.DatabaseName = "postgres" // Default PostgreSQL system database
+		case models.DatabaseEngineMySQL:
+			systemDB.DatabaseName = "" // MySQL can execute CREATE DATABASE without specifying a database
+		default:
+			return nil, fmt.Errorf("unsupported database engine: %s", dbInstance.DatabaseEngine)
+		}
+
+		s.logger.Info("Connecting to system database for CREATE DATABASE operation",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("target_database_name", db.DatabaseName),
+			zap.String("system_database_name", systemDB.DatabaseName),
+			zap.String("database_engine", string(dbInstance.DatabaseEngine)),
+		)
+
+		dbConn, err = s.connectionMgr.Connect(ctx, database.ConnectionParams{
+			DatabaseInstance: dbInstance,
+			Database:         systemDB,
+		})
+	} else {
+		dbConn, err = s.connectionMgr.Connect(ctx, database.ConnectionParams{
+			DatabaseInstance: dbInstance,
+			Database:         db,
+		})
+	}
+
 	if err != nil {
 		s.logger.Error("Failed to connect to database",
 			zap.String("change_plan_id", changePlanID.String()),
@@ -582,7 +650,44 @@ func (s *ExecutionService) executeInTransaction(
 		}
 	}()
 
-	// Begin transaction with SERIALIZABLE isolation
+	// For CREATE DATABASE operations, we cannot use transactions (PostgreSQL restriction)
+	// Execute directly without transaction for Pending databases
+	if db.Status == models.DatabaseStatusPending {
+		s.logger.Info("Executing CREATE DATABASE without transaction",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("database_name", db.DatabaseName),
+		)
+
+		execStartTime := time.Now()
+		result, err := dbConn.ExecContext(ctx, sqlContent)
+		execDuration := time.Since(execStartTime)
+
+		if err != nil {
+			s.logger.Error("Failed to execute CREATE DATABASE",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_name", db.DatabaseName),
+				zap.Duration("execution_duration", execDuration),
+				zap.Error(err),
+			)
+			return nil, fmt.Errorf("failed to execute SQL: %w", err)
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		s.logger.Info("CREATE DATABASE executed successfully",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("database_name", db.DatabaseName),
+			zap.Int64("rows_affected", rowsAffected),
+			zap.Duration("execution_duration", execDuration),
+		)
+
+		return &ExecutionResult{
+			Success:      true,
+			RowsAffected: int(rowsAffected),
+			Duration:     execDuration,
+		}, nil
+	}
+
+	// Begin transaction with SERIALIZABLE isolation for normal operations
 	txStartTime := time.Now()
 	tx, err := dbConn.BeginTxx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelSerializable,

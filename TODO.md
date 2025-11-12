@@ -7,7 +7,16 @@
 
 ### P1 (Medium Priority)
 
-- [ ] Add "Create Database" button in Database Instance Detail page to create a new database for the instance
+- [x] Update "Create Database" action in Database Instance Detail page to create a new database for the instance (or import if it already exists)
+    - [x] Update the CreateDatabaseDialog to use Sheet component instead of Dialog component
+    - [x] Update the Create Database button in Databases Page to use the CreateDatabaseDialog (with instance selector)
+- [ ] Fix UI POV for Project roles (ProjectOwner, ProjectDeveloper, ProjectApprover, ProjectViewer)
+    - [ ] ProjectOwner should be able to add/remove members
+    - [ ] ProjectDeveloper should be able to create change requests
+    - [ ] ProjectDeveloper should be able to create databases
+    - [ ] ProjectApprover should be able to approve/reject change requests
+    - [ ] ProjectViewer should be able to view change requests
+    - [ ] Only show Organization settings in app-sidebar for OrganizationAdmins
 - [ ] Integrate with github.com/nsxbet/sql-schema to show database schema metadata in Database Detail page
     - [ ] Use this pkg to generate schema metadata
     - [ ] Use this pkg to generate schema snapshot
@@ -22,3 +31,5 @@
 ### P2 (Low Priority)
 
 - [ ] Use Monaco Editor for SQL editor (https://github.com/react-monaco-editor/react-monaco-editor)
+- [ ] Update the Change Plan actions buttons to have single for main action based on status (Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled) and a three dots dropdown for other actions.
+- [ ] Update Tables to have pagination.

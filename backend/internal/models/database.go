@@ -14,6 +14,7 @@ type DatabaseStatus string
 const (
 	DatabaseStatusActive   DatabaseStatus = "Active"
 	DatabaseStatusInactive DatabaseStatus = "Inactive"
+	DatabaseStatusPending  DatabaseStatus = "Pending"
 )
 
 // Database represents an individual database within a database instance
@@ -28,22 +29,27 @@ type Database struct {
 	CreatedByID        uuid.UUID      `json:"created_by_id"         db:"created_by_id"`
 	CreatedAt          time.Time      `json:"created_at"            db:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"            db:"updated_at"`
+
+	// Related entities (populated with joins)
+	Project          *Project          `json:"project,omitempty"           db:"-"`
+	DatabaseInstance *DatabaseInstance `json:"database_instance,omitempty" db:"-"`
+	Environment      *Environment      `json:"environment,omitempty"       db:"-"`
 }
 
-// CreateDatabaseRequest represents the request to create a new database
+// CreateDatabaseRequest represents a request to create a new database
 type CreateDatabaseRequest struct {
-	ProjectID          uuid.UUID `json:"project_id"            validate:"required"`
-	DatabaseInstanceID uuid.UUID `json:"database_instance_id"  validate:"required"`
-	EnvironmentID      uuid.UUID `json:"environment_id"        validate:"required"`
+	ProjectID          uuid.UUID `json:"project_id"            validate:"required,uuid"`
+	DatabaseInstanceID uuid.UUID `json:"database_instance_id"  validate:"required,uuid"`
+	EnvironmentID      uuid.UUID `json:"environment_id"        validate:"required,uuid"`
 	DatabaseName       string    `json:"database_name"         validate:"required,max=255"`
 	Description        *string   `json:"description,omitempty"`
 }
 
-// UpdateDatabaseRequest represents the request to update a database
+// UpdateDatabaseRequest represents a request to update a database
 type UpdateDatabaseRequest struct {
 	DatabaseName *string         `json:"database_name,omitempty" validate:"omitempty,max=255"`
 	Description  *string         `json:"description,omitempty"`
-	Status       *DatabaseStatus `json:"status,omitempty"        validate:"omitempty,oneof=Active Inactive"`
+	Status       *DatabaseStatus `json:"status,omitempty"        validate:"omitempty,oneof=Active Inactive Pending"`
 }
 
 // DatabaseResponse represents a database response
@@ -58,9 +64,79 @@ type DatabaseResponse struct {
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
 	// Related entities
-	Project          *ProjectResponse          `json:"project,omitempty"`
-	DatabaseInstance *DatabaseInstanceResponse `json:"database_instance,omitempty"`
-	Environment      *EnvironmentResponse      `json:"environment,omitempty"`
+	Project          *Project          `json:"project,omitempty"`
+	DatabaseInstance *DatabaseInstance `json:"database_instance,omitempty"`
+	Environment      *Environment      `json:"environment,omitempty"`
+}
+
+// Validate validates the database fields
+func (d *Database) Validate() error {
+	if d.ID == uuid.Nil {
+		d.ID = uuid.New()
+	}
+	if d.ProjectID == uuid.Nil {
+		return ErrDatabaseProjectIDRequired
+	}
+	if d.DatabaseInstanceID == uuid.Nil {
+		return ErrDatabaseInstanceIDRequired
+	}
+	if d.EnvironmentID == uuid.Nil {
+		return ErrDatabaseEnvironmentIDRequired
+	}
+	if strings.TrimSpace(d.DatabaseName) == "" {
+		return ErrDatabaseNameRequired
+	}
+	if len(d.DatabaseName) > 255 {
+		return ErrDatabaseNameTooLong
+	}
+	if d.Status == "" {
+		d.Status = DatabaseStatusActive
+	}
+	if d.Status != DatabaseStatusActive && d.Status != DatabaseStatusInactive && d.Status != DatabaseStatusPending {
+		return errors.New("status must be Active, Inactive, or Pending")
+	}
+	if d.CreatedByID == uuid.Nil {
+		return errors.New("created_by_id is required")
+	}
+	return nil
+}
+
+// ValidateCreateDatabaseRequest validates a create database request
+func ValidateCreateDatabaseRequest(req *CreateDatabaseRequest) error {
+	if req.ProjectID == uuid.Nil {
+		return ErrDatabaseProjectIDRequired
+	}
+	if req.DatabaseInstanceID == uuid.Nil {
+		return ErrDatabaseInstanceIDRequired
+	}
+	if req.EnvironmentID == uuid.Nil {
+		return ErrDatabaseEnvironmentIDRequired
+	}
+	if strings.TrimSpace(req.DatabaseName) == "" {
+		return ErrDatabaseNameRequired
+	}
+	if len(req.DatabaseName) > 255 {
+		return ErrDatabaseNameTooLong
+	}
+	return nil
+}
+
+// ValidateUpdateDatabaseRequest validates an update database request
+func ValidateUpdateDatabaseRequest(req *UpdateDatabaseRequest) error {
+	if req.DatabaseName != nil {
+		if strings.TrimSpace(*req.DatabaseName) == "" {
+			return ErrDatabaseNameRequired
+		}
+		if len(*req.DatabaseName) > 255 {
+			return ErrDatabaseNameTooLong
+		}
+	}
+	if req.Status != nil {
+		if *req.Status != DatabaseStatusActive && *req.Status != DatabaseStatusInactive && *req.Status != DatabaseStatusPending {
+			return errors.New("status must be Active, Inactive, or Pending")
+		}
+	}
+	return nil
 }
 
 // ToResponse converts a Database to DatabaseResponse
@@ -75,93 +151,8 @@ func (d *Database) ToResponse() *DatabaseResponse {
 		Status:             d.Status,
 		CreatedAt:          d.CreatedAt,
 		UpdatedAt:          d.UpdatedAt,
+		Project:            d.Project,
+		DatabaseInstance:   d.DatabaseInstance,
+		Environment:        d.Environment,
 	}
-}
-
-// Validation errors
-var (
-	ErrDatabaseNameRequired          = errors.New("database name is required")
-	ErrDatabaseNameTooLong           = errors.New("database name must not exceed 255 characters")
-	ErrDatabaseInstanceIDRequired    = errors.New("database instance ID is required")
-	ErrDatabaseProjectIDRequired     = errors.New("project ID is required")
-	ErrDatabaseEnvironmentIDRequired = errors.New("environment ID is required")
-)
-
-// Validate validates the database model
-func (d *Database) Validate() error {
-	// Trim whitespace
-	d.DatabaseName = strings.TrimSpace(d.DatabaseName)
-
-	// Validate database name
-	if d.DatabaseName == "" {
-		return ErrDatabaseNameRequired
-	}
-	if len(d.DatabaseName) > 255 {
-		return ErrDatabaseNameTooLong
-	}
-
-	// Validate database instance ID
-	if d.DatabaseInstanceID == uuid.Nil {
-		return ErrDatabaseInstanceIDRequired
-	}
-
-	// Validate project ID
-	if d.ProjectID == uuid.Nil {
-		return ErrDatabaseProjectIDRequired
-	}
-
-	// Validate environment ID
-	if d.EnvironmentID == uuid.Nil {
-		return ErrDatabaseEnvironmentIDRequired
-	}
-
-	return nil
-}
-
-// ValidateCreateDatabaseRequest validates a create request
-func ValidateCreateDatabaseRequest(req *CreateDatabaseRequest) error {
-	// Trim whitespace
-	req.DatabaseName = strings.TrimSpace(req.DatabaseName)
-
-	// Validate database name
-	if req.DatabaseName == "" {
-		return ErrDatabaseNameRequired
-	}
-	if len(req.DatabaseName) > 255 {
-		return ErrDatabaseNameTooLong
-	}
-
-	// Validate database instance ID
-	if req.DatabaseInstanceID == uuid.Nil {
-		return ErrDatabaseInstanceIDRequired
-	}
-
-	// Validate project ID
-	if req.ProjectID == uuid.Nil {
-		return ErrDatabaseProjectIDRequired
-	}
-
-	// Validate environment ID
-	if req.EnvironmentID == uuid.Nil {
-		return ErrDatabaseEnvironmentIDRequired
-	}
-
-	return nil
-}
-
-// ValidateUpdateDatabaseRequest validates an update request
-func ValidateUpdateDatabaseRequest(req *UpdateDatabaseRequest) error {
-	// Validate database name if provided
-	if req.DatabaseName != nil {
-		name := strings.TrimSpace(*req.DatabaseName)
-		if name == "" {
-			return ErrDatabaseNameRequired
-		}
-		if len(name) > 255 {
-			return ErrDatabaseNameTooLong
-		}
-		req.DatabaseName = &name
-	}
-
-	return nil
 }

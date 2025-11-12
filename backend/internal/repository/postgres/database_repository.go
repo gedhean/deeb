@@ -283,3 +283,29 @@ func (r *DatabaseRepository) Delete(ctx context.Context, id uuid.UUID) error {
 
 	return nil
 }
+
+// GetByInstanceAndName retrieves a database by instance ID and database name
+func (r *DatabaseRepository) GetByInstanceAndName(
+	ctx context.Context,
+	instanceID uuid.UUID,
+	databaseName string,
+) (*models.Database, error) {
+	query := `
+		SELECT id, project_id, database_instance_id, environment_id,
+		       database_name, description, status, created_by_id,
+		       created_at, updated_at
+		FROM databases
+		WHERE database_instance_id = $1 AND database_name = $2
+	`
+
+	var database models.Database
+	err := r.db.GetContext(ctx, &database, query, instanceID, databaseName)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, repository.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return &database, nil
+}

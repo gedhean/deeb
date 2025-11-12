@@ -170,6 +170,19 @@ func (m *mockDatabaseRepositoryForProject) Delete(ctx context.Context, id uuid.U
 	return nil
 }
 
+func (m *mockDatabaseRepositoryForProject) GetByInstanceAndName(
+	ctx context.Context,
+	instanceID uuid.UUID,
+	databaseName string,
+) (*models.Database, error) {
+	for _, db := range m.databases {
+		if db.DatabaseInstanceID == instanceID && db.DatabaseName == databaseName {
+			return db, nil
+		}
+	}
+	return nil, repository.ErrNotFound
+}
+
 // Mock ProjectMemberRepository for testing
 type mockProjectMemberRepositoryForProject struct{}
 

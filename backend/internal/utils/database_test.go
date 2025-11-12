@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -191,7 +192,11 @@ func TestTestMySQLConnection_Timeout(t *testing.T) {
 
 	err := TestMySQLConnection(ctx, params)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "timed out")
+	// Accept either "timed out" or "i/o timeout" as valid timeout errors
+	assert.True(t,
+		strings.Contains(err.Error(), "timed out") || strings.Contains(err.Error(), "i/o timeout"),
+		"expected timeout error, got: %v", err,
+	)
 }
 
 func TestTestPostgreSQLConnection_Timeout(t *testing.T) {

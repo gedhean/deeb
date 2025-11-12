@@ -38,4 +38,7 @@ type DatabaseRepository interface {
 
 	// Delete deletes a database by its ID
 	Delete(ctx context.Context, id uuid.UUID) error
+
+	// GetByInstanceAndName retrieves a database by instance ID and database name
+	GetByInstanceAndName(ctx context.Context, instanceID uuid.UUID, databaseName string) (*models.Database, error)
 }

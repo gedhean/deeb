@@ -6,6 +6,7 @@ import { databasesService } from '@/lib/api/services/databases';
 import { projectsService } from '@/lib/api/services/projects';
 import { environmentsService } from '@/lib/api/services/environments';
 import { databaseInstancesService } from '@/lib/api/services/database-instances';
+import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
 import type {
   CreateDatabaseRequest,
   Database,
@@ -197,44 +198,6 @@ export const DatabasesPage: React.FC = () => {
   };
 
   // Handle create
-  const handleCreate = async () => {
-    if (!validateForm()) {
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const createData: CreateDatabaseRequest = {
-        project_id: formData.project_id,
-        database_instance_id: formData.database_instance_id,
-        environment_id: formData.environment_id,
-        database_name: formData.database_name.trim(),
-        description: formData.description?.trim() || undefined,
-      };
-      await databasesService.createDatabase(createData);
-      setIsCreateOpen(false);
-      setFormData({
-        project_id: '',
-        database_instance_id: '',
-        environment_id: '',
-        database_name: '',
-        description: '',
-      });
-      setFormErrors({});
-      // Reload databases
-      const response = await databasesService.listDatabases({ limit: 100 });
-      setDatabases(response.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to create database. Please try again.');
-      }
-      console.error('Failed to create database:', err);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   // Handle edit
   const handleEdit = async () => {
@@ -306,14 +269,6 @@ export const DatabasesPage: React.FC = () => {
 
   // Open create form
   const openCreateForm = () => {
-    setFormData({
-      project_id: '',
-      database_instance_id: '',
-      environment_id: '',
-      database_name: '',
-      description: '',
-    });
-    setFormErrors({});
     setIsCreateOpen(true);
   };
 
@@ -758,138 +713,11 @@ export const DatabasesPage: React.FC = () => {
         )}
 
         {/* Create Database Sheet */}
-        <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <SheetContent className="overflow-y-auto max-h-[90vh] min-w-[600px] sm:w-[540px]">
-            <SheetHeader>
-              <SheetTitle>Create Database</SheetTitle>
-              <SheetDescription>
-                Create a new database and assign it to a project, environment, and database
-                instance.
-              </SheetDescription>
-            </SheetHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label htmlFor="create-project" className="text-sm font-medium">
-                  Project *
-                </label>
-                {isLoadingDropdowns ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <select
-                    id="create-project"
-                    value={formData.project_id}
-                    onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-invalid={!!formErrors.project_id}
-                  >
-                    <option value="">Select a project</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {formErrors.project_id && (
-                  <p className="text-sm text-destructive">{formErrors.project_id}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-environment" className="text-sm font-medium">
-                  Environment *
-                </label>
-                {isLoadingDropdowns ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <select
-                    id="create-environment"
-                    value={formData.environment_id}
-                    onChange={(e) => setFormData({ ...formData, environment_id: e.target.value })}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-invalid={!!formErrors.environment_id}
-                  >
-                    <option value="">Select an environment</option>
-                    {environments.map((env) => (
-                      <option key={env.id} value={env.id}>
-                        {env.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {formErrors.environment_id && (
-                  <p className="text-sm text-destructive">{formErrors.environment_id}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-instance" className="text-sm font-medium">
-                  Database Instance *
-                </label>
-                {isLoadingDropdowns ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <select
-                    id="create-instance"
-                    value={formData.database_instance_id}
-                    onChange={(e) =>
-                      setFormData({ ...formData, database_instance_id: e.target.value })
-                    }
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-invalid={!!formErrors.database_instance_id}
-                  >
-                    <option value="">Select a database instance</option>
-                    {databaseInstances.map((instance) => (
-                      <option key={instance.id} value={instance.id}>
-                        {instance.name} ({instance.database_engine})
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {formErrors.database_instance_id && (
-                  <p className="text-sm text-destructive">{formErrors.database_instance_id}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-name" className="text-sm font-medium">
-                  Database Name *
-                </label>
-                <Input
-                  id="create-name"
-                  value={formData.database_name}
-                  onChange={(e) => setFormData({ ...formData, database_name: e.target.value })}
-                  placeholder="Enter database name"
-                  aria-invalid={!!formErrors.database_name}
-                />
-                {formErrors.database_name && (
-                  <p className="text-sm text-destructive">{formErrors.database_name}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-description" className="text-sm font-medium">
-                  Description
-                </label>
-                <textarea
-                  id="create-description"
-                  value={formData.description || ''}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Enter database description"
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-            </div>
-            <SheetFooter>
-              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleCreate} disabled={isSubmitting}>
-                {isSubmitting ? 'Creating...' : 'Create Database'}
-              </Button>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
+        <CreateDatabaseDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
 
         {/* Edit Database Sheet */}
         <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <SheetContent className="overflow-y-auto max-h-[90vh] min-w-[600px] sm:w-[540px]">
+          <SheetContent className="overflow-y-auto max-h-[90vh] md:min-w-[600px] sm:w-[540px]">
             <SheetHeader>
               <SheetTitle>Edit Database</SheetTitle>
               <SheetDescription>
