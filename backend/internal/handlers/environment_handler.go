@@ -101,11 +101,17 @@ func (h *EnvironmentHandler) CreateEnvironment(c echo.Context) error {
 	}
 
 	// Create environment model with created_by_id set to authenticated user
+	allowSelfApproval := false // Default to false for security
+	if req.AllowSelfApproval != nil {
+		allowSelfApproval = *req.AllowSelfApproval
+	}
+
 	environment := &models.Environment{
-		Name:        req.Name,
-		Description: req.Description,
-		PolicyID:    req.PolicyID,
-		CreatedByID: claims.UserID,
+		Name:              req.Name,
+		Description:       req.Description,
+		PolicyID:          req.PolicyID,
+		AllowSelfApproval: allowSelfApproval,
+		CreatedByID:       claims.UserID,
 	}
 
 	// Save to repository
@@ -121,9 +127,10 @@ func (h *EnvironmentHandler) CreateEnvironment(c echo.Context) error {
 	// Log audit entry
 	if h.auditService != nil {
 		detailsJSON, _ := json.Marshal(map[string]interface{}{
-			"environment_name": environment.Name,
-			"description":      environment.Description,
-			"policy_id":        environment.PolicyID,
+			"environment_name":    environment.Name,
+			"description":         environment.Description,
+			"policy_id":           environment.PolicyID,
+			"allow_self_approval": environment.AllowSelfApproval,
 		})
 		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeEnvironment, environment.ID, c.Request(), detailsJSON); err != nil {
 			h.logger.Error("Failed to log audit entry for environment creation", zap.Error(err))
@@ -288,6 +295,9 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 	if policyFieldPresent {
 		environment.PolicyID = req.PolicyID.UUID
 	}
+	if req.AllowSelfApproval != nil {
+		environment.AllowSelfApproval = *req.AllowSelfApproval
+	}
 
 	// Update environment in repository
 	if err := h.envRepo.Update(ctx, environment); err != nil {
@@ -304,9 +314,10 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 		claims, ok := auth.GetUserFromEchoContext(c)
 		if ok && claims != nil {
 			detailsJSON, _ := json.Marshal(map[string]interface{}{
-				"environment_name": environment.Name,
-				"description":      environment.Description,
-				"policy_id":        environment.PolicyID,
+				"environment_name":    environment.Name,
+				"description":         environment.Description,
+				"policy_id":           environment.PolicyID,
+				"allow_self_approval": environment.AllowSelfApproval,
 			})
 			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionUpdate, services.ResourceTypeEnvironment, environmentID, c.Request(), detailsJSON); err != nil {
 				h.logger.Error("Failed to log audit entry for environment update", zap.Error(err))

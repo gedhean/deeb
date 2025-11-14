@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 )
@@ -87,11 +89,23 @@ func (m *AuthzMiddleware) RequireProjectPermission(permission rbac.Permission) e
 				})
 			}
 
-			// Extract project ID from route parameter (try both "project_id" and "id")
-			projectIDStr := c.Param("project_id")
+			// Extract project ID - check in this order:
+			// 1. c.Get() - set by middleware like ExtractProjectFromBody or ChangePlanProjectExtractor
+			// 2. c.Param("project_id") - route parameter
+			// 3. c.Param("id") - fallback for routes where :id refers to project ID
+			var projectIDStr string
+			if val := c.Get("project_id"); val != nil {
+				if str, ok := val.(string); ok {
+					projectIDStr = str
+				}
+			}
+			if projectIDStr == "" {
+				projectIDStr = c.Param("project_id")
+			}
 			if projectIDStr == "" {
 				projectIDStr = c.Param("id")
 			}
+
 			if projectIDStr == "" {
 				return c.JSON(http.StatusBadRequest, map[string]interface{}{
 					"error": "Project ID required",
@@ -140,8 +154,8 @@ func (m *AuthzMiddleware) RequireProjectPermission(permission rbac.Permission) e
 				})
 			}
 
-			// Convert models.ProjectRole to rbac.ProjectRole
-			projectRole := convertProjectRoleToRBAC(member.Role)
+			// Cast rbac.ProjectRole to rbac.ProjectRole (both use PascalCase format)
+			projectRole := rbac.ProjectRole(member.Role)
 			if !rbac.IsValidProjectRole(projectRole) {
 				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 					"error": "Invalid project role",
@@ -166,22 +180,6 @@ func (m *AuthzMiddleware) RequireProjectPermission(permission rbac.Permission) e
 
 			return next(c)
 		}
-	}
-}
-
-// convertProjectRoleToRBAC converts a models.ProjectRole to rbac.ProjectRole
-func convertProjectRoleToRBAC(role models.ProjectRole) rbac.ProjectRole {
-	switch role {
-	case models.ProjectRoleOwner:
-		return rbac.ProjectOwner
-	case models.ProjectRoleDeveloper:
-		return rbac.ProjectDeveloper
-	case models.ProjectRoleApprover:
-		return rbac.ProjectApprover
-	case models.ProjectRoleViewer:
-		return rbac.ProjectViewer
-	default:
-		return rbac.ProjectViewer // Default to most restrictive
 	}
 }
 
@@ -232,6 +230,145 @@ func (m *AuthzMiddleware) RequireOrganizationDBA() echo.MiddlewareFunc {
 					},
 				})
 			}
+
+			return next(c)
+		}
+	}
+}
+
+// RequirePermission returns middleware that checks if the authenticated user has the specified permission.
+// This method automatically determines if the permission is organization-level or project-level:
+//   - Organization-level permissions (e.g., "databases.read", "users.create") are checked against the user's organization role
+//   - Project-level permissions (e.g., "changes.create", "project.members.read") require a project_id in the route
+//     and check the user's project role. Organization admins bypass project-level checks.
+//
+// For project-level permissions:
+//   - The project ID must be available in route parameters as "project_id" or "id"
+//   - Use ExtractProjectFromBody() middleware before this for routes with project_id in request body
+//   - Use ChangePlanProjectExtractor middleware for change plan routes
+//
+// Returns 401 Unauthorized if not authenticated, 403 Forbidden if lacking permission.
+func (m *AuthzMiddleware) RequirePermission(permission rbac.Permission) echo.MiddlewareFunc {
+	// Determine permission scope at middleware creation time
+	isProjectLevel := rbac.IsProjectLevelPermission(permission)
+
+	if isProjectLevel {
+		// For project-level permissions, delegate to RequireProjectPermission
+		return m.RequireProjectPermission(permission)
+	}
+
+	// For organization-level permissions, delegate to RequireOrganizationPermission
+	return m.RequireOrganizationPermission(permission)
+}
+
+// ExtractProjectFromBody is middleware that extracts project_id from the request body
+// and sets it in the Echo context for use by downstream middleware.
+// This allows RequireProjectPermission middleware to work with routes that pass project_id in body.
+// The request body is read and buffered so it can be read again by the handler.
+func ExtractProjectFromBody() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// Read the body
+			bodyBytes, err := io.ReadAll(c.Request().Body)
+			if err != nil {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Failed to read request body",
+				})
+			}
+
+			// Parse JSON to extract project_id
+			var body map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &body); err != nil {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Invalid JSON in request body",
+				})
+			}
+
+			// Extract project_id
+			projectIDValue, ok := body["project_id"]
+			if !ok {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "project_id is required in request body",
+				})
+			}
+
+			projectIDStr, ok := projectIDValue.(string)
+			if !ok {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "project_id must be a string",
+				})
+			}
+
+			// Validate it's a valid UUID
+			if _, err := uuid.Parse(projectIDStr); err != nil {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "project_id must be a valid UUID",
+				})
+			}
+
+			// Store project_id in Echo context so RequireProjectPermission can use it
+			c.Set("project_id", projectIDStr)
+
+			// Restore the body for the handler to read
+			c.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+			return next(c)
+		}
+	}
+}
+
+// ChangePlanProjectExtractor provides middleware to extract project_id from a change plan.
+type ChangePlanProjectExtractor struct {
+	changePlanRepo repository.ChangePlanRepository
+}
+
+// NewChangePlanProjectExtractor creates a new change plan project extractor middleware.
+func NewChangePlanProjectExtractor(changePlanRepo repository.ChangePlanRepository) *ChangePlanProjectExtractor {
+	return &ChangePlanProjectExtractor{
+		changePlanRepo: changePlanRepo,
+	}
+}
+
+// Extract returns middleware that extracts the project_id from the change plan identified by :id parameter.
+func (e *ChangePlanProjectExtractor) Extract() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// Extract change plan ID from route parameter
+			changePlanIDStr := c.Param("id")
+			if changePlanIDStr == "" {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Change plan ID required",
+				})
+			}
+
+			// Parse change plan ID
+			changePlanID, err := uuid.Parse(changePlanIDStr)
+			if err != nil {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Invalid change plan ID format",
+				})
+			}
+
+			// Get change plan
+			changePlan, err := e.changePlanRepo.GetByID(c.Request().Context(), changePlanID)
+			if err != nil {
+				if err == repository.ErrNotFound {
+					return c.JSON(http.StatusNotFound, map[string]interface{}{
+						"error": "Change plan not found",
+					})
+				}
+				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+					"error": "Failed to retrieve change plan",
+				})
+			}
+
+			// Set project_id so RequireProjectPermission can use it
+			// Use c.Set() which is checked by RequireProjectPermission middleware
+			c.Set("project_id", changePlan.ProjectID.String())
+
+			// Also store the change plan in context for handlers that need it
+			ctx := context.WithValue(c.Request().Context(), rbac.ContextKey("change_plan_id"), changePlanID)
+			c.SetRequest(c.Request().WithContext(ctx))
 
 			return next(c)
 		}

@@ -1,0 +1,111 @@
+# IAM Roles and Access Control List (ACL)
+# This file defines all roles and their associated permissions in the Deeb system.
+# This is the single source of truth for RBAC configuration.
+roles:
+  # ============================================
+  # Organization-Level Roles
+  # ============================================
+  - name: OrganizationAdmin
+    title: Organization Administrator
+    description: Full system access with all permissions. Can manage users, databases, projects, policies, and all system settings.
+    permissions:
+      - '*'  # Wildcard permission grants all permissions
+  - name: OrganizationDBA
+    title: Database Administrator
+    description: Database management specialist. Can manage database instances and databases, create projects, and has read access to users and audit logs.
+    permissions:
+      # User management (read-only)
+      - users.read
+      # Database instance management (full access)
+      - database_instances.create
+      - database_instances.read
+      - database_instances.update
+      - database_instances.delete
+      # Database management (full access)
+      - databases.create
+      - databases.read
+      - databases.update
+      - databases.delete
+      # Project management (full access)
+      - projects.read
+      - projects.create
+      - projects.update
+      - projects.delete
+      # Environment management (read-only)
+      - environments.read
+      # Audit logs (read-only)
+      - audit_logs.read
+  - name: OrganizationDeveloper
+    title: Organization Developer
+    description: Standard developer role. Can create projects, read databases and users, and work within assigned projects.
+    permissions:
+      # User management (read-only)
+      - users.read
+      # Database instance management (read-only)
+      - database_instances.read
+      # Database management (read and create)
+      - databases.read
+      - databases.create
+      - databases.update
+      # Project management (create and read)
+      - projects.create
+      - projects.read
+      # Environment management (read-only)
+      - environments.read
+  # ============================================
+  # Project-Level Roles
+  # ============================================
+  - name: ProjectOwner
+    title: Project Owner
+    description: Full control over the project. Can manage all aspects including settings, members, change plans, and policy rules.
+    permissions:
+      # Project settings
+      - project.settings.update
+      # Project member management (full access)
+      - project.members.create
+      - project.members.read
+      - project.members.update
+      - project.members.delete
+      # Change plan management (full access)
+      - changes.create
+      - changes.read
+      - changes.update
+      - changes.delete
+      - changes.approve
+      - changes.reject
+      - changes.execute
+  - name: ProjectDeveloper
+    title: Project Developer
+    description: Can create and manage their own change plans, and execute approved changes. Cannot approve changes or manage members.
+    permissions:
+      # Project member management (read-only)
+      - project.members.read
+      # Change plan management (create, read, update, execute)
+      - changes.create
+      - changes.read
+      - changes.update
+      - changes.execute
+      # Policy rule management (read-only)
+      - policy_rules.read
+  - name: ProjectApprover
+    title: Project Approver
+    description: Can review and approve/reject change plans but cannot create or execute them. Useful for review-only roles.
+    permissions:
+      # Project member management (read-only)
+      - project.members.read
+      # Change plan management (read, approve, reject)
+      - changes.read
+      - changes.approve
+      - changes.reject
+      # Policy rule management (read-only)
+      - policy_rules.read
+  - name: ProjectViewer
+    title: Project Viewer
+    description: Read-only access to the project. Can view members, change plans, and policy rules but cannot make any modifications.
+    permissions:
+      # Project member management (read-only)
+      - project.members.read
+      # Change plan management (read-only)
+      - changes.read
+      # Policy rule management (read-only)
+      - policy_rules.read

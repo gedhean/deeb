@@ -1,0 +1,63 @@
+# IAM Permissions Definition
+# This file defines all available permissions in the Deeb system.
+# Format: [resource].[action]
+permissions:
+  # Wildcard permission (admin only)
+  - '*'
+  # User management permissions
+  - users.create
+  - users.read
+  - users.update
+  - users.delete
+  # Organization management permissions
+  - organization.update
+  - organization.delete
+  # Database instance management permissions
+  - database_instances.create
+  - database_instances.read
+  - database_instances.update
+  - database_instances.delete
+  # Database management permissions
+  - databases.create
+  - databases.read
+  - databases.update
+  - databases.delete
+  # Project management permissions (organization-level)
+  - projects.create
+  - projects.read
+  - projects.update
+  - projects.delete
+  # Environment management permissions
+  - environments.create
+  - environments.read
+  - environments.update
+  - environments.delete
+  # Policy management permissions
+  - policies.create
+  - policies.read
+  - policies.update
+  - policies.delete
+  # Policy rule management permissions
+  - policy_rules.create
+  - policy_rules.read
+  - policy_rules.update
+  - policy_rules.delete
+  # Audit log permissions
+  - audit_logs.read
+  # Project-level permissions (require project membership)
+
+  # Project settings
+  - project.settings.update
+  # Project member management
+  - project.members.create
+  - project.members.read
+  - project.members.update
+  - project.members.delete
+  # Change plan (change request) management
+  - changes.create
+  - changes.read
+  - changes.update
+  - changes.delete
+  - changes.approve
+  - changes.reject
+  - changes.execute

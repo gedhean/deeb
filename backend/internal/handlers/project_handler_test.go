@@ -14,18 +14,21 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
 )
 
 // Mock ProjectRepository for testing
 type mockProjectRepository struct {
-	projects  []*models.Project
-	getErr    error
-	listErr   error
-	createErr error
-	updateErr error
-	deleteErr error
+	projects        []*models.Project
+	projectMembers  map[uuid.UUID][]uuid.UUID // projectID -> []userID
+	getErr          error
+	listErr         error
+	listByUserIDErr error
+	createErr       error
+	updateErr       error
+	deleteErr       error
 }
 
 func (m *mockProjectRepository) Create(ctx context.Context, project *models.Project) error {
@@ -64,6 +67,70 @@ func (m *mockProjectRepository) List(ctx context.Context, limit, offset int) ([]
 		end = len(m.projects)
 	}
 	return m.projects[start:end], nil
+}
+
+func (m *mockProjectRepository) ListByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+	limit, offset int,
+) ([]*models.Project, error) {
+	if m.listByUserIDErr != nil {
+		return nil, m.listByUserIDErr
+	}
+
+	// If projectMembers map is not initialized, return empty list
+	if m.projectMembers == nil {
+		return []*models.Project{}, nil
+	}
+
+	// Find projects where user is a member
+	var userProjects []*models.Project
+	for _, project := range m.projects {
+		if members, ok := m.projectMembers[project.ID]; ok {
+			for _, memberID := range members {
+				if memberID == userID {
+					userProjects = append(userProjects, project)
+					break
+				}
+			}
+		}
+	}
+
+	// Apply pagination
+	start := offset
+	end := offset + limit
+	if start >= len(userProjects) {
+		return []*models.Project{}, nil
+	}
+	if end > len(userProjects) {
+		end = len(userProjects)
+	}
+	return userProjects[start:end], nil
+}
+
+func (m *mockProjectRepository) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	if m.listByUserIDErr != nil {
+		return 0, m.listByUserIDErr
+	}
+
+	// If projectMembers map is not initialized, return 0
+	if m.projectMembers == nil {
+		return 0, nil
+	}
+
+	// Count projects where user is a member
+	count := int64(0)
+	for _, project := range m.projects {
+		if members, ok := m.projectMembers[project.ID]; ok {
+			for _, memberID := range members {
+				if memberID == userID {
+					count++
+					break
+				}
+			}
+		}
+	}
+	return count, nil
 }
 
 func (m *mockProjectRepository) Update(ctx context.Context, project *models.Project) error {
@@ -184,9 +251,19 @@ func (m *mockDatabaseRepositoryForProject) GetByInstanceAndName(
 }
 
 // Mock ProjectMemberRepository for testing
-type mockProjectMemberRepositoryForProject struct{}
+type mockProjectMemberRepositoryForProject struct {
+	members      []*models.ProjectMember
+	addMemberErr error
+}
 
 func (m *mockProjectMemberRepositoryForProject) AddMember(ctx context.Context, member *models.ProjectMember) error {
+	if m.addMemberErr != nil {
+		return m.addMemberErr
+	}
+	if m.members == nil {
+		m.members = []*models.ProjectMember{}
+	}
+	m.members = append(m.members, member)
 	return nil
 }
 
@@ -198,22 +275,43 @@ func (m *mockProjectMemberRepositoryForProject) GetMembers(
 	ctx context.Context,
 	projectID uuid.UUID,
 ) ([]*models.ProjectMember, error) {
-	return nil, nil
+	var result []*models.ProjectMember
+	for _, member := range m.members {
+		if member.ProjectID == projectID {
+			result = append(result, member)
+		}
+	}
+	return result, nil
 }
 
 func (m *mockProjectMemberRepositoryForProject) GetMemberRole(
 	ctx context.Context,
 	projectID, userID uuid.UUID,
 ) (*models.ProjectMember, error) {
-	return nil, nil
+	for _, member := range m.members {
+		if member.ProjectID == projectID && member.UserID == userID {
+			return member, nil
+		}
+	}
+	return nil, repository.ErrNotFound
 }
 
 func (m *mockProjectMemberRepositoryForProject) UpdateRole(
 	ctx context.Context,
 	projectID, userID uuid.UUID,
-	role models.ProjectRole,
+	role rbac.ProjectRole,
 ) error {
 	return nil
+}
+
+func (m *mockProjectMemberRepositoryForProject) GetUserProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	var projectIDs []uuid.UUID
+	for _, member := range m.members {
+		if member.UserID == userID {
+			projectIDs = append(projectIDs, member.ProjectID)
+		}
+	}
+	return projectIDs, nil
 }
 
 // Mock UserRepository for testing
@@ -326,15 +424,16 @@ func TestCreateProject(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup mock repository
+			// Setup mock repositories
 			mockRepo := &mockProjectRepository{
 				projects:  []*models.Project{},
 				createErr: tt.mockErr,
 			}
+			mockMemberRepo := &mockProjectMemberRepositoryForProject{}
 			handler := NewProjectHandler(
 				mockRepo,
 				&mockDatabaseRepositoryForProject{databases: []*models.Database{}},
-				&mockProjectMemberRepositoryForProject{},
+				mockMemberRepo,
 				&mockUserRepositoryForProject{},
 				nil,
 				logger,
@@ -348,9 +447,10 @@ func TestCreateProject(t *testing.T) {
 			c := e.NewContext(req, rec)
 
 			// Set authenticated user context for CreateProject (except for auth test)
+			var testUserID uuid.UUID
 			if !strings.Contains(tt.name, "authentication required") {
-				userID := uuid.New()
-				setAuthContext(c, userID, "admin@example.com", "OrganizationAdmin")
+				testUserID = uuid.New()
+				setAuthContext(c, testUserID, "admin@example.com", "OrganizationAdmin")
 			}
 
 			// Execute handler
@@ -374,6 +474,22 @@ func TestCreateProject(t *testing.T) {
 				if response.ID == uuid.Nil {
 					t.Error("Expected non-nil project ID")
 				}
+
+				// Verify that the creator was added as ProjectOwner member
+				if len(mockMemberRepo.members) != 1 {
+					t.Errorf("Expected 1 project member (creator), got %d", len(mockMemberRepo.members))
+				} else {
+					member := mockMemberRepo.members[0]
+					if member.UserID != testUserID {
+						t.Errorf("Expected member user ID %s, got %s", testUserID, member.UserID)
+					}
+					if member.Role != rbac.ProjectOwner {
+						t.Errorf("Expected member role %s, got %s", rbac.ProjectOwner, member.Role)
+					}
+					if member.AddedByID != testUserID {
+						t.Errorf("Expected added by %s, got %s", testUserID, member.AddedByID)
+					}
+				}
 			}
 		})
 	}
@@ -382,42 +498,106 @@ func TestCreateProject(t *testing.T) {
 func TestListProjects(t *testing.T) {
 	logger := zap.NewNop()
 
+	// Create test users
+	adminUserID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440010")
+	dbaUserID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440011")
+	devUserID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440012")
+
+	// Create test projects
+	project1 := createTestProject("550e8400-e29b-41d4-a716-446655440001", "Project 1", "Description 1")
+	project2 := createTestProject("550e8400-e29b-41d4-a716-446655440002", "Project 2", "Description 2")
+	project3 := createTestProject("550e8400-e29b-41d4-a716-446655440003", "Project 3", "Description 3")
+
 	tests := []struct {
 		name           string
+		userClaims     *auth.Claims
 		mockProjects   []*models.Project
-		mockErr        error
+		projectMembers map[uuid.UUID][]uuid.UUID
+		mockListErr    error
 		queryParams    map[string]string
 		expectedStatus int
 		expectedCount  int
+		expectedTotal  int64
+		checkUnauth    bool
 	}{
 		{
-			name: "list projects successfully",
-			mockProjects: []*models.Project{
-				createTestProject("550e8400-e29b-41d4-a716-446655440001", "Project 1", "Description 1"),
-				createTestProject("550e8400-e29b-41d4-a716-446655440002", "Project 2", "Description 2"),
+			name: "admin user sees all projects",
+			userClaims: &auth.Claims{
+				UserID:           adminUserID,
+				OrganizationRole: string(rbac.OrganizationAdmin),
+			},
+			mockProjects:   []*models.Project{project1, project2, project3},
+			expectedStatus: http.StatusOK,
+			expectedCount:  3,
+			expectedTotal:  3,
+		},
+		{
+			name: "dba user sees only member projects",
+			userClaims: &auth.Claims{
+				UserID:           dbaUserID,
+				OrganizationRole: string(rbac.OrganizationDBA),
+			},
+			mockProjects: []*models.Project{project1, project2, project3},
+			projectMembers: map[uuid.UUID][]uuid.UUID{
+				project1.ID: {dbaUserID},
+				project2.ID: {dbaUserID},
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
+			expectedTotal:  2,
 		},
 		{
-			name: "list projects with pagination",
-			mockProjects: []*models.Project{
-				createTestProject("550e8400-e29b-41d4-a716-446655440001", "Project 1", "Description 1"),
+			name: "developer sees only member projects",
+			userClaims: &auth.Claims{
+				UserID:           devUserID,
+				OrganizationRole: string(rbac.OrganizationDeveloper),
 			},
-			queryParams:    map[string]string{"limit": "1", "offset": "0"},
+			mockProjects: []*models.Project{project1, project2, project3},
+			projectMembers: map[uuid.UUID][]uuid.UUID{
+				project1.ID: {devUserID},
+			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
+			expectedTotal:  1,
 		},
 		{
-			name:           "list projects with database error",
-			mockErr:        errors.New("database error"),
-			expectedStatus: http.StatusInternalServerError,
+			name: "developer with no memberships sees empty list",
+			userClaims: &auth.Claims{
+				UserID:           devUserID,
+				OrganizationRole: string(rbac.OrganizationDeveloper),
+			},
+			mockProjects:   []*models.Project{project1, project2},
+			projectMembers: map[uuid.UUID][]uuid.UUID{},
+			expectedStatus: http.StatusOK,
+			expectedCount:  0,
+			expectedTotal:  0,
+		},
+		{
+			name: "admin with pagination",
+			userClaims: &auth.Claims{
+				UserID:           adminUserID,
+				OrganizationRole: string(rbac.OrganizationAdmin),
+			},
+			mockProjects:   []*models.Project{project1, project2, project3},
+			queryParams:    map[string]string{"limit": "2", "offset": "0"},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+			expectedTotal:  3,
+		},
+		{
+			name:           "missing authentication",
+			checkUnauth:    true,
+			expectedStatus: http.StatusUnauthorized,
 			expectedCount:  0,
 		},
 		{
-			name:           "list empty projects",
-			mockProjects:   []*models.Project{},
-			expectedStatus: http.StatusOK,
+			name: "database error for admin",
+			userClaims: &auth.Claims{
+				UserID:           adminUserID,
+				OrganizationRole: string(rbac.OrganizationAdmin),
+			},
+			mockListErr:    errors.New("database error"),
+			expectedStatus: http.StatusInternalServerError,
 			expectedCount:  0,
 		},
 	}
@@ -426,8 +606,9 @@ func TestListProjects(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup mock repository
 			mockRepo := &mockProjectRepository{
-				projects: tt.mockProjects,
-				listErr:  tt.mockErr,
+				projects:       tt.mockProjects,
+				projectMembers: tt.projectMembers,
+				listErr:        tt.mockListErr,
 			}
 			handler := NewProjectHandler(
 				mockRepo,
@@ -454,6 +635,11 @@ func TestListProjects(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
+			// Add user claims to context if not testing unauthorized
+			if !tt.checkUnauth && tt.userClaims != nil {
+				c.Set("user", tt.userClaims)
+			}
+
 			// Execute handler
 			err := handler.ListProjects(c)
 			if err != nil {
@@ -479,6 +665,13 @@ func TestListProjects(t *testing.T) {
 
 				if len(projects) != tt.expectedCount {
 					t.Errorf("Expected %d projects, got %d", tt.expectedCount, len(projects))
+				}
+
+				// Verify total count
+				if total, ok := response["total"].(float64); ok {
+					if int64(total) != tt.expectedTotal {
+						t.Errorf("Expected total %d, got %d", tt.expectedTotal, int64(total))
+					}
 				}
 			}
 		})

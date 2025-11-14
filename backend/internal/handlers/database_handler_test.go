@@ -13,6 +13,7 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
 )
@@ -167,6 +168,18 @@ func (m *mockProjectRepositoryForDB) GetByID(ctx context.Context, id uuid.UUID) 
 
 func (m *mockProjectRepositoryForDB) List(ctx context.Context, limit, offset int) ([]*models.Project, error) {
 	return nil, nil
+}
+
+func (m *mockProjectRepositoryForDB) ListByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+	limit, offset int,
+) ([]*models.Project, error) {
+	return nil, nil
+}
+
+func (m *mockProjectRepositoryForDB) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	return 0, nil
 }
 
 func (m *mockProjectRepositoryForDB) Update(ctx context.Context, project *models.Project) error {
@@ -338,7 +351,7 @@ func TestCreateDatabase(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.CreateDatabase(c); err != nil {
@@ -391,7 +404,7 @@ func TestCreateDatabase(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		err := handler.CreateDatabase(c)
@@ -451,7 +464,7 @@ func TestListDatabases(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.ListDatabases(c); err != nil {
@@ -515,7 +528,7 @@ func TestListDatabases(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.ListDatabases(c); err != nil {
@@ -563,7 +576,7 @@ func TestListDatabases(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.ListDatabases(c); err != nil {
@@ -616,7 +629,7 @@ func TestGetDatabase(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.GetDatabase(c); err != nil {
@@ -663,7 +676,7 @@ func TestGetDatabase(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.GetDatabase(c); err != nil {
@@ -723,7 +736,7 @@ func TestListProjectDatabases(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.ListProjectDatabases(c); err != nil {
@@ -773,7 +786,7 @@ func TestListProjectDatabases(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.ListProjectDatabases(c); err != nil {
@@ -832,7 +845,7 @@ func TestUpdateDatabase(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.UpdateDatabase(c); err != nil {
@@ -885,7 +898,7 @@ func TestUpdateDatabase(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.UpdateDatabase(c); err != nil {
@@ -938,7 +951,7 @@ func TestDeleteDatabase(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.DeleteDatabase(c); err != nil {
@@ -985,7 +998,7 @@ func TestDeleteDatabase(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.DeleteDatabase(c); err != nil {

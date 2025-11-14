@@ -7,7 +7,9 @@ import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
+import { UserInfoCard } from '@/components/UserInfoCard';
+import { UserPermissionsCard } from '@/components/UserPermissionsCard';
+import type { OrganizationRole } from '@/lib/rbac';
 import {
   Sheet,
   SheetContent,
@@ -16,7 +18,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { AlertTriangle, Pencil, Calendar, Mail, Shield, User as UserIcon } from 'lucide-react';
+import { AlertTriangle, Pencil } from 'lucide-react';
 import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
 import { Input } from '@/components/ui/input';
 import type { UserFormData, UserFormErrors } from '@/components/user-form';
@@ -142,49 +144,6 @@ export const ProfilePage: React.FC = () => {
     setIsEditOpen(true);
   };
 
-  // Format date
-  const formatDate = (dateString: string): string => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
-  // Get role badge variant
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'OrganizationAdmin':
-        return 'default';
-      case 'OrganizationDBA':
-        return 'secondary';
-      case 'OrganizationDeveloper':
-        return 'outline';
-      default:
-        return 'outline';
-    }
-  };
-
-  // Format role display name
-  const formatRoleName = (role: string) => {
-    switch (role) {
-      case 'OrganizationAdmin':
-        return 'Admin';
-      case 'OrganizationDBA':
-        return 'DBA';
-      case 'OrganizationDeveloper':
-        return 'Developer';
-      default:
-        return role;
-    }
-  };
-
   if (!currentUser) {
     return (
       <DefaultLayout breadcrumbs={[{ label: 'Profile', isCurrentPage: true }]}>
@@ -243,79 +202,11 @@ export const ProfilePage: React.FC = () => {
           </Card>
         ) : user ? (
           <>
-            {/* User Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Profile Information</CardTitle>
-                <CardDescription>Your account details</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Mail className="h-4 w-4" />
-                      Email
-                    </div>
-                    <p className="text-base">{user.email}</p>
-                  </div>
+            {/* User Information Card - Using shared component */}
+            <UserInfoCard user={user} />
 
-                  {user.display_name && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                        <UserIcon className="h-4 w-4" />
-                        Display Name
-                      </div>
-                      <p className="text-base">{user.display_name}</p>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Shield className="h-4 w-4" />
-                      Organization Role
-                    </div>
-                    <Badge variant={getRoleBadgeVariant(user.organization_role)}>
-                      {formatRoleName(user.organization_role)}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      Status
-                    </div>
-                    <Badge variant={user.is_active ? 'default' : 'secondary'}>
-                      {user.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      Created At
-                    </div>
-                    <p className="text-base">{formatDate(user.created_at)}</p>
-                  </div>
-
-                  {user.last_login_at && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        Last Login
-                      </div>
-                      <p className="text-base">{formatDate(user.last_login_at)}</p>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      Updated At
-                    </div>
-                    <p className="text-base">{formatDate(user.updated_at)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* User Permissions Card - Using shared component */}
+            <UserPermissionsCard role={user.organization_role as OrganizationRole} />
           </>
         ) : (
           <Card>

@@ -10,7 +10,6 @@ import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 import {
   Empty,
   EmptyContent,
@@ -37,6 +36,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
+import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
+import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 
 export const DatabaseInstanceDetailPage: React.FC = () => {
   const navigate = useNavigate();
@@ -51,8 +52,15 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
   const [error, setError] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  // Check if user is admin
-  const isAdmin = user?.organization_role === 'OrganizationAdmin';
+  // Check permissions
+  const canReadDatabaseInstances = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabaseInstancesRead,
+  );
+  const canCreateDatabases = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabasesCreate,
+  );
 
   const loadDatabases = useCallback(async (instanceId: string) => {
     try {
@@ -125,20 +133,6 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
     }
   };
 
-  // Get status badge color
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Active':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'Inactive':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      case 'Maintenance':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-    }
-  };
-
   // Get project name
   const getProjectName = (projectId: string): string => {
     const project = projects.find((p) => p.id === projectId);
@@ -152,7 +146,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
   };
 
   // Render access denied
-  if (!isAdmin) {
+  if (!canReadDatabaseInstances) {
     return (
       <DefaultLayout breadcrumbs={[{ label: 'Database Instances', isCurrentPage: true }]}>
         <Card>
@@ -162,7 +156,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This page requires Organization Admin role.
+              This page requires the database_instances.read permission.
             </p>
           </CardContent>
         </Card>
@@ -243,7 +237,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Status</p>
-                  <Badge className={getStatusColor(instance.status)}>{instance.status}</Badge>
+                  <DatabaseStatusBadge status={instance.status} variant="instance" />
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Database Engine</p>
@@ -304,7 +298,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
                   )}
                 </CardDescription>
               </div>
-              {isAdmin && instance && (
+              {canCreateDatabases && instance && (
                 <Button onClick={() => setShowCreateDialog(true)} size="sm">
                   <Plus className="mr-2 h-4 w-4" />
                   Create Database
@@ -392,9 +386,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
                           {getEnvironmentName(database.environment_id)}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={database.status === 'Active' ? 'default' : 'secondary'}>
-                            {database.status}
-                          </Badge>
+                          <DatabaseStatusBadge status={database.status} variant="database" />
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {formatDate(database.created_at)}

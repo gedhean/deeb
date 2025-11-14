@@ -12,6 +12,8 @@ import type {
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -58,6 +60,7 @@ export const EnvironmentsPage: React.FC = () => {
     name: '',
     description: '',
     policy_id: undefined,
+    allow_self_approval: false,
   });
   const [formErrors, setFormErrors] = useState<{
     name?: string;
@@ -146,10 +149,11 @@ export const EnvironmentsPage: React.FC = () => {
         name: formData.name.trim(),
         description: formData.description?.trim() || undefined,
         policy_id: formData.policy_id || undefined,
+        allow_self_approval: formData.allow_self_approval,
       };
       await environmentsService.createEnvironment(createData);
       setIsCreateOpen(false);
-      setFormData({ name: '', description: '', policy_id: undefined });
+      setFormData({ name: '', description: '', policy_id: undefined, allow_self_approval: false });
       setFormErrors({});
       await loadEnvironments();
     } catch (err) {
@@ -183,6 +187,9 @@ export const EnvironmentsPage: React.FC = () => {
       if (formData.policy_id !== selectedEnvironment.policy_id) {
         updateData.policy_id = formData.policy_id || null;
       }
+      if (formData.allow_self_approval !== selectedEnvironment.allow_self_approval) {
+        updateData.allow_self_approval = formData.allow_self_approval;
+      }
 
       console.log('Update data being sent:', updateData);
       console.log('formData.policy_id:', formData.policy_id);
@@ -191,7 +198,7 @@ export const EnvironmentsPage: React.FC = () => {
       await environmentsService.updateEnvironment(selectedEnvironment.id, updateData);
       setIsEditOpen(false);
       setSelectedEnvironment(null);
-      setFormData({ name: '', description: '', policy_id: undefined });
+      setFormData({ name: '', description: '', policy_id: undefined, allow_self_approval: false });
       setFormErrors({});
       await loadEnvironments();
     } catch (err) {
@@ -232,7 +239,7 @@ export const EnvironmentsPage: React.FC = () => {
 
   // Open create form
   const openCreateForm = () => {
-    setFormData({ name: '', description: '', policy_id: undefined });
+    setFormData({ name: '', description: '', policy_id: undefined, allow_self_approval: false });
     setFormErrors({});
     setIsCreateOpen(true);
   };
@@ -244,6 +251,7 @@ export const EnvironmentsPage: React.FC = () => {
       name: environment.name,
       description: environment.description || '',
       policy_id: environment.policy_id || undefined,
+      allow_self_approval: environment.allow_self_approval || false,
     });
     setFormErrors({});
     setIsEditOpen(true);
@@ -370,6 +378,7 @@ export const EnvironmentsPage: React.FC = () => {
                     <TableHead>Name</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Policy</TableHead>
+                    <TableHead>Self Approval</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -382,6 +391,17 @@ export const EnvironmentsPage: React.FC = () => {
                         {environment.description || '-'}
                       </TableCell>
                       <TableCell>{getPolicyName(environment.policy_id)}</TableCell>
+                      <TableCell>
+                        {environment.allow_self_approval ? (
+                          <Badge variant="secondary" className="bg-green-100 text-green-800">
+                            Enabled
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-800">
+                            Disabled
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>{formatDate(environment.created_at)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -481,6 +501,28 @@ export const EnvironmentsPage: React.FC = () => {
                   <p className="text-sm text-destructive">{formErrors.policy_id}</p>
                 )}
               </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="create-allow-self-approval"
+                  checked={formData.allow_self_approval}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      allow_self_approval: checked === true,
+                    })
+                  }
+                />
+                <label
+                  htmlFor="create-allow-self-approval"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Allow Self Approval
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                When enabled, developers can approve their own change plans without requiring a
+                separate reviewer. Useful for dev/staging environments.
+              </p>
             </div>
             <SheetFooter>
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
@@ -562,6 +604,28 @@ export const EnvironmentsPage: React.FC = () => {
                   <p className="text-sm text-destructive">{formErrors.policy_id}</p>
                 )}
               </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="edit-allow-self-approval"
+                  checked={formData.allow_self_approval}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      allow_self_approval: checked === true,
+                    })
+                  }
+                />
+                <label
+                  htmlFor="edit-allow-self-approval"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Allow Self Approval
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                When enabled, developers can approve their own change plans without requiring a
+                separate reviewer. Useful for dev/staging environments.
+              </p>
             </div>
             <SheetFooter>
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>

@@ -114,3 +114,17 @@ func GetProjectRoleFromContext(ctx context.Context) (projectID string, projectRo
 
 	return projectID, projectRole, true
 }
+
+// IsProjectLevelPermission determines if a permission is project-level.
+// Project-level permissions start with: "project.", "changes."
+// All other permissions are organization-level.
+func IsProjectLevelPermission(permission Permission) bool {
+	p := string(permission)
+	return len(p) >= 8 && (p[:8] == "project." || p[:8] == "changes.")
+}
+
+// IsOrganizationLevelPermission determines if a permission is organization-level.
+// This is the inverse of IsProjectLevelPermission.
+func IsOrganizationLevelPermission(permission Permission) bool {
+	return !IsProjectLevelPermission(permission)
+}

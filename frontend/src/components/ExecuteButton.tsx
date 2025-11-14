@@ -10,7 +10,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { changePlanService } from '@/lib/api/services/changePlans';
-import { useAuth } from '@/contexts/AuthContext';
 import type { ChangePlan } from '@/lib/api/types';
 import { Play, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
@@ -18,24 +17,18 @@ import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
 interface ExecuteButtonProps {
   changePlan: ChangePlan;
   onSuccess?: () => void;
+  canExecute: boolean;
 }
 
-export const ExecuteButton: React.FC<ExecuteButtonProps> = ({ changePlan, onSuccess }) => {
-  const { user } = useAuth();
+export const ExecuteButton: React.FC<ExecuteButtonProps> = ({
+  changePlan,
+  onSuccess,
+  canExecute,
+}) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [error, setError] = useState('');
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'executing' | 'success'>('idle');
-
-  // Check if user can execute
-  // Authorized users: Organization Admin, Organization DBA, Project Owner, or Author
-  // For now, we check organization_role and author_id. In the future, we should check project membership.
-  // The backend will enforce actual permissions.
-  const canExecute =
-    user &&
-    (user.organization_role === 'OrganizationAdmin' ||
-      user.organization_role === 'OrganizationDBA' ||
-      user.id === changePlan.author_id);
 
   // Only enable for Approved status
   const canExecuteThisPlan = changePlan.status === 'Approved';

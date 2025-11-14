@@ -395,12 +395,7 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 		})
 	}
 
-	// Check if user is admin (this should be enforced by middleware, but double-check)
-	if claims.OrganizationRole != string(models.OrganizationRoleAdmin) {
-		return c.JSON(http.StatusForbidden, map[string]interface{}{
-			"error": "Admin access required",
-		})
-	}
+	// RBAC check is done in middleware (RequireOrganizationAdmin)
 
 	// Parse ID parameter
 	idStr := c.Param("id")
@@ -518,12 +513,7 @@ func (h *DatabaseHandler) DeleteDatabase(c echo.Context) error {
 		})
 	}
 
-	// Check if user is admin (this should be enforced by middleware, but double-check)
-	if claims.OrganizationRole != string(models.OrganizationRoleAdmin) {
-		return c.JSON(http.StatusForbidden, map[string]interface{}{
-			"error": "Admin access required",
-		})
-	}
+	// RBAC check is done in middleware (RequireOrganizationAdmin)
 
 	// Parse ID parameter
 	idStr := c.Param("id")

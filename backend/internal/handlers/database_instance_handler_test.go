@@ -13,6 +13,7 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
 )
@@ -191,6 +192,19 @@ func (m *mockProjectRepositoryForInstance) GetByID(ctx context.Context, id uuid.
 func (m *mockProjectRepositoryForInstance) List(ctx context.Context, limit, offset int) ([]*models.Project, error) {
 	return nil, nil
 }
+
+func (m *mockProjectRepositoryForInstance) ListByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+	limit, offset int,
+) ([]*models.Project, error) {
+	return nil, nil
+}
+
+func (m *mockProjectRepositoryForInstance) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	return 0, nil
+}
+
 func (m *mockProjectRepositoryForInstance) Count(ctx context.Context) (int64, error) { return 0, nil }
 func (m *mockProjectRepositoryForInstance) Update(ctx context.Context, project *models.Project) error {
 	return nil
@@ -370,7 +384,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		if err := handler.CreateDatabaseInstance(c); err != nil {
@@ -442,7 +456,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		err := handler.CreateDatabaseInstance(c)
@@ -485,7 +499,7 @@ func TestCreateDatabaseInstance(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		err := handler.CreateDatabaseInstance(c)
@@ -831,7 +845,7 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 		c.Set("user", &auth.Claims{
 			UserID:           userID,
 			Email:            "admin@example.com",
-			OrganizationRole: string(models.OrganizationRoleAdmin),
+			OrganizationRole: string(rbac.OrganizationAdmin),
 		})
 
 		err := handler.UpdateDatabaseInstance(c)

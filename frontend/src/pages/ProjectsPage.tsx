@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { projectsService, projectMembersService } from '@/lib/api/services/projects';
+import { hasOrganizationPermission, OrganizationPermission, isAdmin } from '@/lib/rbac';
 import type {
   AddProjectMemberRequest,
   CreateProjectRequest,
@@ -55,7 +56,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { RoleBadge } from '@/components/RoleBadge';
 import { Plus, Pencil, Trash2, AlertTriangle, FolderOpen, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectPermissions } from '@/hooks/api/useProjectPermissions';
@@ -100,10 +101,22 @@ export const ProjectsPage: React.FC = () => {
   // Check permissions for members management
   const { canManageMembers } = useProjectPermissions(members);
 
-  // Check if user is admin
-  const isAdmin = user?.organization_role === 'OrganizationAdmin';
+  // Check organization-level permissions
+  const userIsAdmin = isAdmin(user?.organization_role);
+  const canCreateProjects = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.ProjectsCreate,
+  );
+  const canUpdateProjects = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.ProjectsUpdate,
+  );
+  const canDeleteProjects = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.ProjectsDelete,
+  );
 
-  // Load projects - admins see all, project owners fetch their owned projects
+  // Load projects - admins see all, non-admins see projects where they are members
   useEffect(() => {
     if (!user) {
       setError('Authentication required.');
@@ -111,31 +124,29 @@ export const ProjectsPage: React.FC = () => {
       return;
     }
 
-    if (isAdmin) {
+    if (userIsAdmin) {
       // Admins can list all projects
       loadProjects();
     } else {
-      // For Project Owners, check projects from useProjects hook
-      loadProjectsForOwner();
+      // For non-admins, check projects from useProjects hook to see which ones they are members of
+      loadProjectsForMember();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isAdmin, availableProjects]);
+  }, [user, userIsAdmin, availableProjects]);
 
-  // Load projects where user is owner
-  const loadProjectsForOwner = async () => {
+  // Load projects where user is a member (any role)
+  const loadProjectsForMember = async () => {
     try {
       setIsLoading(true);
       setError('');
 
-      // Check projects from useProjects hook to see which ones user owns
+      // Check projects from useProjects hook to see which ones user is a member of
       const userProjects: Project[] = [];
       for (const project of availableProjects) {
         try {
           const members = await projectMembersService.listProjectMembers(project.id);
-          const isOwner = members.some(
-            (m) => m.member.user_id === user?.id && m.member.role === 'ProjectOwner',
-          );
-          if (isOwner) {
+          const isMember = members.some((m) => m.member.user_id === user?.id);
+          if (isMember) {
             userProjects.push(project);
           }
         } catch {
@@ -147,7 +158,7 @@ export const ProjectsPage: React.FC = () => {
       if (err instanceof APIError) {
         setError(err.message);
       } else {
-        setError('Failed to load projects. Contact an admin to be added as a project owner.');
+        setError('Failed to load projects. Contact an admin to be added as a project member.');
       }
       console.error('Failed to load projects:', err);
     } finally {
@@ -408,22 +419,6 @@ export const ProjectsPage: React.FC = () => {
     }
   };
 
-  // Get role badge color
-  const getRoleBadgeVariant = (role: ProjectRole): 'default' | 'secondary' | 'destructive' => {
-    switch (role) {
-      case 'ProjectOwner':
-        return 'default';
-      case 'ProjectDeveloper':
-        return 'secondary';
-      case 'ProjectApprover':
-        return 'secondary';
-      case 'ProjectViewer':
-        return 'secondary';
-      default:
-        return 'secondary';
-    }
-  };
-
   // Format date
   const formatDate = (dateString: string) => {
     try {
@@ -451,9 +446,6 @@ export const ProjectsPage: React.FC = () => {
     );
   }
 
-  // Non-admins can access but with limited functionality
-  const canCreateProjects = isAdmin;
-
   return (
     <DefaultLayout breadcrumbs={[{ label: 'Projects', isCurrentPage: true }]}>
       <div className="space-y-6">
@@ -462,7 +454,7 @@ export const ProjectsPage: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
             <p className="text-muted-foreground mt-1">
-              {isAdmin
+              {userIsAdmin
                 ? 'Manage projects and organize database change requests'
                 : 'Manage members for projects you own'}
             </p>
@@ -535,7 +527,7 @@ export const ProjectsPage: React.FC = () => {
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  {isAdmin ? (
+                  {canCreateProjects ? (
                     <Button onClick={openCreateForm}>
                       <Plus className="mr-2 h-4 w-4" />
                       Create Project
@@ -593,33 +585,33 @@ export const ProjectsPage: React.FC = () => {
                             >
                               <Users className="h-4 w-4" />
                             </Button>
-                            {isAdmin && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openEditForm(project);
-                                  }}
-                                  className="h-11 w-11 p-0 touch-manipulation"
-                                  aria-label="Edit project"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openDeleteConfirmation(project);
-                                  }}
-                                  className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
-                                  aria-label="Delete project"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </>
+                            {canUpdateProjects && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditForm(project);
+                                }}
+                                className="h-11 w-11 p-0 touch-manipulation"
+                                aria-label="Edit project"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canDeleteProjects && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openDeleteConfirmation(project);
+                                }}
+                                className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
+                                aria-label="Delete project"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             )}
                           </div>
                         </TableCell>
@@ -881,9 +873,7 @@ export const ProjectsPage: React.FC = () => {
                                     </SelectContent>
                                   </Select>
                                 ) : (
-                                  <Badge variant={getRoleBadgeVariant(memberWithUser.member.role)}>
-                                    {memberWithUser.member.role}
-                                  </Badge>
+                                  <RoleBadge role={memberWithUser.member.role} showTooltip={true} />
                                 )}
                               </TableCell>
                               <TableCell className="text-right">

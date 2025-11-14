@@ -108,7 +108,7 @@ func (m *ExecutionAuthMiddleware) RequireExecutionPermission() echo.MiddlewareFu
 					}
 
 					// Check if user has Project Owner role or execution permission
-					projectRole := convertProjectRoleToRBAC(member.Role)
+					projectRole := rbac.ProjectRole(member.Role)
 					if projectRole != rbac.ProjectOwner &&
 						!m.checker.HasProjectPermission(projectRole, rbac.PermissionChangesExecute) &&
 						!m.checker.HasProjectPermission(projectRole, rbac.PermissionChangesApprove) {

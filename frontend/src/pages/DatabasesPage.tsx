@@ -7,6 +7,8 @@ import { projectsService } from '@/lib/api/services/projects';
 import { environmentsService } from '@/lib/api/services/environments';
 import { databaseInstancesService } from '@/lib/api/services/database-instances';
 import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
+import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
+import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
 import type {
   CreateDatabaseRequest,
   Database,
@@ -20,6 +22,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Empty,
   EmptyContent,
@@ -99,12 +108,27 @@ export const DatabasesPage: React.FC = () => {
     database_name?: string;
   }>({});
 
-  // Check if user is admin
-  const isAdmin = user?.organization_role === 'OrganizationAdmin';
+  // Check permissions
+  const canReadDatabases = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabasesRead,
+  );
+  const canCreateDatabases = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabasesCreate,
+  );
+  const canUpdateDatabases = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabasesUpdate,
+  );
+  const canDeleteDatabases = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabasesDelete,
+  );
 
   // Load dropdown data
   useEffect(() => {
-    if (!isAdmin) {
+    if (!canReadDatabases) {
       return;
     }
 
@@ -127,7 +151,7 @@ export const DatabasesPage: React.FC = () => {
     };
 
     loadDropdownData();
-  }, [isAdmin]);
+  }, [canReadDatabases]);
 
   // Sync filters with currentProject on initial load (only if filter not already set)
   useEffect(() => {
@@ -139,8 +163,8 @@ export const DatabasesPage: React.FC = () => {
 
   // Load databases
   useEffect(() => {
-    if (!isAdmin) {
-      setError('Access denied. Admin access required.');
+    if (!canReadDatabases) {
+      setError('Access denied. You do not have permission to view databases.');
       setIsLoading(false);
       return;
     }
@@ -164,7 +188,7 @@ export const DatabasesPage: React.FC = () => {
     };
 
     loadDatabases();
-  }, [isAdmin]);
+  }, [canReadDatabases]);
 
   // Validate form
   const validateForm = (): boolean => {
@@ -379,7 +403,7 @@ export const DatabasesPage: React.FC = () => {
   const hasFilters = Object.keys(filters).length > 0;
 
   // Render access denied
-  if (!isAdmin) {
+  if (!canReadDatabases) {
     return (
       <DefaultLayout breadcrumbs={[{ label: 'Databases', isCurrentPage: true }]}>
         <Card>
@@ -389,7 +413,8 @@ export const DatabasesPage: React.FC = () => {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This page requires Organization Admin role.
+              This page requires database read permissions. Please contact your administrator if you
+              need access.
             </p>
           </CardContent>
         </Card>
@@ -408,10 +433,12 @@ export const DatabasesPage: React.FC = () => {
               Manage databases and assign them to projects and environments
             </p>
           </div>
-          <Button onClick={openCreateForm}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Database
-          </Button>
+          {canCreateDatabases && (
+            <Button onClick={openCreateForm}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Database
+            </Button>
+          )}
         </div>
 
         {/* Error message */}
@@ -461,19 +488,24 @@ export const DatabasesPage: React.FC = () => {
                 {isLoadingDropdowns ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
-                  <select
-                    id="filter-project"
-                    value={filters.project_id || ''}
-                    onChange={(e) => handleFilterChange('project_id', e.target.value)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
+                    value={filters.project_id || 'all'}
+                    onValueChange={(value) =>
+                      handleFilterChange('project_id', value === 'all' ? undefined : value)
+                    }
                   >
-                    <option value="">All Projects</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="filter-project">
+                      <SelectValue placeholder="All Projects" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Projects</SelectItem>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
 
@@ -485,19 +517,24 @@ export const DatabasesPage: React.FC = () => {
                 {isLoadingDropdowns ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
-                  <select
-                    id="filter-environment"
-                    value={filters.environment_id || ''}
-                    onChange={(e) => handleFilterChange('environment_id', e.target.value)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
+                    value={filters.environment_id || 'all'}
+                    onValueChange={(value) =>
+                      handleFilterChange('environment_id', value === 'all' ? undefined : value)
+                    }
                   >
-                    <option value="">All Environments</option>
-                    {environments.map((env) => (
-                      <option key={env.id} value={env.id}>
-                        {env.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="filter-environment">
+                      <SelectValue placeholder="All Environments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Environments</SelectItem>
+                      {environments.map((env) => (
+                        <SelectItem key={env.id} value={env.id}>
+                          {env.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
 
@@ -509,19 +546,27 @@ export const DatabasesPage: React.FC = () => {
                 {isLoadingDropdowns ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
-                  <select
-                    id="filter-instance"
-                    value={filters.database_instance_id || ''}
-                    onChange={(e) => handleFilterChange('database_instance_id', e.target.value)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
+                    value={filters.database_instance_id || 'all'}
+                    onValueChange={(value) =>
+                      handleFilterChange(
+                        'database_instance_id',
+                        value === 'all' ? undefined : value,
+                      )
+                    }
                   >
-                    <option value="">All Instances</option>
-                    {databaseInstances.map((instance) => (
-                      <option key={instance.id} value={instance.id}>
-                        {instance.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="filter-instance">
+                      <SelectValue placeholder="All Instances" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Instances</SelectItem>
+                      {databaseInstances.map((instance) => (
+                        <SelectItem key={instance.id} value={instance.id}>
+                          {instance.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
 
@@ -530,17 +575,22 @@ export const DatabasesPage: React.FC = () => {
                 <label htmlFor="filter-status" className="text-sm font-medium">
                   Status
                 </label>
-                <select
-                  id="filter-status"
-                  value={filters.status || ''}
-                  onChange={(e) => handleFilterChange('status', e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                <Select
+                  value={filters.status || 'all'}
+                  onValueChange={(value) =>
+                    handleFilterChange('status', value === 'all' ? undefined : value)
+                  }
                 >
-                  <option value="">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                  <option value="Maintenance">Maintenance</option>
-                </select>
+                  <SelectTrigger id="filter-status">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -623,12 +673,12 @@ export const DatabasesPage: React.FC = () => {
                       <X className="mr-2 h-4 w-4" />
                       Clear Filters
                     </Button>
-                  ) : (
+                  ) : canCreateDatabases ? (
                     <Button onClick={openCreateForm}>
                       <Plus className="mr-2 h-4 w-4" />
                       Create Database
                     </Button>
-                  )}
+                  ) : null}
                 </EmptyContent>
               </Empty>
             </CardContent>
@@ -672,7 +722,9 @@ export const DatabasesPage: React.FC = () => {
                       <TableCell className="text-muted-foreground">
                         {getInstanceName(database.database_instance_id)}
                       </TableCell>
-                      <TableCell>{database.status}</TableCell>
+                      <TableCell>
+                        <DatabaseStatusBadge status={database.status} variant="database" />
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(database.created_at)}
                       </TableCell>
@@ -686,22 +738,26 @@ export const DatabasesPage: React.FC = () => {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditForm(database)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openDeleteConfirmation(database)}
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {canUpdateDatabases && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditForm(database)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canDeleteDatabases && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDeleteConfirmation(database)}
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

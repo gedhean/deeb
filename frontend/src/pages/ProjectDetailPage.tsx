@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
+import { useAuth } from '@/contexts/AuthContext';
 import { projectsService, projectMembersService } from '@/lib/api/services/projects';
 import type {
   Project,
@@ -12,7 +13,7 @@ import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
+import { RoleBadge } from '@/components/RoleBadge';
 import {
   Dialog,
   DialogContent,
@@ -53,6 +54,7 @@ import { ArrowLeft, AlertTriangle, Users, Plus, Trash2, Calendar } from 'lucide-
 export const ProjectDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [members, setMembers] = useState<ProjectMemberWithUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -192,21 +194,6 @@ export const ProjectDetailPage: React.FC = () => {
     }
   };
 
-  const getRoleBadgeVariant = (role: ProjectRole): 'default' | 'secondary' | 'destructive' => {
-    switch (role) {
-      case 'ProjectOwner':
-        return 'default';
-      case 'ProjectDeveloper':
-        return 'secondary';
-      case 'ProjectApprover':
-        return 'secondary';
-      case 'ProjectViewer':
-        return 'secondary';
-      default:
-        return 'secondary';
-    }
-  };
-
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -287,7 +274,18 @@ export const ProjectDetailPage: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+                {user && members.length > 0 && (
+                  <RoleBadge
+                    role={
+                      members.find((m) => m.member.user_id === user.id)?.member.role as ProjectRole
+                    }
+                    showTooltip={true}
+                    size="md"
+                  />
+                )}
+              </div>
               <p className="text-muted-foreground mt-1">
                 {project.description || 'No description'}
               </p>
@@ -436,9 +434,10 @@ export const ProjectDetailPage: React.FC = () => {
                               </SelectContent>
                             </Select>
                           ) : (
-                            <Badge variant={getRoleBadgeVariant(memberWithUser.member.role)}>
-                              {memberWithUser.member.role}
-                            </Badge>
+                            <RoleBadge
+                              role={memberWithUser.member.role as ProjectRole}
+                              showTooltip={true}
+                            />
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">

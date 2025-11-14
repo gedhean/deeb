@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/services"
 	"go.uber.org/zap"
@@ -87,6 +87,25 @@ func (h *ProjectHandler) CreateProject(c echo.Context) error {
 		})
 	}
 
+	// Automatically add the creator as ProjectOwner member
+	projectMember := &models.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    claims.UserID,
+		Role:      rbac.ProjectOwner,
+		AddedByID: claims.UserID,
+	}
+
+	if err := h.projectMemberRepo.AddMember(ctx, projectMember); err != nil {
+		h.logger.Error("Failed to add creator as project member", zap.Error(err))
+		// Attempt to rollback project creation
+		if deleteErr := h.projectRepo.Delete(ctx, project.ID); deleteErr != nil {
+			h.logger.Error("Failed to rollback project creation", zap.Error(deleteErr))
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to add creator as project member",
+		})
+	}
+
 	h.logger.Info("Project created successfully", zap.String("project_id", project.ID.String()))
 
 	// Log audit entry
@@ -115,6 +134,14 @@ func stringPtrOrNil(s string) *string {
 func (h *ProjectHandler) ListProjects(c echo.Context) error {
 	ctx := c.Request().Context()
 
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
 	// Get pagination parameters with defaults
 	limit := 100
 	offset := 0
@@ -132,13 +159,46 @@ func (h *ProjectHandler) ListProjects(c echo.Context) error {
 		}
 	}
 
-	// Fetch projects from repository
-	projects, err := h.projectRepo.List(ctx, limit, offset)
-	if err != nil {
-		h.logger.Error("Failed to list projects", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to retrieve projects",
-		})
+	// Determine which projects to list based on organization role
+	var projects []*models.Project
+	var err error
+	var totalCount int64
+
+	orgRole := rbac.OrganizationRole(claims.OrganizationRole)
+	if orgRole == rbac.OrganizationAdmin {
+		// OrganizationAdmin sees all projects
+		projects, err = h.projectRepo.List(ctx, limit, offset)
+		if err != nil {
+			h.logger.Error("Failed to list projects", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to retrieve projects",
+			})
+		}
+
+		totalCount, err = h.projectRepo.Count(ctx)
+		if err != nil {
+			h.logger.Error("Failed to count projects", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to count projects",
+			})
+		}
+	} else {
+		// Non-admin users (OrganizationDBA, OrganizationDeveloper) only see projects they're members of
+		projects, err = h.projectRepo.ListByUserID(ctx, claims.UserID, limit, offset)
+		if err != nil {
+			h.logger.Error("Failed to list projects for user", zap.Error(err), zap.String("user_id", claims.UserID.String()))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to retrieve projects",
+			})
+		}
+
+		totalCount, err = h.projectRepo.CountByUserID(ctx, claims.UserID)
+		if err != nil {
+			h.logger.Error("Failed to count projects for user", zap.Error(err), zap.String("user_id", claims.UserID.String()))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to count projects",
+			})
+		}
 	}
 
 	// Convert to response format
@@ -152,6 +212,7 @@ func (h *ProjectHandler) ListProjects(c echo.Context) error {
 		"limit":    limit,
 		"offset":   offset,
 		"count":    len(responses),
+		"total":    totalCount,
 	})
 }
 
@@ -333,25 +394,6 @@ func (h *ProjectHandler) DeleteProject(c echo.Context) error {
 	})
 }
 
-// checkProjectPermission checks if user is Organization Admin or Project Owner
-func (h *ProjectHandler) checkProjectPermission(ctx context.Context, claims *auth.Claims, projectID uuid.UUID) (bool, error) {
-	// Organization admins have full access
-	if claims.OrganizationRole == string(models.OrganizationRoleAdmin) {
-		return true, nil
-	}
-
-	// Check if user is Project Owner
-	member, err := h.projectMemberRepo.GetMemberRole(ctx, projectID, claims.UserID)
-	if err != nil {
-		if err == repository.ErrNotFound {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return member.Role == models.ProjectRoleOwner, nil
-}
-
 // AddProjectMember handles POST /api/v1/projects/:id/members - add member to project
 func (h *ProjectHandler) AddProjectMember(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -387,19 +429,7 @@ func (h *ProjectHandler) AddProjectMember(c echo.Context) error {
 		})
 	}
 
-	// Check RBAC: Project Owner or Organization Admin
-	hasPermission, err := h.checkProjectPermission(ctx, claims, projectID)
-	if err != nil {
-		h.logger.Error("Failed to check project permission", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to check permissions",
-		})
-	}
-	if !hasPermission {
-		return c.JSON(http.StatusForbidden, map[string]interface{}{
-			"error": "Insufficient permissions: Project Owner or Organization Admin required",
-		})
-	}
+	// RBAC check is done in middleware (RequireProjectPermission)
 
 	// Parse request
 	var req models.AddProjectMemberRequest
@@ -496,19 +526,7 @@ func (h *ProjectHandler) ListProjectMembers(c echo.Context) error {
 		})
 	}
 
-	// Check RBAC: Project Owner or Organization Admin
-	hasPermission, err := h.checkProjectPermission(ctx, claims, projectID)
-	if err != nil {
-		h.logger.Error("Failed to check project permission", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to check permissions",
-		})
-	}
-	if !hasPermission {
-		return c.JSON(http.StatusForbidden, map[string]interface{}{
-			"error": "Insufficient permissions: Project Owner or Organization Admin required",
-		})
-	}
+	// RBAC check is done in middleware (RequireProjectPermission)
 
 	// Get members
 	members, err := h.projectMemberRepo.GetMembers(ctx, projectID)
@@ -592,19 +610,7 @@ func (h *ProjectHandler) RemoveProjectMember(c echo.Context) error {
 		})
 	}
 
-	// Check RBAC: Project Owner or Organization Admin
-	hasPermission, err := h.checkProjectPermission(ctx, claims, projectID)
-	if err != nil {
-		h.logger.Error("Failed to check project permission", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to check permissions",
-		})
-	}
-	if !hasPermission {
-		return c.JSON(http.StatusForbidden, map[string]interface{}{
-			"error": "Insufficient permissions: Project Owner or Organization Admin required",
-		})
-	}
+	// RBAC check is done in middleware (RequireProjectPermission)
 
 	// Check if member exists and get their role
 	member, err := h.projectMemberRepo.GetMemberRole(ctx, projectID, userID)
@@ -621,7 +627,7 @@ func (h *ProjectHandler) RemoveProjectMember(c echo.Context) error {
 	}
 
 	// Cannot remove Project Owner if they're the only owner
-	if member.Role == models.ProjectRoleOwner {
+	if member.Role == rbac.ProjectOwner {
 		allMembers, err := h.projectMemberRepo.GetMembers(ctx, projectID)
 		if err != nil {
 			h.logger.Error("Failed to get all members", zap.Error(err))
@@ -632,7 +638,7 @@ func (h *ProjectHandler) RemoveProjectMember(c echo.Context) error {
 
 		ownerCount := 0
 		for _, m := range allMembers {
-			if m.Role == models.ProjectRoleOwner {
+			if m.Role == rbac.ProjectOwner {
 				ownerCount++
 			}
 		}
@@ -709,23 +715,11 @@ func (h *ProjectHandler) UpdateProjectMemberRole(c echo.Context) error {
 		})
 	}
 
-	// Check RBAC: Project Owner or Organization Admin
-	hasPermission, err := h.checkProjectPermission(ctx, claims, projectID)
-	if err != nil {
-		h.logger.Error("Failed to check project permission", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to check permissions",
-		})
-	}
-	if !hasPermission {
-		return c.JSON(http.StatusForbidden, map[string]interface{}{
-			"error": "Insufficient permissions: Project Owner or Organization Admin required",
-		})
-	}
+	// RBAC check is done in middleware (RequireProjectPermission)
 
 	// Parse request
 	var req struct {
-		Role models.ProjectRole `json:"project_role" validate:"required,oneof=ProjectOwner ProjectDeveloper ProjectApprover ProjectViewer"`
+		Role rbac.ProjectRole `json:"project_role" validate:"required,oneof=ProjectOwner ProjectDeveloper ProjectApprover ProjectViewer"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
@@ -734,7 +728,7 @@ func (h *ProjectHandler) UpdateProjectMemberRole(c echo.Context) error {
 	}
 
 	// Validate role
-	if !req.Role.IsValid() {
+	if !rbac.IsValidProjectRole(req.Role) {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"error": "Invalid project role",
 		})

@@ -62,7 +62,7 @@ func (m *mockProjectMemberRepository) GetMembers(ctx context.Context, projectID 
 func (m *mockProjectMemberRepository) UpdateRole(
 	ctx context.Context,
 	projectID, userID uuid.UUID,
-	role models.ProjectRole,
+	role rbac.ProjectRole,
 ) error {
 	key := projectID.String() + "-" + userID.String()
 	if member, ok := m.members[key]; ok {
@@ -70,6 +70,16 @@ func (m *mockProjectMemberRepository) UpdateRole(
 		return nil
 	}
 	return repository.ErrNotFound
+}
+
+func (m *mockProjectMemberRepository) GetUserProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	var projectIDs []uuid.UUID
+	for _, member := range m.members {
+		if member.UserID == userID {
+			projectIDs = append(projectIDs, member.ProjectID)
+		}
+	}
+	return projectIDs, nil
 }
 
 func TestRequireOrganizationPermission(t *testing.T) {
@@ -361,7 +371,7 @@ func TestRequireProjectPermission(t *testing.T) {
 			mockMember: &models.ProjectMember{
 				ProjectID: projectID,
 				UserID:    userID,
-				Role:      models.ProjectRoleOwner,
+				Role:      rbac.ProjectOwner,
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -376,7 +386,7 @@ func TestRequireProjectPermission(t *testing.T) {
 			mockMember: &models.ProjectMember{
 				ProjectID: projectID,
 				UserID:    userID,
-				Role:      models.ProjectRoleApprover,
+				Role:      rbac.ProjectApprover,
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -391,7 +401,7 @@ func TestRequireProjectPermission(t *testing.T) {
 			mockMember: &models.ProjectMember{
 				ProjectID: projectID,
 				UserID:    userID,
-				Role:      models.ProjectRoleDeveloper,
+				Role:      rbac.ProjectDeveloper,
 			},
 			expectedStatus: http.StatusForbidden,
 		},
@@ -406,7 +416,7 @@ func TestRequireProjectPermission(t *testing.T) {
 			mockMember: &models.ProjectMember{
 				ProjectID: projectID,
 				UserID:    userID,
-				Role:      models.ProjectRoleViewer,
+				Role:      rbac.ProjectViewer,
 			},
 			expectedStatus: http.StatusForbidden,
 		},
@@ -432,7 +442,7 @@ func TestRequireProjectPermission(t *testing.T) {
 			mockMember: &models.ProjectMember{
 				ProjectID: projectID,
 				UserID:    userID,
-				Role:      models.ProjectRoleDeveloper,
+				Role:      rbac.ProjectDeveloper,
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -477,6 +487,195 @@ func TestRequireProjectPermission(t *testing.T) {
 			}
 
 			handler := middleware.RequireProjectPermission(tt.permission)(func(c echo.Context) error {
+				return c.String(http.StatusOK, "success")
+			})
+
+			_ = handler(c)
+
+			if rec.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, rec.Code)
+			}
+		})
+	}
+}
+
+func TestRequirePermission(t *testing.T) {
+	userID := uuid.New()
+	projectID := uuid.New()
+
+	tests := []struct {
+		name           string
+		permission     rbac.Permission
+		userRole       rbac.OrganizationRole
+		projectID      string
+		paramName      string // for project-level permissions
+		setContext     bool
+		mockMember     *models.ProjectMember
+		hasRepo        bool
+		expectedStatus int
+	}{
+		// Organization-level permission tests
+		{
+			name:           "org permission - admin has users.create",
+			permission:     rbac.PermissionUsersCreate,
+			userRole:       rbac.OrganizationAdmin,
+			setContext:     true,
+			hasRepo:        false,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "org permission - dba has databases.create",
+			permission:     rbac.PermissionDatabasesCreate,
+			userRole:       rbac.OrganizationDBA,
+			setContext:     true,
+			hasRepo:        false,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "org permission - developer lacks users.delete",
+			permission:     rbac.PermissionUsersDelete,
+			userRole:       rbac.OrganizationDeveloper,
+			setContext:     true,
+			hasRepo:        false,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:           "org permission - developer has projects.read",
+			permission:     rbac.PermissionProjectsRead,
+			userRole:       rbac.OrganizationDeveloper,
+			setContext:     true,
+			hasRepo:        false,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "org permission - no context returns unauthorized",
+			permission:     rbac.PermissionDatabasesRead,
+			userRole:       rbac.OrganizationDeveloper,
+			setContext:     false,
+			hasRepo:        false,
+			expectedStatus: http.StatusUnauthorized,
+		},
+		// Project-level permission tests
+		{
+			name:           "project permission - admin bypasses project check",
+			permission:     rbac.PermissionChangesApprove,
+			userRole:       rbac.OrganizationAdmin,
+			projectID:      projectID.String(),
+			paramName:      "project_id",
+			setContext:     true,
+			hasRepo:        false, // Admin bypasses, so no repo needed
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:       "project permission - owner has changes.approve",
+			permission: rbac.PermissionChangesApprove,
+			userRole:   rbac.OrganizationDeveloper,
+			projectID:  projectID.String(),
+			paramName:  "project_id",
+			setContext: true,
+			hasRepo:    true,
+			mockMember: &models.ProjectMember{
+				ProjectID: projectID,
+				UserID:    userID,
+				Role:      rbac.ProjectOwner,
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:       "project permission - developer can create changes",
+			permission: rbac.PermissionChangesCreate,
+			userRole:   rbac.OrganizationDeveloper,
+			projectID:  projectID.String(),
+			paramName:  "project_id",
+			setContext: true,
+			hasRepo:    true,
+			mockMember: &models.ProjectMember{
+				ProjectID: projectID,
+				UserID:    userID,
+				Role:      rbac.ProjectDeveloper,
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:       "project permission - viewer cannot approve",
+			permission: rbac.PermissionChangesApprove,
+			userRole:   rbac.OrganizationDeveloper,
+			projectID:  projectID.String(),
+			paramName:  "project_id",
+			setContext: true,
+			hasRepo:    true,
+			mockMember: &models.ProjectMember{
+				ProjectID: projectID,
+				UserID:    userID,
+				Role:      rbac.ProjectViewer,
+			},
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:       "project permission - approver can read",
+			permission: rbac.PermissionChangesRead,
+			userRole:   rbac.OrganizationDeveloper,
+			projectID:  projectID.String(),
+			paramName:  "project_id",
+			setContext: true,
+			hasRepo:    true,
+			mockMember: &models.ProjectMember{
+				ProjectID: projectID,
+				UserID:    userID,
+				Role:      rbac.ProjectApprover,
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "project permission - missing project ID",
+			permission:     rbac.PermissionChangesRead,
+			userRole:       rbac.OrganizationDeveloper,
+			projectID:      "",
+			paramName:      "project_id",
+			setContext:     true,
+			hasRepo:        true,
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			rec := httptest.NewRecorder()
+
+			if tt.setContext {
+				ctx := context.WithValue(req.Context(), rbac.ContextKeyUserID, userID.String())
+				ctx = context.WithValue(ctx, rbac.ContextKeyOrganizationID, "test-org-id")
+				ctx = context.WithValue(ctx, rbac.ContextKeyOrganizationRole, tt.userRole)
+				req = req.WithContext(ctx)
+			}
+
+			c := e.NewContext(req, rec)
+			if tt.projectID != "" && tt.paramName != "" {
+				c.SetParamNames(tt.paramName)
+				c.SetParamValues(tt.projectID)
+			}
+
+			var mockRepo *mockProjectMemberRepository
+			if tt.hasRepo {
+				mockRepo = &mockProjectMemberRepository{
+					members: make(map[string]*models.ProjectMember),
+				}
+				if tt.mockMember != nil {
+					key := tt.mockMember.ProjectID.String() + "-" + tt.mockMember.UserID.String()
+					mockRepo.members[key] = tt.mockMember
+				}
+			}
+
+			var middleware *AuthzMiddleware
+			if tt.hasRepo {
+				middleware = NewAuthzMiddlewareWithRepo(mockRepo)
+			} else {
+				middleware = NewAuthzMiddleware()
+			}
+
+			handler := middleware.RequirePermission(tt.permission)(func(c echo.Context) error {
 				return c.String(http.StatusOK, "success")
 			})
 

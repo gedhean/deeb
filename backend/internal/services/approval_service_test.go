@@ -236,10 +236,18 @@ func (m *MockProjectMemberRepository) GetMemberRole(
 func (m *MockProjectMemberRepository) UpdateRole(
 	ctx context.Context,
 	projectID, userID uuid.UUID,
-	role models.ProjectRole,
+	role rbac.ProjectRole,
 ) error {
 	args := m.Called(ctx, projectID, userID, role)
 	return args.Error(0)
+}
+
+func (m *MockProjectMemberRepository) GetUserProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]uuid.UUID), args.Error(1)
 }
 
 // Helper function to create a context with user info
@@ -289,6 +297,8 @@ func TestApprovalService_Approve(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -323,7 +333,7 @@ func TestApprovalService_Approve(t *testing.T) {
 		projectMember := &models.ProjectMember{
 			ProjectID: projectID,
 			UserID:    approverID,
-			Role:      models.ProjectRoleApprover,
+			Role:      rbac.ProjectApprover,
 		}
 
 		ctxWithUser := createContextWithUser(approverID, rbac.OrganizationDeveloper)
@@ -343,6 +353,8 @@ func TestApprovalService_Approve(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -375,6 +387,8 @@ func TestApprovalService_Approve(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -412,6 +426,8 @@ func TestApprovalService_Approve(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -450,6 +466,8 @@ func TestApprovalService_Approve(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -501,6 +519,8 @@ func TestApprovalService_Approve(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -557,6 +577,8 @@ func TestApprovalService_Approve(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -607,6 +629,8 @@ func TestApprovalService_Close(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -637,6 +661,8 @@ func TestApprovalService_Close(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -674,6 +700,8 @@ func TestApprovalService_Close(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -719,6 +747,8 @@ func TestApprovalService_Close(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -752,7 +782,7 @@ func TestApprovalService_Close(t *testing.T) {
 		projectMember := &models.ProjectMember{
 			ProjectID: projectID,
 			UserID:    approverID,
-			Role:      models.ProjectRoleApprover,
+			Role:      rbac.ProjectApprover,
 		}
 
 		ctxWithUser := createContextWithUser(approverID, rbac.OrganizationDeveloper)
@@ -771,6 +801,8 @@ func TestApprovalService_Close(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -810,6 +842,8 @@ func TestApprovalService_Close(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -853,6 +887,8 @@ func TestApprovalService_Close(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -896,6 +932,8 @@ func TestApprovalService_GetApprovalHistory(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -923,6 +961,8 @@ func TestApprovalService_GetApprovalHistory(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -950,6 +990,8 @@ func TestApprovalService_GetApprovalHistory(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -984,6 +1026,8 @@ func TestApprovalService_ErrorHandling(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)
@@ -1025,6 +1069,8 @@ func TestApprovalService_ErrorHandling(t *testing.T) {
 			mockChangePlanRepo,
 			mockPolicyFindingRepo,
 			mockProjectMemberRepo,
+			new(MockDatabaseRepository),
+			new(MockEnvironmentRepository),
 			rbacChecker,
 			logger,
 		)

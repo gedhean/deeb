@@ -33,8 +33,8 @@ func (r *EnvironmentRepository) Create(ctx context.Context, environment *models.
 	environment.UpdatedAt = now
 
 	query := `
-		INSERT INTO environments (id, name, description, policy_id, created_by_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO environments (id, name, description, policy_id, allow_self_approval, created_by_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -42,6 +42,7 @@ func (r *EnvironmentRepository) Create(ctx context.Context, environment *models.
 		environment.Name,
 		environment.Description,
 		environment.PolicyID,
+		environment.AllowSelfApproval,
 		environment.CreatedByID,
 		environment.CreatedAt,
 		environment.UpdatedAt,
@@ -56,7 +57,7 @@ func (r *EnvironmentRepository) Create(ctx context.Context, environment *models.
 // GetByID retrieves an environment by its ID
 func (r *EnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Environment, error) {
 	query := `
-		SELECT id, name, description, policy_id, created_by_id, created_at, updated_at
+		SELECT id, name, description, policy_id, allow_self_approval, created_by_id, created_at, updated_at
 		FROM environments
 		WHERE id = $1
 	`
@@ -76,7 +77,7 @@ func (r *EnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID) (*mod
 // List retrieves all environments with pagination
 func (r *EnvironmentRepository) List(ctx context.Context, limit, offset int) ([]*models.Environment, error) {
 	query := `
-		SELECT id, name, description, policy_id, created_by_id, created_at, updated_at
+		SELECT id, name, description, policy_id, allow_self_approval, created_by_id, created_at, updated_at
 		FROM environments
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -116,7 +117,7 @@ func (r *EnvironmentRepository) Update(ctx context.Context, environment *models.
 
 	query := `
 		UPDATE environments
-		SET name = $2, description = $3, policy_id = $4, updated_at = $5
+		SET name = $2, description = $3, policy_id = $4, allow_self_approval = $5, updated_at = $6
 		WHERE id = $1
 	`
 
@@ -125,6 +126,7 @@ func (r *EnvironmentRepository) Update(ctx context.Context, environment *models.
 		environment.Name,
 		environment.Description,
 		environment.PolicyID,
+		environment.AllowSelfApproval,
 		environment.UpdatedAt,
 	)
 	if err != nil {

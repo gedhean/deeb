@@ -1,192 +1,70 @@
 /**
  * RBAC (Role-Based Access Control) utilities for frontend
  * Provides role checking and permission checking functions based on backend RBAC system
+ *
+ * IMPORTANT: Permission constants and role mappings are generated from YAML configuration.
+ * See rbac.generated.ts (auto-generated from backend/config/iam/*.yaml)
  */
 
-// Organization roles (matching backend)
-export type OrganizationRole = 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
+// Import and re-export from generated file
+import {
+  OrganizationPermission as OrgPermission,
+  organizationRolePermissions,
+  projectRolePermissions,
+} from './rbac.generated';
 
-// Project roles (matching backend)
-export type ProjectRole = 'ProjectOwner' | 'ProjectDeveloper' | 'ProjectApprover' | 'ProjectViewer';
+// Re-export types (OrganizationRole and ProjectRole are pure types)
+export type { OrganizationRole, ProjectRole } from './rbac.generated';
 
-// Organization-level permissions
-const OrganizationPermissionValues = {
-  // User management
-  UsersCreate: 'users.create',
-  UsersRead: 'users.read',
-  UsersUpdate: 'users.update',
-  UsersDelete: 'users.delete',
-
-  // Organization management
-  OrganizationUpdate: 'organization.update',
-  OrganizationDelete: 'organization.delete',
-
-  // Database management
-  DatabasesCreate: 'databases.create',
-  DatabasesRead: 'databases.read',
-  DatabasesUpdate: 'databases.update',
-  DatabasesDelete: 'databases.delete',
-
-  // Project management
-  ProjectsCreate: 'projects.create',
-  ProjectsRead: 'projects.read',
-  ProjectsUpdate: 'projects.update',
-  ProjectsDelete: 'projects.delete',
-
-  // Audit logs
-  AuditLogsRead: 'audit_logs.read',
-
-  // Wildcard permission (admin only)
-  All: '*',
-} as const;
-
-export const OrganizationPermission = OrganizationPermissionValues;
-// eslint-disable-next-line no-redeclare
-export type OrganizationPermission =
-  (typeof OrganizationPermissionValues)[keyof typeof OrganizationPermissionValues];
-
-// Project-level permissions
-const ProjectPermissionValues = {
-  // Project settings
-  ProjectSettingsUpdate: 'project.settings.update',
-
-  // Project members
-  ProjectMembersCreate: 'project.members.create',
-  ProjectMembersRead: 'project.members.read',
-  ProjectMembersUpdate: 'project.members.update',
-  ProjectMembersDelete: 'project.members.delete',
-
-  // Change requests
-  ChangesCreate: 'changes.create',
-  ChangesRead: 'changes.read',
-  ChangesUpdate: 'changes.update',
-  ChangesDelete: 'changes.delete',
-  ChangesApprove: 'changes.approve',
-  ChangesReject: 'changes.reject',
-  ChangesExecute: 'changes.execute',
-
-  // Policy rules
-  PolicyRulesCreate: 'policy_rules.create',
-  PolicyRulesRead: 'policy_rules.read',
-  PolicyRulesUpdate: 'policy_rules.update',
-  PolicyRulesDelete: 'policy_rules.delete',
-} as const;
-
-export const ProjectPermission = ProjectPermissionValues;
-// eslint-disable-next-line no-redeclare
-export type ProjectPermission =
-  (typeof ProjectPermissionValues)[keyof typeof ProjectPermissionValues];
-
-// Organization role permissions mapping (matching backend)
-const organizationRolePermissions: Record<OrganizationRole, OrganizationPermission[]> = {
-  OrganizationAdmin: [OrganizationPermission.All], // Admin has all permissions
-  OrganizationDBA: [
-    OrganizationPermission.UsersRead,
-    OrganizationPermission.DatabasesCreate,
-    OrganizationPermission.DatabasesRead,
-    OrganizationPermission.DatabasesUpdate,
-    OrganizationPermission.DatabasesDelete,
-    OrganizationPermission.ProjectsRead,
-    OrganizationPermission.AuditLogsRead,
-  ],
-  OrganizationDeveloper: [
-    OrganizationPermission.UsersRead,
-    OrganizationPermission.DatabasesRead,
-    OrganizationPermission.ProjectsCreate,
-    OrganizationPermission.ProjectsRead,
-    OrganizationPermission.AuditLogsRead,
-  ],
-};
-
-// Project role permissions mapping (matching backend)
-const projectRolePermissions: Record<ProjectRole, ProjectPermission[]> = {
-  ProjectOwner: [
-    ProjectPermission.ProjectSettingsUpdate,
-    ProjectPermission.ProjectMembersCreate,
-    ProjectPermission.ProjectMembersRead,
-    ProjectPermission.ProjectMembersUpdate,
-    ProjectPermission.ProjectMembersDelete,
-    ProjectPermission.ChangesCreate,
-    ProjectPermission.ChangesRead,
-    ProjectPermission.ChangesUpdate,
-    ProjectPermission.ChangesDelete,
-    ProjectPermission.ChangesApprove,
-    ProjectPermission.ChangesReject,
-    ProjectPermission.ChangesExecute,
-    ProjectPermission.PolicyRulesCreate,
-    ProjectPermission.PolicyRulesRead,
-    ProjectPermission.PolicyRulesUpdate,
-    ProjectPermission.PolicyRulesDelete,
-  ],
-  ProjectDeveloper: [
-    ProjectPermission.ProjectMembersRead,
-    ProjectPermission.ChangesCreate,
-    ProjectPermission.ChangesRead,
-    ProjectPermission.ChangesUpdate,
-    ProjectPermission.ChangesDelete,
-    ProjectPermission.PolicyRulesRead,
-  ],
-  ProjectApprover: [
-    ProjectPermission.ProjectMembersRead,
-    ProjectPermission.ChangesRead,
-    ProjectPermission.ChangesApprove,
-    ProjectPermission.ChangesReject,
-    ProjectPermission.PolicyRulesRead,
-  ],
-  ProjectViewer: [
-    ProjectPermission.ProjectMembersRead,
-    ProjectPermission.ChangesRead,
-    ProjectPermission.PolicyRulesRead,
-  ],
-};
+// Re-export constants, mappings, and permission types (these are values with associated types)
+// Note: OrganizationPermission and ProjectPermission are exported as values (const objects)
+// Their types are inferred from the const assertion in the generated file
+export {
+  OrganizationPermission,
+  ProjectPermission,
+  organizationRolePermissions,
+  projectRolePermissions,
+} from './rbac.generated';
 
 /**
  * Check if a user has a specific organization-level permission
  */
-export function hasOrganizationPermission(
-  role: OrganizationRole | string | undefined,
-  permission: OrganizationPermission,
-): boolean {
+export function hasOrganizationPermission(role: string | undefined, permission: string): boolean {
   if (!role) {
     return false;
   }
 
-  const orgRole = role as OrganizationRole;
-  if (!isValidOrganizationRole(orgRole)) {
+  if (!isValidOrganizationRole(role)) {
     return false;
   }
 
-  const permissions = organizationRolePermissions[orgRole] || [];
-  return permissions.includes(OrganizationPermission.All) || permissions.includes(permission);
+  const permissions =
+    organizationRolePermissions[role as keyof typeof organizationRolePermissions] || [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return permissions.includes(OrgPermission.All) || permissions.includes(permission as any);
 }
 
 /**
  * Check if a user has a specific project-level permission
  */
-export function hasProjectPermission(
-  role: ProjectRole | string | undefined,
-  permission: ProjectPermission,
-): boolean {
+export function hasProjectPermission(role: string | undefined, permission: string): boolean {
   if (!role) {
     return false;
   }
 
-  const projRole = role as ProjectRole;
-  if (!isValidProjectRole(projRole)) {
+  if (!isValidProjectRole(role)) {
     return false;
   }
 
-  const permissions = projectRolePermissions[projRole] || [];
-  return permissions.includes(permission);
+  const permissions = projectRolePermissions[role as keyof typeof projectRolePermissions] || [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return permissions.includes(permission as any);
 }
 
 /**
  * Check if a user has a specific organization role
  */
-export function hasOrganizationRole(
-  userRole: string | undefined,
-  requiredRole: OrganizationRole,
-): boolean {
+export function hasOrganizationRole(userRole: string | undefined, requiredRole: string): boolean {
   if (!userRole) {
     return false;
   }
@@ -198,7 +76,7 @@ export function hasOrganizationRole(
  */
 export function hasAnyOrganizationRole(
   userRole: string | undefined,
-  requiredRoles: OrganizationRole[],
+  requiredRoles: string[],
 ): boolean {
   if (!userRole) {
     return false;
@@ -209,7 +87,7 @@ export function hasAnyOrganizationRole(
 /**
  * Check if a user has a specific project role
  */
-export function hasProjectRole(userRole: string | undefined, requiredRole: ProjectRole): boolean {
+export function hasProjectRole(userRole: string | undefined, requiredRole: string): boolean {
   if (!userRole) {
     return false;
   }
@@ -219,10 +97,7 @@ export function hasProjectRole(userRole: string | undefined, requiredRole: Proje
 /**
  * Check if a user has one of the required project roles
  */
-export function hasAnyProjectRole(
-  userRole: string | undefined,
-  requiredRoles: ProjectRole[],
-): boolean {
+export function hasAnyProjectRole(userRole: string | undefined, requiredRoles: string[]): boolean {
   if (!userRole) {
     return false;
   }
@@ -232,14 +107,14 @@ export function hasAnyProjectRole(
 /**
  * Check if a role is a valid organization role
  */
-export function isValidOrganizationRole(role: string): role is OrganizationRole {
+export function isValidOrganizationRole(role: string): boolean {
   return ['OrganizationAdmin', 'OrganizationDBA', 'OrganizationDeveloper'].includes(role);
 }
 
 /**
  * Check if a role is a valid project role
  */
-export function isValidProjectRole(role: string): role is ProjectRole {
+export function isValidProjectRole(role: string): boolean {
   return ['ProjectOwner', 'ProjectDeveloper', 'ProjectApprover', 'ProjectViewer'].includes(role);
 }
 
@@ -267,13 +142,13 @@ export function isDeveloper(userRole: string | undefined): boolean {
 /**
  * Get all organization permissions for a role
  */
-export function getOrganizationPermissions(role: OrganizationRole): OrganizationPermission[] {
-  return organizationRolePermissions[role] || [];
+export function getOrganizationPermissions(role: string): string[] {
+  return organizationRolePermissions[role as keyof typeof organizationRolePermissions] || [];
 }
 
 /**
  * Get all project permissions for a role
  */
-export function getProjectPermissions(role: ProjectRole): ProjectPermission[] {
-  return projectRolePermissions[role] || [];
+export function getProjectPermissions(role: string): string[] {
+  return projectRolePermissions[role as keyof typeof projectRolePermissions] || [];
 }

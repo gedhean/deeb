@@ -140,6 +140,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       return false;
     }
 
+    // Databases - Check DatabasesRead permission (Admin + DBA)
+    if (item.url === '/databases') {
+      return hasOrganizationPermission(
+        user.organization_role,
+        OrganizationPermission.DatabasesRead,
+      );
+    }
+
     // Projects - Admin or users with ProjectsRead permission (which includes project owners through useProjects)
     if (item.url === '/projects') {
       // Show for admins or anyone who can read projects

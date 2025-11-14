@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/services"
 	"go.uber.org/zap"
@@ -153,7 +154,7 @@ func (h *RegisterHandler) Register(c echo.Context) error {
 	user := &models.User{
 		Email:            req.Email,
 		PasswordHash:     passwordHash,
-		OrganizationRole: models.OrganizationRole(orgRole),
+		OrganizationRole: rbac.OrganizationRole(orgRole),
 		TwoFactorEnabled: false,
 		IsActive:         true,
 	}

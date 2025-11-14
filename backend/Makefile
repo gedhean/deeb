@@ -1,12 +1,12 @@
 .PHONY: all help info
 
-include Makefile.build
-include Makefile.defs
-include Makefile.lint
-include Makefile.format
-include Makefile.run
-include Makefile.testing
-include Makefile.generate
+include makefiles/Makefile.build
+include makefiles/Makefile.defs
+include makefiles/Makefile.lint
+include makefiles/Makefile.format
+include makefiles/Makefile.run
+include makefiles/Makefile.testing
+include makefiles/Makefile.generate
 
 .PHONY: info
 info:

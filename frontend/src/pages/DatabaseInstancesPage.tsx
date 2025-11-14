@@ -4,6 +4,13 @@ import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { databaseInstancesService } from '@/lib/api/services/database-instances';
 import { environmentsService } from '@/lib/api/services/environments';
+import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
+import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
+import {
+  DatabaseInstanceForm,
+  type DatabaseInstanceFormData,
+  type DatabaseInstanceFormErrors,
+} from '@/components/DatabaseInstanceForm';
 import type {
   CreateDatabaseInstanceRequest,
   DatabaseInstance,
@@ -15,6 +22,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Empty,
   EmptyContent,
@@ -51,6 +65,7 @@ import {
   X,
   Eye,
 } from 'lucide-react';
+import type { DatabaseEngine } from '@/lib/api/types.ts';
 
 export const DatabaseInstancesPage: React.FC = () => {
   const { user } = useAuth();
@@ -73,16 +88,16 @@ export const DatabaseInstancesPage: React.FC = () => {
   // Filter state
   const [filters, setFilters] = useState<{
     search?: string;
-    database_engine?: string;
+    database_engine?: DatabaseEngine;
     status?: string;
     environment_id?: string;
   }>({});
 
   // Form state
-  const [formData, setFormData] = useState<CreateDatabaseInstanceRequest>({
+  const [formData, setFormData] = useState<DatabaseInstanceFormData>({
     name: '',
     description: '',
-    database_engine: 'postgres',
+    database_engine: 'postgres' as DatabaseEngine,
     host: '',
     port: 5432,
     username: '',
@@ -91,27 +106,36 @@ export const DatabaseInstancesPage: React.FC = () => {
     require_ssl: false,
     environment_id: undefined,
   });
-  const [formErrors, setFormErrors] = useState<{
-    name?: string;
-    host?: string;
-    port?: string;
-    username?: string;
-    password?: string;
-  }>({});
+  const [formErrors, setFormErrors] = useState<DatabaseInstanceFormErrors>({});
 
-  // Check if user is admin
-  const isAdmin = user?.organization_role === 'OrganizationAdmin';
+  // Check permissions - Database instances are managed by both Admin and DBA
+  const canReadDatabaseInstances = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabaseInstancesRead,
+  );
+  const canCreateDatabaseInstances = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabaseInstancesCreate,
+  );
+  const canUpdateDatabaseInstances = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabaseInstancesUpdate,
+  );
+  const canDeleteDatabaseInstances = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabaseInstancesDelete,
+  );
 
   // Load instances and environments
   useEffect(() => {
-    if (!isAdmin) {
-      setError('Access denied. Admin access required.');
+    if (!canReadDatabaseInstances) {
+      setError('Access denied. You do not have permission to view database instances.');
       setIsLoading(false);
       return;
     }
 
     loadData();
-  }, [isAdmin]);
+  }, [canReadDatabaseInstances]);
 
   const loadData = async () => {
     try {
@@ -150,15 +174,18 @@ export const DatabaseInstancesPage: React.FC = () => {
     }
   };
 
+  // Handle database engine change (for auto-updating port in create mode)
+  const handleDatabaseEngineChange = (engine: DatabaseEngine) => {
+    setFormData({
+      ...formData,
+      database_engine: engine,
+      port: engine === 'mysql' ? 3306 : 5432,
+    });
+  };
+
   // Validate form
   const validateForm = (): boolean => {
-    const errors: {
-      name?: string;
-      host?: string;
-      port?: string;
-      username?: string;
-      password?: string;
-    } = {};
+    const errors: DatabaseInstanceFormErrors = {};
 
     if (!formData.name.trim()) {
       errors.name = 'Instance name is required';
@@ -259,14 +286,14 @@ export const DatabaseInstancesPage: React.FC = () => {
         password: formData.password,
         use_rds_iam_auth: formData.use_rds_iam_auth,
         require_ssl: formData.require_ssl,
-        environment_id: formData.environment_id || undefined,
+        environment_id: formData.environment_id,
       };
       await databaseInstancesService.createDatabaseInstance(createData);
       setIsCreateOpen(false);
       setFormData({
         name: '',
         description: '',
-        database_engine: 'postgres',
+        database_engine: 'postgres' as DatabaseEngine,
         host: '',
         port: 5432,
         username: '',
@@ -288,6 +315,11 @@ export const DatabaseInstancesPage: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Handle form data change
+  const handleFormDataChange = (data: Partial<DatabaseInstanceFormData>) => {
+    setFormData((prev) => ({ ...prev, ...data }));
   };
 
   // Handle edit
@@ -336,7 +368,7 @@ export const DatabaseInstancesPage: React.FC = () => {
       setFormData({
         name: '',
         description: '',
-        database_engine: 'postgres',
+        database_engine: 'postgres' as DatabaseEngine,
         host: '',
         port: 5432,
         username: '',
@@ -389,7 +421,7 @@ export const DatabaseInstancesPage: React.FC = () => {
     setFormData({
       name: '',
       description: '',
-      database_engine: 'postgres',
+      database_engine: 'postgres' as DatabaseEngine,
       host: '',
       port: 5432,
       username: '',
@@ -441,26 +473,12 @@ export const DatabaseInstancesPage: React.FC = () => {
     }
   };
 
-  // Get status badge color
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Active':
-        return 'text-green-600 dark:text-green-400';
-      case 'Inactive':
-        return 'text-gray-600 dark:text-gray-400';
-      case 'Maintenance':
-        return 'text-yellow-600 dark:text-yellow-400';
-      default:
-        return 'text-gray-600 dark:text-gray-400';
-    }
-  };
-
   // Handle filter changes
   const handleFilterChange = (key: keyof typeof filters, value: string | undefined) => {
     setFilters((prev) => {
       const updated = { ...prev };
       if (value && value.trim()) {
-        updated[key] = value;
+        updated[key] = value as unknown as DatabaseEngine;
       } else {
         delete updated[key];
       }
@@ -496,13 +514,18 @@ export const DatabaseInstancesPage: React.FC = () => {
       return false;
     }
 
+    // Environment filter
+    if (filters.environment_id && instance.environment_id !== filters.environment_id) {
+      return false;
+    }
+
     return true;
   });
 
   const hasFilters = Object.keys(filters).length > 0;
 
   // Render access denied
-  if (!isAdmin) {
+  if (!canReadDatabaseInstances) {
     return (
       <DefaultLayout breadcrumbs={[{ label: 'Database Instances', isCurrentPage: true }]}>
         <Card>
@@ -512,7 +535,8 @@ export const DatabaseInstancesPage: React.FC = () => {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This page requires Organization Admin role.
+              This page requires database read permissions. Please contact your administrator if you
+              need access.
             </p>
           </CardContent>
         </Card>
@@ -531,10 +555,12 @@ export const DatabaseInstancesPage: React.FC = () => {
               Manage database server connections and credentials
             </p>
           </div>
-          <Button onClick={openCreateForm}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Instance
-          </Button>
+          {canCreateDatabaseInstances && (
+            <Button onClick={openCreateForm}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Instance
+            </Button>
+          )}
         </div>
 
         {/* Error message */}
@@ -581,16 +607,21 @@ export const DatabaseInstancesPage: React.FC = () => {
                 <label htmlFor="filter-type" className="text-sm font-medium">
                   Database Engine
                 </label>
-                <select
-                  id="filter-type"
-                  value={filters.database_engine || ''}
-                  onChange={(e) => handleFilterChange('database_engine', e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                <Select
+                  value={filters.database_engine || 'all'}
+                  onValueChange={(value) =>
+                    handleFilterChange('database_engine', value === 'all' ? undefined : value)
+                  }
                 >
-                  <option value="">All Types</option>
-                  <option value="postgresql">PostgreSQL</option>
-                  <option value="mysql">MySQL</option>
-                </select>
+                  <SelectTrigger id="filter-type">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="postgres">PostgreSQL</SelectItem>
+                    <SelectItem value="mysql">MySQL</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Status Filter */}
@@ -598,17 +629,22 @@ export const DatabaseInstancesPage: React.FC = () => {
                 <label htmlFor="filter-status" className="text-sm font-medium">
                   Status
                 </label>
-                <select
-                  id="filter-status"
-                  value={filters.status || ''}
-                  onChange={(e) => handleFilterChange('status', e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                <Select
+                  value={filters.status || 'all'}
+                  onValueChange={(value) =>
+                    handleFilterChange('status', value === 'all' ? undefined : value)
+                  }
                 >
-                  <option value="">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                  <option value="Maintenance">Maintenance</option>
-                </select>
+                  <SelectTrigger id="filter-status">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                    <SelectItem value="Maintenance">Maintenance</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Environment Filter */}
@@ -616,19 +652,24 @@ export const DatabaseInstancesPage: React.FC = () => {
                 <label htmlFor="filter-environment" className="text-sm font-medium">
                   Environment
                 </label>
-                <select
-                  id="filter-environment"
-                  value={filters.environment_id || ''}
-                  onChange={(e) => handleFilterChange('environment_id', e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                <Select
+                  value={filters.environment_id || 'all'}
+                  onValueChange={(value) =>
+                    handleFilterChange('environment_id', value === 'all' ? undefined : value)
+                  }
                 >
-                  <option value="">All Environments</option>
-                  {environments.map((env) => (
-                    <option key={env.id} value={env.id}>
-                      {env.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="filter-environment">
+                    <SelectValue placeholder="All Environments" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Environments</SelectItem>
+                    {environments.map((env) => (
+                      <SelectItem key={env.id} value={env.id}>
+                        {env.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -713,12 +754,12 @@ export const DatabaseInstancesPage: React.FC = () => {
                       <X className="mr-2 h-4 w-4" />
                       Clear Filters
                     </Button>
-                  ) : (
+                  ) : canCreateDatabaseInstances ? (
                     <Button onClick={openCreateForm}>
                       <Plus className="mr-2 h-4 w-4" />
                       Create Instance
                     </Button>
-                  )}
+                  ) : null}
                 </EmptyContent>
               </Empty>
             </CardContent>
@@ -769,7 +810,7 @@ export const DatabaseInstancesPage: React.FC = () => {
                             : '-'}
                         </TableCell>
                         <TableCell>
-                          <span className={getStatusColor(instance.status)}>{instance.status}</span>
+                          <DatabaseStatusBadge status={instance.status} variant="instance" />
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {formatDate(instance.created_at)}
@@ -785,24 +826,28 @@ export const DatabaseInstancesPage: React.FC = () => {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditForm(instance)}
-                              className="h-11 w-11 p-0 touch-manipulation"
-                              aria-label="Edit instance"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openDeleteConfirmation(instance)}
-                              className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
-                              aria-label="Delete instance"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {canUpdateDatabaseInstances && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditForm(instance)}
+                                className="h-11 w-11 p-0 touch-manipulation"
+                                aria-label="Edit instance"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canDeleteDatabaseInstances && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openDeleteConfirmation(instance)}
+                                className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
+                                aria-label="Delete instance"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -823,164 +868,15 @@ export const DatabaseInstancesPage: React.FC = () => {
                 Create a new database instance connection. Connection will be tested before saving.
               </SheetDescription>
             </SheetHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label htmlFor="create-name" className="text-sm font-medium">
-                  Instance Name *
-                </label>
-                <Input
-                  id="create-name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Enter instance name"
-                  aria-invalid={!!formErrors.name}
-                />
-                {formErrors.name && <p className="text-sm text-destructive">{formErrors.name}</p>}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-description" className="text-sm font-medium">
-                  Description
-                </label>
-                <textarea
-                  id="create-description"
-                  value={formData.description || ''}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Enter instance description"
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-type" className="text-sm font-medium">
-                  Database Engine *
-                </label>
-                <select
-                  id="create-type"
-                  value={formData.database_engine}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      database_engine: e.target.value as 'mysql' | 'postgres',
-                      port: e.target.value === 'mysql' ? 3306 : 5432,
-                    })
-                  }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="postgresql">PostgreSQL</option>
-                  <option value="mysql">MySQL</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-environment" className="text-sm font-medium">
-                  Environment (optional)
-                </label>
-                <select
-                  id="create-environment"
-                  value={formData.environment_id || ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      environment_id: e.target.value || undefined,
-                    })
-                  }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="">No Environment</option>
-                  {environments.map((env) => (
-                    <option key={env.id} value={env.id}>
-                      {env.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-4 gap-4">
-                <div className="space-y-2 col-span-3">
-                  <label htmlFor="create-host" className="text-sm font-medium">
-                    Host *
-                  </label>
-                  <Input
-                    id="create-host"
-                    value={formData.host}
-                    onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                    placeholder="Enter database host"
-                    aria-invalid={!!formErrors.host}
-                  />
-                  {formErrors.host && <p className="text-sm text-destructive">{formErrors.host}</p>}
-                </div>
-                <div className="space-y-2 col-span-1">
-                  <label htmlFor="create-port" className="text-sm font-medium">
-                    Port *
-                  </label>
-                  <Input
-                    id="create-port"
-                    type="number"
-                    value={formData.port}
-                    onChange={(e) =>
-                      setFormData({ ...formData, port: parseInt(e.target.value) || 0 })
-                    }
-                    placeholder="Enter database port"
-                    min={1}
-                    max={65535}
-                    aria-invalid={!!formErrors.port}
-                  />
-                  {formErrors.port && <p className="text-sm text-destructive">{formErrors.port}</p>}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-username" className="text-sm font-medium">
-                  Username *
-                </label>
-                <Input
-                  id="create-username"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  placeholder="Enter database username"
-                  aria-invalid={!!formErrors.username}
-                />
-                {formErrors.username && (
-                  <p className="text-sm text-destructive">{formErrors.username}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="create-password" className="text-sm font-medium">
-                  Password (optional)
-                </label>
-                <Input
-                  id="create-password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Enter database password"
-                  disabled={formData.use_rds_iam_auth}
-                  aria-invalid={!!formErrors.password}
-                />
-                {formErrors.password && (
-                  <p className="text-sm text-destructive">{formErrors.password}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.use_rds_iam_auth}
-                    onChange={(e) =>
-                      setFormData({ ...formData, use_rds_iam_auth: e.target.checked })
-                    }
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm font-medium">Use RDS IAM Authentication</span>
-                </label>
-              </div>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.require_ssl}
-                    onChange={(e) => setFormData({ ...formData, require_ssl: e.target.checked })}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm font-medium">Require SSL</span>
-                </label>
-              </div>
+            <div className="space-y-4 mb-6">
+              <DatabaseInstanceForm
+                mode="create"
+                formData={formData}
+                formErrors={formErrors}
+                environments={environments}
+                onChange={handleFormDataChange}
+                onDatabaseEngineChange={handleDatabaseEngineChange}
+              />
 
               {/* Connection Test Result */}
               {connectionTestResult && (
@@ -1049,163 +945,14 @@ export const DatabaseInstancesPage: React.FC = () => {
                 change.
               </SheetDescription>
             </SheetHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label htmlFor="edit-name" className="text-sm font-medium">
-                  Instance Name *
-                </label>
-                <Input
-                  id="edit-name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Enter instance name"
-                  aria-invalid={!!formErrors.name}
-                />
-                {formErrors.name && <p className="text-sm text-destructive">{formErrors.name}</p>}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-description" className="text-sm font-medium">
-                  Description
-                </label>
-                <textarea
-                  id="edit-description"
-                  value={formData.description || ''}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Enter instance description"
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-type" className="text-sm font-medium">
-                  Database Engine *
-                </label>
-                <select
-                  id="edit-type"
-                  value={formData.database_engine}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      database_engine: e.target.value as 'mysql' | 'postgres',
-                    })
-                  }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="postgresql">PostgreSQL</option>
-                  <option value="mysql">MySQL</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-environment" className="text-sm font-medium">
-                  Environment (optional)
-                </label>
-                <select
-                  id="edit-environment"
-                  value={formData.environment_id || ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      environment_id: e.target.value || undefined,
-                    })
-                  }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="">No Environment</option>
-                  {environments.map((env) => (
-                    <option key={env.id} value={env.id}>
-                      {env.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label htmlFor="edit-host" className="text-sm font-medium">
-                    Host *
-                  </label>
-                  <Input
-                    id="edit-host"
-                    value={formData.host}
-                    onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                    placeholder="Enter database host"
-                    aria-invalid={!!formErrors.host}
-                  />
-                  {formErrors.host && <p className="text-sm text-destructive">{formErrors.host}</p>}
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="edit-port" className="text-sm font-medium">
-                    Port *
-                  </label>
-                  <Input
-                    id="edit-port"
-                    type="number"
-                    value={formData.port}
-                    onChange={(e) =>
-                      setFormData({ ...formData, port: parseInt(e.target.value) || 0 })
-                    }
-                    placeholder="Enter database port"
-                    min={1}
-                    max={65535}
-                    aria-invalid={!!formErrors.port}
-                  />
-                  {formErrors.port && <p className="text-sm text-destructive">{formErrors.port}</p>}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-username" className="text-sm font-medium">
-                  Username *
-                </label>
-                <Input
-                  id="edit-username"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  placeholder="Enter database username"
-                  aria-invalid={!!formErrors.username}
-                />
-                {formErrors.username && (
-                  <p className="text-sm text-destructive">{formErrors.username}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="edit-password" className="text-sm font-medium">
-                  Password (optional, leave blank to keep current)
-                </label>
-                <Input
-                  id="edit-password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Enter new password (leave blank to keep current)"
-                  disabled={formData.use_rds_iam_auth}
-                  aria-invalid={!!formErrors.password}
-                />
-                {formErrors.password && (
-                  <p className="text-sm text-destructive">{formErrors.password}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.use_rds_iam_auth}
-                    onChange={(e) =>
-                      setFormData({ ...formData, use_rds_iam_auth: e.target.checked })
-                    }
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm font-medium">Use RDS IAM Authentication</span>
-                </label>
-              </div>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.require_ssl}
-                    onChange={(e) => setFormData({ ...formData, require_ssl: e.target.checked })}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm font-medium">Require SSL</span>
-                </label>
-              </div>
+            <div className="space-y-4 mb-6">
+              <DatabaseInstanceForm
+                mode="edit"
+                formData={formData}
+                formErrors={formErrors}
+                environments={environments}
+                onChange={handleFormDataChange}
+              />
 
               {/* Connection Test Result */}
               {connectionTestResult && (

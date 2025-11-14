@@ -13,7 +13,6 @@ import type {
   Project,
   Environment,
   DatabaseInstance,
-  ChangePlanStatus,
   User,
 } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
@@ -48,6 +47,9 @@ import {
   Globe,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
+import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
+import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 
 export const DatabaseDetailPage: React.FC = () => {
   const navigate = useNavigate();
@@ -63,8 +65,11 @@ export const DatabaseDetailPage: React.FC = () => {
   const [isLoadingChangePlans, setIsLoadingChangePlans] = useState(false);
   const [error, setError] = useState('');
 
-  // Check if user is admin
-  const isAdmin = user?.organization_role === 'OrganizationAdmin';
+  // Check if user has databases.read permission
+  const canReadDatabases = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.DatabasesRead,
+  );
 
   const loadChangePlans = useCallback(async (databaseId: string) => {
     try {
@@ -150,68 +155,6 @@ export const DatabaseDetailPage: React.FC = () => {
     }
   };
 
-  // Get status badge color
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Active':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'Inactive':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-    }
-  };
-
-  // Get status badge variant for change plans
-  const getStatusBadgeVariant = (
-    status: ChangePlanStatus,
-  ): 'default' | 'secondary' | 'destructive' | 'outline' => {
-    switch (status) {
-      case 'Open':
-        return 'default';
-      case 'Approved':
-        return 'default';
-      case 'Completed':
-        return 'default';
-      case 'Draft':
-        return 'secondary';
-      case 'InProgress':
-        return 'outline';
-      case 'Failed':
-        return 'destructive';
-      case 'Cancelled':
-        return 'secondary';
-      case 'Closed':
-        return 'secondary';
-      default:
-        return 'secondary';
-    }
-  };
-
-  // Get status badge color class for change plans
-  const getStatusBadgeClass = (status: ChangePlanStatus): string => {
-    switch (status) {
-      case 'Open':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'Approved':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'Completed':
-        return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200';
-      case 'Draft':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      case 'InProgress':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'Failed':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'Cancelled':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      case 'Closed':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-    }
-  };
-
   // Get author name
   const getAuthorName = (authorId: string): string => {
     const author = users.find((u) => u.id === authorId);
@@ -219,7 +162,7 @@ export const DatabaseDetailPage: React.FC = () => {
   };
 
   // Render access denied
-  if (!isAdmin) {
+  if (!canReadDatabases) {
     return (
       <DefaultLayout breadcrumbs={[{ label: 'Databases', isCurrentPage: true }]}>
         <Card>
@@ -229,7 +172,7 @@ export const DatabaseDetailPage: React.FC = () => {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This page requires Organization Admin role.
+              This page requires the databases.read permission.
             </p>
           </CardContent>
         </Card>
@@ -310,7 +253,7 @@ export const DatabaseDetailPage: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Status</p>
-                  <Badge className={getStatusColor(database.status)}>{database.status}</Badge>
+                  <DatabaseStatusBadge status={database.status} variant="database" />
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Project</p>
@@ -467,12 +410,7 @@ export const DatabaseDetailPage: React.FC = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={getStatusBadgeVariant(changePlan.status)}
-                            className={getStatusBadgeClass(changePlan.status)}
-                          >
-                            {changePlan.status}
-                          </Badge>
+                          <ChangePlanStatusBadge status={changePlan.status} />
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{changePlan.change_type}</Badge>

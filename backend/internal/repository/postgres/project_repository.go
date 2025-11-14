@@ -171,3 +171,46 @@ func (r *ProjectRepository) Delete(ctx context.Context, id uuid.UUID) error {
 
 	return nil
 }
+
+// ListByUserID retrieves projects where the user is a member with pagination
+func (r *ProjectRepository) ListByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.Project, error) {
+	query := `
+		SELECT DISTINCT p.id, p.name, p.description, p.created_by_id, p.created_at, p.updated_at
+		FROM projects p
+		INNER JOIN project_members pm ON p.id = pm.project_id
+		WHERE pm.user_id = $1
+		ORDER BY p.created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	var projects []*models.Project
+	err := r.db.SelectContext(ctx, &projects, query, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return empty slice instead of nil if no projects found
+	if projects == nil {
+		projects = []*models.Project{}
+	}
+
+	return projects, nil
+}
+
+// CountByUserID returns the total number of projects where the user is a member
+func (r *ProjectRepository) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	query := `
+		SELECT COUNT(DISTINCT p.id)
+		FROM projects p
+		INNER JOIN project_members pm ON p.id = pm.project_id
+		WHERE pm.user_id = $1
+	`
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}

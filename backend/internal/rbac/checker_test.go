@@ -74,10 +74,10 @@ func TestHasOrganizationPermission(t *testing.T) {
 			expected:   true,
 		},
 		{
-			name:       "developer does not have databases.create",
+			name:       "developer has databases.create",
 			role:       OrganizationDeveloper,
 			permission: PermissionDatabasesCreate,
-			expected:   false,
+			expected:   true,
 		},
 		{
 			name:       "developer does not have users.delete",
@@ -129,10 +129,10 @@ func TestHasProjectPermission(t *testing.T) {
 			expected:   true,
 		},
 		{
-			name:       "owner has policy_rules.create",
+			name:       "owner does not have policy_rules.create (org-level only)",
 			role:       ProjectOwner,
 			permission: PermissionPolicyRulesCreate,
-			expected:   true,
+			expected:   false,
 		},
 
 		// ProjectDeveloper tests
@@ -394,12 +394,12 @@ func TestGetOrganizationPermissions(t *testing.T) {
 		{
 			name:     "dba has multiple permissions",
 			role:     OrganizationDBA,
-			expected: 7, // 7 specific permissions
+			expected: 15, // 15 specific permissions (users read, database instances CRUD, databases CRUD, projects CRUD, environments read, audit logs read)
 		},
 		{
 			name:     "developer has basic permissions",
 			role:     OrganizationDeveloper,
-			expected: 5, // 5 basic permissions
+			expected: 8, // 8 basic permissions (users read, database instances read, databases read/create/update, projects create/read, environments read)
 		},
 		{
 			name:     "invalid role has no permissions",
@@ -428,7 +428,7 @@ func TestGetProjectPermissions(t *testing.T) {
 		{
 			name:     "owner has full permissions",
 			role:     ProjectOwner,
-			expected: 16, // Full access to all project resources
+			expected: 12, // Full access to project settings, members, and changes (policy rules are org-level)
 		},
 		{
 			name:     "developer has create permissions",

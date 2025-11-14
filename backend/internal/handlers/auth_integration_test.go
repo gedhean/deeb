@@ -21,6 +21,7 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/handlers"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/stretchr/testify/assert"
@@ -123,7 +124,7 @@ func TestIntegration_RegisterAndLogin_Success(t *testing.T) {
 	dummyUser := &models.User{
 		Email:            fmt.Sprintf("dummy-%d@example.com", time.Now().Unix()),
 		PasswordHash:     "dummy_hash",
-		OrganizationRole: models.OrganizationRoleDeveloper,
+		OrganizationRole: rbac.OrganizationDeveloper,
 		IsActive:         true,
 	}
 	err := userRepo.Create(ctx, dummyUser)
@@ -155,7 +156,7 @@ func TestIntegration_RegisterAndLogin_Success(t *testing.T) {
 	err = json.NewDecoder(rec.Body).Decode(&registerResp)
 	require.NoError(t, err)
 	assert.Equal(t, email, registerResp.User.Email)
-	assert.Equal(t, models.OrganizationRoleDeveloper, registerResp.User.OrganizationRole)
+	assert.Equal(t, rbac.OrganizationDeveloper, registerResp.User.OrganizationRole)
 	assert.True(t, registerResp.User.IsActive)
 
 	// Test Login

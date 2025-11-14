@@ -34,7 +34,13 @@ import {
 } from '@/components/ui/table';
 import { Plus, Pencil, Trash2, AlertTriangle, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { RoleBadge } from '@/components/RoleBadge';
 import { UserForm, type UserFormData, type UserFormErrors } from '@/components/user-form';
+import {
+  hasOrganizationPermission,
+  OrganizationPermission,
+  type OrganizationRole,
+} from '@/lib/rbac';
 
 export const UsersPage: React.FC = () => {
   const navigate = useNavigate();
@@ -62,19 +68,34 @@ export const UsersPage: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<UserFormErrors>({});
 
-  // Check if user is admin
-  const isAdmin = user?.organization_role === 'OrganizationAdmin';
+  // Check permissions
+  const canReadUsers = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.UsersRead,
+  );
+  const canCreateUsers = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.UsersCreate,
+  );
+  const canUpdateUsers = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.UsersUpdate,
+  );
+  const canDeleteUsers = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.UsersDelete,
+  );
 
   // Load users
   useEffect(() => {
-    if (!isAdmin) {
-      setError('Access denied. Admin access required.');
+    if (!canReadUsers) {
+      setError('Access denied. User read permissions required.');
       setIsLoading(false);
       return;
     }
 
     loadUsers();
-  }, [isAdmin]);
+  }, [canReadUsers]);
 
   const loadUsers = async () => {
     try {
@@ -282,36 +303,8 @@ export const UsersPage: React.FC = () => {
     }
   };
 
-  // Get role badge variant
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'OrganizationAdmin':
-        return 'default';
-      case 'OrganizationDBA':
-        return 'secondary';
-      case 'OrganizationDeveloper':
-        return 'outline';
-      default:
-        return 'outline';
-    }
-  };
-
-  // Format role display name
-  const formatRoleName = (role: string) => {
-    switch (role) {
-      case 'OrganizationAdmin':
-        return 'Admin';
-      case 'OrganizationDBA':
-        return 'DBA';
-      case 'OrganizationDeveloper':
-        return 'Developer';
-      default:
-        return role;
-    }
-  };
-
   // Render access denied
-  if (!isAdmin) {
+  if (!canReadUsers) {
     return (
       <DefaultLayout breadcrumbs={[{ label: 'Users', isCurrentPage: true }]}>
         <Card>
@@ -321,7 +314,7 @@ export const UsersPage: React.FC = () => {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This page requires Organization Admin role.
+              This page requires the users.read permission.
             </p>
           </CardContent>
         </Card>
@@ -338,10 +331,12 @@ export const UsersPage: React.FC = () => {
             <h1 className="text-3xl font-bold tracking-tight">Users</h1>
             <p className="text-muted-foreground mt-1">Manage users and their organization roles</p>
           </div>
-          <Button onClick={openCreateForm}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create User
-          </Button>
+          {canCreateUsers && (
+            <Button onClick={openCreateForm}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create User
+            </Button>
+          )}
         </div>
 
         {/* Error message */}
@@ -385,10 +380,12 @@ export const UsersPage: React.FC = () => {
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button onClick={openCreateForm}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create User
-                  </Button>
+                  {canCreateUsers && (
+                    <Button onClick={openCreateForm}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create User
+                    </Button>
+                  )}
                 </EmptyContent>
               </Empty>
             </CardContent>
@@ -417,9 +414,10 @@ export const UsersPage: React.FC = () => {
                       >
                         <TableCell className="font-medium">{user.email}</TableCell>
                         <TableCell>
-                          <Badge variant={getRoleBadgeVariant(user.organization_role)}>
-                            {formatRoleName(user.organization_role)}
-                          </Badge>
+                          <RoleBadge
+                            role={user.organization_role as OrganizationRole}
+                            showTooltip={true}
+                          />
                         </TableCell>
                         <TableCell>
                           <Badge variant={user.is_active ? 'default' : 'secondary'}>
@@ -432,30 +430,34 @@ export const UsersPage: React.FC = () => {
                         <TableCell>{formatDate(user.created_at)}</TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEditForm(user);
-                              }}
-                              className="h-11 w-11 p-0 touch-manipulation"
-                              aria-label="Edit user"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDeleteConfirmation(user);
-                              }}
-                              className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
-                              aria-label="Delete user"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {canUpdateUsers && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditForm(user);
+                                }}
+                                className="h-11 w-11 p-0 touch-manipulation"
+                                aria-label="Edit user"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canDeleteUsers && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openDeleteConfirmation(user);
+                                }}
+                                className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
+                                aria-label="Delete user"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -531,9 +533,13 @@ export const UsersPage: React.FC = () => {
               {selectedUser && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium">{selectedUser.email}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Role: {formatRoleName(selectedUser.organization_role)}
-                  </p>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>Role:</span>
+                    <RoleBadge
+                      role={selectedUser.organization_role as OrganizationRole}
+                      showTooltip={true}
+                    />
+                  </div>
                 </div>
               )}
             </div>

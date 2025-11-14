@@ -20,6 +20,8 @@ type ApprovalService struct {
 	changePlanRepo    repository.ChangePlanRepository
 	policyFindingRepo repository.PolicyFindingRepository
 	projectMemberRepo repository.ProjectMemberRepository
+	databaseRepo      repository.DatabaseRepository
+	environmentRepo   repository.EnvironmentRepository
 	rbacChecker       *rbac.CheckerService
 	logger            *zap.Logger
 }
@@ -30,6 +32,8 @@ func NewApprovalService(
 	changePlanRepo repository.ChangePlanRepository,
 	policyFindingRepo repository.PolicyFindingRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
+	databaseRepo repository.DatabaseRepository,
+	environmentRepo repository.EnvironmentRepository,
 	rbacChecker *rbac.CheckerService,
 	logger *zap.Logger,
 ) *ApprovalService {
@@ -38,6 +42,8 @@ func NewApprovalService(
 		changePlanRepo:    changePlanRepo,
 		policyFindingRepo: policyFindingRepo,
 		projectMemberRepo: projectMemberRepo,
+		databaseRepo:      databaseRepo,
+		environmentRepo:   environmentRepo,
 		rbacChecker:       rbacChecker,
 		logger:            logger,
 	}
@@ -51,6 +57,7 @@ var (
 	ErrCannotApproveWithErrors   = fmt.Errorf("cannot approve change plan with SQL Review errors")
 	ErrChangePlanAlreadyApproved = fmt.Errorf("change plan is already approved")
 	ErrChangePlanAlreadyClosed   = fmt.Errorf("change plan is already closed")
+	ErrCannotSelfApprove         = fmt.Errorf("cannot approve your own change plan in this environment")
 )
 
 // Approve approves a Change Plan, moving it from Open or Failed to Approved status
@@ -86,6 +93,11 @@ func (s *ApprovalService) Approve(ctx context.Context, changePlanID uuid.UUID, a
 	// Verify approver has permission
 	if err := s.verifyApproverPermission(ctx, changePlan.ProjectID, approverID); err != nil {
 		return fmt.Errorf("%w: %v", ErrUnauthorizedApprover, err)
+	}
+
+	// Check for self-approval restriction based on environment settings
+	if err := s.verifySelfApprovalAllowed(ctx, changePlan, approverID); err != nil {
+		return err
 	}
 
 	// Check for SQL Review errors
@@ -270,8 +282,8 @@ func (s *ApprovalService) verifyApproverPermission(ctx context.Context, projectI
 		return fmt.Errorf("failed to get project member role: %w", err)
 	}
 
-	// Convert models.ProjectRole to rbac.ProjectRole
-	projectRole := s.toRBACProjectRole(projectMember.Role)
+	// Convert rbac.ProjectRole to rbac.ProjectRole
+	projectRole := rbac.ProjectRole(projectMember.Role)
 	if projectRole == "" {
 		return fmt.Errorf("invalid project role: %s", projectMember.Role)
 	}
@@ -281,6 +293,45 @@ func (s *ApprovalService) verifyApproverPermission(ctx context.Context, projectI
 		return fmt.Errorf("user does not have approve permission in project")
 	}
 
+	return nil
+}
+
+// verifySelfApprovalAllowed checks if the approver is allowed to approve their own change plan
+// based on the environment's allow_self_approval setting
+func (s *ApprovalService) verifySelfApprovalAllowed(
+	ctx context.Context,
+	changePlan *models.ChangePlan,
+	approverID uuid.UUID,
+) error {
+	// If approver is not the author, no self-approval restriction applies
+	if changePlan.AuthorID != approverID {
+		return nil
+	}
+
+	// Get the target database to access environment information
+	database, err := s.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return fmt.Errorf("target database not found")
+		}
+		return fmt.Errorf("failed to get target database: %w", err)
+	}
+
+	// Get the environment to check allow_self_approval setting
+	environment, err := s.environmentRepo.GetByID(ctx, database.EnvironmentID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return fmt.Errorf("environment not found")
+		}
+		return fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// If self-approval is not allowed in this environment, reject
+	if !environment.AllowSelfApproval {
+		return ErrCannotSelfApprove
+	}
+
+	// Self-approval is allowed
 	return nil
 }
 
@@ -301,20 +352,4 @@ func (s *ApprovalService) hasSQLReviewErrors(ctx context.Context, changePlanID u
 	}
 
 	return len(errorFindings) > 0, errorFindings, nil
-}
-
-// toRBACProjectRole converts models.ProjectRole to rbac.ProjectRole
-func (s *ApprovalService) toRBACProjectRole(role models.ProjectRole) rbac.ProjectRole {
-	switch role {
-	case models.ProjectRoleOwner:
-		return rbac.ProjectOwner
-	case models.ProjectRoleDeveloper:
-		return rbac.ProjectDeveloper
-	case models.ProjectRoleApprover:
-		return rbac.ProjectApprover
-	case models.ProjectRoleViewer:
-		return rbac.ProjectViewer
-	default:
-		return ""
-	}
 }

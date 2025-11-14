@@ -348,7 +348,16 @@ func (r *ChangePlanRepository) ListWithFilters(
 		argIndex++
 	}
 
-	if filters.ProjectID != uuid.Nil {
+	// Handle ProjectIDs (multiple projects) or ProjectID (single project)
+	if len(filters.ProjectIDs) > 0 {
+		placeholders := []string{}
+		for _, projectID := range filters.ProjectIDs {
+			placeholders = append(placeholders, "$"+fmt.Sprintf("%d", argIndex))
+			args = append(args, projectID)
+			argIndex++
+		}
+		whereClauses = append(whereClauses, "project_id IN ("+strings.Join(placeholders, ", ")+")")
+	} else if filters.ProjectID != uuid.Nil {
 		whereClauses = append(whereClauses, "project_id = $"+fmt.Sprintf("%d", argIndex))
 		args = append(args, filters.ProjectID)
 		argIndex++
@@ -363,6 +372,7 @@ func (r *ChangePlanRepository) ListWithFilters(
 	if filters.AuthorID != uuid.Nil {
 		whereClauses = append(whereClauses, "author_id = $"+fmt.Sprintf("%d", argIndex))
 		args = append(args, filters.AuthorID)
+		argIndex++
 	}
 
 	// Build query
@@ -419,7 +429,16 @@ func (r *ChangePlanRepository) CountWithFilters(ctx context.Context, filters rep
 		argIndex++
 	}
 
-	if filters.ProjectID != uuid.Nil {
+	// Handle ProjectIDs (multiple projects) or ProjectID (single project)
+	if len(filters.ProjectIDs) > 0 {
+		placeholders := []string{}
+		for _, projectID := range filters.ProjectIDs {
+			placeholders = append(placeholders, "$"+fmt.Sprintf("%d", argIndex))
+			args = append(args, projectID)
+			argIndex++
+		}
+		whereClauses = append(whereClauses, "project_id IN ("+strings.Join(placeholders, ", ")+")")
+	} else if filters.ProjectID != uuid.Nil {
 		whereClauses = append(whereClauses, "project_id = $"+fmt.Sprintf("%d", argIndex))
 		args = append(args, filters.ProjectID)
 		argIndex++
@@ -434,6 +453,7 @@ func (r *ChangePlanRepository) CountWithFilters(ctx context.Context, filters rep
 	if filters.AuthorID != uuid.Nil {
 		whereClauses = append(whereClauses, "author_id = $"+fmt.Sprintf("%d", argIndex))
 		args = append(args, filters.AuthorID)
+		argIndex++ //nolint:ineffassign
 	}
 
 	// Build query

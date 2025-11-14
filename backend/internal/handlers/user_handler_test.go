@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
 )
@@ -103,7 +104,7 @@ func createTestUser(id string, email string, role string) *models.User {
 		ID:               uid,
 		Email:            email,
 		PasswordHash:     "hashed",
-		OrganizationRole: models.OrganizationRole(role),
+		OrganizationRole: rbac.OrganizationRole(role),
 		TwoFactorEnabled: false,
 		IsActive:         true,
 		CreatedAt:        now,
@@ -270,7 +271,7 @@ func TestGetUser(t *testing.T) {
 			c.Set("user", &auth.Claims{
 				UserID:           userID,
 				Email:            "admin@example.com",
-				OrganizationRole: string(models.OrganizationRoleAdmin),
+				OrganizationRole: string(rbac.OrganizationAdmin),
 			})
 
 			// Execute handler
@@ -382,7 +383,7 @@ func TestUpdateUser(t *testing.T) {
 			c.Set("user", &auth.Claims{
 				UserID:           adminUserID,
 				Email:            "admin@example.com",
-				OrganizationRole: string(models.OrganizationRoleAdmin),
+				OrganizationRole: string(rbac.OrganizationAdmin),
 			})
 
 			// Execute handler

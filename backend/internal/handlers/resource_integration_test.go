@@ -26,6 +26,7 @@ import (
 	"github.com/nsxbet/deeb/internal/config"
 	"github.com/nsxbet/deeb/internal/handlers"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/routes"
 	"github.com/nsxbet/deeb/internal/services"
@@ -134,7 +135,7 @@ func cleanupResourceTestDB(t *testing.T, db *sqlx.DB) {
 }
 
 // createTestUser creates a test user and returns the user ID
-func createTestUser(t *testing.T, db *sqlx.DB, email string, orgRole models.OrganizationRole) uuid.UUID {
+func createTestUser(t *testing.T, db *sqlx.DB, email string, orgRole rbac.OrganizationRole) uuid.UUID {
 	t.Helper()
 
 	userRepo := postgres.NewUserRepository(db)
@@ -163,7 +164,7 @@ func createTestUser(t *testing.T, db *sqlx.DB, email string, orgRole models.Orga
 	require.NoError(t, err)
 
 	// Update organization role if needed
-	if orgRole != models.OrganizationRoleDeveloper {
+	if orgRole != rbac.OrganizationDeveloper {
 		ctx := context.Background()
 		_, err = db.ExecContext(
 			ctx,
@@ -324,12 +325,12 @@ func TestIntegration_Projects_CRUD(t *testing.T) {
 
 	// Create admin user
 	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().Unix())
-	createTestUser(t, db, adminEmail, models.OrganizationRoleAdmin)
+	createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ := loginUser(t, db, adminEmail, "TestPassword123!")
 
 	// Create developer user
 	devEmail := fmt.Sprintf("developer-%d@example.com", time.Now().Unix())
-	_ = createTestUser(t, db, devEmail, models.OrganizationRoleDeveloper)
+	_ = createTestUser(t, db, devEmail, rbac.OrganizationDeveloper)
 	devToken, _ := loginUser(t, db, devEmail, "TestPassword123!")
 
 	t.Run("Create Project - Admin", func(t *testing.T) {
@@ -487,12 +488,12 @@ func TestIntegration_Environments_CRUD(t *testing.T) {
 
 	// Create admin user
 	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().Unix())
-	createTestUser(t, db, adminEmail, models.OrganizationRoleAdmin)
+	createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ := loginUser(t, db, adminEmail, "TestPassword123!")
 
 	// Create developer user
 	devEmail := fmt.Sprintf("developer-%d@example.com", time.Now().Unix())
-	_ = createTestUser(t, db, devEmail, models.OrganizationRoleDeveloper)
+	_ = createTestUser(t, db, devEmail, rbac.OrganizationDeveloper)
 	devToken, _ := loginUser(t, db, devEmail, "TestPassword123!")
 
 	t.Run("Create Environment - Admin", func(t *testing.T) {
@@ -647,12 +648,12 @@ func TestIntegration_DatabaseInstances_CRUD(t *testing.T) {
 
 	// Create admin user
 	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().Unix())
-	createTestUser(t, db, adminEmail, models.OrganizationRoleAdmin)
+	createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ := loginUser(t, db, adminEmail, "TestPassword123!")
 
 	// Create developer user
 	devEmail := fmt.Sprintf("developer-%d@example.com", time.Now().Unix())
-	_ = createTestUser(t, db, devEmail, models.OrganizationRoleDeveloper)
+	_ = createTestUser(t, db, devEmail, rbac.OrganizationDeveloper)
 	devToken, _ := loginUser(t, db, devEmail, "TestPassword123!")
 
 	t.Run("Create Database Instance - Admin", func(t *testing.T) {
@@ -717,7 +718,7 @@ func TestIntegration_Databases_CRUD_WithConstraints(t *testing.T) {
 
 	// Create admin user
 	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().Unix())
-	adminUserID := createTestUser(t, db, adminEmail, models.OrganizationRoleAdmin)
+	adminUserID := createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ := loginUser(t, db, adminEmail, "TestPassword123!")
 
 	// Create project

@@ -140,7 +140,7 @@ func (s *ExecutionService) verifyExecutionPermission(
     }
 
     // Check if user is Project Owner
-    if projectMember.Role == models.ProjectRoleOwner {
+    if projectMember.Role == rbac.ProjectOwner {
         return nil
     }
 

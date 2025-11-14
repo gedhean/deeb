@@ -5,12 +5,26 @@ import { changePlanService } from '@/lib/api/services/changePlans';
 import { projectsService } from '@/lib/api/services/projects';
 import { databasesService } from '@/lib/api/services/databases';
 import { usersService } from '@/lib/api/services/users';
-import type { ChangePlan, ChangePlanStatus, Project, Database, User } from '@/lib/api/types';
+import type {
+  ChangePlan,
+  ChangePlanStatus,
+  ChangePlanListResponse,
+  Project,
+  Database,
+  User,
+} from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Empty,
   EmptyContent,
@@ -31,12 +45,15 @@ import { Plus, ChevronLeft, ChevronRight, AlertTriangle, FileEdit } from 'lucide
 import { ProtectedComponent } from '@/components/ProtectedComponent';
 import { OrganizationPermission } from '@/lib/rbac';
 import { useCurrentProject } from '@/store';
+import { useAuth } from '@/contexts/AuthContext';
+import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
 
 const PAGE_SIZE = 20;
 
 export const ChangePlansPage: React.FC = () => {
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
+  const { user: currentUser } = useAuth();
   const [changePlans, setChangePlans] = useState<ChangePlan[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [databases, setDatabases] = useState<Database[]>([]);
@@ -47,7 +64,7 @@ export const ChangePlansPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Filter state - initialize with currentProject if available
+  // Filter state - initialize with currentProject and currentUser if available
   const [filters, setFilters] = useState<{
     status?: ChangePlanStatus;
     project_id?: string;
@@ -55,6 +72,7 @@ export const ChangePlansPage: React.FC = () => {
     author_id?: string;
   }>({
     project_id: currentProject?.id,
+    author_id: currentUser?.id,
   });
 
   // Load filter options
@@ -64,7 +82,10 @@ export const ChangePlansPage: React.FC = () => {
         setIsLoadingFilters(true);
         const [projectsRes, databasesRes, usersRes] = await Promise.all([
           projectsService.listProjects({ limit: 100 }),
-          databasesService.listDatabases({ limit: 100 }),
+          databasesService.listDatabases({
+            limit: 100,
+            ...(currentProject?.id ? { project_id: currentProject.id } : {}),
+          }),
           usersService.listUsers({ limit: 100 }),
         ]);
         setProjects(projectsRes.items);
@@ -78,15 +99,22 @@ export const ChangePlansPage: React.FC = () => {
     };
 
     loadFilters();
-  }, []);
+  }, [currentProject?.id]);
 
-  // Sync filters with currentProject on initial load (only if filter not already set)
+  // Sync filters with currentProject and currentUser on initial load (only if filter not already set)
   useEffect(() => {
-    if (currentProject?.id && !filters.project_id) {
-      setFilters((prev) => ({ ...prev, project_id: currentProject.id }));
+    const needsUpdate =
+      (currentProject?.id && !filters.project_id) || (currentUser?.id && !filters.author_id);
+
+    if (needsUpdate) {
+      setFilters((prev) => ({
+        ...prev,
+        ...(currentProject?.id && !prev.project_id ? { project_id: currentProject.id } : {}),
+        ...(currentUser?.id && !prev.author_id ? { author_id: currentUser.id } : {}),
+      }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject]);
+  }, [currentProject?.id, currentUser?.id]);
 
   // Load change plans
   useEffect(() => {
@@ -99,11 +127,26 @@ export const ChangePlansPage: React.FC = () => {
       setIsLoading(true);
       setError('');
       const offset = (currentPage - 1) * PAGE_SIZE;
-      const response = await changePlanService.listChangePlans({
+
+      // Determine which project to use
+      const projectId = filters.project_id || currentProject?.id;
+
+      if (!projectId) {
+        // No project selected - show empty state
+        setChangePlans([]);
+        setTotal(0);
+        setIsLoading(false);
+        return;
+      }
+
+      // Use project-scoped route - all routes now require project_id
+
+      const response: ChangePlanListResponse = await changePlanService.listChangePlans({
         ...filters,
         limit: PAGE_SIZE,
         offset,
       });
+
       setChangePlans(response.change_plans);
       setTotal(response.total);
     } catch (err) {
@@ -144,56 +187,6 @@ export const ChangePlansPage: React.FC = () => {
   const clearFilters = () => {
     setFilters({});
     setCurrentPage(1);
-  };
-
-  // Get status badge variant
-  const getStatusBadgeVariant = (
-    status: ChangePlanStatus,
-  ): 'default' | 'secondary' | 'destructive' | 'outline' => {
-    switch (status) {
-      case 'Open':
-        return 'default';
-      case 'Approved':
-        return 'default';
-      case 'Completed':
-        return 'default';
-      case 'Draft':
-        return 'secondary';
-      case 'InProgress':
-        return 'outline';
-      case 'Failed':
-        return 'destructive';
-      case 'Cancelled':
-        return 'secondary';
-      case 'Closed':
-        return 'secondary';
-      default:
-        return 'secondary';
-    }
-  };
-
-  // Get status badge color class
-  const getStatusBadgeClass = (status: ChangePlanStatus): string => {
-    switch (status) {
-      case 'Open':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'Approved':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'Completed':
-        return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200';
-      case 'Draft':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      case 'InProgress':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'Failed':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'Cancelled':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      case 'Closed':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-    }
   };
 
   // Format date
@@ -276,22 +269,30 @@ export const ChangePlansPage: React.FC = () => {
                 {isLoadingFilters ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
-                  <select
-                    id="filter-status"
-                    value={filters.status || ''}
-                    onChange={(e) => handleFilterChange('status', e.target.value || undefined)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
+                    value={filters.status || 'all'}
+                    onValueChange={(value) =>
+                      handleFilterChange(
+                        'status',
+                        value === 'all' ? undefined : (value as ChangePlanStatus),
+                      )
+                    }
                   >
-                    <option value="">All Statuses</option>
-                    <option value="Draft">Draft</option>
-                    <option value="Open">Open</option>
-                    <option value="Approved">Approved</option>
-                    <option value="InProgress">InProgress</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Failed">Failed</option>
-                    <option value="Cancelled">Cancelled</option>
-                    <option value="Closed">Closed</option>
-                  </select>
+                    <SelectTrigger id="filter-status">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="Draft">Draft</SelectItem>
+                      <SelectItem value="Open">Open</SelectItem>
+                      <SelectItem value="Approved">Approved</SelectItem>
+                      <SelectItem value="InProgress">InProgress</SelectItem>
+                      <SelectItem value="Completed">Completed</SelectItem>
+                      <SelectItem value="Failed">Failed</SelectItem>
+                      <SelectItem value="Cancelled">Cancelled</SelectItem>
+                      <SelectItem value="Closed">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
 
@@ -303,19 +304,24 @@ export const ChangePlansPage: React.FC = () => {
                 {isLoadingFilters ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
-                  <select
-                    id="filter-project"
-                    value={filters.project_id || ''}
-                    onChange={(e) => handleFilterChange('project_id', e.target.value || undefined)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
+                    value={filters.project_id || 'all'}
+                    onValueChange={(value) =>
+                      handleFilterChange('project_id', value === 'all' ? undefined : value)
+                    }
                   >
-                    <option value="">All Projects</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="filter-project">
+                      <SelectValue placeholder="All Projects" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Projects</SelectItem>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
 
@@ -327,22 +333,27 @@ export const ChangePlansPage: React.FC = () => {
                 {isLoadingFilters ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
-                  <select
-                    id="filter-database"
-                    value={filters.database_id || ''}
-                    onChange={(e) => handleFilterChange('database_id', e.target.value || undefined)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
+                    value={filters.database_id || 'all'}
+                    onValueChange={(value) =>
+                      handleFilterChange('database_id', value === 'all' ? undefined : value)
+                    }
                   >
-                    <option value="">All Databases</option>
-                    {databases.map((database) => (
-                      <option key={database.id} value={database.id}>
-                        {database.database_name}
-                        {database.environment
-                          ? ` (${database.environment.name || database.environment_id})`
-                          : ''}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="filter-database">
+                      <SelectValue placeholder="All Databases" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Databases</SelectItem>
+                      {databases.map((database) => (
+                        <SelectItem key={database.id} value={database.id}>
+                          {database.database_name}
+                          {database.environment
+                            ? ` (${database.environment.name || database.environment_id})`
+                            : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
 
@@ -354,19 +365,24 @@ export const ChangePlansPage: React.FC = () => {
                 {isLoadingFilters ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
-                  <select
-                    id="filter-author"
-                    value={filters.author_id || ''}
-                    onChange={(e) => handleFilterChange('author_id', e.target.value || undefined)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
+                    value={filters.author_id || 'all'}
+                    onValueChange={(value) =>
+                      handleFilterChange('author_id', value === 'all' ? undefined : value)
+                    }
                   >
-                    <option value="">All Authors</option>
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.email}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="filter-author">
+                      <SelectValue placeholder="All Authors" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Authors</SelectItem>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
             </div>
@@ -460,12 +476,7 @@ export const ChangePlansPage: React.FC = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={getStatusBadgeVariant(changePlan.status)}
-                            className={getStatusBadgeClass(changePlan.status)}
-                          >
-                            {changePlan.status}
-                          </Badge>
+                          <ChangePlanStatusBadge status={changePlan.status} />
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {getProjectName(changePlan.project_id)}

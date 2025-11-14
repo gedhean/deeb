@@ -1,5 +1,7 @@
 .PHONY: test test-verbose test-coverage test-integration
 
+TEST_PARALLELISM ?= $(shell nproc)
+
 # Install gotestsum if not present
 ensure-gotestsum:
 	@which gotestsum > /dev/null || (echo "Installing gotestsum..." && go install gotest.tools/gotestsum@latest)
@@ -7,7 +9,7 @@ ensure-gotestsum:
 # Run tests using gotestsum with parallel execution
 # -p=4 runs up to 4 packages in parallel
 test: ensure-gotestsum
-	@gotestsum --format testname -- -race -p=4 ./...
+	@gotestsum --format testname -- -race -p=${TEST_PARALLELISM} ./...
 
 # Run integration tests with testcontainers
 test-integration: ensure-gotestsum

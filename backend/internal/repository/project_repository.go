@@ -18,8 +18,14 @@ type ProjectRepository interface {
 	// List retrieves all projects with pagination
 	List(ctx context.Context, limit, offset int) ([]*models.Project, error)
 
+	// ListByUserID retrieves projects where the user is a member with pagination
+	ListByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.Project, error)
+
 	// Count returns the total number of projects
 	Count(ctx context.Context) (int64, error)
+
+	// CountByUserID returns the total number of projects where the user is a member
+	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
 
 	// Update updates an existing project's information
 	Update(ctx context.Context, project *models.Project) error

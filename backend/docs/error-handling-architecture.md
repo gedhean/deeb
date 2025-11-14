@@ -390,7 +390,7 @@ if !ok || claims == nil {
     return echo.NewHTTPError(http.StatusUnauthorized, "Authentication required")
 }
 
-if claims.OrganizationRole != string(models.OrganizationRoleAdmin) {
+if claims.OrganizationRole != string(rbac.OrganizationAdmin) {
     return echo.NewHTTPError(http.StatusForbidden, "Admin access required")
 }
 ```
@@ -697,7 +697,7 @@ if err := changePlan.Validate(); err != nil {
 ### Example 3: Authorization Error
 
 ```go
-if claims.OrganizationRole != string(models.OrganizationRoleAdmin) {
+if claims.OrganizationRole != string(rbac.OrganizationAdmin) {
     return echo.NewHTTPError(http.StatusForbidden, "Admin access required")
 }
 ```

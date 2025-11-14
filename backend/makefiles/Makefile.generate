@@ -1,6 +1,6 @@
 # vim: set ft=make:
 
-.PHONY: generate-rules generate-check
+.PHONY: generate-rules generate-check generate-rbac gen
 
 # Path to sql-reviewer schema
 SQL_REVIEWER_PATH ?= $(HOME)/w/sql-reviewer
@@ -33,3 +33,17 @@ generate-check:
 	fi
 	@rm -f internal/review/rules_metadata.go.tmp ../frontend/src/lib/api/generated-types.ts.tmp
 	@echo "✅ Generated files are up-to-date"
+
+# Generate RBAC code from YAML configuration
+generate-rbac:
+	@echo "Generating RBAC code from YAML configuration..."
+	@go run -mod=readonly cmd/generate-rbac/main.go \
+		-permissions config/iam/permissions.yaml \
+		-roles config/iam/roles.yaml \
+		-output internal/rbac
+	@echo "✅ RBAC code generated successfully"
+
+generate: generate-rules generate-rbac
+
+# alias for generate
+gen: generate

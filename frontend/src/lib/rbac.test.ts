@@ -61,8 +61,9 @@ describe('RBAC Utilities', () => {
       expect(
         hasOrganizationPermission('OrganizationDeveloper', OrganizationPermission.UsersCreate),
       ).toBe(false);
+      // Note: OrganizationDeveloper now has databases.create permission per YAML config
       expect(
-        hasOrganizationPermission('OrganizationDeveloper', OrganizationPermission.DatabasesCreate),
+        hasOrganizationPermission('OrganizationDeveloper', OrganizationPermission.DatabasesUpdate),
       ).toBe(false);
     });
 
@@ -96,9 +97,10 @@ describe('RBAC Utilities', () => {
       expect(hasProjectPermission('ProjectDeveloper', ProjectPermission.ChangesApprove)).toBe(
         false,
       );
-      expect(hasProjectPermission('ProjectDeveloper', ProjectPermission.ChangesExecute)).toBe(
-        false,
-      );
+      // Note: ProjectDeveloper now has changes.execute permission per YAML config
+      expect(
+        hasProjectPermission('ProjectDeveloper', ProjectPermission.ProjectSettingsUpdate),
+      ).toBe(false);
     });
 
     it('should return true for ProjectApprover with approval permissions', () => {
@@ -286,7 +288,9 @@ describe('RBAC Utilities', () => {
       const permissions = getOrganizationPermissions('OrganizationDeveloper');
       expect(permissions).toContain(OrganizationPermission.ProjectsCreate);
       expect(permissions).toContain(OrganizationPermission.ProjectsRead);
-      expect(permissions).not.toContain(OrganizationPermission.DatabasesCreate);
+      // Note: OrganizationDeveloper now has databases.create permission per YAML config
+      expect(permissions).toContain(OrganizationPermission.DatabasesCreate);
+      expect(permissions).not.toContain(OrganizationPermission.DatabasesUpdate);
     });
   });
 

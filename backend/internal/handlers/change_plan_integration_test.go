@@ -137,7 +137,7 @@ func createChangePlanTestUser(
 	t *testing.T,
 	userRepo repository.UserRepository,
 	email string,
-	role models.OrganizationRole,
+	role rbac.OrganizationRole,
 ) *models.User {
 	t.Helper()
 
@@ -279,7 +279,7 @@ func createTestChangePlan(
 }
 
 // setUserContext sets up the Echo context with user information for RBAC checks and auth claims
-func setUserContext(c echo.Context, userID uuid.UUID, email string, orgRole models.OrganizationRole) {
+func setUserContext(c echo.Context, userID uuid.UUID, email string, orgRole rbac.OrganizationRole) {
 	// Set RBAC context in request context
 	ctx := c.Request().Context()
 	ctx = context.WithValue(ctx, rbac.ContextKeyUserID, userID.String())
@@ -302,7 +302,7 @@ func createAuthToken(
 	tokenManager *auth.TokenManager,
 	userID uuid.UUID,
 	email string,
-	orgRole models.OrganizationRole,
+	orgRole rbac.OrganizationRole,
 ) string {
 	t.Helper()
 
@@ -577,7 +577,7 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_Success(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleAdmin,
+		rbac.OrganizationAdmin,
 	)
 
 	// Create project
@@ -587,7 +587,7 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_Success(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    user.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: user.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -696,7 +696,7 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_ErrorsBlockTransition(t *test
 		t,
 		userRepo,
 		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleAdmin,
+		rbac.OrganizationAdmin,
 	)
 
 	// Create project
@@ -706,7 +706,7 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_ErrorsBlockTransition(t *test
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    user.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: user.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -816,7 +816,7 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_OnlyWarnings(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleAdmin,
+		rbac.OrganizationAdmin,
 	)
 
 	// Create project
@@ -826,7 +826,7 @@ func TestIntegration_ChangePlan_AutomaticSQLReview_OnlyWarnings(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    user.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: user.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -943,7 +943,7 @@ func TestIntegration_ChangePlan_ManualSQLReview(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleAdmin,
+		rbac.OrganizationAdmin,
 	)
 
 	// Create project
@@ -953,7 +953,7 @@ func TestIntegration_ChangePlan_ManualSQLReview(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    user.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: user.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -1052,7 +1052,7 @@ func TestIntegration_ChangePlan_ManualSQLReview_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -1132,7 +1132,7 @@ func TestIntegration_ChangePlan_ListWithFilters(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleAdmin,
+		rbac.OrganizationAdmin,
 	)
 
 	// Create project
@@ -1142,7 +1142,7 @@ func TestIntegration_ChangePlan_ListWithFilters(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    user.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: user.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -1365,7 +1365,7 @@ func TestIntegration_ChangePlan_GetWithPolicyFindings(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add user as member
@@ -1373,7 +1373,7 @@ func TestIntegration_ChangePlan_GetWithPolicyFindings(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    user.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: user.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -1434,7 +1434,7 @@ func TestIntegration_ChangePlan_GetWithPolicyFindings(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token
-	token, err := tokenManager.GenerateToken(user.ID, user.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(user.ID, user.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -1519,7 +1519,7 @@ func TestIntegration_ChangePlan_GetWithoutPolicyFindings(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("test-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add user as member
@@ -1527,7 +1527,7 @@ func TestIntegration_ChangePlan_GetWithoutPolicyFindings(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    user.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: user.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -1556,7 +1556,7 @@ func TestIntegration_ChangePlan_GetWithoutPolicyFindings(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token
-	token, err := tokenManager.GenerateToken(user.ID, user.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(user.ID, user.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -1624,7 +1624,7 @@ func TestIntegration_ChangePlan_ApprovalWithErrors(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add approver as member with Approver role
@@ -1632,7 +1632,7 @@ func TestIntegration_ChangePlan_ApprovalWithErrors(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    approver.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: approver.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -1652,12 +1652,12 @@ func TestIntegration_ChangePlan_ApprovalWithErrors(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -1702,7 +1702,7 @@ func TestIntegration_ChangePlan_ApprovalWithErrors(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for approver
-	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -1767,7 +1767,7 @@ func TestIntegration_ChangePlan_ApprovalWithOnlyWarnings(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add approver as member with Approver role
@@ -1775,7 +1775,7 @@ func TestIntegration_ChangePlan_ApprovalWithOnlyWarnings(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    approver.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: approver.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -1795,12 +1795,12 @@ func TestIntegration_ChangePlan_ApprovalWithOnlyWarnings(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -1844,7 +1844,7 @@ func TestIntegration_ChangePlan_ApprovalWithOnlyWarnings(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for approver
-	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -1903,7 +1903,7 @@ func TestIntegration_ChangePlan_ExecutionWithErrors(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("executor-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add executor as member with Approver role (can execute)
@@ -1911,7 +1911,7 @@ func TestIntegration_ChangePlan_ExecutionWithErrors(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    executor.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: executor.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -1931,12 +1931,12 @@ func TestIntegration_ChangePlan_ExecutionWithErrors(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -1971,7 +1971,7 @@ func TestIntegration_ChangePlan_ExecutionWithErrors(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for executor
-	token, err := tokenManager.GenerateToken(executor.ID, executor.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(executor.ID, executor.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -2033,7 +2033,7 @@ func TestIntegration_ChangePlan_ExecutionWithOnlyWarnings(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("executor-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add executor as member with Approver role (can execute)
@@ -2041,7 +2041,7 @@ func TestIntegration_ChangePlan_ExecutionWithOnlyWarnings(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    executor.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: executor.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -2061,12 +2061,12 @@ func TestIntegration_ChangePlan_ExecutionWithOnlyWarnings(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -2100,7 +2100,7 @@ func TestIntegration_ChangePlan_ExecutionWithOnlyWarnings(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for executor
-	token, err := tokenManager.GenerateToken(executor.ID, executor.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(executor.ID, executor.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -2159,7 +2159,7 @@ func TestIntegration_ChangePlan_Resubmission(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add author as member
@@ -2167,7 +2167,7 @@ func TestIntegration_ChangePlan_Resubmission(t *testing.T) {
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -2216,7 +2216,7 @@ func TestIntegration_ChangePlan_Resubmission(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Test 1: Resubmit change plan
@@ -2308,7 +2308,7 @@ func TestIntegration_ChangePlan_Resubmission_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create non-author user
@@ -2316,7 +2316,7 @@ func TestIntegration_ChangePlan_Resubmission_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("nonauthor-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add both users as members
@@ -2324,7 +2324,7 @@ func TestIntegration_ChangePlan_Resubmission_Unauthorized(t *testing.T) {
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -2333,7 +2333,7 @@ func TestIntegration_ChangePlan_Resubmission_Unauthorized(t *testing.T) {
 	member3 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    nonAuthor.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: nonAuthor.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member3)
@@ -2365,7 +2365,7 @@ func TestIntegration_ChangePlan_Resubmission_Unauthorized(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for non-author
-	token, err := tokenManager.GenerateToken(nonAuthor.ID, nonAuthor.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(nonAuthor.ID, nonAuthor.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -2422,7 +2422,7 @@ func TestIntegration_ChangePlan_Resubmission_InvalidStatus(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add author as member
@@ -2430,7 +2430,7 @@ func TestIntegration_ChangePlan_Resubmission_InvalidStatus(t *testing.T) {
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -2460,7 +2460,7 @@ func TestIntegration_ChangePlan_Resubmission_InvalidStatus(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -2505,7 +2505,7 @@ func TestIntegration_ChangePlan_Create(t *testing.T) {
 	dbRepo := postgres.NewDatabaseRepository(db)
 
 	// Create test user
-	author := createChangePlanTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+	author := createChangePlanTestUser(t, userRepo, "author@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -2515,7 +2515,7 @@ func TestIntegration_ChangePlan_Create(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -2534,7 +2534,7 @@ func TestIntegration_ChangePlan_Create(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -2626,7 +2626,7 @@ func TestIntegration_ChangePlan_Create_Forbidden(t *testing.T) {
 	dbRepo := postgres.NewDatabaseRepository(db)
 
 	// Create test user (not a member of project)
-	user := createChangePlanTestUser(t, userRepo, "user@example.com", models.OrganizationRoleDeveloper)
+	user := createChangePlanTestUser(t, userRepo, "user@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -2644,7 +2644,7 @@ func TestIntegration_ChangePlan_Create_Forbidden(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for user (not a project member)
-	token, err := tokenManager.GenerateToken(user.ID, user.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(user.ID, user.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -2691,7 +2691,7 @@ func TestIntegration_ChangePlan_Create_SQLContentTooLarge(t *testing.T) {
 	dbRepo := postgres.NewDatabaseRepository(db)
 
 	// Create test user
-	author := createChangePlanTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+	author := createChangePlanTestUser(t, userRepo, "author@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -2701,7 +2701,7 @@ func TestIntegration_ChangePlan_Create_SQLContentTooLarge(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -2720,7 +2720,7 @@ func TestIntegration_ChangePlan_Create_SQLContentTooLarge(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create SQL content larger than 10MB
@@ -2777,7 +2777,7 @@ func TestIntegration_ChangePlan_GetByID(t *testing.T) {
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 
 	// Create test user
-	author := createChangePlanTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+	author := createChangePlanTestUser(t, userRepo, "author@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -2787,7 +2787,7 @@ func TestIntegration_ChangePlan_GetByID(t *testing.T) {
 	err = projectMemberRepo.AddMember(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	})
 	require.NoError(t, err)
@@ -2815,7 +2815,7 @@ func TestIntegration_ChangePlan_GetByID(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -2860,13 +2860,13 @@ func TestIntegration_ChangePlan_GetByID_NotFound(t *testing.T) {
 	userRepo := postgres.NewUserRepository(db)
 
 	// Create test user
-	user := createChangePlanTestUser(t, userRepo, "user@example.com", models.OrganizationRoleDeveloper)
+	user := createChangePlanTestUser(t, userRepo, "user@example.com", rbac.OrganizationDeveloper)
 
 	// Setup handler
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token
-	token, err := tokenManager.GenerateToken(user.ID, user.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(user.ID, user.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request with non-existent ID
@@ -2907,7 +2907,7 @@ func TestIntegration_ChangePlan_List(t *testing.T) {
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 
 	// Create test user
-	author := createChangePlanTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+	author := createChangePlanTestUser(t, userRepo, "author@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -2917,7 +2917,7 @@ func TestIntegration_ChangePlan_List(t *testing.T) {
 	err = projectMemberRepo.AddMember(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	})
 	require.NoError(t, err)
@@ -2961,7 +2961,7 @@ func TestIntegration_ChangePlan_List(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -3012,7 +3012,7 @@ func TestIntegration_ChangePlan_Update(t *testing.T) {
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 
 	// Create test user
-	author := createChangePlanTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+	author := createChangePlanTestUser(t, userRepo, "author@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -3022,7 +3022,7 @@ func TestIntegration_ChangePlan_Update(t *testing.T) {
 	err = projectMemberRepo.AddMember(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	})
 	require.NoError(t, err)
@@ -3050,7 +3050,7 @@ func TestIntegration_ChangePlan_Update(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create update request
@@ -3114,8 +3114,8 @@ func TestIntegration_ChangePlan_Update_Forbidden(t *testing.T) {
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 
 	// Create test users
-	author := createChangePlanTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
-	otherUser := createChangePlanTestUser(t, userRepo, "other@example.com", models.OrganizationRoleDeveloper)
+	author := createChangePlanTestUser(t, userRepo, "author@example.com", rbac.OrganizationDeveloper)
+	otherUser := createChangePlanTestUser(t, userRepo, "other@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -3125,7 +3125,7 @@ func TestIntegration_ChangePlan_Update_Forbidden(t *testing.T) {
 	err = projectMemberRepo.AddMember(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	})
 	require.NoError(t, err)
@@ -3153,7 +3153,7 @@ func TestIntegration_ChangePlan_Update_Forbidden(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for other user (not a project member)
-	token, err := tokenManager.GenerateToken(otherUser.ID, otherUser.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(otherUser.ID, otherUser.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create update request
@@ -3204,7 +3204,7 @@ func TestIntegration_ChangePlan_Delete(t *testing.T) {
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 
 	// Create test user
-	author := createChangePlanTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+	author := createChangePlanTestUser(t, userRepo, "author@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -3214,7 +3214,7 @@ func TestIntegration_ChangePlan_Delete(t *testing.T) {
 	err = projectMemberRepo.AddMember(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	})
 	require.NoError(t, err)
@@ -3242,7 +3242,7 @@ func TestIntegration_ChangePlan_Delete(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -3286,8 +3286,8 @@ func TestIntegration_ChangePlan_Delete_Forbidden(t *testing.T) {
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 
 	// Create test users
-	author := createChangePlanTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
-	otherUser := createChangePlanTestUser(t, userRepo, "other@example.com", models.OrganizationRoleDeveloper)
+	author := createChangePlanTestUser(t, userRepo, "author@example.com", rbac.OrganizationDeveloper)
+	otherUser := createChangePlanTestUser(t, userRepo, "other@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -3297,7 +3297,7 @@ func TestIntegration_ChangePlan_Delete_Forbidden(t *testing.T) {
 	err = projectMemberRepo.AddMember(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	})
 	require.NoError(t, err)
@@ -3325,7 +3325,7 @@ func TestIntegration_ChangePlan_Delete_Forbidden(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for other user (not a project member)
-	token, err := tokenManager.GenerateToken(otherUser.ID, otherUser.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(otherUser.ID, otherUser.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -3365,7 +3365,7 @@ func TestIntegration_ChangePlan_Delete_InvalidStatus(t *testing.T) {
 	changePlanRepo := postgres.NewChangePlanRepository(db)
 
 	// Create test user
-	author := createChangePlanTestUser(t, userRepo, "author@example.com", models.OrganizationRoleDeveloper)
+	author := createChangePlanTestUser(t, userRepo, "author@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -3375,7 +3375,7 @@ func TestIntegration_ChangePlan_Delete_InvalidStatus(t *testing.T) {
 	err = projectMemberRepo.AddMember(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	})
 	require.NoError(t, err)
@@ -3406,7 +3406,7 @@ func TestIntegration_ChangePlan_Delete_InvalidStatus(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -3459,7 +3459,7 @@ func TestIntegration_ChangePlan_AssignReviewer(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create reviewer user (Project Approver)
@@ -3467,7 +3467,7 @@ func TestIntegration_ChangePlan_AssignReviewer(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("reviewer-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -3477,7 +3477,7 @@ func TestIntegration_ChangePlan_AssignReviewer(t *testing.T) {
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -3487,7 +3487,7 @@ func TestIntegration_ChangePlan_AssignReviewer(t *testing.T) {
 	reviewerMember := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    reviewer.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, reviewerMember)
@@ -3516,7 +3516,7 @@ func TestIntegration_ChangePlan_AssignReviewer(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request body
@@ -3589,7 +3589,7 @@ func TestIntegration_ChangePlan_AssignReviewer_Forbidden(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create another user (not the author)
@@ -3597,7 +3597,7 @@ func TestIntegration_ChangePlan_AssignReviewer_Forbidden(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("other-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create reviewer user
@@ -3605,7 +3605,7 @@ func TestIntegration_ChangePlan_AssignReviewer_Forbidden(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("reviewer-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -3615,7 +3615,7 @@ func TestIntegration_ChangePlan_AssignReviewer_Forbidden(t *testing.T) {
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -3624,7 +3624,7 @@ func TestIntegration_ChangePlan_AssignReviewer_Forbidden(t *testing.T) {
 	otherMember := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    otherUser.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, otherMember)
@@ -3633,7 +3633,7 @@ func TestIntegration_ChangePlan_AssignReviewer_Forbidden(t *testing.T) {
 	reviewerMember := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    reviewer.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, reviewerMember)
@@ -3662,7 +3662,7 @@ func TestIntegration_ChangePlan_AssignReviewer_Forbidden(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for other user (not the author)
-	token, err := tokenManager.GenerateToken(otherUser.ID, otherUser.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(otherUser.ID, otherUser.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request body
@@ -3727,7 +3727,7 @@ func TestIntegration_ChangePlan_AssignReviewer_InvalidReviewer(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create developer user (not an approver)
@@ -3735,7 +3735,7 @@ func TestIntegration_ChangePlan_AssignReviewer_InvalidReviewer(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("developer-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -3745,7 +3745,7 @@ func TestIntegration_ChangePlan_AssignReviewer_InvalidReviewer(t *testing.T) {
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -3755,7 +3755,7 @@ func TestIntegration_ChangePlan_AssignReviewer_InvalidReviewer(t *testing.T) {
 	developerMember := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    developer.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, developerMember)
@@ -3784,7 +3784,7 @@ func TestIntegration_ChangePlan_AssignReviewer_InvalidReviewer(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request body trying to assign a developer as reviewer
@@ -3848,7 +3848,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -3858,7 +3858,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -3898,7 +3898,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -3970,13 +3970,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	unauthorizedUser := createChangePlanTestUser(
 		t,
 		userRepo,
 		fmt.Sprintf("unauthorized-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -3986,7 +3986,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Unauthorized(t *testing.T) {
 	authorMember := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, authorMember)
@@ -3996,7 +3996,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Unauthorized(t *testing.T) {
 	unauthorizedMember := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    unauthorizedUser.ID,
-		Role:      models.ProjectRoleViewer,
+		Role:      rbac.ProjectViewer,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, unauthorizedMember)
@@ -4034,7 +4034,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Unauthorized(t *testing.T) {
 	token, err := tokenManager.GenerateToken(
 		unauthorizedUser.ID,
 		unauthorizedUser.Email,
-		string(models.OrganizationRoleDeveloper),
+		string(rbac.OrganizationDeveloper),
 	)
 	require.NoError(t, err)
 
@@ -4091,7 +4091,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_InvalidStatus(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -4101,7 +4101,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_InvalidStatus(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -4136,7 +4136,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_InvalidStatus(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -4230,7 +4230,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Success(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -4240,7 +4240,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Success(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -4323,7 +4323,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Success(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -4432,7 +4432,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Failure(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -4442,7 +4442,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Failure(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -4523,7 +4523,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Failure(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -4623,7 +4623,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SnapshotCapture(t *testing.T) 
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -4633,7 +4633,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SnapshotCapture(t *testing.T) 
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -4722,7 +4722,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SnapshotCapture(t *testing.T) 
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -4819,13 +4819,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase(t *test
 		t,
 		userRepo,
 		fmt.Sprintf("author1-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	author2 := createChangePlanTestUser(
 		t,
 		userRepo,
 		fmt.Sprintf("author2-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -4835,7 +4835,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase(t *test
 	member1 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author1.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author1.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member1)
@@ -4844,7 +4844,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase(t *test
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author2.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author2.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -4933,9 +4933,9 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentSameDatabase(t *test
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create tokens for both authors
-	token1, err := tokenManager.GenerateToken(author1.ID, author1.Email, string(models.OrganizationRoleDeveloper))
+	token1, err := tokenManager.GenerateToken(author1.ID, author1.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
-	token2, err := tokenManager.GenerateToken(author2.ID, author2.Email, string(models.OrganizationRoleDeveloper))
+	token2, err := tokenManager.GenerateToken(author2.ID, author2.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Execute first change plan (should succeed and acquire lock)
@@ -5071,13 +5071,13 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases(t
 		t,
 		userRepo,
 		fmt.Sprintf("author1-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	author2 := createChangePlanTestUser(
 		t,
 		userRepo,
 		fmt.Sprintf("author2-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -5087,7 +5087,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases(t
 	member1 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author1.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author1.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member1)
@@ -5096,7 +5096,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases(t
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author2.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author2.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -5226,9 +5226,9 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConcurrentDifferentDatabases(t
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create tokens
-	token1, err := tokenManager.GenerateToken(author1.ID, author1.Email, string(models.OrganizationRoleDeveloper))
+	token1, err := tokenManager.GenerateToken(author1.ID, author1.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
-	token2, err := tokenManager.GenerateToken(author2.ID, author2.Email, string(models.OrganizationRoleDeveloper))
+	token2, err := tokenManager.GenerateToken(author2.ID, author2.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Execute both change plans concurrently
@@ -5361,7 +5361,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_LockRelease(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -5371,7 +5371,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_LockRelease(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -5451,7 +5451,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_LockRelease(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Execute change plan
@@ -5523,19 +5523,19 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author1-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	author2 := createChangePlanTestUser(
 		t,
 		userRepo,
 		fmt.Sprintf("author2-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	author3 := createChangePlanTestUser(
 		t,
 		userRepo,
 		fmt.Sprintf("author3-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -5546,7 +5546,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling(t *testing.T) {
 		member := &models.ProjectMember{
 			ProjectID: project.ID,
 			UserID:    author.ID,
-			Role:      models.ProjectRoleOwner,
+			Role:      rbac.ProjectOwner,
 			AddedByID: author.ID,
 		}
 		err = projectMemberRepo.AddMember(ctx, member)
@@ -5641,7 +5641,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Execute first change plan (acquires lock)
-	token1, err := tokenManager.GenerateToken(author1.ID, author1.Email, string(models.OrganizationRoleDeveloper))
+	token1, err := tokenManager.GenerateToken(author1.ID, author1.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	e := echo.New()
@@ -5673,9 +5673,9 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_QueueHandling(t *testing.T) {
 	require.True(t, isLocked, "database should be locked")
 
 	// Try to execute second and third change plans (should be queued)
-	token2, err := tokenManager.GenerateToken(author2.ID, author2.Email, string(models.OrganizationRoleDeveloper))
+	token2, err := tokenManager.GenerateToken(author2.ID, author2.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
-	token3, err := tokenManager.GenerateToken(author3.ID, author3.Email, string(models.OrganizationRoleDeveloper))
+	token3, err := tokenManager.GenerateToken(author3.ID, author3.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	req2 := httptest.NewRequest(
@@ -5785,7 +5785,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SQLSyntaxError(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -5795,7 +5795,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SQLSyntaxError(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -5871,7 +5871,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_SQLSyntaxError(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Execute change plan
@@ -5946,7 +5946,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Timeout(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -5956,7 +5956,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Timeout(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -6032,7 +6032,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_Timeout(t *testing.T) {
 	handler := setupChangePlanHandlerWithTimeout(t, db, tokenManager, 1*time.Second)
 
 	// Create token
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Execute change plan
@@ -6092,7 +6092,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConnectionFailure(t *testing.T
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -6102,7 +6102,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConnectionFailure(t *testing.T
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -6168,7 +6168,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ConnectionFailure(t *testing.T
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Execute change plan
@@ -6228,7 +6228,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_RollbackVerification(t *testin
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -6238,7 +6238,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_RollbackVerification(t *testin
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -6332,7 +6332,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_RollbackVerification(t *testin
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Execute change plan
@@ -6408,7 +6408,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ErrorLogging(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -6418,7 +6418,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ErrorLogging(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -6494,7 +6494,7 @@ func TestIntegration_ChangePlan_ExecuteChangePlan_ErrorLogging(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Execute change plan
@@ -6569,7 +6569,7 @@ func TestIntegration_ChangePlan_CloseChangePlan(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add approver as member with Approver role
@@ -6577,7 +6577,7 @@ func TestIntegration_ChangePlan_CloseChangePlan(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    approver.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: approver.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -6597,12 +6597,12 @@ func TestIntegration_ChangePlan_CloseChangePlan(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -6625,7 +6625,7 @@ func TestIntegration_ChangePlan_CloseChangePlan(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for approver
-	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request with comments
@@ -6705,7 +6705,7 @@ func TestIntegration_ChangePlan_CloseChangePlan_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("unauthorized-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -6715,7 +6715,7 @@ func TestIntegration_ChangePlan_CloseChangePlan_Unauthorized(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    unauthorizedUser.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: unauthorizedUser.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -6726,12 +6726,12 @@ func TestIntegration_ChangePlan_CloseChangePlan_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	err = projectMemberRepo.AddMember(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    approver.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: approver.ID,
 	})
 	require.NoError(t, err)
@@ -6750,12 +6750,12 @@ func TestIntegration_ChangePlan_CloseChangePlan_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -6781,7 +6781,7 @@ func TestIntegration_ChangePlan_CloseChangePlan_Unauthorized(t *testing.T) {
 	token, err := tokenManager.GenerateToken(
 		unauthorizedUser.ID,
 		unauthorizedUser.Email,
-		string(models.OrganizationRoleDeveloper),
+		string(rbac.OrganizationDeveloper),
 	)
 	require.NoError(t, err)
 
@@ -6836,7 +6836,7 @@ func TestIntegration_ChangePlan_GetApprovalHistory(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add approver as member with Approver role
@@ -6844,7 +6844,7 @@ func TestIntegration_ChangePlan_GetApprovalHistory(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    approver.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: approver.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -6864,12 +6864,12 @@ func TestIntegration_ChangePlan_GetApprovalHistory(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -6930,7 +6930,7 @@ func TestIntegration_ChangePlan_GetApprovalHistory(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for approver (who can view approval history)
-	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -6998,7 +6998,7 @@ func TestIntegration_ChangePlan_ApproveChangePlan_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("unauthorized-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -7008,7 +7008,7 @@ func TestIntegration_ChangePlan_ApproveChangePlan_Unauthorized(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    unauthorizedUser.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: unauthorizedUser.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -7019,12 +7019,12 @@ func TestIntegration_ChangePlan_ApproveChangePlan_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	err = projectMemberRepo.AddMember(ctx, &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    approver.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: approver.ID,
 	})
 	require.NoError(t, err)
@@ -7043,12 +7043,12 @@ func TestIntegration_ChangePlan_ApproveChangePlan_Unauthorized(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -7074,7 +7074,7 @@ func TestIntegration_ChangePlan_ApproveChangePlan_Unauthorized(t *testing.T) {
 	token, err := tokenManager.GenerateToken(
 		unauthorizedUser.ID,
 		unauthorizedUser.Email,
-		string(models.OrganizationRoleDeveloper),
+		string(rbac.OrganizationDeveloper),
 	)
 	require.NoError(t, err)
 
@@ -7128,7 +7128,7 @@ func TestIntegration_ChangePlan_ApproveChangePlan_OrganizationAdmin(t *testing.T
 		t,
 		userRepo,
 		fmt.Sprintf("admin-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleAdmin,
+		rbac.OrganizationAdmin,
 	)
 
 	// Create project
@@ -7148,12 +7148,12 @@ func TestIntegration_ChangePlan_ApproveChangePlan_OrganizationAdmin(t *testing.T
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -7187,7 +7187,7 @@ func TestIntegration_ChangePlan_ApproveChangePlan_OrganizationAdmin(t *testing.T
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for organization admin
-	token, err := tokenManager.GenerateToken(orgAdmin.ID, orgAdmin.Email, string(models.OrganizationRoleAdmin))
+	token, err := tokenManager.GenerateToken(orgAdmin.ID, orgAdmin.Email, string(rbac.OrganizationAdmin))
 	require.NoError(t, err)
 
 	// Create request
@@ -7243,7 +7243,7 @@ func TestIntegration_ChangePlan_AuditLogging_ApproveChangePlan(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add approver as member with Approver role
@@ -7251,7 +7251,7 @@ func TestIntegration_ChangePlan_AuditLogging_ApproveChangePlan(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    approver.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: approver.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -7271,12 +7271,12 @@ func TestIntegration_ChangePlan_AuditLogging_ApproveChangePlan(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -7299,7 +7299,7 @@ func TestIntegration_ChangePlan_AuditLogging_ApproveChangePlan(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for approver
-	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request with comments
@@ -7394,7 +7394,7 @@ func TestIntegration_ChangePlan_AuditLogging_CloseChangePlan(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("approver-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project and add approver as member with Approver role
@@ -7402,7 +7402,7 @@ func TestIntegration_ChangePlan_AuditLogging_CloseChangePlan(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    approver.ID,
-		Role:      models.ProjectRoleApprover,
+		Role:      rbac.ProjectApprover,
 		AddedByID: approver.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -7422,12 +7422,12 @@ func TestIntegration_ChangePlan_AuditLogging_CloseChangePlan(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 	member2 := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member2)
@@ -7450,7 +7450,7 @@ func TestIntegration_ChangePlan_AuditLogging_CloseChangePlan(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for approver
-	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(approver.ID, approver.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request with comments
@@ -7549,7 +7549,7 @@ func TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Success(t *testin
 		t,
 		userRepo,
 		fmt.Sprintf("executor-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -7559,7 +7559,7 @@ func TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Success(t *testin
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    executor.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: executor.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -7641,7 +7641,7 @@ func TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Success(t *testin
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for executor
-	token, err := tokenManager.GenerateToken(executor.ID, executor.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(executor.ID, executor.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -7749,7 +7749,7 @@ func TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Failure(t *testin
 		t,
 		userRepo,
 		fmt.Sprintf("executor-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -7759,7 +7759,7 @@ func TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Failure(t *testin
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    executor.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: executor.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -7841,7 +7841,7 @@ func TestIntegration_ChangePlan_AuditLogging_ExecuteChangePlan_Failure(t *testin
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for executor
-	token, err := tokenManager.GenerateToken(executor.ID, executor.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(executor.ID, executor.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -7935,7 +7935,7 @@ func TestIntegration_ChangePlan_ChangeHistoryTracking(t *testing.T) {
 		t,
 		userRepo,
 		fmt.Sprintf("author-%d@example.com", time.Now().Unix()),
-		models.OrganizationRoleDeveloper,
+		rbac.OrganizationDeveloper,
 	)
 
 	// Create project
@@ -7945,7 +7945,7 @@ func TestIntegration_ChangePlan_ChangeHistoryTracking(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    author.ID,
-		Role:      models.ProjectRoleDeveloper,
+		Role:      rbac.ProjectDeveloper,
 		AddedByID: author.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -7974,7 +7974,7 @@ func TestIntegration_ChangePlan_ChangeHistoryTracking(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for author
-	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(author.ID, author.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Update change plan - change title, description, and status
@@ -8094,10 +8094,10 @@ func TestIntegration_ChangePlan_GetReviewFindings_Forbidden(t *testing.T) {
 	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
 
 	// Create project owner
-	owner := createChangePlanTestUser(t, userRepo, "owner@example.com", models.OrganizationRoleDeveloper)
+	owner := createChangePlanTestUser(t, userRepo, "owner@example.com", rbac.OrganizationDeveloper)
 
 	// Create test user (not a member of project)
-	nonMember := createChangePlanTestUser(t, userRepo, "nonmember@example.com", models.OrganizationRoleDeveloper)
+	nonMember := createChangePlanTestUser(t, userRepo, "nonmember@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -8106,7 +8106,7 @@ func TestIntegration_ChangePlan_GetReviewFindings_Forbidden(t *testing.T) {
 	member := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    owner.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: owner.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, member)
@@ -8150,7 +8150,7 @@ func TestIntegration_ChangePlan_GetReviewFindings_Forbidden(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for non-member user
-	token, err := tokenManager.GenerateToken(nonMember.ID, nonMember.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(nonMember.ID, nonMember.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -8199,7 +8199,7 @@ func TestIntegration_ChangePlan_GetReviewFindings_Success(t *testing.T) {
 	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
 
 	// Create project member with viewer role
-	member := createChangePlanTestUser(t, userRepo, "member@example.com", models.OrganizationRoleDeveloper)
+	member := createChangePlanTestUser(t, userRepo, "member@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -8208,7 +8208,7 @@ func TestIntegration_ChangePlan_GetReviewFindings_Success(t *testing.T) {
 	projectMember := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    member.ID,
-		Role:      models.ProjectRoleViewer,
+		Role:      rbac.ProjectViewer,
 		AddedByID: member.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, projectMember)
@@ -8263,7 +8263,7 @@ func TestIntegration_ChangePlan_GetReviewFindings_Success(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for member user
-	token, err := tokenManager.GenerateToken(member.ID, member.Email, string(models.OrganizationRoleDeveloper))
+	token, err := tokenManager.GenerateToken(member.ID, member.Email, string(rbac.OrganizationDeveloper))
 	require.NoError(t, err)
 
 	// Create request
@@ -8332,10 +8332,10 @@ func TestIntegration_ChangePlan_GetReviewFindings_OrgAdmin(t *testing.T) {
 	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
 
 	// Create org admin (not a member of project)
-	orgAdmin := createChangePlanTestUser(t, userRepo, "admin@example.com", models.OrganizationRoleAdmin)
+	orgAdmin := createChangePlanTestUser(t, userRepo, "admin@example.com", rbac.OrganizationAdmin)
 
 	// Create project owner
-	owner := createChangePlanTestUser(t, userRepo, "owner@example.com", models.OrganizationRoleDeveloper)
+	owner := createChangePlanTestUser(t, userRepo, "owner@example.com", rbac.OrganizationDeveloper)
 
 	// Create project
 	project := createTestProject(t, projectRepo, "test-project")
@@ -8344,7 +8344,7 @@ func TestIntegration_ChangePlan_GetReviewFindings_OrgAdmin(t *testing.T) {
 	projectMember := &models.ProjectMember{
 		ProjectID: project.ID,
 		UserID:    owner.ID,
-		Role:      models.ProjectRoleOwner,
+		Role:      rbac.ProjectOwner,
 		AddedByID: owner.ID,
 	}
 	err = projectMemberRepo.AddMember(ctx, projectMember)
@@ -8388,7 +8388,7 @@ func TestIntegration_ChangePlan_GetReviewFindings_OrgAdmin(t *testing.T) {
 	handler := setupChangePlanHandler(t, db, tokenManager)
 
 	// Create token for org admin (not a project member)
-	token, err := tokenManager.GenerateToken(orgAdmin.ID, orgAdmin.Email, string(models.OrganizationRoleAdmin))
+	token, err := tokenManager.GenerateToken(orgAdmin.ID, orgAdmin.Email, string(rbac.OrganizationAdmin))
 	require.NoError(t, err)
 
 	// Create request

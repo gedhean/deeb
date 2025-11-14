@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,12 +33,12 @@ func TestIntegration_AuditLogs_ListAuditLogs(t *testing.T) {
 
 	// Create admin user
 	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().Unix())
-	adminID := createTestUser(t, db, adminEmail, models.OrganizationRoleAdmin)
+	adminID := createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ := loginUser(t, db, adminEmail, "TestPassword123!")
 
 	// Create developer user (non-admin)
 	devEmail := fmt.Sprintf("developer-%d@example.com", time.Now().Unix())
-	devID := createTestUser(t, db, devEmail, models.OrganizationRoleDeveloper)
+	devID := createTestUser(t, db, devEmail, rbac.OrganizationDeveloper)
 	devToken, _ := loginUser(t, db, devEmail, "TestPassword123!")
 
 	ctx := context.Background()

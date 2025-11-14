@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
 )
@@ -44,7 +45,7 @@ func (h *AuditLogHandler) ListAuditLogs(c echo.Context) error {
 	}
 
 	// RBAC check: admin only
-	if claims.OrganizationRole != string(models.OrganizationRoleAdmin) {
+	if claims.OrganizationRole != string(rbac.OrganizationAdmin) {
 		return c.JSON(http.StatusForbidden, map[string]interface{}{
 			"error": "Admin access required",
 		})

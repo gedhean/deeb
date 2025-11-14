@@ -2,10 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { changePlanService } from '@/lib/api/services/changePlans';
-import { projectsService } from '@/lib/api/services/projects';
+import { projectsService, projectMembersService } from '@/lib/api/services/projects';
 import { databasesService } from '@/lib/api/services/databases';
 import { usersService } from '@/lib/api/services/users';
-import type { ChangePlan, ChangePlanStatus, Project, Database, User } from '@/lib/api/types';
+import { useProjectPermissions } from '@/hooks/api/useProjectPermissions';
+import type {
+  ChangePlan,
+  ChangePlanStatus,
+  Project,
+  Database,
+  User,
+  ProjectMemberWithUser,
+} from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,12 +28,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { SQLReviewResults } from '@/components/SQLReviewResults';
-import { ApprovalActions } from '@/components/ApprovalActions';
 import { ApprovalHistory } from '@/components/ApprovalHistory';
-import { ExecuteButton } from '@/components/ExecuteButton';
 import { ExecutionResults } from '@/components/ExecutionResults';
-import { SubmitForReview } from '@/components/SubmitForReview';
-import { useAuth } from '@/contexts/AuthContext';
+import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
+import { ChangePlanActions } from '@/components/ChangePlanActions';
 import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
 import {
   ArrowLeft,
@@ -41,17 +47,20 @@ import {
 export const ChangePlanDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
   const [changePlan, setChangePlan] = useState<ChangePlan | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [database, setDatabase] = useState<Database | null>(null);
   const [author, setAuthor] = useState<User | null>(null);
+  const [projectMembers, setProjectMembers] = useState<ProjectMemberWithUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingSQLContent, setEditingSQLContent] = useState('');
   const [isUpdatingSQL, setIsUpdatingSQL] = useState(false);
   const [editError, setEditError] = useState('');
+
+  // Get project permissions based on loaded project members
+  const permissions = useProjectPermissions(projectMembers);
 
   useEffect(() => {
     if (id) {
@@ -85,6 +94,17 @@ export const ChangePlanDetailPage: React.FC = () => {
       setProject(foundProject || null);
       setDatabase(foundDatabase || null);
       setAuthor(foundAuthor || null);
+
+      // Load project members if project found
+      if (foundProject) {
+        try {
+          const members = await projectMembersService.listProjectMembers(foundProject.id);
+          setProjectMembers(members);
+        } catch (err) {
+          console.error('Failed to load project members:', err);
+          setProjectMembers([]);
+        }
+      }
     } catch (err) {
       if (err instanceof APIError) {
         setError(err.message);
@@ -94,56 +114,6 @@ export const ChangePlanDetailPage: React.FC = () => {
       console.error('Failed to load change plan:', err);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Get status badge variant
-  const getStatusBadgeVariant = (
-    status: ChangePlanStatus,
-  ): 'default' | 'secondary' | 'destructive' | 'outline' => {
-    switch (status) {
-      case 'Open':
-        return 'default';
-      case 'Approved':
-        return 'default';
-      case 'Completed':
-        return 'default';
-      case 'Draft':
-        return 'secondary';
-      case 'InProgress':
-        return 'outline';
-      case 'Failed':
-        return 'destructive';
-      case 'Cancelled':
-        return 'secondary';
-      case 'Closed':
-        return 'secondary';
-      default:
-        return 'secondary';
-    }
-  };
-
-  // Get status badge color class
-  const getStatusBadgeClass = (status: ChangePlanStatus): string => {
-    switch (status) {
-      case 'Open':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'Approved':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'Completed':
-        return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200';
-      case 'Draft':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      case 'InProgress':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'Failed':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'Cancelled':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      case 'Closed':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
     }
   };
 
@@ -168,11 +138,6 @@ export const ChangePlanDetailPage: React.FC = () => {
   const canEditSQLContent = (status: ChangePlanStatus): boolean => {
     const terminalStates: ChangePlanStatus[] = ['Completed', 'Closed', 'Cancelled'];
     return !terminalStates.includes(status);
-  };
-
-  // Check if current user is the author
-  const isAuthor = (): boolean => {
-    return user?.id === changePlan?.author_id;
   };
 
   // Handle opening edit dialog
@@ -306,15 +271,14 @@ export const ChangePlanDetailPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Badge
-              variant={getStatusBadgeVariant(changePlan.status)}
-              className={getStatusBadgeClass(changePlan.status)}
-            >
-              {changePlan.status}
-            </Badge>
-            <SubmitForReview changePlan={changePlan} onSuccess={() => loadChangePlan(id!)} />
-            <ApprovalActions changePlan={changePlan} onSuccess={() => loadChangePlan(id!)} />
-            <ExecuteButton changePlan={changePlan} onSuccess={() => loadChangePlan(id!)} />
+            <ChangePlanStatusBadge status={changePlan.status} />
+            <ChangePlanActions
+              changePlan={changePlan}
+              onSuccess={() => loadChangePlan(id!)}
+              canApprove={permissions.canApproveChanges}
+              canReject={permissions.canRejectChanges}
+              canExecute={permissions.canExecuteChanges}
+            />
           </div>
         </div>
 
@@ -465,7 +429,7 @@ export const ChangePlanDetailPage: React.FC = () => {
                 <CardTitle>SQL Content</CardTitle>
                 <CardDescription>SQL statements to be executed</CardDescription>
               </div>
-              {isAuthor() && canEditSQLContent(changePlan.status) && (
+              {permissions.canUpdateChanges && canEditSQLContent(changePlan.status) && (
                 <Button
                   variant="ghost"
                   size="sm"

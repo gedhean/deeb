@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 import {
   Accordion,
   AccordionContent,
@@ -11,7 +10,8 @@ import {
 import { changePlanService } from '@/lib/api/services/changePlans';
 import { usersService } from '@/lib/api/services/users';
 import { APIError } from '@/lib/api/types';
-import type { ChangePlan, ExecutionLog, User } from '@/lib/api/types';
+import type { ChangePlan, ExecutionLog, User, ChangePlanStatus } from '@/lib/api/types';
+import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
 import {
   CheckCircle2,
   XCircle,
@@ -189,16 +189,9 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ changePlan }
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">Status</span>
-                    <Badge
-                      variant={isCompleted ? 'default' : 'destructive'}
-                      className={
-                        isCompleted
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                      }
-                    >
-                      {executionStatus}
-                    </Badge>
+                    {executionStatus && (
+                      <ChangePlanStatusBadge status={executionStatus as ChangePlanStatus} />
+                    )}
                   </div>
                 </div>
               </div>
@@ -275,16 +268,9 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ changePlan }
                             ) : logIsFailed ? (
                               <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
                             ) : null}
-                            <Badge
-                              variant={logIsCompleted ? 'default' : 'destructive'}
-                              className={
-                                logIsCompleted
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                              }
-                            >
-                              {log.status}
-                            </Badge>
+                            {log.status && (
+                              <ChangePlanStatusBadge status={log.status as ChangePlanStatus} />
+                            )}
                           </div>
                           <span className="text-xs text-muted-foreground">
                             {formatDate(log.completed_at || log.started_at)}

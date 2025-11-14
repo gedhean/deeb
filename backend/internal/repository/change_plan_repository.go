@@ -13,6 +13,7 @@ type ChangePlanListFilters struct {
 	Offset     int                     // Number of results to skip
 	Status     models.ChangePlanStatus // Filter by status (empty for all)
 	ProjectID  uuid.UUID               // Filter by project ID (Nil for all)
+	ProjectIDs []uuid.UUID             // Filter by multiple project IDs (empty for all, overrides ProjectID)
 	DatabaseID uuid.UUID               // Filter by database ID (Nil for all)
 	AuthorID   uuid.UUID               // Filter by author ID (Nil for all)
 }

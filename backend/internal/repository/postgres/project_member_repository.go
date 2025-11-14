@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 )
 
@@ -126,9 +127,9 @@ func (r *ProjectMemberRepository) GetMemberRole(ctx context.Context, projectID, 
 }
 
 // UpdateRole updates the role of a member in a project
-func (r *ProjectMemberRepository) UpdateRole(ctx context.Context, projectID, userID uuid.UUID, role models.ProjectRole) error {
+func (r *ProjectMemberRepository) UpdateRole(ctx context.Context, projectID, userID uuid.UUID, role rbac.ProjectRole) error {
 	// Validate role
-	if !role.IsValid() {
+	if !rbac.IsValidProjectRole(role) {
 		return models.ErrProjectMemberInvalidRole
 	}
 
@@ -153,4 +154,27 @@ func (r *ProjectMemberRepository) UpdateRole(ctx context.Context, projectID, use
 	}
 
 	return nil
+}
+
+// GetUserProjectIDs retrieves all project IDs that a user is a member of
+func (r *ProjectMemberRepository) GetUserProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	query := `
+		SELECT project_id
+		FROM project_members
+		WHERE user_id = $1
+		ORDER BY added_at DESC
+	`
+
+	var projectIDs []uuid.UUID
+	err := r.db.SelectContext(ctx, &projectIDs, query, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return empty slice instead of nil if no projects found
+	if projectIDs == nil {
+		projectIDs = []uuid.UUID{}
+	}
+
+	return projectIDs, nil
 }

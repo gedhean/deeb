@@ -3,6 +3,8 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronsUpDown, Plus, FolderKanban, Search } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 
 import {
   DropdownMenu,
@@ -24,10 +26,17 @@ import type { Project } from '@/lib/api/types';
 
 export function ProjectSwitcher({ projects }: { projects: Project[] }) {
   const { isMobile } = useSidebar();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const setCurrentProject = useSetCurrentProject();
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Check if user can create projects (DBA or Admin)
+  const canCreateProjects = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.ProjectsCreate,
+  );
 
   // Use current project from store, or first project if available
   const activeProject = currentProject || projects[0];
@@ -132,13 +141,17 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
                 </DropdownMenuItem>
               ))
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 p-2" onClick={handleAddProject}>
-              <div className="flex size-6 items-center justify-center rounded-md border bg-background">
-                <Plus className="size-4" />
-              </div>
-              <div className="font-medium text-muted-foreground">Add project</div>
-            </DropdownMenuItem>
+            {canCreateProjects && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="gap-2 p-2" onClick={handleAddProject}>
+                  <div className="flex size-6 items-center justify-center rounded-md border bg-background">
+                    <Plus className="size-4" />
+                  </div>
+                  <div className="font-medium text-muted-foreground">Add project</div>
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

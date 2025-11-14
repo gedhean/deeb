@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -195,7 +196,7 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 			Email:            email,
 			PasswordHash:     "", // No password for OAuth users
 			IsActive:         true,
-			OrganizationRole: models.OrganizationRole(orgRole),
+			OrganizationRole: rbac.OrganizationRole(orgRole),
 			OAuthProvider:    stringPtr("google"),
 			OAuthID:          stringPtr(userInfo.Email), // Using email as OAuth ID for now
 		}

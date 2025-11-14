@@ -14,6 +14,7 @@ import (
 
 	"github.com/nsxbet/deeb/internal/handlers"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +34,7 @@ func TestIntegration_AuditLogging_ResourceCRUD(t *testing.T) {
 
 	// Create admin user
 	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().Unix())
-	adminID := createTestUser(t, db, adminEmail, models.OrganizationRoleAdmin)
+	adminID := createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ := loginUser(t, db, adminEmail, "TestPassword123!")
 
 	t.Run("Project Create Audit Logging", func(t *testing.T) {
@@ -422,7 +423,7 @@ func TestIntegration_AuditLogging_ChangePlanCRUD(t *testing.T) {
 
 	// Create admin user
 	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().Unix())
-	adminID := createTestUser(t, db, adminEmail, models.OrganizationRoleAdmin)
+	adminID := createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ := loginUser(t, db, adminEmail, "TestPassword123!")
 
 	// Create project
@@ -631,7 +632,7 @@ func TestIntegration_AuditLogging_ChangePlanStateTransitions(t *testing.T) {
 
 	// Create admin user
 	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().Unix())
-	adminID := createTestUser(t, db, adminEmail, models.OrganizationRoleAdmin)
+	adminID := createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ := loginUser(t, db, adminEmail, "TestPassword123!")
 
 	// Create project

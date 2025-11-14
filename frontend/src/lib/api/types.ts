@@ -1,5 +1,10 @@
 // API Response Types
 
+import type { OrganizationRole, ProjectRole } from '../rbac.generated';
+
+// Re-export RBAC types for convenience
+export type { OrganizationRole, ProjectRole };
+
 // Health Check
 export interface HealthCheckResponse {
   status: string;
@@ -18,7 +23,7 @@ export interface User {
   id: string;
   email: string;
   display_name?: string;
-  organization_role: string;
+  organization_role: OrganizationRole;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -39,7 +44,7 @@ export interface LoginResponse {
 export interface RegisterRequest {
   email: string;
   password: string;
-  organization_role?: string;
+  organization_role?: OrganizationRole;
 }
 
 export interface RegisterResponse {
@@ -50,13 +55,13 @@ export interface CreateUserRequest {
   email: string;
   password: string;
   display_name?: string;
-  organization_role: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
+  organization_role: OrganizationRole;
 }
 
 export interface UpdateUserRequest {
   password?: string;
   display_name?: string;
-  organization_role?: 'OrganizationAdmin' | 'OrganizationDBA' | 'OrganizationDeveloper';
+  organization_role?: OrganizationRole;
   is_active?: boolean;
   two_factor_enabled?: boolean;
 }
@@ -81,7 +86,7 @@ export interface UpdateProjectRequest {
 }
 
 // Project Member Types
-export type ProjectRole = 'ProjectOwner' | 'ProjectDeveloper' | 'ProjectApprover' | 'ProjectViewer';
+// Note: ProjectRole is imported from rbac.generated (YAML-based)
 
 export interface ProjectMember {
   id: string;
@@ -126,7 +131,7 @@ export interface DatabaseInstance {
   username: string;
   use_rds_iam_auth: boolean;
   require_ssl: boolean;
-  status: 'Active' | 'Inactive' | 'Maintenance';
+  status: DatabaseInstanceStatus;
   environment_id?: string;
   created_at: string;
   updated_at: string;
@@ -155,9 +160,13 @@ export interface UpdateDatabaseInstanceRequest {
   password?: string;
   use_rds_iam_auth?: boolean;
   require_ssl?: boolean;
-  status?: 'Active' | 'Inactive' | 'Maintenance';
+  status?: DatabaseInstanceStatus;
   environment_id?: string;
 }
+
+// Database Status Types
+export type DatabaseStatus = 'Active' | 'Inactive' | 'Pending';
+export type DatabaseInstanceStatus = 'Active' | 'Inactive' | 'Maintenance';
 
 // Database Types
 export interface Database {
@@ -167,7 +176,7 @@ export interface Database {
   environment_id: string;
   database_name: string;
   description?: string;
-  status: 'Active' | 'Inactive';
+  status: DatabaseStatus;
   created_at: string;
   updated_at: string;
   project?: Project;
@@ -186,7 +195,7 @@ export interface CreateDatabaseRequest {
 export interface UpdateDatabaseRequest {
   database_name?: string;
   description?: string;
-  status?: 'Active' | 'Inactive';
+  status?: DatabaseStatus;
 }
 
 // Environment Types
@@ -195,6 +204,7 @@ export interface Environment {
   name: string;
   description?: string;
   policy_id?: string;
+  allow_self_approval: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -203,12 +213,14 @@ export interface CreateEnvironmentRequest {
   name: string;
   description?: string;
   policy_id?: string;
+  allow_self_approval?: boolean;
 }
 
 export interface UpdateEnvironmentRequest {
   name?: string;
   description?: string;
   policy_id?: string | null;
+  allow_self_approval?: boolean;
 }
 
 // Policy Types

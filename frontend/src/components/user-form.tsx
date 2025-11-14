@@ -1,5 +1,12 @@
 import React from 'react';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export type UserFormMode = 'create' | 'edit';
 
@@ -118,17 +125,16 @@ export const UserForm: React.FC<UserFormProps> = ({ mode, formData, formErrors, 
         <label htmlFor="user-role" className="text-sm font-medium">
           Organization Role *
         </label>
-        <select
-          id="user-role"
-          value={formData.organization_role}
-          onChange={(e) => handleRoleChange(e.target.value)}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-          aria-invalid={!!formErrors.organization_role}
-        >
-          <option value="OrganizationDeveloper">Developer</option>
-          <option value="OrganizationDBA">DBA</option>
-          <option value="OrganizationAdmin">Admin</option>
-        </select>
+        <Select value={formData.organization_role} onValueChange={handleRoleChange}>
+          <SelectTrigger id="user-role" aria-invalid={!!formErrors.organization_role}>
+            <SelectValue placeholder="Select role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="OrganizationDeveloper">Developer</SelectItem>
+            <SelectItem value="OrganizationDBA">DBA</SelectItem>
+            <SelectItem value="OrganizationAdmin">Admin</SelectItem>
+          </SelectContent>
+        </Select>
         {formErrors.organization_role && (
           <p className="text-sm text-destructive">{formErrors.organization_role}</p>
         )}
@@ -140,15 +146,18 @@ export const UserForm: React.FC<UserFormProps> = ({ mode, formData, formErrors, 
           <label htmlFor="user-active" className="text-sm font-medium">
             Status
           </label>
-          <select
-            id="user-active"
+          <Select
             value={formData.is_active ? 'true' : 'false'}
-            onChange={(e) => handleIsActiveChange(e.target.value)}
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+            onValueChange={handleIsActiveChange}
           >
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
+            <SelectTrigger id="user-active">
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="true">Active</SelectItem>
+              <SelectItem value="false">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       )}
     </div>

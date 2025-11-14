@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +94,7 @@ func TestUserRepository_GetByID(t *testing.T) {
 	assert.NotNil(t, user)
 	assert.Equal(t, userID, user.ID)
 	assert.Equal(t, "test@example.com", user.Email)
-	assert.Equal(t, models.OrganizationRoleDeveloper, user.OrganizationRole)
+	assert.Equal(t, rbac.OrganizationDeveloper, user.OrganizationRole)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

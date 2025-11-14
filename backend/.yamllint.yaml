@@ -3,6 +3,7 @@ ignore: |
   vendor/
   tmp/
   .git/
+  ../frontend/pnpm-lock.yaml
 rules:
   document-start: disable
   line-length: disable

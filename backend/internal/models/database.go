@@ -12,9 +12,9 @@ import (
 type DatabaseStatus string
 
 const (
-	DatabaseStatusActive   DatabaseStatus = "Active"
-	DatabaseStatusInactive DatabaseStatus = "Inactive"
-	DatabaseStatusPending  DatabaseStatus = "Pending"
+	DatabaseStatusActive   DatabaseStatus = "Active"   // Database is active and available for use. Change plans can be executed against it.
+	DatabaseStatusInactive DatabaseStatus = "Inactive" // Database is inactive and not available for use. Change plans cannot be executed against it.
+	DatabaseStatusPending  DatabaseStatus = "Pending"  // Database is pending and awaiting creation. Change plans can be executed against it after it is created.
 )
 
 // Database represents an individual database within a database instance

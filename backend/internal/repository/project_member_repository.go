@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 )
 
 // ProjectMemberRepository defines the interface for project member data operations
@@ -22,5 +23,8 @@ type ProjectMemberRepository interface {
 	GetMemberRole(ctx context.Context, projectID, userID uuid.UUID) (*models.ProjectMember, error)
 
 	// UpdateRole updates the role of a member in a project
-	UpdateRole(ctx context.Context, projectID, userID uuid.UUID, role models.ProjectRole) error
+	UpdateRole(ctx context.Context, projectID, userID uuid.UUID, role rbac.ProjectRole) error
+
+	// GetUserProjectIDs retrieves all project IDs that a user is a member of
+	GetUserProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 }

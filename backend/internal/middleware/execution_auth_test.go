@@ -147,17 +147,17 @@ func TestRequireExecutionPermission(t *testing.T) {
 			projectID.String() + "-" + projectOwnerID.String(): {
 				ProjectID: projectID,
 				UserID:    projectOwnerID,
-				Role:      models.ProjectRoleOwner,
+				Role:      rbac.ProjectOwner,
 			},
 			projectID.String() + "-" + projectDeveloperID.String(): {
 				ProjectID: projectID,
 				UserID:    projectDeveloperID,
-				Role:      models.ProjectRoleDeveloper,
+				Role:      rbac.ProjectDeveloper,
 			},
 			projectID.String() + "-" + projectApproverID.String(): {
 				ProjectID: projectID,
 				UserID:    projectApproverID,
-				Role:      models.ProjectRoleApprover,
+				Role:      rbac.ProjectApprover,
 			},
 		},
 	}
@@ -221,13 +221,12 @@ func TestRequireExecutionPermission(t *testing.T) {
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:           "project developer cannot execute without permission",
+			name:           "project developer can execute with permission",
 			userID:         projectDeveloperID,
 			userRole:       rbac.OrganizationDeveloper,
 			changePlanID:   changePlanID,
 			setContext:     true,
-			expectedStatus: http.StatusForbidden,
-			expectedError:  "Insufficient permissions",
+			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "user not in project cannot execute",

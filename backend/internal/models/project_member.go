@@ -5,42 +5,23 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nsxbet/deeb/internal/rbac"
 )
-
-// ProjectRole represents the project-level role of a user
-type ProjectRole string
-
-const (
-	ProjectRoleOwner     ProjectRole = "ProjectOwner"
-	ProjectRoleDeveloper ProjectRole = "ProjectDeveloper"
-	ProjectRoleApprover  ProjectRole = "ProjectApprover"
-	ProjectRoleViewer    ProjectRole = "ProjectViewer"
-)
-
-// IsValid checks if the project role is valid
-func (r ProjectRole) IsValid() bool {
-	switch r {
-	case ProjectRoleOwner, ProjectRoleDeveloper, ProjectRoleApprover, ProjectRoleViewer:
-		return true
-	default:
-		return false
-	}
-}
 
 // ProjectMember represents a user's membership in a project with a specific role
 type ProjectMember struct {
-	ID        uuid.UUID   `json:"id"          db:"id"`
-	ProjectID uuid.UUID   `json:"project_id"  db:"project_id"`
-	UserID    uuid.UUID   `json:"user_id"     db:"user_id"`
-	Role      ProjectRole `json:"role"        db:"project_role"`
-	AddedByID uuid.UUID   `json:"added_by_id" db:"added_by_id"`
-	AddedAt   time.Time   `json:"added_at"    db:"added_at"`
+	ID        uuid.UUID        `json:"id"          db:"id"`
+	ProjectID uuid.UUID        `json:"project_id"  db:"project_id"`
+	UserID    uuid.UUID        `json:"user_id"     db:"user_id"`
+	Role      rbac.ProjectRole `json:"role"        db:"project_role"`
+	AddedByID uuid.UUID        `json:"added_by_id" db:"added_by_id"`
+	AddedAt   time.Time        `json:"added_at"    db:"added_at"`
 }
 
 // AddProjectMemberRequest represents the request to add a member to a project
 type AddProjectMemberRequest struct {
-	UserID uuid.UUID   `json:"user_id"      validate:"required"`
-	Role   ProjectRole `json:"project_role" validate:"required,oneof=ProjectOwner ProjectDeveloper ProjectApprover ProjectViewer"`
+	UserID uuid.UUID        `json:"user_id"      validate:"required"`
+	Role   rbac.ProjectRole `json:"project_role" validate:"required,oneof=ProjectOwner ProjectDeveloper ProjectApprover ProjectViewer"`
 }
 
 // ValidateAddProjectMemberRequest validates an add project member request
@@ -48,7 +29,7 @@ func ValidateAddProjectMemberRequest(req *AddProjectMemberRequest) error {
 	if req.UserID == uuid.Nil {
 		return ErrProjectMemberUserIDRequired
 	}
-	if !req.Role.IsValid() {
+	if !rbac.IsValidProjectRole(req.Role) {
 		return ErrProjectMemberInvalidRole
 	}
 	return nil
@@ -56,12 +37,12 @@ func ValidateAddProjectMemberRequest(req *AddProjectMemberRequest) error {
 
 // ProjectMemberResponse represents a project member response
 type ProjectMemberResponse struct {
-	ID        uuid.UUID   `json:"id"`
-	ProjectID uuid.UUID   `json:"project_id"`
-	UserID    uuid.UUID   `json:"user_id"`
-	Role      ProjectRole `json:"role"`
-	AddedByID uuid.UUID   `json:"added_by_id"`
-	AddedAt   time.Time   `json:"added_at"`
+	ID        uuid.UUID        `json:"id"`
+	ProjectID uuid.UUID        `json:"project_id"`
+	UserID    uuid.UUID        `json:"user_id"`
+	Role      rbac.ProjectRole `json:"role"`
+	AddedByID uuid.UUID        `json:"added_by_id"`
+	AddedAt   time.Time        `json:"added_at"`
 }
 
 // ToResponse converts a ProjectMember to ProjectMemberResponse
@@ -84,7 +65,7 @@ func (pm *ProjectMember) Validate() error {
 	if pm.UserID == uuid.Nil {
 		return ErrProjectMemberUserIDRequired
 	}
-	if !pm.Role.IsValid() {
+	if !rbac.IsValidProjectRole(pm.Role) {
 		return ErrProjectMemberInvalidRole
 	}
 	if pm.AddedByID == uuid.Nil {
