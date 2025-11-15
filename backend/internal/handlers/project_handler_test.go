@@ -250,6 +250,10 @@ func (m *mockDatabaseRepositoryForProject) GetByInstanceAndName(
 	return nil, repository.ErrNotFound
 }
 
+func (m *mockDatabaseRepositoryForProject) ListActiveForSync(ctx context.Context, limit, offset int) ([]*models.Database, error) {
+	return nil, nil
+}
+
 // Mock ProjectMemberRepository for testing
 type mockProjectMemberRepositoryForProject struct {
 	members      []*models.ProjectMember

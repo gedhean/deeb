@@ -50,6 +50,30 @@ func Setup(
 	// Initialize connection manager
 	connectionMgr := database.NewConnectionManager(cfg.Security.EncryptionKey, logger.Get())
 
+	// Initialize database schema repository
+	dbSchemaRepo := postgres.NewDatabaseSchemaRepository(db)
+
+	// Initialize schema metadata service
+	schemaMetadataService := services.NewSchemaMetadataService(
+		dbInstanceRepo,
+		dbRepo,
+		dbSchemaRepo,
+		connectionMgr,
+		logger.Get(),
+	)
+
+	// Initialize and start schema sync background job
+	schemaSyncJob := services.NewSchemaSyncJob(
+		dbRepo,
+		dbSchemaRepo,
+		schemaMetadataService,
+		cfg.BackgroundJobs.SchemaSyncInterval,
+		logger.Get(),
+	)
+	// Start the schema sync job in background
+	ctx := context.Background()
+	schemaSyncJob.Start(ctx)
+
 	// Setup API routes
 	setupHealthRoute(e, db, version)
 	setupSetupRoutes(e, userRepo)
@@ -80,6 +104,7 @@ func Setup(
 		projectMemberRepo,
 		tokenManager,
 		auditLogService,
+		schemaMetadataService,
 	)
 	setupChangePlanRoutes(
 		e,
@@ -455,6 +480,7 @@ func setupDatabaseRoutes(
 	projectMemberRepo repository.ProjectMemberRepository,
 	tokenManager *auth.TokenManager,
 	auditLogService *services.AuditLogService,
+	schemaMetadataService *services.SchemaMetadataService,
 ) {
 	dbHandler := handlers.NewDatabaseHandler(
 		dbRepo,
@@ -463,6 +489,7 @@ func setupDatabaseRoutes(
 		dbInstanceRepo,
 		changePlanRepo,
 		auditLogService,
+		schemaMetadataService,
 		logger.Get(),
 	)
 	databasesGroup := e.Group("/api/v1/databases")
@@ -510,6 +537,26 @@ func setupDatabaseRoutes(
 	e.GET(
 		"/api/v1/projects/:project_id/databases",
 		dbHandler.ListProjectDatabases,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
+	)
+
+	// Schema metadata routes require databases.read permission
+	databasesGroup.GET(
+		"/:id/schema",
+		dbHandler.GetDatabaseSchema,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
+	)
+	databasesGroup.GET(
+		"/:id/tables/:tableName",
+		dbHandler.GetTableDetail,
+		authMiddleware.Authenticate,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
+	)
+	databasesGroup.POST(
+		"/:id/schema/refresh",
+		dbHandler.RefreshDatabaseSchema,
 		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)

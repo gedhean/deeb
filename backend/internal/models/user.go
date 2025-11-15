@@ -21,7 +21,7 @@ type User struct {
 	OAuthID          *string               `json:"oauth_id"             db:"oauth_id"`
 	TwoFactorEnabled bool                  `json:"two_factor_enabled"   db:"two_factor_enabled"`
 	TwoFactorSecret  *string               `json:"-"                    db:"two_factor_secret"`
-	LastLogin        *time.Time            `json:"last_login,omitempty" db:"last_login_at"`
+	LastLogin        *time.Time            `json:"last_login_at,omitempty" db:"last_login_at"`
 	CreatedAt        time.Time             `json:"created_at"           db:"created_at"`
 	UpdatedAt        time.Time             `json:"updated_at"           db:"updated_at"`
 }
@@ -52,7 +52,7 @@ type UserResponse struct {
 	TwoFactorEnabled bool                  `json:"two_factor_enabled"`
 	IsActive         bool                  `json:"is_active"`
 	OAuthProvider    *string               `json:"oauth_provider,omitempty"`
-	LastLogin        *time.Time            `json:"last_login,omitempty"`
+	LastLogin        *time.Time            `json:"last_login_at,omitempty"`
 	CreatedAt        time.Time             `json:"created_at"`
 	UpdatedAt        time.Time             `json:"updated_at"`
 }

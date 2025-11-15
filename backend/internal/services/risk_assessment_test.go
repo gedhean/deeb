@@ -96,6 +96,14 @@ func (m *MockDatabaseRepository) GetByInstanceAndName(
 	return args.Get(0).(*models.Database), args.Error(1)
 }
 
+func (m *MockDatabaseRepository) ListActiveForSync(ctx context.Context, limit, offset int) ([]*models.Database, error) {
+	args := m.Called(ctx, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Database), args.Error(1)
+}
+
 // MockEnvironmentRepository is a mock implementation of EnvironmentRepository
 type MockEnvironmentRepository struct {
 	mock.Mock

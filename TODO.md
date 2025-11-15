@@ -12,25 +12,32 @@
     - [x] Update the Create Database button in Databases Page to use the CreateDatabaseDialog (with instance selector)
 - [x] Fix UI POV for Project roles (ProjectOwner, ProjectDeveloper, ProjectApprover, ProjectViewer)
 - [ ] Integrate with github.com/nsxbet/sql-schema to show database schema metadata in Database Detail page
-    - [ ] Use this pkg to generate schema metadata
-    - [ ] Use this pkg to generate schema snapshot
+    - [x] Do not sync schema metadata for inactive or pending databases
+    - [x] Engine column should be shown in the tables list only for MySQL databases
+    - [x] Upgrade sql-schema pkg to latest version
+    - [x] Use this pkg to generate schema metadata
 - [ ] Create database schema versions for schema change history
     - [ ] UI to view schema history
     - [ ] Button to set current schema as baseline version
     - [ ] Create database schema snapshot only after schema change is applied (not before AND after)
-- [ ] Enhance Environment:
-    - [x] Add "Allow Self Approval" checkbox to allow developers to approve their own changes without approval from a reviewer
-    - [ ] Add "Require Approval" checkbox to require approval from a reviewer for all changes
+    - [ ] Use this sql-schema pkg to generate schema snapshot and metadata for schema change history
+- [x] Environment: Add "Allow Self Approval" checkbox to allow developers to approve their own changes without approval from a reviewer
+- [ ] Environment: Add "Require Approval" checkbox to require approval from a reviewer for all changes
 
 ### P2 (Low Priority)
 
 - [ ] Use Monaco Editor for SQL editor (https://github.com/react-monaco-editor/react-monaco-editor)
 - [x] Update the Change Plan actions buttons to show a single button for main action based on status (Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled) and a three dots dropdown for other actions.
-- [ ] Update Tables to have pagination.
+- [ ] Update Tables to have pagination by default.
 - [ ] Create Helm Chart for Deeb deployment
 - [ ] Create Deeb CI/CD pipeline with GitHub Actions
-- [ ] SQL Review: get syntax errors from sql-reviewer pkg
+- [ ] SQL Review: SQL syntax built-in check
+- [ ] SQL Review: connection to the database built-in check
+- [ ] Optimize Frontend APIs calls: reduce the number of API calls and optimize the data fetching logic (use store to reuse data and avoid duplicate API calls).
 
+### P3 (Low Priority)
+- [x] Add Start Background to Login Page and Register Page
+- [ ] Simplify the Change Plan create page with fewer fields and better UI.
 
 ### Current
 

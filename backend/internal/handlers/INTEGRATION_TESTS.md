@@ -70,7 +70,7 @@ The integration tests in `auth_integration_test.go` cover:
 The integration tests work with the actual database schema, which uses:
 - `status` field (varchar: "Active", "Inactive", "Suspended") instead of `is_active` boolean
 - Additional fields: `display_name`, `oauth_provider`, `oauth_id`
-- `last_login_at` instead of `last_login`
+- `last_login_at` instead of `last_login_at`
 
 ## Acceptance Criteria Met
 

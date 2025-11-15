@@ -99,6 +99,19 @@ func (m *mockDatabaseRepository) Delete(ctx context.Context, id uuid.UUID) error
 	return repository.ErrNotFound
 }
 
+func (m *mockDatabaseRepository) ListActiveForSync(ctx context.Context, limit, offset int) ([]*models.Database, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	var active []*models.Database
+	for _, db := range m.databases {
+		if db.Status == models.DatabaseStatusActive {
+			active = append(active, db)
+		}
+	}
+	return active, nil
+}
+
 func (m *mockDatabaseRepository) GetByInstanceAndName(
 	ctx context.Context,
 	instanceID uuid.UUID,
@@ -325,6 +338,7 @@ func TestCreateDatabase(t *testing.T) {
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
 			nil,
+			nil,
 			logger,
 		)
 
@@ -380,6 +394,7 @@ func TestCreateDatabase(t *testing.T) {
 			&mockEnvironmentRepositoryForDB{},
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
+			nil,
 			nil,
 			logger,
 		)
@@ -450,6 +465,7 @@ func TestListDatabases(t *testing.T) {
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
 			nil,
+			nil,
 			logger,
 		)
 
@@ -514,6 +530,7 @@ func TestListDatabases(t *testing.T) {
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
 			nil,
+			nil,
 			logger,
 		)
 
@@ -561,6 +578,7 @@ func TestListDatabases(t *testing.T) {
 			&mockEnvironmentRepositoryForDB{},
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
+			nil,
 			nil,
 			logger,
 		)
@@ -613,6 +631,7 @@ func TestGetDatabase(t *testing.T) {
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
 			nil,
+			nil,
 			logger,
 		)
 
@@ -658,6 +677,7 @@ func TestGetDatabase(t *testing.T) {
 			&mockEnvironmentRepositoryForDB{},
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
+			nil,
 			nil,
 			logger,
 		)
@@ -720,6 +740,7 @@ func TestListProjectDatabases(t *testing.T) {
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
 			nil,
+			nil,
 			logger,
 		)
 
@@ -769,6 +790,7 @@ func TestListProjectDatabases(t *testing.T) {
 			&mockEnvironmentRepositoryForDB{},
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
+			nil,
 			nil,
 			logger,
 		)
@@ -823,6 +845,7 @@ func TestUpdateDatabase(t *testing.T) {
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
 			nil,
+			nil,
 			logger,
 		)
 
@@ -874,6 +897,7 @@ func TestUpdateDatabase(t *testing.T) {
 			&mockEnvironmentRepositoryForDB{},
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
+			nil,
 			nil,
 			logger,
 		)
@@ -935,6 +959,7 @@ func TestDeleteDatabase(t *testing.T) {
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
 			nil,
+			nil,
 			logger,
 		)
 
@@ -980,6 +1005,7 @@ func TestDeleteDatabase(t *testing.T) {
 			&mockEnvironmentRepositoryForDB{},
 			&mockDatabaseInstanceRepositoryForDB{},
 			&mockChangePlanRepositoryForDB{},
+			nil,
 			nil,
 			logger,
 		)

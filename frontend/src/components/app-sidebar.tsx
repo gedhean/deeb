@@ -200,18 +200,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   });
 
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="icon" {...props} className="bg-transparent">
       <SidebarHeader>
         <ProjectSwitcher projects={projects} />
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="bg-transparent">
         <NavMain items={filteredNavMainItems} />
         <NavOrg items={filteredNavOrgItems} />
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="bg-transparent">
         <NavUser user={userData} />
       </SidebarFooter>
-      <SidebarRail />
+      <SidebarRail className="bg-transparent" />
     </Sidebar>
   );
 }

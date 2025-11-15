@@ -496,6 +496,126 @@ export interface ReviewFindingsResponse {
   };
 }
 
+// Schema Metadata Types
+export interface TableListItem {
+  name: string;
+  row_count: number;
+  data_size: number;
+  index_size: number;
+  total_size: number;
+  engine: string;
+  comment: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Column {
+  name: string;
+  position: number;
+  type: string;
+  nullable: boolean;
+  default?: string;
+  comment: string;
+  character_set: string;
+  collation: string;
+  on_update: string;
+  is_generated: boolean;
+  generated_as: string;
+  is_identity: boolean;
+}
+
+export interface Index {
+  name: string;
+  type: string;
+  columns: string[];
+  primary: boolean;
+  unique: boolean;
+  visible: boolean;
+  comment: string;
+  where_clause: string;
+}
+
+export interface ForeignKey {
+  name: string;
+  columns: string[];
+  referenced_table: string;
+  referenced_columns: string[];
+  on_delete: string;
+  on_update: string;
+}
+
+export interface CheckConstraint {
+  name: string;
+  expression: string;
+}
+
+export interface ViewListItem {
+  name: string;
+  definition: string;
+  comment: string;
+}
+
+export interface MaterializedViewListItem {
+  name: string;
+  definition: string;
+  comment: string;
+}
+
+export interface ExtensionListItem {
+  name: string;
+  schema: string;
+  version: string;
+  description: string;
+}
+
+export interface FunctionListItem {
+  name: string;
+  definition: string;
+  comment: string;
+}
+
+export interface SequenceListItem {
+  name: string;
+  data_type: string;
+  start: number;
+  increment: number;
+  min: number;
+  max: number;
+  cache: number;
+  cycle: boolean;
+  comment: string;
+}
+
+export interface TableDetail {
+  name: string;
+  comment: string;
+  engine: string;
+  collation: string;
+  charset: string;
+  row_count: number;
+  data_size: number;
+  index_size: number;
+  total_size: number;
+  created_at?: string;
+  updated_at?: string;
+  columns: Column[];
+  indexes: Index[];
+  foreign_keys: ForeignKey[];
+  check_constraints: CheckConstraint[];
+}
+
+export interface DatabaseSchemaMetadata {
+  database_name: string;
+  database_type: string;
+  tables: TableListItem[];
+  views: ViewListItem[];
+  materialized_views?: MaterializedViewListItem[];
+  extensions?: ExtensionListItem[];
+  functions?: FunctionListItem[];
+  sequences?: SequenceListItem[];
+  last_synced_at?: string;
+}
+
 // API Error
 export class APIError extends Error {
   statusCode: number;

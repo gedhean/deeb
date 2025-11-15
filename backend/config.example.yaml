@@ -38,3 +38,5 @@ logging:
   format: json  # Log format: json, console
   output: stdout  # Log output: stdout, stderr, file
   file_path: ''  # Log file path (if output is file)
+background_jobs:
+  schema_sync_interval: 1h  # How often to sync database schema metadata (e.g., 30m, 1h, 2h)

@@ -309,3 +309,30 @@ func (r *DatabaseRepository) GetByInstanceAndName(
 
 	return &database, nil
 }
+
+// ListActiveForSync retrieves all active databases (excludes Inactive and Pending)
+// Used by schema sync job to determine which databases should have metadata synced
+func (r *DatabaseRepository) ListActiveForSync(ctx context.Context, limit, offset int) ([]*models.Database, error) {
+	query := `
+		SELECT id, project_id, database_instance_id, environment_id,
+		       database_name, description, status, created_by_id,
+		       created_at, updated_at
+		FROM databases
+		WHERE status = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	var databases []*models.Database
+	err := r.db.SelectContext(ctx, &databases, query, models.DatabaseStatusActive, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return empty slice instead of nil if no databases found
+	if databases == nil {
+		databases = []*models.Database{}
+	}
+
+	return databases, nil
+}

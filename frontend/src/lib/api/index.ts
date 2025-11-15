@@ -8,3 +8,4 @@ export * from './types';
 export { authService } from './services/auth';
 export { healthService } from './services/health';
 export { changePlanService } from './services/changePlans';
+export { schemaService } from './services/schema';

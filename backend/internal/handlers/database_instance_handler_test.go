@@ -178,6 +178,13 @@ func (m *mockDatabaseRepositoryForInstance) GetByInstanceAndName(
 	return nil, repository.ErrNotFound
 }
 
+func (m *mockDatabaseRepositoryForInstance) ListActiveForSync(
+	ctx context.Context,
+	limit, offset int,
+) ([]*models.Database, error) {
+	return nil, nil
+}
+
 // Mock repositories for other dependencies
 type mockProjectRepositoryForInstance struct{}
 

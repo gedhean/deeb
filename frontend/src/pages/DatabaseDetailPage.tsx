@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { databasesService } from '@/lib/api/services/databases';
@@ -20,6 +20,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Empty,
   EmptyContent,
@@ -36,20 +39,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  ArrowLeft,
-  AlertTriangle,
-  Calendar,
-  ExternalLink,
-  FileEdit,
-  Server,
-  FolderGit2,
-  Globe,
-} from 'lucide-react';
+import { ArrowLeft, AlertTriangle, ExternalLink, FileEdit } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
-import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
+import { DatabaseInfoCard } from '@/components/database/DatabaseInfoCard';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
+import { TableDetailSheet } from '@/components/database/TableDetailSheet';
+import { DatabaseMetadataSections } from '@/components/database/DatabaseMetadataSections';
+import { schemaService } from '@/lib/api/services/schema';
+import type { DatabaseSchemaMetadata } from '@/lib/api/types';
 
 export const DatabaseDetailPage: React.FC = () => {
   const navigate = useNavigate();
@@ -64,6 +62,14 @@ export const DatabaseDetailPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingChangePlans, setIsLoadingChangePlans] = useState(false);
   const [error, setError] = useState('');
+  const [selectedTableName, setSelectedTableName] = useState<string | null>(null);
+  const [isTableDetailOpen, setIsTableDetailOpen] = useState(false);
+  const [schemaMetadata, setSchemaMetadata] = useState<DatabaseSchemaMetadata | null>(null);
+  const [isLoadingSchema, setIsLoadingSchema] = useState(false);
+  const [isRefreshingSchema, setIsRefreshingSchema] = useState(false);
+  const [isRefreshDisabled, setIsRefreshDisabled] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check if user has databases.read permission
   const canReadDatabases = hasOrganizationPermission(
@@ -161,6 +167,101 @@ export const DatabaseDetailPage: React.FC = () => {
     return author?.email || authorId;
   };
 
+  // Handle table click
+  const handleTableClick = (tableName: string) => {
+    setSelectedTableName(tableName);
+    setIsTableDetailOpen(true);
+  };
+
+  // Load schema metadata for views
+  const loadSchemaMetadata = useCallback(async (databaseId: string) => {
+    try {
+      setIsLoadingSchema(true);
+      const data = await schemaService.getDatabaseSchema(databaseId);
+      setSchemaMetadata(data);
+    } catch (err) {
+      // Clear schema metadata on error so UI shows empty state
+      setSchemaMetadata(null);
+
+      // Show user-facing error notification
+      if (err instanceof APIError) {
+        console.error('Failed to load schema metadata:', err.message);
+        toast.error('Failed to load schema metadata', {
+          description: err.message,
+        });
+      } else {
+        console.error('Failed to load schema metadata:', err);
+        toast.error('Failed to load schema metadata', {
+          description: 'An unexpected error occurred. Please try again.',
+        });
+      }
+    } finally {
+      setIsLoadingSchema(false);
+    }
+  }, []);
+
+  // Refresh schema metadata with debounce and toast notifications
+  const handleRefreshSchema = async () => {
+    if (!database?.id || isRefreshDisabled || isRefreshingSchema) return;
+
+    // Clear any existing timer before starting a new one
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+
+    setIsRefreshDisabled(true);
+
+    try {
+      setIsRefreshingSchema(true);
+      toast.info('Schema refresh started', {
+        description: 'The refresh is running in the background and may take a few moments.',
+      });
+
+      const data = await schemaService.refreshDatabaseSchema(database.id);
+      setSchemaMetadata(data);
+
+      toast.success('Schema refreshed successfully', {
+        description: 'The database schema metadata has been updated.',
+      });
+    } catch (err) {
+      if (err instanceof APIError) {
+        toast.error('Failed to refresh schema', {
+          description: err.message,
+        });
+        console.error('Failed to refresh schema metadata:', err.message);
+      } else {
+        toast.error('Failed to refresh schema', {
+          description: 'An unexpected error occurred. Please try again.',
+        });
+        console.error('Failed to refresh schema metadata:', err);
+      }
+    } finally {
+      // Enable debounce - disable button and loading state for 5 seconds
+      refreshTimerRef.current = setTimeout(() => {
+        setIsRefreshingSchema(false);
+        setIsRefreshDisabled(false);
+        refreshTimerRef.current = null;
+      }, 5000);
+    }
+  };
+
+  useEffect(() => {
+    if (database?.id) {
+      loadSchemaMetadata(database.id);
+    }
+  }, [database?.id, loadSchemaMetadata]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // Render access denied
   if (!canReadDatabases) {
     return (
@@ -202,13 +303,13 @@ export const DatabaseDetailPage: React.FC = () => {
                   database?.database_name || 'Database'
                 )}
               </h1>
-              <p className="text-muted-foreground mt-1">
+              <div className="text-muted-foreground mt-1">
                 {isLoading ? (
                   <Skeleton className="h-4 w-96 mt-2" />
                 ) : (
                   database?.description || 'Database details'
                 )}
-              </p>
+              </div>
             </div>
           </div>
         </div>
@@ -225,223 +326,211 @@ export const DatabaseDetailPage: React.FC = () => {
           </Card>
         )}
 
-        {/* Database Info */}
-        {isLoading ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Database Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-              </div>
-            </CardContent>
-          </Card>
-        ) : database ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Database Information</CardTitle>
-              <CardDescription>Details about this database</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Database Name</p>
-                  <p className="text-sm font-mono">{database.database_name}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Status</p>
-                  <DatabaseStatusBadge status={database.status} variant="database" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Project</p>
-                  <div className="flex items-center gap-2">
-                    <FolderGit2 className="h-4 w-4 text-muted-foreground" />
-                    <Button
-                      variant="link"
-                      className="h-auto p-0 text-sm"
-                      onClick={() => navigate(`/projects/${database.project_id}`)}
-                    >
-                      {project?.name || database.project_id}
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Environment</p>
-                  <div className="flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{environment?.name || database.environment_id}</span>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Database Instance</p>
-                  <div className="flex items-center gap-2">
-                    <Server className="h-4 w-4 text-muted-foreground" />
-                    <Button
-                      variant="link"
-                      className="h-auto p-0 text-sm"
-                      onClick={() =>
-                        navigate(`/database-instances/${database.database_instance_id}`)
-                      }
-                    >
-                      {instance?.name || database.database_instance_id}
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Created</p>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Calendar className="h-4 w-4" />
-                    <span>{formatDate(database.created_at)}</span>
-                  </div>
-                </div>
-                {database.description && (
-                  <div className="space-y-1 md:col-span-2">
-                    <p className="text-sm font-medium text-muted-foreground">Description</p>
-                    <p className="text-sm">{database.description}</p>
+        {/* Tabs */}
+        <Tabs
+          defaultValue="overview"
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="space-y-6"
+        >
+          <div className="flex items-center justify-between">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="change-plans">Change Plans</TabsTrigger>
+            </TabsList>
+            {activeTab === 'overview' && (
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleRefreshSchema}
+                disabled={isLoadingSchema || isRefreshingSchema || isRefreshDisabled}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingSchema ? 'animate-spin' : ''}`} />
+                {isRefreshingSchema ? 'Refreshing...' : 'Refresh Schema'}
+              </Button>
+            )}
+          </div>
+
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            {/* Database Info */}
+            <DatabaseInfoCard
+              database={database}
+              project={project}
+              environment={environment}
+              instance={instance}
+              isLoading={isLoading}
+              onNavigate={navigate}
+              formatDate={formatDate}
+            />
+
+            {/* Database Metadata Sections (Tables, Views, Materialized Views, Extensions, Functions, Sequences) */}
+            {!isLoading && database && (
+              <>
+                <DatabaseMetadataSections
+                  schemaMetadata={schemaMetadata}
+                  isLoading={isLoadingSchema}
+                  onTableClick={handleTableClick}
+                />
+                <TableDetailSheet
+                  databaseId={database.id}
+                  tableName={selectedTableName}
+                  open={isTableDetailOpen}
+                  onOpenChange={setIsTableDetailOpen}
+                />
+              </>
+            )}
+          </TabsContent>
+
+          {/* Change Plans Tab */}
+          <TabsContent value="change-plans" className="space-y-6">
+            {/* Database Info */}
+            <DatabaseInfoCard
+              database={database}
+              project={project}
+              environment={environment}
+              instance={instance}
+              isLoading={isLoading}
+              onNavigate={navigate}
+              formatDate={formatDate}
+            />
+
+            {/* Change Plans Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Change Plans</CardTitle>
+                <CardDescription>
+                  {isLoadingChangePlans ? (
+                    'Loading change plans...'
+                  ) : (
+                    <>
+                      {changePlans.length} change plan{changePlans.length === 1 ? '' : 's'} for this
+                      database
+                    </>
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingChangePlans ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Change Type</TableHead>
+                        <TableHead>Author</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[1, 2, 3].map((i) => (
+                        <TableRow key={i}>
+                          <TableCell>
+                            <Skeleton className="h-4 w-32" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-24" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-24" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-32" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-24" />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Skeleton className="h-8 w-16 ml-auto" />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : changePlans.length === 0 ? (
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <FileEdit className="h-12 w-12 text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle>No Change Plans Found</EmptyTitle>
+                      <EmptyDescription>
+                        No change plans have been created for this database yet.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button onClick={() => navigate('/change-plans/create')}>
+                        <FileEdit className="mr-2 h-4 w-4" />
+                        Create Change Plan
+                      </Button>
+                    </EmptyContent>
+                  </Empty>
+                ) : (
+                  <div className="overflow-x-auto -mx-6 px-6">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Title</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Change Type</TableHead>
+                          <TableHead>Author</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {changePlans.map((changePlan) => (
+                          <TableRow
+                            key={changePlan.id}
+                            onClick={() => navigate(`/change-plans/${changePlan.id}`)}
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                          >
+                            <TableCell className="font-medium">
+                              <div className="flex flex-col">
+                                <span className="truncate max-w-[200px]">{changePlan.title}</span>
+                                {changePlan.description && (
+                                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                    {changePlan.description}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <ChangePlanStatusBadge status={changePlan.status} />
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{changePlan.change_type}</Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {getAuthorName(changePlan.author_id)}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {formatDate(changePlan.created_at)}
+                            </TableCell>
+                            <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/change-plans/${changePlan.id}`);
+                                }}
+                                className="h-8"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {/* Change Plans Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Change Plans</CardTitle>
-            <CardDescription>
-              {isLoadingChangePlans ? (
-                'Loading change plans...'
-              ) : (
-                <>
-                  {changePlans.length} change plan{changePlans.length === 1 ? '' : 's'} for this
-                  database
-                </>
-              )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingChangePlans ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Change Type</TableHead>
-                    <TableHead>Author</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[1, 2, 3].map((i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-8 w-16 ml-auto" />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : changePlans.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <FileEdit className="h-12 w-12 text-muted-foreground" />
-                  </EmptyMedia>
-                  <EmptyTitle>No Change Plans Found</EmptyTitle>
-                  <EmptyDescription>
-                    No change plans have been created for this database yet.
-                  </EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <Button onClick={() => navigate('/change-plans/create')}>
-                    <FileEdit className="mr-2 h-4 w-4" />
-                    Create Change Plan
-                  </Button>
-                </EmptyContent>
-              </Empty>
-            ) : (
-              <div className="overflow-x-auto -mx-6 px-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Change Type</TableHead>
-                      <TableHead>Author</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {changePlans.map((changePlan) => (
-                      <TableRow
-                        key={changePlan.id}
-                        onClick={() => navigate(`/change-plans/${changePlan.id}`)}
-                        className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      >
-                        <TableCell className="font-medium">
-                          <div className="flex flex-col">
-                            <span className="truncate max-w-[200px]">{changePlan.title}</span>
-                            {changePlan.description && (
-                              <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                {changePlan.description}
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <ChangePlanStatusBadge status={changePlan.status} />
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{changePlan.change_type}</Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {getAuthorName(changePlan.author_id)}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatDate(changePlan.created_at)}
-                        </TableCell>
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/change-plans/${changePlan.id}`);
-                            }}
-                            className="h-8"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </DefaultLayout>
   );

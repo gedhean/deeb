@@ -17,11 +17,12 @@ import (
 
 // Config holds all configuration for the Deeb application
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
-	Auth     AuthConfig     `yaml:"auth"`
-	Security SecurityConfig `yaml:"security"`
-	Logging  LoggingConfig  `yaml:"logging"`
+	Server         ServerConfig         `yaml:"server"`
+	Database       DatabaseConfig       `yaml:"database"`
+	Auth           AuthConfig           `yaml:"auth"`
+	Security       SecurityConfig       `yaml:"security"`
+	Logging        LoggingConfig        `yaml:"logging"`
+	BackgroundJobs BackgroundJobsConfig `yaml:"background_jobs"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -77,6 +78,11 @@ type LoggingConfig struct {
 	Format   string `yaml:"format"`    // json, console
 	Output   string `yaml:"output"`    // stdout, stderr, file
 	FilePath string `yaml:"file_path"` // if output is file
+}
+
+// BackgroundJobsConfig holds background job configuration
+type BackgroundJobsConfig struct {
+	SchemaSyncInterval time.Duration `yaml:"schema_sync_interval"` // How often to sync schema metadata
 }
 
 // Load loads configuration from environment variables and optionally a YAML file
@@ -142,6 +148,9 @@ func (c *Config) setDefaults() {
 	c.Logging.Level = "info"
 	c.Logging.Format = "json"
 	c.Logging.Output = "stdout"
+
+	// Background Jobs defaults
+	c.BackgroundJobs.SchemaSyncInterval = 1 * time.Hour
 }
 
 // loadFromFile loads configuration from a YAML file

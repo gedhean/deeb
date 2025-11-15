@@ -18,13 +18,14 @@ import (
 
 // DatabaseHandler handles HTTP requests for databases
 type DatabaseHandler struct {
-	databaseRepo         repository.DatabaseRepository
-	projectRepo          repository.ProjectRepository
-	environmentRepo      repository.EnvironmentRepository
-	databaseInstanceRepo repository.DatabaseInstanceRepository
-	changePlanRepo       repository.ChangePlanRepository
-	auditService         *services.AuditLogService
-	logger               *zap.Logger
+	databaseRepo          repository.DatabaseRepository
+	projectRepo           repository.ProjectRepository
+	environmentRepo       repository.EnvironmentRepository
+	databaseInstanceRepo  repository.DatabaseInstanceRepository
+	changePlanRepo        repository.ChangePlanRepository
+	auditService          *services.AuditLogService
+	schemaMetadataService *services.SchemaMetadataService
+	logger                *zap.Logger
 }
 
 // NewDatabaseHandler creates a new database handler
@@ -35,16 +36,18 @@ func NewDatabaseHandler(
 	databaseInstanceRepo repository.DatabaseInstanceRepository,
 	changePlanRepo repository.ChangePlanRepository,
 	auditService *services.AuditLogService,
+	schemaMetadataService *services.SchemaMetadataService,
 	logger *zap.Logger,
 ) *DatabaseHandler {
 	return &DatabaseHandler{
-		databaseRepo:         databaseRepo,
-		projectRepo:          projectRepo,
-		environmentRepo:      environmentRepo,
-		databaseInstanceRepo: databaseInstanceRepo,
-		changePlanRepo:       changePlanRepo,
-		auditService:         auditService,
-		logger:               logger,
+		databaseRepo:          databaseRepo,
+		projectRepo:           projectRepo,
+		environmentRepo:       environmentRepo,
+		databaseInstanceRepo:  databaseInstanceRepo,
+		changePlanRepo:        changePlanRepo,
+		auditService:          auditService,
+		schemaMetadataService: schemaMetadataService,
+		logger:                logger,
 	}
 }
 
@@ -583,4 +586,235 @@ func (h *DatabaseHandler) DeleteDatabase(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Database deleted successfully",
 	})
+}
+
+// GetDatabaseSchema handles GET /api/v1/databases/:id/schema
+func (h *DatabaseHandler) GetDatabaseSchema(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse database ID
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid database ID",
+		})
+	}
+
+	// Check if database exists and user has access
+	database, err := h.databaseRepo.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Database not found",
+			})
+		}
+		h.logger.Error("Failed to get database", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to get database",
+		})
+	}
+
+	// Check if schemaMetadataService is available
+	if h.schemaMetadataService == nil {
+		h.logger.Error("Schema metadata service not initialized")
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Schema metadata service not available",
+		})
+	}
+
+	// Extract schema metadata
+	schema, err := h.schemaMetadataService.ExtractSchemaMetadata(ctx, id)
+	if err != nil {
+		h.logger.Error("Failed to extract schema metadata",
+			zap.String("database_id", id.String()),
+			zap.Error(err),
+		)
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to extract schema metadata",
+		})
+	}
+
+	h.logger.Info("Schema metadata extracted",
+		zap.String("database_id", id.String()),
+		zap.String("database_name", database.DatabaseName),
+		zap.Int("table_count", len(schema.Tables)),
+	)
+
+	return c.JSON(http.StatusOK, schema)
+}
+
+// GetTableDetail handles GET /api/v1/databases/:id/tables/:tableName
+func (h *DatabaseHandler) GetTableDetail(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse database ID
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid database ID",
+		})
+	}
+
+	// Get table name from path parameter
+	tableName := c.Param("tableName")
+	if tableName == "" {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Table name is required",
+		})
+	}
+
+	// Check if database exists and user has access
+	_, err = h.databaseRepo.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Database not found",
+			})
+		}
+		h.logger.Error("Failed to get database", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to get database",
+		})
+	}
+
+	// Check if schemaMetadataService is available
+	if h.schemaMetadataService == nil {
+		h.logger.Error("Schema metadata service not initialized")
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Schema metadata service not available",
+		})
+	}
+
+	// Extract table detail
+	tableDetail, err := h.schemaMetadataService.ExtractTableDetail(ctx, id, tableName)
+	if err != nil {
+		h.logger.Error("Failed to extract table detail",
+			zap.String("database_id", id.String()),
+			zap.String("table_name", tableName),
+			zap.Error(err),
+		)
+		// Check if it's a table not found error
+		if err.Error() == "table not found: "+tableName {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Table not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to extract table detail",
+		})
+	}
+
+	h.logger.Info("Table detail extracted",
+		zap.String("database_id", id.String()),
+		zap.String("table_name", tableName),
+		zap.Int("column_count", len(tableDetail.Columns)),
+		zap.Int("index_count", len(tableDetail.Indexes)),
+	)
+
+	return c.JSON(http.StatusOK, tableDetail)
+}
+
+// RefreshDatabaseSchema handles POST /api/v1/databases/:id/schema/refresh
+func (h *DatabaseHandler) RefreshDatabaseSchema(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse database ID
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid database ID",
+		})
+	}
+
+	// Check if database exists and user has access
+	database, err := h.databaseRepo.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Database not found",
+			})
+		}
+		h.logger.Error("Failed to get database", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to get database",
+		})
+	}
+
+	// Check if schemaMetadataService is available
+	if h.schemaMetadataService == nil {
+		h.logger.Error("Schema metadata service not initialized")
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Schema metadata service not available",
+		})
+	}
+
+	h.logger.Info("Refreshing schema metadata",
+		zap.String("database_id", id.String()),
+		zap.String("database_name", database.DatabaseName),
+		zap.String("user_id", claims.UserID.String()),
+	)
+
+	// Force refresh schema metadata (bypass cache)
+	schema, err := h.schemaMetadataService.RefreshSchemaMetadata(ctx, id)
+	if err != nil {
+		h.logger.Error("Failed to refresh schema metadata",
+			zap.String("database_id", id.String()),
+			zap.Error(err),
+		)
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to refresh schema metadata",
+		})
+	}
+
+	// Log audit event
+	if h.auditService != nil {
+		auditDetails := map[string]interface{}{
+			"database_id":   id.String(),
+			"database_name": database.DatabaseName,
+			"table_count":   len(schema.Tables),
+		}
+		auditDetailsJSON, _ := json.Marshal(auditDetails)
+		if err := h.auditService.Log(
+			ctx,
+			claims.UserID,
+			"refresh_schema",
+			"database",
+			id,
+			auditDetailsJSON,
+		); err != nil {
+			h.logger.Error("Failed to log audit event", zap.Error(err))
+		}
+	}
+
+	h.logger.Info("Schema metadata refreshed",
+		zap.String("database_id", id.String()),
+		zap.String("database_name", database.DatabaseName),
+		zap.Int("table_count", len(schema.Tables)),
+	)
+
+	return c.JSON(http.StatusOK, schema)
 }

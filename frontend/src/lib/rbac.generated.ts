@@ -11,7 +11,7 @@
  *   1. Edit the YAML files
  *   2. Run: pnpm generate:rbac
  *
- * Generated at: 2025-11-13T00:57:59.125Z
+ * Generated at: 2025-11-14T18:28:38.790Z
  */
 
 // Organization roles

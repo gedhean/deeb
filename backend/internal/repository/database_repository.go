@@ -41,4 +41,8 @@ type DatabaseRepository interface {
 
 	// GetByInstanceAndName retrieves a database by instance ID and database name
 	GetByInstanceAndName(ctx context.Context, instanceID uuid.UUID, databaseName string) (*models.Database, error)
+
+	// ListActiveForSync retrieves all active databases (excludes Inactive and Pending)
+	// Used by schema sync job to determine which databases should have metadata synced
+	ListActiveForSync(ctx context.Context, limit, offset int) ([]*models.Database, error)
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -120,11 +121,17 @@ func (h *LoginHandler) Login(c echo.Context) error {
 	}
 
 	// Update last login timestamp
+	now := time.Now()
 	if err := h.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
 		h.logger.Warn("Failed to update last login timestamp",
 			zap.Error(err),
 			zap.String("user_id", user.ID.String()))
 		// Don't fail the login if this update fails
+	} else {
+		// Update the in-memory user object with the new last login timestamp
+		// so the response includes the updated value
+		user.LastLogin = &now
+		user.UpdatedAt = now
 	}
 
 	// Reset rate limit on successful login

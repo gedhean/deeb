@@ -235,11 +235,16 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 	}
 
 	// Update last login timestamp
+	now := time.Now()
 	if err := h.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
 		h.logger.Warn("Failed to update last login timestamp",
 			zap.Error(err),
 			zap.String("user_id", user.ID.String()))
 		// Don't fail the OAuth flow if this update fails
+	} else {
+		// Update the in-memory user object with the new last login timestamp
+		user.LastLogin = &now
+		user.UpdatedAt = now
 	}
 
 	// Set JWT token in HttpOnly cookie

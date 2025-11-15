@@ -12,6 +12,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { APIError } from '@/lib/api/types';
+import { ShootingStars } from '@/components/ui/shooting-stars';
+import { StarsBackground } from '@/components/ui/stars-background';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -143,7 +145,11 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="relative flex items-center justify-center min-h-screen overflow-hidden">
+      {/* Animated background */}
+      <StarsBackground className="absolute inset-0 -z-10" />
+      <ShootingStars className="absolute inset-0 -z-10" />
+
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">

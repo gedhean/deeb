@@ -24,3 +24,9 @@ frontend/build/
 
 # temporary files
 tmp/
+
+# AI 
+frontend/.cursor/
+frontend/.claude/
+backend/.cursor/
+backend/.claude/
