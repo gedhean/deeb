@@ -26,7 +26,7 @@
 
 ### P2 (Low Priority)
 
-- [ ] Use Monaco Editor for SQL editor (https://github.com/react-monaco-editor/react-monaco-editor)
+- [x] Use Monaco Editor for SQL editor (https://github.com/react-monaco-editor/react-monaco-editor)
 - [x] Update the Change Plan actions buttons to show a single button for main action based on status (Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled) and a three dots dropdown for other actions.
 - [ ] Update Tables to have pagination by default.
 - [ ] Create Helm Chart for Deeb deployment

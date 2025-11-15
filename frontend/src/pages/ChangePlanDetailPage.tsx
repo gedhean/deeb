@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTheme } from '@/components/theme-provider';
 import { DefaultLayout } from '@/components/layouts';
 import { changePlanService } from '@/lib/api/services/changePlans';
 import { projectsService, projectMembersService } from '@/lib/api/services/projects';
@@ -19,14 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { MonacoSQLEditor } from '@/components/editors/MonacoSQLEditor';
 import { SQLReviewResults } from '@/components/SQLReviewResults';
 import { ApprovalHistory } from '@/components/ApprovalHistory';
 import { ExecutionResults } from '@/components/ExecutionResults';
@@ -41,12 +35,16 @@ import {
   Database as DatabaseIcon,
   FileCode,
   Edit,
+  Save,
+  X,
   Loader2,
+  Server,
 } from 'lucide-react';
 
 export const ChangePlanDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { theme } = useTheme();
   const [changePlan, setChangePlan] = useState<ChangePlan | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [database, setDatabase] = useState<Database | null>(null);
@@ -54,7 +52,7 @@ export const ChangePlanDetailPage: React.FC = () => {
   const [projectMembers, setProjectMembers] = useState<ProjectMemberWithUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isEditingSQL, setIsEditingSQL] = useState(false);
   const [editingSQLContent, setEditingSQLContent] = useState('');
   const [isUpdatingSQL, setIsUpdatingSQL] = useState(false);
   const [editError, setEditError] = useState('');
@@ -140,20 +138,18 @@ export const ChangePlanDetailPage: React.FC = () => {
     return !terminalStates.includes(status);
   };
 
-  // Handle opening edit dialog
-  const handleOpenEditDialog = () => {
-    if (changePlan) {
-      setEditingSQLContent(changePlan.sql_content);
+  // Handle toggling edit mode
+  const handleToggleEdit = () => {
+    if (isEditingSQL) {
+      // Cancel editing - revert changes
+      setEditingSQLContent(changePlan?.sql_content || '');
       setEditError('');
-      setIsEditDialogOpen(true);
+    } else {
+      // Start editing
+      setEditingSQLContent(changePlan?.sql_content || '');
+      setEditError('');
     }
-  };
-
-  // Handle closing edit dialog
-  const handleCloseEditDialog = () => {
-    setIsEditDialogOpen(false);
-    setEditingSQLContent('');
-    setEditError('');
+    setIsEditingSQL(!isEditingSQL);
   };
 
   // Handle saving SQL content
@@ -171,7 +167,7 @@ export const ChangePlanDetailPage: React.FC = () => {
         sql_content: editingSQLContent.trim(),
       });
 
-      setIsEditDialogOpen(false);
+      setIsEditingSQL(false);
       showSuccessToast('SQL content updated successfully. SQL Review will run automatically.');
 
       // Reload change plan to get updated status and SQL Review results
@@ -312,31 +308,79 @@ export const ChangePlanDetailPage: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex items-start gap-3">
                     <DatabaseIcon className="h-4 w-4 text-muted-foreground mt-1" />
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium">Database</p>
-                      <p className="text-sm text-muted-foreground">
-                        {database?.database_name || changePlan.target_database_id}
-                      </p>
+                      {database ? (
+                        <Button
+                          variant="link"
+                          className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+                          onClick={() => navigate(`/databases/${database.id}`)}
+                        >
+                          {database.database_name}
+                        </Button>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {changePlan.target_database_id}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Server className="h-4 w-4 text-muted-foreground mt-1" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Database Instance</p>
+                      {database?.database_instance ? (
+                        <Button
+                          variant="link"
+                          className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+                          onClick={() =>
+                            navigate(`/database-instances/${database.database_instance?.id}`)
+                          }
+                        >
+                          {database.database_instance.name}
+                        </Button>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {database?.database_instance_id || 'N/A'}
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex items-start gap-3">
                     <FileCode className="h-4 w-4 text-muted-foreground mt-1" />
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium">Project</p>
-                      <p className="text-sm text-muted-foreground">
-                        {project?.name || changePlan.project_id}
-                      </p>
+                      {project ? (
+                        <Button
+                          variant="link"
+                          className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+                          onClick={() => navigate(`/projects/${project.id}`)}
+                        >
+                          {project.name}
+                        </Button>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{changePlan.project_id}</p>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex items-start gap-3">
                     <UserIcon className="h-4 w-4 text-muted-foreground mt-1" />
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium">Author</p>
-                      <p className="text-sm text-muted-foreground">
-                        {author?.email || changePlan.author_id}
-                      </p>
+                      {author ? (
+                        <Button
+                          variant="link"
+                          className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+                          onClick={() => navigate(`/users/${author.id}`)}
+                        >
+                          {author.email}
+                        </Button>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{changePlan.author_id}</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -430,22 +474,91 @@ export const ChangePlanDetailPage: React.FC = () => {
                 <CardDescription>SQL statements to be executed</CardDescription>
               </div>
               {permissions.canUpdateChanges && canEditSQLContent(changePlan.status) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleOpenEditDialog}
-                  className="h-8 w-8 p-0"
-                  aria-label="Edit SQL content"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  {isEditingSQL ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleToggleEdit}
+                        disabled={isUpdatingSQL}
+                        className="h-8"
+                      >
+                        <X className="mr-1 h-4 w-4" />
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleSaveSQLContent}
+                        disabled={isUpdatingSQL}
+                        className="h-8"
+                      >
+                        {isUpdatingSQL ? (
+                          <>
+                            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="mr-1 h-4 w-4" />
+                            Save
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleToggleEdit}
+                      className="h-8 w-8 p-0"
+                      aria-label="Edit SQL content"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </CardHeader>
           <CardContent>
-            <pre className="p-4 bg-muted rounded-md overflow-x-auto">
-              <code className="text-sm font-mono">{changePlan.sql_content}</code>
-            </pre>
+            {isEditingSQL ? (
+              <div className="space-y-2">
+                <MonacoSQLEditor
+                  value={editingSQLContent}
+                  onChange={(value) => setEditingSQLContent(value)}
+                  height={300}
+                  theme={theme === 'dark' ? 'dark' : 'light'}
+                  dialect={
+                    database?.database_instance?.database_engine === 'postgres' ? 'pgsql' : 'mysql'
+                  }
+                />
+                {editError && <p className="text-sm text-destructive">{editError}</p>}
+                {changePlan.status !== 'Open' && (
+                  <div className="rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/20">
+                    <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span className="text-sm">
+                        After saving, this change plan will transition to &quot;Open&quot; status
+                        and SQL Review will run automatically.
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <MonacoSQLEditor
+                value={changePlan.sql_content}
+                onChange={() => {}}
+                readonly={true}
+                height={300}
+                theme={theme === 'dark' ? 'dark' : 'light'}
+                dialect={
+                  database?.database_instance?.database_engine === 'postgres' ? 'pgsql' : 'mysql'
+                }
+              />
+            )}
           </CardContent>
         </Card>
 
@@ -493,78 +606,19 @@ export const ChangePlanDetailPage: React.FC = () => {
               <CardDescription>SQL statements to rollback the changes</CardDescription>
             </CardHeader>
             <CardContent>
-              <pre className="p-4 bg-muted rounded-md overflow-x-auto">
-                <code className="text-sm font-mono">{changePlan.rollback_sql}</code>
-              </pre>
+              <MonacoSQLEditor
+                value={changePlan.rollback_sql}
+                onChange={() => {}}
+                readonly={true}
+                height={300}
+                theme={theme === 'dark' ? 'dark' : 'light'}
+                dialect={
+                  database?.database_instance?.database_engine === 'postgres' ? 'pgsql' : 'mysql'
+                }
+              />
             </CardContent>
           </Card>
         )}
-
-        {/* Edit SQL Dialog */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Edit SQL Content</DialogTitle>
-              <DialogDescription>
-                Update the SQL content for this change plan. After saving, the change plan will
-                transition to &quot;Open&quot; status and SQL Review will run automatically.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label htmlFor="edit-sql-content" className="text-sm font-medium">
-                  SQL Content *
-                </label>
-                <textarea
-                  id="edit-sql-content"
-                  value={editingSQLContent}
-                  onChange={(e) => setEditingSQLContent(e.target.value)}
-                  placeholder="-- Enter your SQL statements here&#10;CREATE TABLE users (&#10;  id UUID PRIMARY KEY,&#10;  email VARCHAR(255) UNIQUE&#10;);"
-                  rows={16}
-                  className="flex min-h-[300px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-invalid={!!editError}
-                />
-                {editError && <p className="text-sm text-destructive">{editError}</p>}
-                <p className="text-xs text-muted-foreground">
-                  SQL statements will be executed against the target database. Ensure they are
-                  correct and tested.
-                </p>
-              </div>
-
-              {changePlan && changePlan.status !== 'Open' && (
-                <div className="rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/20">
-                  <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span className="text-sm">
-                      After saving, this change plan will transition to &quot;Open&quot; status and
-                      SQL Review will run automatically.
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCloseEditDialog} disabled={isUpdatingSQL}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveSQLContent} disabled={isUpdatingSQL}>
-                {isUpdatingSQL ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Edit className="mr-2 h-4 w-4" />
-                    Save Changes
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </DefaultLayout>
   );

@@ -87,7 +87,8 @@ describe('useProjectPermissions', () => {
       expect(result.current.canApproveChanges).toBe(true);
       expect(result.current.canRejectChanges).toBe(true);
       expect(result.current.canExecuteChanges).toBe(true);
-      expect(result.current.canManagePolicyRules).toBe(true);
+      // Note: ProjectOwner does not have policy_rules management permissions per YAML config
+      expect(result.current.canManagePolicyRules).toBe(false);
       expect(result.current.isProjectOwner).toBe(true);
       expect(result.current.userProjectRole).toBe('ProjectOwner');
     });

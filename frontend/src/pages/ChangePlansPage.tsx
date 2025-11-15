@@ -71,6 +71,7 @@ export const ChangePlansPage: React.FC = () => {
     database_id?: string;
     author_id?: string;
   }>({
+    status: 'Open' as ChangePlanStatus,
     project_id: currentProject?.id,
     author_id: currentUser?.id,
   });

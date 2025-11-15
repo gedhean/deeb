@@ -21,6 +21,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { EncryptedText } from '@/components/ui/encrypted-text';
 import { useCurrentProject, useSetCurrentProject } from '@/store';
 import type { Project } from '@/lib/api/types';
 
@@ -83,7 +84,9 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
                 <FolderKanban className="size-4" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">{activeProject.name}</span>
+                <span className="truncate font-semibold">
+                  <EncryptedText text={activeProject.name} revealDelayMs={30} />
+                </span>
                 <span className="truncate text-xs">{activeProject.description || 'Project'}</span>
               </div>
               <ChevronsUpDown className="ml-auto" />

@@ -43,9 +43,10 @@ describe('RBAC Utilities', () => {
       expect(hasOrganizationPermission('OrganizationDBA', OrganizationPermission.UsersCreate)).toBe(
         false,
       );
-      expect(
-        hasOrganizationPermission('OrganizationDBA', OrganizationPermission.ProjectsCreate),
-      ).toBe(false);
+      // Note: OrganizationDBA now has projects.create permission per YAML config
+      expect(hasOrganizationPermission('OrganizationDBA', OrganizationPermission.UsersUpdate)).toBe(
+        false,
+      );
     });
 
     it('should return true for Developer with allowed permissions', () => {
@@ -61,9 +62,9 @@ describe('RBAC Utilities', () => {
       expect(
         hasOrganizationPermission('OrganizationDeveloper', OrganizationPermission.UsersCreate),
       ).toBe(false);
-      // Note: OrganizationDeveloper now has databases.create permission per YAML config
+      // Note: OrganizationDeveloper now has databases.create and databases.update permission per YAML config
       expect(
-        hasOrganizationPermission('OrganizationDeveloper', OrganizationPermission.DatabasesUpdate),
+        hasOrganizationPermission('OrganizationDeveloper', OrganizationPermission.DatabasesDelete),
       ).toBe(false);
     });
 
@@ -288,9 +289,10 @@ describe('RBAC Utilities', () => {
       const permissions = getOrganizationPermissions('OrganizationDeveloper');
       expect(permissions).toContain(OrganizationPermission.ProjectsCreate);
       expect(permissions).toContain(OrganizationPermission.ProjectsRead);
-      // Note: OrganizationDeveloper now has databases.create permission per YAML config
+      // Note: OrganizationDeveloper now has databases.create and databases.update permission per YAML config
       expect(permissions).toContain(OrganizationPermission.DatabasesCreate);
-      expect(permissions).not.toContain(OrganizationPermission.DatabasesUpdate);
+      expect(permissions).toContain(OrganizationPermission.DatabasesUpdate);
+      expect(permissions).not.toContain(OrganizationPermission.DatabasesDelete);
     });
   });
 

@@ -54,9 +54,15 @@ export const ShootingStars: React.FC<ShootingStarsProps> = ({
 }) => {
   const [star, setStar] = useState<ShootingStar | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const timeoutRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     const createStar = () => {
+      if (!isMountedRef.current) return;
+
       const { x, y, angle } = getRandomStartPoint();
       const newStar: ShootingStar = {
         id: Date.now(),
@@ -70,12 +76,21 @@ export const ShootingStars: React.FC<ShootingStarsProps> = ({
       setStar(newStar);
 
       const randomDelay = Math.random() * (maxDelay - minDelay) + minDelay;
-      setTimeout(createStar, randomDelay);
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = window.setTimeout(createStar, randomDelay);
     };
 
     createStar();
 
-    return () => {};
+    return () => {
+      isMountedRef.current = false;
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
   }, [minSpeed, maxSpeed, minDelay, maxDelay]);
 
   useEffect(() => {

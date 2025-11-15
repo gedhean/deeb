@@ -1,11 +1,20 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import monacoEditorPlugin from 'vite-plugin-monaco-editor-esm';
 import path from 'path';
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    monacoEditorPlugin({
+      // Configure worker paths for Monaco Editor
+      publicPath: 'monaco-editor-workers',
+      customWorkers: [],
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'), // eslint-disable-line no-undef

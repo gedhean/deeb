@@ -14,6 +14,7 @@ import {
 import { APIError } from '@/lib/api/types';
 import { ShootingStars } from '@/components/ui/shooting-stars';
 import { StarsBackground } from '@/components/ui/stars-background';
+import { EncryptedText } from '@/components/ui/encrypted-text';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -153,12 +154,20 @@ export const RegisterPage: React.FC = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">
-            {isFirstUser ? 'Initial Setup' : 'Create an account'}
+            <EncryptedText
+              text={isFirstUser ? 'Initial Setup' : 'Create an account'}
+              revealDelayMs={40}
+            />
           </CardTitle>
           <CardDescription className="text-center">
-            {isFirstUser
-              ? 'Create the first administrator account to get started'
-              : 'Enter your details to create your Deeb account'}
+            <EncryptedText
+              text={
+                isFirstUser
+                  ? 'Create the first administrator account to get started'
+                  : 'Enter your details to create your Deeb account'
+              }
+              revealDelayMs={25}
+            />
           </CardDescription>
         </CardHeader>
         <CardContent>

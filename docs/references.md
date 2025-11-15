@@ -16,3 +16,4 @@
 - https://ui.aceternity.com/components/code-block (Use for create db user sql snippet)
 - https://better-upload.com/
 - https://shadcn-ui-multi-form.vercel.app/build (Change Plan create form)
+- https://dtstack.github.io/monaco-sql-languages/ (Monaco SQL Editor with syntax highlighting for MySQL and PostgreSQL)
