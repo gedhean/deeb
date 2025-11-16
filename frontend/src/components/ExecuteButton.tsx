@@ -9,10 +9,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { changePlanService } from '@/lib/api/services/changePlans';
+import { useExecuteChangePlan } from '@/hooks/api/useChangePlansSWR';
 import type { ChangePlan } from '@/lib/api/types';
 import { Play, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
+import { showSuccessToast } from '@/lib/errorHandling';
 
 interface ExecuteButtonProps {
   changePlan: ChangePlan;
@@ -25,8 +25,10 @@ export const ExecuteButton: React.FC<ExecuteButtonProps> = ({
   onSuccess,
   canExecute,
 }) => {
+  // Use SWR mutation hook for consistent cache management
+  const { executeChangePlan, isLoading: isExecuting } = useExecuteChangePlan();
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isExecuting, setIsExecuting] = useState(false);
   const [error, setError] = useState('');
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'executing' | 'success'>('idle');
 
@@ -50,13 +52,12 @@ export const ExecuteButton: React.FC<ExecuteButtonProps> = ({
       return;
     }
 
-    try {
-      setIsExecuting(true);
-      setError('');
-      setExecutionStatus('executing');
+    setError('');
+    setExecutionStatus('executing');
 
-      await changePlanService.executeChangePlan(changePlan.id);
+    const success = await executeChangePlan(changePlan.id);
 
+    if (success) {
       setExecutionStatus('success');
       showSuccessToast('Change plan executed successfully');
 
@@ -69,16 +70,9 @@ export const ExecuteButton: React.FC<ExecuteButtonProps> = ({
           onSuccess();
         }
       }, 1500);
-    } catch (err) {
+    } else {
       setExecutionStatus('idle');
-      const errorMsg = handleApiError(err, {
-        showToast: true,
-        toastTitle: 'Failed to execute change plan',
-      });
-      setError(errorMsg);
-      console.error('Failed to execute change plan:', err);
-    } finally {
-      setIsExecuting(false);
+      setError('Failed to execute change plan');
     }
   };
 

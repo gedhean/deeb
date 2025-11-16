@@ -46,7 +46,7 @@ dev: ensure-concurrently
 		--names "FRONTEND,BACKEND" \
 		--prefix-colors "cyan,magenta" \
 		--kill-others \
-		"pnpm --dir $(FRONTEND_DIR) run dev" \
+		"pnpm --dir $(FRONTEND_DIR) install && pnpm --dir $(FRONTEND_DIR) run dev" \
 		"make -C $(BACKEND_DIR) run-air"
 
 # alias cmd for dev

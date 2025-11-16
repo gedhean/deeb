@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { schemaService } from '@/lib/api/services/schema';
-import type { TableDetail, Column, Index, ForeignKey, CheckConstraint } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import React from 'react';
+import { useTableDetailSWR } from '@/hooks/api/useDatabaseSchemaSWR';
+import type { Column, Index, ForeignKey, CheckConstraint } from '@/lib/api/types';
 import {
   Sheet,
   SheetContent,
@@ -56,36 +55,10 @@ export const TableDetailSheet: React.FC<TableDetailSheetProps> = ({
   open,
   onOpenChange,
 }) => {
-  const [tableDetail, setTableDetail] = useState<TableDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (open && tableName) {
-      const loadTableDetail = async () => {
-        try {
-          setIsLoading(true);
-          setError('');
-          const data = await schemaService.getTableDetail(databaseId, tableName);
-          setTableDetail(data);
-        } catch (err) {
-          if (err instanceof APIError) {
-            setError(err.message);
-          } else {
-            setError('Failed to load table details. Please try again.');
-          }
-          console.error('Failed to load table detail:', err);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-      loadTableDetail();
-    } else {
-      setTableDetail(null);
-      setError('');
-    }
-  }, [databaseId, tableName, open]);
+  // Use SWR hook for table detail with automatic caching
+  const { tableDetail, isLoading, error } = useTableDetailSWR(databaseId, tableName, {
+    enabled: open,
+  });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

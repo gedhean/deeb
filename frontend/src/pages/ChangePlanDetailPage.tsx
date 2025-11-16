@@ -1,21 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTheme } from '@/components/theme-provider';
 import { DefaultLayout } from '@/components/layouts';
-import { changePlanService } from '@/lib/api/services/changePlans';
-import { projectsService, projectMembersService } from '@/lib/api/services/projects';
-import { databasesService } from '@/lib/api/services/databases';
-import { usersService } from '@/lib/api/services/users';
 import { useProjectPermissions } from '@/hooks/api/useProjectPermissions';
-import type {
-  ChangePlan,
-  ChangePlanStatus,
-  Project,
-  Database,
-  User,
-  ProjectMemberWithUser,
-} from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import type { ChangePlanStatus } from '@/lib/api/types';
+import { useUsers } from '@/hooks/api/useUsersSWR';
+import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
+import { useDatabases } from '@/hooks/api/useDatabases';
+import { useChangePlanSWR, useUpdateChangePlanSWR } from '@/hooks/api/useChangePlansSWR';
+import { useProjectMembersSWR } from '@/hooks/api/useProjectMembersSWR';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,75 +38,41 @@ export const ChangePlanDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { theme } = useTheme();
-  const [changePlan, setChangePlan] = useState<ChangePlan | null>(null);
-  const [project, setProject] = useState<Project | null>(null);
-  const [database, setDatabase] = useState<Database | null>(null);
-  const [author, setAuthor] = useState<User | null>(null);
-  const [projectMembers, setProjectMembers] = useState<ProjectMemberWithUser[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [isEditingSQL, setIsEditingSQL] = useState(false);
   const [editingSQLContent, setEditingSQLContent] = useState('');
-  const [isUpdatingSQL, setIsUpdatingSQL] = useState(false);
   const [editError, setEditError] = useState('');
+
+  // Use SWR hook for change plan - automatic caching and revalidation
+  const { changePlan, isLoading, error: swrError, refetch } = useChangePlanSWR(id);
+
+  // Use cached data from store
+  const { getUserById } = useUsers();
+  const { getProjectById } = useProjectsSWR();
+  const { getDatabaseById } = useDatabases();
+
+  // Get related entities from cache
+  const project = useMemo(() => {
+    return changePlan ? getProjectById(changePlan.project_id) : null;
+  }, [changePlan, getProjectById]);
+
+  const database = useMemo(() => {
+    return changePlan ? getDatabaseById(changePlan.target_database_id) : null;
+  }, [changePlan, getDatabaseById]);
+
+  const author = useMemo(() => {
+    return changePlan ? getUserById(changePlan.author_id) : null;
+  }, [changePlan, getUserById]);
+
+  // Use cached hook for project members - automatic deduplication
+  const { members: projectMembers } = useProjectMembersSWR(project?.id);
 
   // Get project permissions based on loaded project members
   const permissions = useProjectPermissions(projectMembers);
 
-  useEffect(() => {
-    if (id) {
-      loadChangePlan(id);
-    }
-  }, [id]);
+  // Hook for updating change plan
+  const { updateChangePlan, isLoading: isUpdatingSQL } = useUpdateChangePlanSWR();
 
-  const loadChangePlan = async (changePlanId: string) => {
-    try {
-      setIsLoading(true);
-      setError('');
-
-      // Load change plan
-      const changePlanData = await changePlanService.getChangePlan(changePlanId);
-      setChangePlan(changePlanData);
-
-      // Load related data in parallel
-      const [projectsRes, databasesRes, usersRes] = await Promise.all([
-        projectsService.listProjects({ limit: 100 }),
-        databasesService.listDatabases({ limit: 100 }),
-        usersService.listUsers({ limit: 100 }),
-      ]);
-
-      // Find related entities
-      const foundProject = projectsRes.items.find((p) => p.id === changePlanData.project_id);
-      const foundDatabase = databasesRes.items.find(
-        (d) => d.id === changePlanData.target_database_id,
-      );
-      const foundAuthor = usersRes.items.find((u) => u.id === changePlanData.author_id);
-
-      setProject(foundProject || null);
-      setDatabase(foundDatabase || null);
-      setAuthor(foundAuthor || null);
-
-      // Load project members if project found
-      if (foundProject) {
-        try {
-          const members = await projectMembersService.listProjectMembers(foundProject.id);
-          setProjectMembers(members);
-        } catch (err) {
-          console.error('Failed to load project members:', err);
-          setProjectMembers([]);
-        }
-      }
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load change plan. Please try again.');
-      }
-      console.error('Failed to load change plan:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const error = swrError || '';
 
   // Format date
   const formatDate = (dateString: string): string => {
@@ -159,30 +118,24 @@ export const ChangePlanDetailPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsUpdatingSQL(true);
-      setEditError('');
+    setEditError('');
 
-      await changePlanService.updateChangePlan(changePlan.id, {
-        sql_content: editingSQLContent.trim(),
-      });
+    const result = await updateChangePlan(changePlan.id, {
+      sql_content: editingSQLContent.trim(),
+    });
 
+    if (result) {
       setIsEditingSQL(false);
       showSuccessToast('SQL content updated successfully. SQL Review will run automatically.');
 
-      // Reload change plan to get updated status and SQL Review results
-      if (id) {
-        loadChangePlan(id);
-      }
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
+      // Refetch change plan to get updated status and SQL Review results
+      await refetch();
+    } else {
+      const errorMsg = handleApiError(new Error('Failed to update SQL content'), {
         showToast: true,
         toastTitle: 'Failed to update SQL content',
       });
       setEditError(errorMsg);
-      console.error('Failed to update SQL content:', err);
-    } finally {
-      setIsUpdatingSQL(false);
     }
   };
 
@@ -270,7 +223,7 @@ export const ChangePlanDetailPage: React.FC = () => {
             <ChangePlanStatusBadge status={changePlan.status} />
             <ChangePlanActions
               changePlan={changePlan}
-              onSuccess={() => loadChangePlan(id!)}
+              onSuccess={() => refetch()}
               canApprove={permissions.canApproveChanges}
               canReject={permissions.canRejectChanges}
               canExecute={permissions.canExecuteChanges}
@@ -585,11 +538,7 @@ export const ChangePlanDetailPage: React.FC = () => {
           changePlanId={changePlan.id}
           findings={changePlan.policy_findings}
           changePlanStatus={changePlan.status}
-          onRefresh={() => {
-            if (id) {
-              loadChangePlan(id);
-            }
-          }}
+          onRefresh={() => refetch()}
         />
 
         {/* Approval History */}

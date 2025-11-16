@@ -1,15 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsService, projectMembersService } from '@/lib/api/services/projects';
-import type {
-  Project,
-  ProjectMemberWithUser,
-  ProjectRole,
-  AddProjectMemberRequest,
-} from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import { projectMembersService } from '@/lib/api/services/projects';
+import type { ProjectMemberWithUser, ProjectRole, AddProjectMemberRequest } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -46,8 +40,9 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { useProjectPermissions } from '@/hooks/api/useProjectPermissions';
-import { usersService } from '@/lib/api/services/users';
-import type { User } from '@/lib/api/types';
+import { useUsers } from '@/hooks/api/useUsersSWR';
+import { useProjectSWR } from '@/hooks/api/useProjectsSWR';
+import { useProjectMembersSWR } from '@/hooks/api/useProjectMembersSWR';
 import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
 import { ArrowLeft, AlertTriangle, Users, Plus, Trash2, Calendar } from 'lucide-react';
 
@@ -55,77 +50,29 @@ export const ProjectDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const [project, setProject] = useState<Project | null>(null);
-  const [members, setMembers] = useState<ProjectMemberWithUser[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-  const [error, setError] = useState('');
+
+  // Use SWR hooks for data fetching
+  const { project, isLoading, error } = useProjectSWR(id);
+  const {
+    members,
+    isLoading: isLoadingMembers,
+    refetch: refetchMembers,
+  } = useProjectMembersSWR(id);
+
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isRemoveMemberOpen, setIsRemoveMemberOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<ProjectMemberWithUser | null>(null);
-  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addMemberForm, setAddMemberForm] = useState<AddProjectMemberRequest>({
     user_id: '',
     project_role: 'ProjectDeveloper',
   });
 
+  // Use cached users data
+  const { users: availableUsers, isLoading: isLoadingUsers } = useUsers();
+
   // Check permissions for members management
   const { canManageMembers } = useProjectPermissions(members);
-
-  useEffect(() => {
-    if (id) {
-      loadProject(id);
-      loadMembers(id);
-    }
-  }, [id]);
-
-  const loadProject = async (projectId: string) => {
-    try {
-      setIsLoading(true);
-      setError('');
-      const projectData = await projectsService.getProject(projectId);
-      setProject(projectData);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load project. Please try again.');
-      }
-      console.error('Failed to load project:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadMembers = async (projectId: string) => {
-    try {
-      setIsLoadingMembers(true);
-      const membersList = await projectMembersService.listProjectMembers(projectId);
-      setMembers(membersList);
-    } catch (err) {
-      handleApiError(err, {
-        showToast: true,
-        toastTitle: 'Failed to load members',
-      });
-      console.error('Failed to load members:', err);
-    } finally {
-      setIsLoadingMembers(false);
-    }
-  };
-
-  const loadAvailableUsers = async () => {
-    try {
-      setIsLoadingUsers(true);
-      const response = await usersService.listUsers({ limit: 100 });
-      setAvailableUsers(response.items);
-    } catch (err) {
-      console.error('Failed to load users:', err);
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  };
 
   const handleAddMember = async () => {
     if (!id || !addMemberForm.user_id) {
@@ -138,7 +85,7 @@ export const ProjectDetailPage: React.FC = () => {
       setIsAddMemberOpen(false);
       setAddMemberForm({ user_id: '', project_role: 'ProjectDeveloper' });
       showSuccessToast('Member added successfully');
-      await loadMembers(id);
+      await refetchMembers();
     } catch (err) {
       handleApiError(err, {
         showToast: true,
@@ -161,7 +108,7 @@ export const ProjectDetailPage: React.FC = () => {
       setIsRemoveMemberOpen(false);
       setSelectedMember(null);
       showSuccessToast('Member removed successfully');
-      await loadMembers(id);
+      await refetchMembers();
     } catch (err) {
       handleApiError(err, {
         showToast: true,
@@ -182,7 +129,7 @@ export const ProjectDetailPage: React.FC = () => {
       setIsSubmitting(true);
       await projectMembersService.updateProjectMemberRole(id, member.member.user_id, newRole);
       showSuccessToast('Member role updated successfully');
-      await loadMembers(id);
+      await refetchMembers();
     } catch (err) {
       handleApiError(err, {
         showToast: true,
@@ -331,13 +278,7 @@ export const ProjectDetailPage: React.FC = () => {
                 </CardDescription>
               </div>
               {canManageMembers && (
-                <Button
-                  onClick={async () => {
-                    await loadAvailableUsers();
-                    setIsAddMemberOpen(true);
-                  }}
-                  size="sm"
-                >
+                <Button onClick={() => setIsAddMemberOpen(true)} size="sm">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Member
                 </Button>
@@ -376,12 +317,7 @@ export const ProjectDetailPage: React.FC = () => {
                 </EmptyHeader>
                 {canManageMembers && (
                   <EmptyContent>
-                    <Button
-                      onClick={async () => {
-                        await loadAvailableUsers();
-                        setIsAddMemberOpen(true);
-                      }}
-                    >
+                    <Button onClick={() => setIsAddMemberOpen(true)}>
                       <Plus className="mr-2 h-4 w-4" />
                       Add Member
                     </Button>

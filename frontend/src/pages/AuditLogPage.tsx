@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { DefaultLayout } from '@/components/layouts';
-import { auditLogService } from '@/lib/api/services/auditLogs';
-import { usersService } from '@/lib/api/services/users';
-import type { AuditLog, ListAuditLogsParams, User } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import type { ListAuditLogsParams } from '@/lib/api/types';
+import { useUsers } from '@/hooks/api/useUsersSWR';
+import { useAuditLogsSWR } from '@/hooks/api/useAuditLogsSWR';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -50,13 +49,11 @@ const RESOURCE_TYPES = [
 
 export const AuditLogPage: React.FC = () => {
   const { user } = useAuth();
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [users, setUsers] = useState<Map<string, User>>(new Map());
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [limit] = useState(50);
+
+  // Use cached users from store instead of fetching
+  const { getUserById } = useUsers();
 
   // Filters
   const [filters, setFilters] = useState<ListAuditLogsParams>({
@@ -67,60 +64,18 @@ export const AuditLogPage: React.FC = () => {
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
 
-  useEffect(() => {
-    if (!isAdmin) {
-      setError('Access denied. Admin access required.');
-      setIsLoading(false);
-      return;
-    }
+  // Construct params for SWR hook
+  const params = useMemo(
+    () => ({
+      ...filters,
+      limit,
+      offset: (currentPage - 1) * limit,
+    }),
+    [filters, limit, currentPage],
+  );
 
-    loadAuditLogs();
-    loadUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, filters, currentPage]);
-
-  const loadUsers = async () => {
-    try {
-      const response = await usersService.listUsers({ limit: 100 });
-      const usersMap = new Map<string, User>();
-      response.items.forEach((u) => {
-        usersMap.set(u.id, u);
-      });
-      setUsers(usersMap);
-    } catch (err) {
-      console.error('Failed to load users:', err);
-    }
-  };
-
-  const loadAuditLogs = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-
-      const params: ListAuditLogsParams = {
-        ...filters,
-        limit,
-        offset: (currentPage - 1) * limit,
-      };
-
-      const response = await auditLogService.listAuditLogs(params);
-      setAuditLogs(response.audit_logs || []);
-      setTotal(response.total || 0);
-    } catch (err) {
-      if (err instanceof APIError) {
-        if (err.statusCode === 403) {
-          setError('Access denied. Admin access required.');
-        } else {
-          setError(err.message || 'Failed to load audit logs.');
-        }
-      } else {
-        setError('Failed to load audit logs. Please try again.');
-      }
-      console.error('Failed to load audit logs:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Use SWR hook for data fetching
+  const { auditLogs, total, isLoading, error } = useAuditLogsSWR(params, isAdmin);
 
   const handleFilterChange = (key: keyof ListAuditLogsParams, value: string | undefined) => {
     setFilters((prev) => {
@@ -393,7 +348,7 @@ export const AuditLogPage: React.FC = () => {
                     </TableHeader>
                     <TableBody>
                       {auditLogs.map((log) => {
-                        const logUser = users.get(log.user_id);
+                        const logUser = getUserById(log.user_id);
                         return (
                           <TableRow key={log.id}>
                             <TableCell>

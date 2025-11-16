@@ -3,20 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { databasesService } from '@/lib/api/services/databases';
-import { projectsService } from '@/lib/api/services/projects';
-import { environmentsService } from '@/lib/api/services/environments';
-import { databaseInstancesService } from '@/lib/api/services/database-instances';
 import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
+import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
+import { useDatabases } from '@/hooks/api/useDatabases';
+import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
+import { useDatabaseInstancesSWR } from '@/hooks/api/useDatabaseInstancesSWR';
 import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
-import type {
-  CreateDatabaseRequest,
-  Database,
-  UpdateDatabaseRequest,
-  Project,
-  Environment,
-  DatabaseInstance,
-} from '@/lib/api/types';
+import type { CreateDatabaseRequest, Database, UpdateDatabaseRequest } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,18 +63,21 @@ export const DatabasesPage: React.FC = () => {
   const { user } = useAuth();
   const currentProject = useCurrentProject();
   const navigate = useNavigate();
-  const [databases, setDatabases] = useState<Database[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [databaseInstances, setDatabaseInstances] = useState<DatabaseInstance[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(false);
   const [error, setError] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedDatabase, setSelectedDatabase] = useState<Database | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Use cached data from SWR hooks
+  const { projects, isLoading: projectsLoading } = useProjectsSWR();
+  const { databases, isLoading: databasesLoading, refetch: refetchDatabases } = useDatabases({});
+  const { environments, isLoading: environmentsLoading } = useEnvironmentsSWR();
+  const { databaseInstances, isLoading: instancesLoading } = useDatabaseInstancesSWR();
+
+  const isLoading = projectsLoading || databasesLoading;
+  const isLoadingDropdowns = environmentsLoading || instancesLoading;
 
   // Filter state - initialize with currentProject if available
   const [filters, setFilters] = useState<{
@@ -126,33 +123,6 @@ export const DatabasesPage: React.FC = () => {
     OrganizationPermission.DatabasesDelete,
   );
 
-  // Load dropdown data
-  useEffect(() => {
-    if (!canReadDatabases) {
-      return;
-    }
-
-    const loadDropdownData = async () => {
-      try {
-        setIsLoadingDropdowns(true);
-        const [projectsRes, environmentsRes, instancesRes] = await Promise.all([
-          projectsService.listProjects({ limit: 100 }),
-          environmentsService.listEnvironments({ limit: 100 }),
-          databaseInstancesService.listDatabaseInstances({ limit: 100 }),
-        ]);
-        setProjects(projectsRes.items);
-        setEnvironments(environmentsRes.items);
-        setDatabaseInstances(instancesRes.items);
-      } catch (err) {
-        console.error('Failed to load dropdown data:', err);
-      } finally {
-        setIsLoadingDropdowns(false);
-      }
-    };
-
-    loadDropdownData();
-  }, [canReadDatabases]);
-
   // Sync filters with currentProject on initial load (only if filter not already set)
   useEffect(() => {
     if (currentProject?.id && !filters.project_id) {
@@ -161,34 +131,22 @@ export const DatabasesPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject]);
 
-  // Load databases
+  // Check permissions for error display
   useEffect(() => {
     if (!canReadDatabases) {
       setError('Access denied. You do not have permission to view databases.');
-      setIsLoading(false);
-      return;
     }
-
-    const loadDatabases = async () => {
-      try {
-        setIsLoading(true);
-        setError('');
-        const response = await databasesService.listDatabases({ limit: 100 });
-        setDatabases(response.items);
-      } catch (err) {
-        if (err instanceof APIError) {
-          setError(err.message);
-        } else {
-          setError('Failed to load databases. Please try again.');
-        }
-        console.error('Failed to load databases:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadDatabases();
   }, [canReadDatabases]);
+
+  // Refetch databases when create dialog closes (after a successful creation)
+  const prevIsCreateOpen = React.useRef(isCreateOpen);
+  useEffect(() => {
+    if (prevIsCreateOpen.current && !isCreateOpen) {
+      // Dialog was just closed, refetch to get the new database
+      refetchDatabases();
+    }
+    prevIsCreateOpen.current = isCreateOpen;
+  }, [isCreateOpen, refetchDatabases]);
 
   // Validate form
   const validateForm = (): boolean => {
@@ -250,9 +208,8 @@ export const DatabasesPage: React.FC = () => {
         description: '',
       });
       setFormErrors({});
-      // Reload databases
-      const response = await databasesService.listDatabases({ limit: 100 });
-      setDatabases(response.items);
+      // Reload databases from cache
+      await refetchDatabases();
     } catch (err) {
       if (err instanceof APIError) {
         setError(err.message);
@@ -276,9 +233,8 @@ export const DatabasesPage: React.FC = () => {
       await databasesService.deleteDatabase(selectedDatabase.id);
       setIsDeleteOpen(false);
       setSelectedDatabase(null);
-      // Reload databases
-      const response = await databasesService.listDatabases({ limit: 100 });
-      setDatabases(response.items);
+      // Reload databases from cache
+      await refetchDatabases();
     } catch (err) {
       if (err instanceof APIError) {
         setError(err.message);

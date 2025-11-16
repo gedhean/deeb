@@ -31,8 +31,8 @@ import './App.css';
 function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
           <SetupCheck>
             <Routes>
               <Route path="/" element={<Home />} />
@@ -186,8 +186,8 @@ function App() {
             </Routes>
           </SetupCheck>
           <Toaster />
-        </BrowserRouter>
-      </AuthProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }

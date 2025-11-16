@@ -13,8 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { PolicyFindingsSummary, PolicyFindingItem, ChangePlanStatus } from '@/lib/api/types';
-import { changePlanService } from '@/lib/api/services/changePlans';
-import { APIError } from '@/lib/api/types';
+import { useTriggerSQLReview } from '@/hooks/api/useChangePlansSWR';
 import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw, Filter } from 'lucide-react';
 
 interface SQLReviewResultsProps {
@@ -30,7 +29,9 @@ export const SQLReviewResults: React.FC<SQLReviewResultsProps> = ({
   changePlanStatus,
   onRefresh,
 }) => {
-  const [isTriggeringReview, setIsTriggeringReview] = useState(false);
+  // Use SWR mutation hook for consistent cache management
+  const { triggerSQLReview, isLoading: isTriggeringReview } = useTriggerSQLReview();
+
   const [error, setError] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [severityFilter, setSeverityFilter] = useState<string>('all');
@@ -38,26 +39,18 @@ export const SQLReviewResults: React.FC<SQLReviewResultsProps> = ({
   const [validatorTypeFilter, setValidatorTypeFilter] = useState<string>('');
 
   const handleTriggerReview = async () => {
-    try {
-      setIsTriggeringReview(true);
-      setError('');
+    setError('');
 
-      // Trigger SQL Review
-      await changePlanService.triggerSQLReview(changePlanId);
+    // Trigger SQL Review
+    const success = await triggerSQLReview(changePlanId);
 
+    if (success) {
       // Refresh the change plan data if callback provided
       if (onRefresh) {
         onRefresh();
       }
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to trigger SQL Review. Please try again.');
-      }
-      console.error('Failed to trigger SQL Review:', err);
-    } finally {
-      setIsTriggeringReview(false);
+    } else {
+      setError('Failed to trigger SQL Review. Please try again.');
     }
   };
 

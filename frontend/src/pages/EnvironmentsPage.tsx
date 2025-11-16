@@ -1,15 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
-import { environmentsService } from '@/lib/api/services/environments';
-import { policiesService } from '@/lib/api/services/policies';
 import type {
   CreateEnvironmentRequest,
-  Environment,
   UpdateEnvironmentRequest,
-  Policy,
+  Environment,
 } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import {
+  useEnvironmentsSWR,
+  useCreateEnvironmentSWR,
+  useUpdateEnvironmentSWR,
+  useDeleteEnvironmentSWR,
+} from '@/hooks/api/useEnvironmentsSWR';
+import { usePolicies } from '@/hooks/api/usePoliciesSWR';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -44,16 +47,10 @@ import { Plus, Pencil, Trash2, AlertTriangle, Globe } from 'lucide-react';
 
 export const EnvironmentsPage: React.FC = () => {
   const { user } = useAuth();
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [policies, setPolicies] = useState<Policy[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
-  const [error, setError] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedEnvironment, setSelectedEnvironment] = useState<Environment | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<CreateEnvironmentRequest>({
@@ -71,57 +68,18 @@ export const EnvironmentsPage: React.FC = () => {
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
 
-  // Load policies (filtered by SQL_REVIEW type)
-  useEffect(() => {
-    if (!isAdmin) {
-      return;
-    }
+  // Use SWR hooks for data fetching
+  const { environments, isLoading, error } = useEnvironmentsSWR();
+  const { policies, isLoading: isLoadingPolicies } = usePolicies({
+    type: 'SQL_REVIEW',
+    limit: 100,
+    enabled: isAdmin,
+  });
 
-    const loadPolicies = async () => {
-      try {
-        setIsLoadingPolicies(true);
-        const response = await policiesService.listPolicies({ type: 'SQL_REVIEW', limit: 100 });
-        setPolicies(response.items);
-      } catch (err) {
-        console.error('Failed to load policies:', err);
-      } finally {
-        setIsLoadingPolicies(false);
-      }
-    };
-
-    loadPolicies();
-  }, [isAdmin]);
-
-  // Load environments
-  useEffect(() => {
-    if (!isAdmin) {
-      setError('Access denied. Admin access required.');
-      setIsLoading(false);
-      return;
-    }
-
-    loadEnvironments();
-  }, [isAdmin]);
-
-  const loadEnvironments = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-      const response = await environmentsService.listEnvironments({ limit: 100 });
-      setEnvironments(response.items);
-      return response.items;
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load environments. Please try again.');
-      }
-      console.error('Failed to load environments:', err);
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Use mutation hooks
+  const { createEnvironment, isLoading: isCreating } = useCreateEnvironmentSWR();
+  const { updateEnvironment, isLoading: isUpdating } = useUpdateEnvironmentSWR();
+  const { deleteEnvironment, isLoading: isDeleting } = useDeleteEnvironmentSWR();
 
   // Validate form
   const validateForm = (): boolean => {
@@ -143,28 +101,18 @@ export const EnvironmentsPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const createData: CreateEnvironmentRequest = {
-        name: formData.name.trim(),
-        description: formData.description?.trim() || undefined,
-        policy_id: formData.policy_id || undefined,
-        allow_self_approval: formData.allow_self_approval,
-      };
-      await environmentsService.createEnvironment(createData);
+    const createData: CreateEnvironmentRequest = {
+      name: formData.name.trim(),
+      description: formData.description?.trim() || undefined,
+      policy_id: formData.policy_id || undefined,
+      allow_self_approval: formData.allow_self_approval,
+    };
+
+    const result = await createEnvironment(createData);
+    if (result) {
       setIsCreateOpen(false);
       setFormData({ name: '', description: '', policy_id: undefined, allow_self_approval: false });
       setFormErrors({});
-      await loadEnvironments();
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to create environment. Please try again.');
-      }
-      console.error('Failed to create environment:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -174,42 +122,27 @@ export const EnvironmentsPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const updateData: UpdateEnvironmentRequest = {};
-      if (formData.name !== selectedEnvironment.name) {
-        updateData.name = formData.name.trim();
-      }
-      if (formData.description !== selectedEnvironment.description) {
-        updateData.description = formData.description?.trim() || undefined;
-      }
-      // Always include policy_id if it changed, even when clearing to null
-      if (formData.policy_id !== selectedEnvironment.policy_id) {
-        updateData.policy_id = formData.policy_id || null;
-      }
-      if (formData.allow_self_approval !== selectedEnvironment.allow_self_approval) {
-        updateData.allow_self_approval = formData.allow_self_approval;
-      }
+    const updateData: UpdateEnvironmentRequest = {};
+    if (formData.name !== selectedEnvironment.name) {
+      updateData.name = formData.name.trim();
+    }
+    if (formData.description !== selectedEnvironment.description) {
+      updateData.description = formData.description?.trim() || undefined;
+    }
+    // Always include policy_id if it changed, even when clearing to null
+    if (formData.policy_id !== selectedEnvironment.policy_id) {
+      updateData.policy_id = formData.policy_id || null;
+    }
+    if (formData.allow_self_approval !== selectedEnvironment.allow_self_approval) {
+      updateData.allow_self_approval = formData.allow_self_approval;
+    }
 
-      console.log('Update data being sent:', updateData);
-      console.log('formData.policy_id:', formData.policy_id);
-      console.log('selectedEnvironment.policy_id:', selectedEnvironment.policy_id);
-
-      await environmentsService.updateEnvironment(selectedEnvironment.id, updateData);
+    const result = await updateEnvironment(selectedEnvironment.id, updateData);
+    if (result) {
       setIsEditOpen(false);
       setSelectedEnvironment(null);
       setFormData({ name: '', description: '', policy_id: undefined, allow_self_approval: false });
       setFormErrors({});
-      await loadEnvironments();
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to update environment. Please try again.');
-      }
-      console.error('Failed to update environment:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -219,21 +152,10 @@ export const EnvironmentsPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      await environmentsService.deleteEnvironment(selectedEnvironment.id);
+    const success = await deleteEnvironment(selectedEnvironment.id);
+    if (success) {
       setIsDeleteOpen(false);
       setSelectedEnvironment(null);
-      await loadEnvironments();
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to delete environment. Please try again.');
-      }
-      console.error('Failed to delete environment:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -528,8 +450,8 @@ export const EnvironmentsPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={isSubmitting}>
-                {isSubmitting ? 'Creating...' : 'Create Environment'}
+              <Button onClick={handleCreate} disabled={isCreating}>
+                {isCreating ? 'Creating...' : 'Create Environment'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -631,8 +553,8 @@ export const EnvironmentsPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleEdit} disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
+              <Button onClick={handleEdit} disabled={isUpdating}>
+                {isUpdating ? 'Saving...' : 'Save Changes'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -661,8 +583,8 @@ export const EnvironmentsPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
-                {isSubmitting ? 'Deleting...' : 'Delete Environment'}
+              <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Delete Environment'}
               </Button>
             </SheetFooter>
           </SheetContent>

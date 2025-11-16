@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { schemaService } from '@/lib/api/services/schema';
-import type { DatabaseSchemaMetadata, TableListItem } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import React, { useState } from 'react';
+import { useDatabaseSchemaSWR, useRefreshDatabaseSchema } from '@/hooks/api/useDatabaseSchemaSWR';
+import type { TableListItem } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -48,51 +47,20 @@ const formatNumber = (num: number): string => {
 };
 
 export const TablesSection: React.FC<TablesSectionProps> = ({ databaseId, onTableClick }) => {
-  const [schemaMetadata, setSchemaMetadata] = useState<DatabaseSchemaMetadata | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  // Use SWR hooks for automatic caching and revalidation
+  const { schemaMetadata, isLoading, error, refetch } = useDatabaseSchemaSWR(databaseId);
+  const { refreshDatabaseSchema, isRefreshing, error: refreshError } = useRefreshDatabaseSchema();
   const [searchTerm, setSearchTerm] = useState('');
 
-  const loadSchema = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-      const data = await schemaService.getDatabaseSchema(databaseId);
-      setSchemaMetadata(data);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load database schema. Please try again.');
-      }
-      console.error('Failed to load schema:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [databaseId]);
-
   const handleRefresh = async () => {
-    try {
-      setIsRefreshing(true);
-      setError('');
-      const data = await schemaService.refreshDatabaseSchema(databaseId);
-      setSchemaMetadata(data);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to refresh database schema. Please try again.');
-      }
-      console.error('Failed to refresh schema:', err);
-    } finally {
-      setIsRefreshing(false);
+    const result = await refreshDatabaseSchema(databaseId);
+    if (result) {
+      await refetch();
     }
   };
 
-  useEffect(() => {
-    loadSchema();
-  }, [loadSchema]);
+  // Combined error message
+  const errorMessage = error || refreshError || '';
 
   // Filter tables based on search term
   const filteredTables =
@@ -146,11 +114,11 @@ export const TablesSection: React.FC<TablesSectionProps> = ({ databaseId, onTabl
       </CardHeader>
       <CardContent>
         {/* Error message */}
-        {error && (
+        {errorMessage && (
           <div className="mb-4 p-4 border border-destructive rounded-md">
             <div className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-4 w-4" />
-              <span className="text-sm">{error}</span>
+              <span className="text-sm">{errorMessage}</span>
             </div>
           </div>
         )}

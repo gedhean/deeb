@@ -1,42 +1,17 @@
-import { useState, useEffect } from 'react';
-import { healthService, type HealthCheckResponse, APIError } from '../lib/api';
+import { useHealthSWR } from '@/hooks/api/useHealthSWR';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 
 export function HealthCheck() {
-  const [health, setHealth] = useState<HealthCheckResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const checkHealth = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await healthService.check();
-      setHealth(response);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('An unexpected error occurred');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    // Check health on mount
-    checkHealth();
-  }, []);
+  // Use SWR hook for automatic caching and revalidation
+  const { health, isLoading: loading, error, refetch } = useHealthSWR();
 
   return (
     <Card className="p-6 max-w-md">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">API Health Check</h2>
-          <Button onClick={checkHealth} disabled={loading} variant="outline" size="sm">
+          <Button onClick={() => refetch()} disabled={loading} variant="outline" size="sm">
             {loading ? 'Checking...' : 'Refresh'}
           </Button>
         </div>

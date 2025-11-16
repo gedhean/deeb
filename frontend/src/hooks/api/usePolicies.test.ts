@@ -1,6 +1,8 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { usePolicies } from '@/hooks/api/usePolicies';
+import { SWRConfig } from 'swr';
+import { usePolicies } from '@/hooks/api/usePoliciesSWR';
 import { policiesService } from '@/lib/api/services/policies';
 import type { Policy } from '@/lib/api/types';
 
@@ -22,6 +24,20 @@ const mockPolicies: Policy[] = [
   },
 ];
 
+// Helper to wrap hooks with SWRConfig for testing
+const wrapper = ({ children }: { children: React.ReactNode }) =>
+  React.createElement(
+    SWRConfig,
+    {
+      value: {
+        dedupingInterval: 0, // Disable deduplication in tests
+        provider: () => new Map(), // Use isolated cache for each test
+        shouldRetryOnError: false, // Disable retries in tests
+      },
+    },
+    children,
+  );
+
 describe('usePolicies', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -35,7 +51,7 @@ describe('usePolicies', () => {
       page_size: 100,
     });
 
-    const { result } = renderHook(() => usePolicies());
+    const { result } = renderHook(() => usePolicies(), { wrapper });
 
     expect(result.current.isLoading).toBe(true);
     expect(result.current.policies).toEqual([]);
@@ -57,7 +73,7 @@ describe('usePolicies', () => {
       page_size: 100,
     });
 
-    renderHook(() => usePolicies({ type: 'SQL_REVIEW' }));
+    renderHook(() => usePolicies({ type: 'SQL_REVIEW' }), { wrapper });
 
     await waitFor(() => {
       expect(policiesService.listPolicies).toHaveBeenCalledWith({
@@ -72,13 +88,25 @@ describe('usePolicies', () => {
     const error = new Error('Failed to fetch');
     vi.mocked(policiesService.listPolicies).mockRejectedValue(error);
 
-    const { result } = renderHook(() => usePolicies());
+    const { result } = renderHook(() => usePolicies(), { wrapper });
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
+    await waitFor(
+      () => {
+        expect(result.current.isLoading).toBe(false);
+      },
+      { timeout: 3000 },
+    );
 
-    expect(result.current.error).toBe('Failed to load policies');
+    // Wait for error to be set
+    await waitFor(
+      () => {
+        expect(result.current.error).not.toBeNull();
+      },
+      { timeout: 3000 },
+    );
+
+    // The error message comes from the Error instance
+    expect(result.current.error).toBe('Failed to fetch');
     expect(result.current.policies).toEqual([]);
   });
 
@@ -90,7 +118,7 @@ describe('usePolicies', () => {
       page_size: 100,
     });
 
-    const { result } = renderHook(() => usePolicies());
+    const { result } = renderHook(() => usePolicies(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);

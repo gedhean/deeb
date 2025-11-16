@@ -1,46 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
-import { changePlanService } from '@/lib/api/services/changePlans';
-import type { ChangePlan } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { healthService } from '@/lib/api/services/health';
 import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
+import { useChangePlansSWR } from '@/hooks/api/useChangePlansSWR';
+import { useHealthSWR } from '@/hooks/api/useHealthSWR';
 
 export const DashboardPage: React.FC = () => {
-  const [changePlans, setChangePlans] = useState<ChangePlan[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [systemStatus, setSystemStatus] = useState<'healthy' | 'unhealthy' | 'loading'>('loading');
+  // Use cached hooks instead of direct API calls
+  const { changePlans, isLoading: changePlansLoading } = useChangePlansSWR({ limit: 10 });
+  const { isHealthy, isLoading: healthLoading } = useHealthSWR();
 
-  // Fetch change plans and system status
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-
-        // Fetch change plans (recent and open)
-        const allChangePlans = await changePlanService.listChangePlans({ limit: 10 });
-
-        setChangePlans(allChangePlans.change_plans);
-
-        // Check system health
-        try {
-          await healthService.check();
-          setSystemStatus('healthy');
-        } catch {
-          setSystemStatus('unhealthy');
-        }
-      } catch (error) {
-        console.error('Failed to load dashboard data:', error);
-        setSystemStatus('unhealthy');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
+  const isLoading = changePlansLoading || healthLoading;
+  const systemStatus = healthLoading ? 'loading' : isHealthy ? 'healthy' : 'unhealthy';
 
   // Calculate statistics
   const stats = useMemo(() => {

@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
-import { usersService } from '@/lib/api/services/users';
-import type { User, UpdateUserRequest, OrganizationRole } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import { useUserById, useUpdateUser } from '@/hooks/api/useUsersSWR';
+import type { UpdateUserRequest, OrganizationRole } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,23 +19,23 @@ import {
 } from '@/components/ui/sheet';
 import { AlertTriangle, Pencil } from 'lucide-react';
 import { UserForm, type UserFormData, type UserFormErrors } from '@/components/user-form';
-import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
+import { showSuccessToast } from '@/lib/errorHandling';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 
 export const UserDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user: currentUser } = useAuth();
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [editFormData, setEditFormData] = useState<UserFormData>({
     display_name: '',
     organization_role: 'OrganizationDeveloper',
     is_active: true,
   });
   const [formErrors, setFormErrors] = useState<UserFormErrors>({});
+
+  // Use SWR hooks for data fetching
+  const { user, isLoading, error } = useUserById(id);
+  const { updateUser, isLoading: isUpdating } = useUpdateUser();
 
   // Check permissions
   const canReadUsers = hasOrganizationPermission(
@@ -47,36 +46,6 @@ export const UserDetailPage: React.FC = () => {
     currentUser?.organization_role,
     OrganizationPermission.UsersUpdate,
   );
-
-  useEffect(() => {
-    if (id) {
-      loadUser(id);
-    }
-  }, [id]);
-
-  const loadUser = async (userId: string) => {
-    try {
-      setIsLoading(true);
-      setError('');
-      const userData = await usersService.getUser(userId);
-      setUser(userData);
-      setEditFormData({
-        display_name: userData.display_name || '',
-        password: '',
-        organization_role: userData.organization_role as OrganizationRole,
-        is_active: userData.is_active,
-      });
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load user. Please try again.');
-      }
-      console.error('Failed to load user:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Validate edit form (password is optional for edit)
   const validateEditForm = (): boolean => {
@@ -102,33 +71,26 @@ export const UserDetailPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const updateData: UpdateUserRequest = {};
+    const updateData: UpdateUserRequest = {};
 
-      if (editFormData.password && editFormData.password.trim() !== '') {
-        updateData.password = editFormData.password;
-      }
-      if (editFormData.display_name !== (user.display_name || '')) {
-        updateData.display_name = editFormData.display_name?.trim() || undefined;
-      }
-      if (editFormData.organization_role !== user.organization_role) {
-        updateData.organization_role = editFormData.organization_role;
-      }
-      if (editFormData.is_active !== user.is_active) {
-        updateData.is_active = editFormData.is_active;
-      }
+    if (editFormData.password && editFormData.password.trim() !== '') {
+      updateData.password = editFormData.password;
+    }
+    if (editFormData.display_name !== (user.display_name || '')) {
+      updateData.display_name = editFormData.display_name?.trim() || undefined;
+    }
+    if (editFormData.organization_role !== user.organization_role) {
+      updateData.organization_role = editFormData.organization_role;
+    }
+    if (editFormData.is_active !== user.is_active) {
+      updateData.is_active = editFormData.is_active;
+    }
 
-      await usersService.updateUser(user.id, updateData);
+    const result = await updateUser(user.id, updateData);
+    if (result) {
       setIsEditOpen(false);
       setFormErrors({});
-      await loadUser(user.id);
       showSuccessToast('User updated successfully');
-    } catch (err) {
-      handleApiError(err, { fallbackMessage: 'Failed to update user' });
-      console.error('Failed to update user:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -256,8 +218,8 @@ export const UserDetailPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleEdit} disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
+              <Button onClick={handleEdit} disabled={isUpdating}>
+                {isUpdating ? 'Saving...' : 'Save Changes'}
               </Button>
             </SheetFooter>
           </SheetContent>

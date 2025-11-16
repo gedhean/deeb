@@ -10,10 +10,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { changePlanService } from '@/lib/api/services/changePlans';
+import { useApproveChangePlan, useCloseChangePlan } from '@/hooks/api/useChangePlansSWR';
 import type { ChangePlan } from '@/lib/api/types';
 import { CheckCircle2, XCircle, Loader2, AlertTriangle } from 'lucide-react';
-import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
+import { showSuccessToast } from '@/lib/errorHandling';
 
 interface ApprovalActionsProps {
   changePlan: ChangePlan;
@@ -28,11 +28,17 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({
   canApprove,
   canReject,
 }) => {
+  // Use SWR mutation hooks for consistent cache management
+  const { approveChangePlan, isLoading: isApproving } = useApproveChangePlan();
+  const { closeChangePlan, isLoading: isClosing } = useCloseChangePlan();
+
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false);
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
   const [comments, setComments] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Computed combined loading state
+  const isSubmitting = isApproving || isClosing;
 
   // Only show actions if change plan is in Open status or Failed status (can retry)
   const canPerformActions = changePlan.status === 'Open' || changePlan.status === 'Failed';
@@ -49,14 +55,13 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      setError('');
+    setError('');
 
-      await changePlanService.approveChangePlan(changePlan.id, {
-        comments: comments.trim() || undefined,
-      });
+    const success = await approveChangePlan(changePlan.id, {
+      comments: comments.trim() || undefined,
+    });
 
+    if (success) {
       setIsApproveDialogOpen(false);
       handleDialogClose();
       showSuccessToast(
@@ -68,15 +73,8 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({
       if (onSuccess) {
         onSuccess();
       }
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
-        showToast: true,
-        toastTitle: 'Failed to approve change plan',
-      });
-      setError(errorMsg);
-      console.error('Failed to approve change plan:', err);
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      setError('Failed to approve change plan');
     }
   };
 
@@ -86,14 +84,13 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      setError('');
+    setError('');
 
-      await changePlanService.closeChangePlan(changePlan.id, {
-        comments: comments.trim() || undefined,
-      });
+    const success = await closeChangePlan(changePlan.id, {
+      comments: comments.trim() || undefined,
+    });
 
+    if (success) {
       setIsCloseDialogOpen(false);
       handleDialogClose();
       showSuccessToast('Change plan closed successfully');
@@ -101,15 +98,8 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({
       if (onSuccess) {
         onSuccess();
       }
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
-        showToast: true,
-        toastTitle: 'Failed to close change plan',
-      });
-      setError(errorMsg);
-      console.error('Failed to close change plan:', err);
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      setError('Failed to close change plan');
     }
   };
 

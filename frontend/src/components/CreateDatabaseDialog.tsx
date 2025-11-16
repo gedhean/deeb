@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Sheet,
@@ -18,11 +18,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { databasesService } from '@/lib/api/services/databases';
-import { environmentsService } from '@/lib/api/services/environments';
-import { databaseInstancesService } from '@/lib/api/services/database-instances';
-import { useProjects } from '@/hooks/api/useProjects';
-import type { Database, ChangePlan, Environment, DatabaseInstance } from '@/lib/api/types';
+import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
+import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
+import { useDatabaseInstancesSWR } from '@/hooks/api/useDatabaseInstancesSWR';
+import { useCreateDatabase } from '@/hooks/api/useDatabaseSWR';
+import type { Database, ChangePlan } from '@/lib/api/types';
 
 interface CreateDatabaseSheetProps {
   open: boolean;
@@ -36,9 +36,22 @@ export const CreateDatabaseSheet: React.FC<CreateDatabaseSheetProps> = ({
   databaseInstanceId,
 }) => {
   const navigate = useNavigate();
-  const { projects } = useProjects();
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [instances, setInstances] = useState<DatabaseInstance[]>([]);
+
+  // Use SWR hooks for data fetching
+  const { projects } = useProjectsSWR();
+  const {
+    environments,
+    isLoading: environmentsLoading,
+    error: environmentsError,
+  } = useEnvironmentsSWR();
+  const {
+    databaseInstances: instances,
+    isLoading: instancesLoading,
+    error: instancesError,
+  } = useDatabaseInstancesSWR();
+
+  // Use mutation hook for creating database
+  const { createDatabase, isLoading: loading } = useCreateDatabase();
 
   const [formData, setFormData] = useState({
     project_id: '',
@@ -47,54 +60,7 @@ export const CreateDatabaseSheet: React.FC<CreateDatabaseSheetProps> = ({
     database_name: '',
     description: '',
   });
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [environmentsLoading, setEnvironmentsLoading] = useState(false);
-  const [environmentsError, setEnvironmentsError] = useState<string | null>(null);
-  const [instancesLoading, setInstancesLoading] = useState(false);
-  const [instancesError, setInstancesError] = useState<string | null>(null);
-
-  // Fetch environments and instances when sheet opens
-  useEffect(() => {
-    if (open) {
-      // Load environments
-      setEnvironmentsLoading(true);
-      setEnvironmentsError(null);
-      environmentsService
-        .listEnvironments({ limit: 100 })
-        .then((response) => {
-          setEnvironments(response.items);
-        })
-        .catch((err) => {
-          const errorMsg = err instanceof Error ? err.message : 'Failed to load environments';
-          setEnvironmentsError(errorMsg);
-          console.error('Failed to load environments:', err);
-        })
-        .finally(() => {
-          setEnvironmentsLoading(false);
-        });
-
-      // Load instances (only if not pre-selected)
-      if (!databaseInstanceId) {
-        setInstancesLoading(true);
-        setInstancesError(null);
-        databaseInstancesService
-          .listDatabaseInstances({ limit: 100 })
-          .then((response) => {
-            setInstances(response.items);
-          })
-          .catch((err) => {
-            const errorMsg =
-              err instanceof Error ? err.message : 'Failed to load database instances';
-            setInstancesError(errorMsg);
-            console.error('Failed to load database instances:', err);
-          })
-          .finally(() => {
-            setInstancesLoading(false);
-          });
-      }
-    }
-  }, [open, databaseInstanceId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,41 +77,36 @@ export const CreateDatabaseSheet: React.FC<CreateDatabaseSheetProps> = ({
       return;
     }
 
-    setLoading(true);
+    // Use mutation hook to create database
+    const result = await createDatabase(formData.database_instance_id, {
+      project_id: formData.project_id,
+      environment_id: formData.environment_id,
+      database_instance_id: formData.database_instance_id,
+      database_name: formData.database_name,
+      description: formData.description || undefined,
+    });
 
-    try {
-      const result = await databasesService.createDatabaseForInstance(
-        formData.database_instance_id,
-        {
-          project_id: formData.project_id,
-          environment_id: formData.environment_id,
-          database_instance_id: formData.database_instance_id,
-          database_name: formData.database_name,
-          description: formData.description || undefined,
-        },
-      );
-
-      // Check if result is Database or ChangePlan with more robust type checking
-      if ('database_name' in result && 'database_instance_id' in result) {
-        // It's a Database - redirect to database detail page
-        const database = result as Database;
-        navigate(`/databases/${database.id}`);
-      } else if ('sql_content' in result && 'change_type' in result) {
-        // It's a ChangePlan - redirect to change plan page
-        const changePlan = result as ChangePlan;
-        navigate(`/change-plans/${changePlan.id}`);
-      } else {
-        // Unexpected response format
-        setError('Unexpected response format from server');
-        return;
-      }
-
-      onOpenChange(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create database');
-    } finally {
-      setLoading(false);
+    if (!result) {
+      setError('Failed to create database');
+      return;
     }
+
+    // Check if result is Database or ChangePlan with more robust type checking
+    if ('database_name' in result && 'database_instance_id' in result) {
+      // It's a Database - redirect to database detail page
+      const database = result as Database;
+      navigate(`/databases/${database.id}`);
+    } else if ('sql_content' in result && 'change_type' in result) {
+      // It's a ChangePlan - redirect to change plan page
+      const changePlan = result as ChangePlan;
+      navigate(`/change-plans/${changePlan.id}`);
+    } else {
+      // Unexpected response format
+      setError('Unexpected response format from server');
+      return;
+    }
+
+    onOpenChange(false);
   };
 
   const handleClose = () => {

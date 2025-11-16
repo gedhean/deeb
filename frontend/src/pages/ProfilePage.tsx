@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
-import { usersService } from '@/lib/api/services/users';
+import { useUserById, useUpdateUser } from '@/hooks/api/useUsersSWR';
 import type { UpdateUserRequest } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,17 +18,13 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { AlertTriangle, Pencil } from 'lucide-react';
-import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
+import { showSuccessToast } from '@/lib/errorHandling';
 import { Input } from '@/components/ui/input';
 import type { UserFormData, UserFormErrors } from '@/components/user-form';
 
 export const ProfilePage: React.FC = () => {
   const { user: currentUser } = useAuth();
-  const [user, setUser] = useState(currentUser);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [editFormData, setEditFormData] = useState<UserFormData>({
     display_name: '',
     password: '',
@@ -37,46 +32,9 @@ export const ProfilePage: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<UserFormErrors>({});
 
-  useEffect(() => {
-    if (currentUser) {
-      setUser(currentUser);
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (currentUser) {
-      loadUser();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]);
-
-  const loadUser = async () => {
-    if (!currentUser) return;
-
-    try {
-      setIsLoading(true);
-      setError('');
-      const userData = await usersService.getUser(currentUser.id);
-      setUser(userData);
-      setEditFormData({
-        display_name: userData.display_name || '',
-        password: '',
-        organization_role: userData.organization_role as
-          | 'OrganizationAdmin'
-          | 'OrganizationDBA'
-          | 'OrganizationDeveloper',
-      });
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load profile. Please try again.');
-      }
-      console.error('Failed to load profile:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Use SWR hooks for data fetching
+  const { user, isLoading, error } = useUserById(currentUser?.id);
+  const { updateUser, isLoading: isUpdating } = useUpdateUser();
 
   // Validate edit form (password is optional for edit)
   const validateEditForm = (): boolean => {
@@ -101,31 +59,24 @@ export const ProfilePage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const updateData: UpdateUserRequest = {};
+    const updateData: UpdateUserRequest = {};
 
-      if (editFormData.password && editFormData.password.trim() !== '') {
-        updateData.password = editFormData.password;
-      }
-      if (editFormData.display_name !== (user.display_name || '')) {
-        updateData.display_name = editFormData.display_name?.trim() || undefined;
-      }
+    if (editFormData.password && editFormData.password.trim() !== '') {
+      updateData.password = editFormData.password;
+    }
+    if (editFormData.display_name !== (user.display_name || '')) {
+      updateData.display_name = editFormData.display_name?.trim() || undefined;
+    }
 
-      await usersService.updateUser(user.id, updateData);
+    const result = await updateUser(user.id, updateData);
+    if (result) {
       setIsEditOpen(false);
       setFormErrors({});
-      await loadUser();
       showSuccessToast('Profile updated successfully');
 
       // Reload current user data in AuthContext
       // The AuthContext will pick up the changes on next getCurrentUser call
       window.location.reload();
-    } catch (err) {
-      handleApiError(err, { fallbackMessage: 'Failed to update profile' });
-      console.error('Failed to update profile:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -267,8 +218,8 @@ export const ProfilePage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleEdit} disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
+              <Button onClick={handleEdit} disabled={isUpdating}>
+                {isUpdating ? 'Saving...' : 'Save Changes'}
               </Button>
             </SheetFooter>
           </SheetContent>

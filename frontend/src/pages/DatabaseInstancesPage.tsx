@@ -1,10 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
-import { databaseInstancesService } from '@/lib/api/services/database-instances';
-import { environmentsService } from '@/lib/api/services/environments';
+import {
+  useDatabaseInstancesSWR,
+  useCreateDatabaseInstance,
+  useUpdateDatabaseInstance,
+  useDeleteDatabaseInstance,
+  useTestConnection,
+} from '@/hooks/api/useDatabaseInstancesSWR';
+import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
+import { objDiff } from '@/lib/utils';
 import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
 import {
   DatabaseInstanceForm,
@@ -15,9 +22,7 @@ import type {
   CreateDatabaseInstanceRequest,
   DatabaseInstance,
   UpdateDatabaseInstanceRequest,
-  Environment,
 } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -70,20 +75,28 @@ import type { DatabaseEngine } from '@/lib/api/types.ts';
 export const DatabaseInstancesPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [instances, setInstances] = useState<DatabaseInstance[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedInstance, setSelectedInstance] = useState<DatabaseInstance | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionTestResult, setConnectionTestResult] = useState<{
     success: boolean;
     message?: string;
   } | null>(null);
+
+  // Use SWR hooks for data fetching
+  const {
+    databaseInstances: instances,
+    isLoading,
+    error: instancesError,
+  } = useDatabaseInstancesSWR();
+  const { environments } = useEnvironmentsSWR();
+
+  // Use mutation hooks
+  const { createDatabaseInstance, isLoading: isCreating } = useCreateDatabaseInstance();
+  const { updateDatabaseInstance, isLoading: isUpdating } = useUpdateDatabaseInstance();
+  const { deleteDatabaseInstance, isLoading: isDeleting } = useDeleteDatabaseInstance();
+  const { testConnection, isLoading: isTestingConnection } = useTestConnection();
 
   // Filter state
   const [filters, setFilters] = useState<{
@@ -126,53 +139,10 @@ export const DatabaseInstancesPage: React.FC = () => {
     OrganizationPermission.DatabaseInstancesDelete,
   );
 
-  // Load instances and environments
-  useEffect(() => {
-    if (!canReadDatabaseInstances) {
-      setError('Access denied. You do not have permission to view database instances.');
-      setIsLoading(false);
-      return;
-    }
-
-    loadData();
-  }, [canReadDatabaseInstances]);
-
-  const loadData = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-      const [instancesResponse, environmentsResponse] = await Promise.all([
-        databaseInstancesService.listDatabaseInstances({ limit: 100 }),
-        environmentsService.listEnvironments({ limit: 100 }),
-      ]);
-      setInstances(instancesResponse.items);
-      setEnvironments(environmentsResponse.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load data. Please try again.');
-      }
-      console.error('Failed to load data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadInstances = async () => {
-    try {
-      setError('');
-      const response = await databaseInstancesService.listDatabaseInstances({ limit: 100 });
-      setInstances(response.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load database instances. Please try again.');
-      }
-      console.error('Failed to load database instances:', err);
-    }
-  };
+  // Compute error message
+  const error = !canReadDatabaseInstances
+    ? 'Access denied. You do not have permission to view database instances.'
+    : instancesError || '';
 
   // Handle database engine change (for auto-updating port in create mode)
   const handleDatabaseEngineChange = (engine: DatabaseEngine) => {
@@ -213,58 +183,39 @@ export const DatabaseInstancesPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsTestingConnection(true);
-      setConnectionTestResult(null);
+    setConnectionTestResult(null);
 
-      // Create a test request with a temporary name to avoid conflicts
-      const testData: CreateDatabaseInstanceRequest = {
-        ...formData,
-        name: `__TEST__${formData.name}_${Date.now()}`,
-      };
+    // Create a test request with a temporary name to avoid conflicts
+    const testData: CreateDatabaseInstanceRequest = {
+      ...formData,
+      name: `__TEST__${formData.name}_${Date.now()}`,
+    };
 
-      // Test connection by attempting to create
-      // Backend will test connection and return error if it fails
-      const result = await databaseInstancesService.testConnection(testData);
+    // Test connection using SWR mutation hook
+    const result = await testConnection(testData);
 
-      if (result.success) {
-        // Connection was successful
-        // If we got an instance back, delete it immediately to clean up
-        if (result.instance) {
-          try {
-            await databaseInstancesService.deleteDatabaseInstance(result.instance.id);
-            setConnectionTestResult({
-              success: true,
-              message: 'Connection test successful!',
-            });
-          } catch {
-            // If deletion fails, just show success with a note
-            setConnectionTestResult({
-              success: true,
-              message:
-                'Connection test successful! Note: A test instance was created (you can delete it).',
-            });
-            await loadInstances();
-          }
-        } else {
-          setConnectionTestResult({
-            success: true,
-            message: 'Connection test successful!',
-          });
-        }
+    if (result.success) {
+      // Connection was successful
+      // If we got an instance back, delete it immediately to clean up
+      if (result.instance) {
+        const deleted = await deleteDatabaseInstance(result.instance.id);
+        setConnectionTestResult({
+          success: true,
+          message: deleted
+            ? 'Connection test successful!'
+            : 'Connection test successful! Note: A test instance was created (you can delete it).',
+        });
       } else {
         setConnectionTestResult({
-          success: false,
-          message: result.details || result.error || 'Connection test failed',
+          success: true,
+          message: 'Connection test successful!',
         });
       }
-    } catch (err) {
+    } else {
       setConnectionTestResult({
         success: false,
-        message: err instanceof Error ? err.message : 'Connection test failed',
+        message: result.details || result.error || 'Connection test failed',
       });
-    } finally {
-      setIsTestingConnection(false);
     }
   };
 
@@ -274,21 +225,21 @@ export const DatabaseInstancesPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const createData: CreateDatabaseInstanceRequest = {
-        name: formData.name.trim(),
-        description: formData.description?.trim() || undefined,
-        database_engine: formData.database_engine,
-        host: formData.host.trim(),
-        port: formData.port,
-        username: formData.username.trim(),
-        password: formData.password,
-        use_rds_iam_auth: formData.use_rds_iam_auth,
-        require_ssl: formData.require_ssl,
-        environment_id: formData.environment_id,
-      };
-      await databaseInstancesService.createDatabaseInstance(createData);
+    const createData: CreateDatabaseInstanceRequest = {
+      name: formData.name.trim(),
+      description: formData.description?.trim() || undefined,
+      database_engine: formData.database_engine,
+      host: formData.host.trim(),
+      port: formData.port,
+      username: formData.username.trim(),
+      password: formData.password,
+      use_rds_iam_auth: formData.use_rds_iam_auth,
+      require_ssl: formData.require_ssl,
+      environment_id: formData.environment_id,
+    };
+
+    const result = await createDatabaseInstance(createData);
+    if (result) {
       setIsCreateOpen(false);
       setFormData({
         name: '',
@@ -304,16 +255,6 @@ export const DatabaseInstancesPage: React.FC = () => {
       });
       setFormErrors({});
       setConnectionTestResult(null);
-      await loadInstances();
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to create database instance. Please try again.');
-      }
-      console.error('Failed to create database instance:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -328,41 +269,29 @@ export const DatabaseInstancesPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const updateData: UpdateDatabaseInstanceRequest = {};
-      if (formData.name !== selectedInstance.name) {
-        updateData.name = formData.name.trim();
-      }
-      if (formData.description !== selectedInstance.description) {
-        updateData.description = formData.description?.trim() || undefined;
-      }
-      if (formData.database_engine !== selectedInstance.database_engine) {
-        updateData.database_engine = formData.database_engine;
-      }
-      if (formData.host !== selectedInstance.host) {
-        updateData.host = formData.host.trim();
-      }
-      if (formData.port !== selectedInstance.port) {
-        updateData.port = formData.port;
-      }
-      if (formData.username !== selectedInstance.username) {
-        updateData.username = formData.username.trim();
-      }
-      if (formData.password) {
-        updateData.password = formData.password;
-      }
-      if (formData.use_rds_iam_auth !== selectedInstance.use_rds_iam_auth) {
-        updateData.use_rds_iam_auth = formData.use_rds_iam_auth;
-      }
-      if (formData.require_ssl !== selectedInstance.require_ssl) {
-        updateData.require_ssl = formData.require_ssl;
-      }
-      if (formData.environment_id !== selectedInstance.environment_id) {
-        updateData.environment_id = formData.environment_id || undefined;
-      }
+    // Normalize form data (trim strings, handle optional fields)
+    const normalizedFormData = {
+      name: formData.name.trim(),
+      description: formData.description?.trim() || undefined,
+      database_engine: formData.database_engine,
+      host: formData.host.trim(),
+      port: formData.port,
+      username: formData.username.trim(),
+      use_rds_iam_auth: formData.use_rds_iam_auth,
+      require_ssl: formData.require_ssl,
+      environment_id: formData.environment_id || undefined,
+    };
 
-      await databaseInstancesService.updateDatabaseInstance(selectedInstance.id, updateData);
+    // Get only the fields that changed
+    const updateData: UpdateDatabaseInstanceRequest = objDiff(selectedInstance, normalizedFormData);
+
+    // Special handling for password - only include if user entered a new one
+    if (formData.password) {
+      updateData.password = formData.password;
+    }
+
+    const result = await updateDatabaseInstance(selectedInstance.id, updateData);
+    if (result) {
       setIsEditOpen(false);
       setSelectedInstance(null);
       setFormData({
@@ -379,16 +308,6 @@ export const DatabaseInstancesPage: React.FC = () => {
       });
       setFormErrors({});
       setConnectionTestResult(null);
-      await loadInstances();
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to update database instance. Please try again.');
-      }
-      console.error('Failed to update database instance:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -398,21 +317,10 @@ export const DatabaseInstancesPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      await databaseInstancesService.deleteDatabaseInstance(selectedInstance.id);
+    const success = await deleteDatabaseInstance(selectedInstance.id);
+    if (success) {
       setIsDeleteOpen(false);
       setSelectedInstance(null);
-      await loadInstances();
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to delete database instance. Please try again.');
-      }
-      console.error('Failed to delete database instance:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -911,7 +819,7 @@ export const DatabaseInstancesPage: React.FC = () => {
                 type="button"
                 variant="outline"
                 onClick={handleTestConnection}
-                disabled={isTestingConnection || isSubmitting}
+                disabled={isTestingConnection || isCreating}
                 className="w-full"
               >
                 {isTestingConnection ? (
@@ -928,8 +836,8 @@ export const DatabaseInstancesPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={isSubmitting || isTestingConnection}>
-                {isSubmitting ? 'Creating...' : 'Create Instance'}
+              <Button onClick={handleCreate} disabled={isCreating || isTestingConnection}>
+                {isCreating ? 'Creating...' : 'Create Instance'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -987,7 +895,7 @@ export const DatabaseInstancesPage: React.FC = () => {
                 type="button"
                 variant="outline"
                 onClick={handleTestConnection}
-                disabled={isTestingConnection || isSubmitting}
+                disabled={isTestingConnection || isUpdating}
                 className="w-full"
               >
                 {isTestingConnection ? (
@@ -1004,8 +912,8 @@ export const DatabaseInstancesPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleEdit} disabled={isSubmitting || isTestingConnection}>
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
+              <Button onClick={handleEdit} disabled={isUpdating || isTestingConnection}>
+                {isUpdating ? 'Saving...' : 'Save Changes'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -1038,8 +946,8 @@ export const DatabaseInstancesPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
-                {isSubmitting ? 'Deleting...' : 'Delete Instance'}
+              <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Delete Instance'}
               </Button>
             </SheetFooter>
           </SheetContent>

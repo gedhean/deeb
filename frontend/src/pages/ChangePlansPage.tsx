@@ -1,19 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
-import { changePlanService } from '@/lib/api/services/changePlans';
-import { projectsService } from '@/lib/api/services/projects';
-import { databasesService } from '@/lib/api/services/databases';
-import { usersService } from '@/lib/api/services/users';
-import type {
-  ChangePlan,
-  ChangePlanStatus,
-  ChangePlanListResponse,
-  Project,
-  Database,
-  User,
-} from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import type { ChangePlanStatus } from '@/lib/api/types';
+import { useUsers } from '@/hooks/api/useUsersSWR';
+import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
+import { useDatabases } from '@/hooks/api/useDatabases';
+import { useChangePlansSWR } from '@/hooks/api/useChangePlansSWR';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -54,15 +46,11 @@ export const ChangePlansPage: React.FC = () => {
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const { user: currentUser } = useAuth();
-  const [changePlans, setChangePlans] = useState<ChangePlan[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [databases, setDatabases] = useState<Database[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingFilters, setIsLoadingFilters] = useState(true);
-  const [error, setError] = useState('');
-  const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Use cached data from store instead of fetching
+  const { users, isLoading: usersLoading } = useUsers();
+  const { projects, isLoading: projectsLoading } = useProjectsSWR();
 
   // Filter state - initialize with currentProject and currentUser if available
   const [filters, setFilters] = useState<{
@@ -75,32 +63,6 @@ export const ChangePlansPage: React.FC = () => {
     project_id: currentProject?.id,
     author_id: currentUser?.id,
   });
-
-  // Load filter options
-  useEffect(() => {
-    const loadFilters = async () => {
-      try {
-        setIsLoadingFilters(true);
-        const [projectsRes, databasesRes, usersRes] = await Promise.all([
-          projectsService.listProjects({ limit: 100 }),
-          databasesService.listDatabases({
-            limit: 100,
-            ...(currentProject?.id ? { project_id: currentProject.id } : {}),
-          }),
-          usersService.listUsers({ limit: 100 }),
-        ]);
-        setProjects(projectsRes.items);
-        setDatabases(databasesRes.items);
-        setUsers(usersRes.items);
-      } catch (err) {
-        console.error('Failed to load filter options:', err);
-      } finally {
-        setIsLoadingFilters(false);
-      }
-    };
-
-    loadFilters();
-  }, [currentProject?.id]);
 
   // Sync filters with currentProject and currentUser on initial load (only if filter not already set)
   useEffect(() => {
@@ -117,50 +79,25 @@ export const ChangePlansPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.id, currentUser?.id]);
 
-  // Load change plans
-  useEffect(() => {
-    loadChangePlans();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, currentPage]);
+  // Fetch databases only when we have a project filter
+  const { databases, isLoading: databasesLoading } = useDatabases(
+    filters.project_id ? { project_id: filters.project_id } : {},
+  );
 
-  const loadChangePlans = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-      const offset = (currentPage - 1) * PAGE_SIZE;
+  const isLoadingFilters = usersLoading || projectsLoading || databasesLoading;
 
-      // Determine which project to use
-      const projectId = filters.project_id || currentProject?.id;
+  // Use SWR hook for change plans with stable params
+  const changePlansParams = useMemo(
+    () => ({
+      ...filters,
+      limit: PAGE_SIZE,
+      offset: (currentPage - 1) * PAGE_SIZE,
+    }),
+    [filters, currentPage],
+  );
 
-      if (!projectId) {
-        // No project selected - show empty state
-        setChangePlans([]);
-        setTotal(0);
-        setIsLoading(false);
-        return;
-      }
-
-      // Use project-scoped route - all routes now require project_id
-
-      const response: ChangePlanListResponse = await changePlanService.listChangePlans({
-        ...filters,
-        limit: PAGE_SIZE,
-        offset,
-      });
-
-      setChangePlans(response.change_plans);
-      setTotal(response.total);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load change plans. Please try again.');
-      }
-      console.error('Failed to load change plans:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { changePlans, total, isLoading, error: swrError } = useChangePlansSWR(changePlansParams);
+  const error = swrError || '';
 
   // Handle filter changes
   const handleFilterChange = (key: keyof typeof filters, value: string | undefined) => {

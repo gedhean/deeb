@@ -1,8 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
-import { policiesService } from '@/lib/api/services/policies';
-import { environmentsService } from '@/lib/api/services/environments';
 import type {
   CreatePolicyRequest,
   Policy,
@@ -10,7 +8,13 @@ import type {
   UpdatePolicyRequest,
   Environment,
 } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import {
+  usePolicies,
+  useCreatePolicy,
+  useUpdatePolicy,
+  useDeletePolicy,
+} from '@/hooks/api/usePoliciesSWR';
+import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,16 +32,11 @@ import { SQLReviewRuleSelector } from '@/components/sql-review-rule-selector';
 
 export const PoliciesPage: React.FC = () => {
   const { user } = useAuth();
-  const [policies, setPolicies] = useState<Policy[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [filterType, setFilterType] = useState<'SQL_REVIEW' | 'all'>('SQL_REVIEW');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [useJsonEditor, setUseJsonEditor] = useState(false);
   const [jsonEditorError, setJsonEditorError] = useState('');
 
@@ -57,55 +56,23 @@ export const PoliciesPage: React.FC = () => {
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
 
-  // Load environments to check references
-  useEffect(() => {
-    if (!isAdmin) {
-      return;
-    }
+  // Use SWR hooks for data fetching
+  const policiesParams = useMemo(
+    () => ({
+      type: filterType === 'SQL_REVIEW' ? ('SQL_REVIEW' as const) : undefined,
+      limit: 100,
+      enabled: isAdmin,
+    }),
+    [filterType, isAdmin],
+  );
 
-    const loadEnvironments = async () => {
-      try {
-        const response = await environmentsService.listEnvironments({ limit: 100 });
-        setEnvironments(response.items);
-      } catch (err) {
-        console.error('Failed to load environments:', err);
-      }
-    };
+  const { policies, isLoading, error } = usePolicies(policiesParams);
+  const { environments } = useEnvironmentsSWR();
 
-    loadEnvironments();
-  }, [isAdmin]);
-
-  // Load policies
-  useEffect(() => {
-    if (!isAdmin) {
-      setError('Access denied. Admin access required.');
-      setIsLoading(false);
-      return;
-    }
-
-    const loadPolicies = async () => {
-      try {
-        setIsLoading(true);
-        setError('');
-        const response = await policiesService.listPolicies({
-          type: filterType === 'SQL_REVIEW' ? 'SQL_REVIEW' : undefined,
-          limit: 100,
-        });
-        setPolicies(response.items);
-      } catch (err) {
-        if (err instanceof APIError) {
-          setError(err.message);
-        } else {
-          setError('Failed to load policies. Please try again.');
-        }
-        console.error('Failed to load policies:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadPolicies();
-  }, [isAdmin, filterType]);
+  // Use mutation hooks
+  const { createPolicy, isLoading: isCreating } = useCreatePolicy();
+  const { updatePolicy, isLoading: isUpdating } = useUpdatePolicy();
+  const { deletePolicy, isLoading: isDeleting } = useDeletePolicy();
 
   // Validate form
   const validateForm = (): boolean => {
@@ -145,36 +112,21 @@ export const PoliciesPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const createData: CreatePolicyRequest = {
-        name: formData.name.trim(),
-        description: formData.description?.trim() || undefined,
-        type: 'SQL_REVIEW',
-        policy_config: useJsonEditor
-          ? (JSON.parse(formData.policy_config as unknown as string) as SQLReviewPolicyConfig)
-          : formData.policy_config,
-      };
-      await policiesService.createPolicy(createData);
+    const createData: CreatePolicyRequest = {
+      name: formData.name.trim(),
+      description: formData.description?.trim() || undefined,
+      type: 'SQL_REVIEW',
+      policy_config: useJsonEditor
+        ? (JSON.parse(formData.policy_config as unknown as string) as SQLReviewPolicyConfig)
+        : formData.policy_config,
+    };
+
+    const result = await createPolicy(createData);
+    if (result) {
       setIsCreateOpen(false);
       setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
       setFormErrors({});
       setUseJsonEditor(false);
-      // Reload policies
-      const response = await policiesService.listPolicies({
-        type: filterType === 'SQL_REVIEW' ? 'SQL_REVIEW' : undefined,
-        limit: 100,
-      });
-      setPolicies(response.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to create policy. Please try again.');
-      }
-      console.error('Failed to create policy:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -184,46 +136,30 @@ export const PoliciesPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const updateData: UpdatePolicyRequest = {};
-      if (formData.name !== selectedPolicy.name) {
-        updateData.name = formData.name.trim();
-      }
-      if (formData.description !== selectedPolicy.description) {
-        updateData.description = formData.description?.trim() || undefined;
-      }
+    const updateData: UpdatePolicyRequest = {};
+    if (formData.name !== selectedPolicy.name) {
+      updateData.name = formData.name.trim();
+    }
+    if (formData.description !== selectedPolicy.description) {
+      updateData.description = formData.description?.trim() || undefined;
+    }
 
-      const newConfig = useJsonEditor
-        ? (JSON.parse(formData.policy_config as unknown as string) as SQLReviewPolicyConfig)
-        : formData.policy_config;
+    const newConfig = useJsonEditor
+      ? (JSON.parse(formData.policy_config as unknown as string) as SQLReviewPolicyConfig)
+      : formData.policy_config;
 
-      // Only update if config changed
-      if (JSON.stringify(newConfig) !== JSON.stringify(selectedPolicy.policy_config)) {
-        updateData.policy_config = newConfig;
-      }
+    // Only update if config changed
+    if (JSON.stringify(newConfig) !== JSON.stringify(selectedPolicy.policy_config)) {
+      updateData.policy_config = newConfig;
+    }
 
-      await policiesService.updatePolicy(selectedPolicy.id, updateData);
+    const result = await updatePolicy(selectedPolicy.id, updateData);
+    if (result) {
       setIsEditOpen(false);
       setSelectedPolicy(null);
       setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
       setFormErrors({});
       setUseJsonEditor(false);
-      // Reload policies
-      const response = await policiesService.listPolicies({
-        type: filterType === 'SQL_REVIEW' ? 'SQL_REVIEW' : undefined,
-        limit: 100,
-      });
-      setPolicies(response.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to update policy. Please try again.');
-      }
-      console.error('Failed to update policy:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -233,26 +169,10 @@ export const PoliciesPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      await policiesService.deletePolicy(selectedPolicy.id);
+    const success = await deletePolicy(selectedPolicy.id);
+    if (success) {
       setIsDeleteOpen(false);
       setSelectedPolicy(null);
-      // Reload policies
-      const response = await policiesService.listPolicies({
-        type: filterType === 'SQL_REVIEW' ? 'SQL_REVIEW' : undefined,
-        limit: 100,
-      });
-      setPolicies(response.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to delete policy. Please try again.');
-      }
-      console.error('Failed to delete policy:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -597,8 +517,8 @@ export const PoliciesPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={isSubmitting}>
-                {isSubmitting ? 'Creating...' : 'Create Policy'}
+              <Button onClick={handleCreate} disabled={isCreating}>
+                {isCreating ? 'Creating...' : 'Create Policy'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -737,8 +657,8 @@ export const PoliciesPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleEdit} disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
+              <Button onClick={handleEdit} disabled={isUpdating}>
+                {isUpdating ? 'Saving...' : 'Save Changes'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -785,10 +705,10 @@ export const PoliciesPage: React.FC = () => {
                 variant="destructive"
                 onClick={handleDelete}
                 disabled={
-                  isSubmitting || (selectedPolicy ? isPolicyReferenced(selectedPolicy.id) : false)
+                  isDeleting || (selectedPolicy ? isPolicyReferenced(selectedPolicy.id) : false)
                 }
               >
-                {isSubmitting ? 'Deleting...' : 'Delete Policy'}
+                {isDeleting ? 'Deleting...' : 'Delete Policy'}
               </Button>
             </SheetFooter>
           </SheetContent>

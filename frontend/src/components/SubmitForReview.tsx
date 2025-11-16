@@ -9,10 +9,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { changePlanService } from '@/lib/api/services/changePlans';
+import { useUpdateChangePlanSWR } from '@/hooks/api/useChangePlansSWR';
 import type { ChangePlan } from '@/lib/api/types';
 import { Send, Loader2, AlertTriangle } from 'lucide-react';
-import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
+import { showSuccessToast } from '@/lib/errorHandling';
 
 interface SubmitForReviewProps {
   changePlan: ChangePlan;
@@ -20,8 +20,10 @@ interface SubmitForReviewProps {
 }
 
 export const SubmitForReview: React.FC<SubmitForReviewProps> = ({ changePlan, onSuccess }) => {
+  // Use SWR mutation hook for consistent cache management
+  const { updateChangePlan, isLoading: isSubmitting } = useUpdateChangePlanSWR();
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   // Only show if change plan is in Draft status
@@ -36,15 +38,14 @@ export const SubmitForReview: React.FC<SubmitForReviewProps> = ({ changePlan, on
   };
 
   const handleSubmit = async () => {
-    try {
-      setIsSubmitting(true);
-      setError('');
+    setError('');
 
-      // Update status from Draft to Open
-      await changePlanService.updateChangePlan(changePlan.id, {
-        status: 'Open',
-      });
+    // Update status from Draft to Open
+    const result = await updateChangePlan(changePlan.id, {
+      status: 'Open',
+    });
 
+    if (result) {
       setIsDialogOpen(false);
       handleDialogClose();
       showSuccessToast('Change plan submitted for review. SQL Review will run automatically.');
@@ -52,15 +53,8 @@ export const SubmitForReview: React.FC<SubmitForReviewProps> = ({ changePlan, on
       if (onSuccess) {
         onSuccess();
       }
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
-        showToast: true,
-        toastTitle: 'Failed to submit change plan for review',
-      });
-      setError(errorMsg);
-      console.error('Failed to submit change plan for review:', err);
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      setError('Failed to submit change plan for review');
     }
   };
 

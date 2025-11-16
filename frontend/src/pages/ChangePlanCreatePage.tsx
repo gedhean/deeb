@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '@/components/theme-provider';
 import { DefaultLayout } from '@/components/layouts';
 import { changePlanService } from '@/lib/api/services/changePlans';
-import { databasesService } from '@/lib/api/services/databases';
+import { useDatabases } from '@/hooks/api/useDatabases';
 import type { CreateChangePlanRequest, Database, ChangeType } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,8 +39,13 @@ export const ChangePlanCreatePage: React.FC = () => {
   const { theme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [databases, setDatabases] = useState<Database[]>([]);
-  const [isLoadingDatabases, setIsLoadingDatabases] = useState(false);
+  // Use cached databases from SWR hook with project filter
+  const databasesFilter = useMemo(
+    () => (currentProject?.id ? { project_id: currentProject.id } : {}),
+    [currentProject?.id],
+  );
+  const { databases, isLoading: isLoadingDatabases } = useDatabases(databasesFilter);
+
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -122,29 +127,6 @@ export const ChangePlanCreatePage: React.FC = () => {
       });
     }
   }, [currentProject, navigate]);
-
-  // Load databases when component mounts
-  useEffect(() => {
-    if (currentProject?.id) {
-      loadDatabases(currentProject.id);
-    }
-  }, [currentProject?.id]);
-
-  const loadDatabases = async (projectId: string) => {
-    try {
-      setIsLoadingDatabases(true);
-      const response = await databasesService.listDatabases({
-        project_id: projectId,
-        limit: 100,
-      });
-      setDatabases(response.items);
-    } catch (err) {
-      console.error('Failed to load databases:', err);
-      setDatabases([]);
-    } finally {
-      setIsLoadingDatabases(false);
-    }
-  };
 
   // Generate a suitable title from SQL content
   const generateTitle = (

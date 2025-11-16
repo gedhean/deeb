@@ -29,7 +29,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar';
-import { useProjects } from '@/hooks/api/useProjects';
+import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
 
 // Deeb navigation structure
 const navMainItems = [
@@ -102,7 +102,7 @@ const navOrgItems = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user } = useAuth();
-  const { projects } = useProjects();
+  const { projects } = useProjectsSWR();
 
   // Get initials from email for avatar fallback
   const getInitials = (email: string | undefined): string => {

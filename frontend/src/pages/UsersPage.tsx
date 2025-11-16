@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
-import { usersService } from '@/lib/api/services/users';
+import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '@/hooks/api/useUsersSWR';
 import type { CreateUserRequest, User, UpdateUserRequest } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,14 +44,16 @@ import {
 export const UsersPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { users, isLoading, error: usersError } = useUsers();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Use mutation hooks
+  const { createUser, isLoading: isCreating } = useCreateUser();
+  const { updateUser, isLoading: isUpdating } = useUpdateUser();
+  const { deleteUser, isLoading: isDeleting } = useDeleteUser();
 
   // Form state
   const [formData, setFormData] = useState<UserFormData>({
@@ -86,34 +87,8 @@ export const UsersPage: React.FC = () => {
     OrganizationPermission.UsersDelete,
   );
 
-  // Load users
-  useEffect(() => {
-    if (!canReadUsers) {
-      setError('Access denied. User read permissions required.');
-      setIsLoading(false);
-      return;
-    }
-
-    loadUsers();
-  }, [canReadUsers]);
-
-  const loadUsers = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-      const response = await usersService.listUsers({ limit: 100 });
-      setUsers(response.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load users. Please try again.');
-      }
-      console.error('Failed to load users:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Compute error message based on permissions and API errors
+  const error = !canReadUsers ? 'Access denied. User read permissions required.' : usersError || '';
 
   // Validate form
   const validateForm = (): boolean => {
@@ -156,15 +131,15 @@ export const UsersPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const createData: CreateUserRequest = {
-        email: formData.email?.trim().toLowerCase() || '',
-        password: formData.password || '',
-        display_name: formData.display_name?.trim() || undefined,
-        organization_role: formData.organization_role,
-      };
-      await usersService.createUser(createData);
+    const createData: CreateUserRequest = {
+      email: formData.email?.trim().toLowerCase() || '',
+      password: formData.password || '',
+      display_name: formData.display_name?.trim() || undefined,
+      organization_role: formData.organization_role,
+    };
+
+    const result = await createUser(createData);
+    if (result) {
       setIsCreateOpen(false);
       setFormData({
         email: '',
@@ -173,16 +148,6 @@ export const UsersPage: React.FC = () => {
         organization_role: 'OrganizationDeveloper',
       });
       setFormErrors({});
-      await loadUsers();
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to create user. Please try again.');
-      }
-      console.error('Failed to create user:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -192,24 +157,23 @@ export const UsersPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const updateData: UpdateUserRequest = {};
+    const updateData: UpdateUserRequest = {};
 
-      if (editFormData.password && editFormData.password.trim() !== '') {
-        updateData.password = editFormData.password;
-      }
-      if (editFormData.display_name !== (selectedUser.display_name || '')) {
-        updateData.display_name = editFormData.display_name?.trim() || undefined;
-      }
-      if (editFormData.organization_role !== selectedUser.organization_role) {
-        updateData.organization_role = editFormData.organization_role;
-      }
-      if (editFormData.is_active !== selectedUser.is_active) {
-        updateData.is_active = editFormData.is_active;
-      }
+    if (editFormData.password && editFormData.password.trim() !== '') {
+      updateData.password = editFormData.password;
+    }
+    if (editFormData.display_name !== (selectedUser.display_name || '')) {
+      updateData.display_name = editFormData.display_name?.trim() || undefined;
+    }
+    if (editFormData.organization_role !== selectedUser.organization_role) {
+      updateData.organization_role = editFormData.organization_role;
+    }
+    if (editFormData.is_active !== selectedUser.is_active) {
+      updateData.is_active = editFormData.is_active;
+    }
 
-      await usersService.updateUser(selectedUser.id, updateData);
+    const result = await updateUser(selectedUser.id, updateData);
+    if (result) {
       setIsEditOpen(false);
       setSelectedUser(null);
       setEditFormData({
@@ -219,16 +183,6 @@ export const UsersPage: React.FC = () => {
         is_active: true,
       });
       setFormErrors({});
-      await loadUsers();
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to update user. Please try again.');
-      }
-      console.error('Failed to update user:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -238,21 +192,10 @@ export const UsersPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      await usersService.deleteUser(selectedUser.id);
+    const success = await deleteUser(selectedUser.id);
+    if (success) {
       setIsDeleteOpen(false);
       setSelectedUser(null);
-      await loadUsers();
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to deactivate user. Please try again.');
-      }
-      console.error('Failed to deactivate user:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -488,8 +431,8 @@ export const UsersPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={isSubmitting}>
-                {isSubmitting ? 'Creating...' : 'Create User'}
+              <Button onClick={handleCreate} disabled={isCreating}>
+                {isCreating ? 'Creating...' : 'Create User'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -512,8 +455,8 @@ export const UsersPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleEdit} disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
+              <Button onClick={handleEdit} disabled={isUpdating}>
+                {isUpdating ? 'Saving...' : 'Save Changes'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -547,8 +490,8 @@ export const UsersPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
-                {isSubmitting ? 'Deactivating...' : 'Deactivate User'}
+              <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                {isDeleting ? 'Deactivating...' : 'Deactivate User'}
               </Button>
             </SheetFooter>
           </SheetContent>

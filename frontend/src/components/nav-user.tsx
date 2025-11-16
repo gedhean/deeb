@@ -1,13 +1,13 @@
 import { BadgeCheck, ChevronsUpDown, LogOut, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleBadge } from '@/components/RoleBadge';
 import type { OrganizationRole, ProjectRole } from '@/lib/rbac';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useProjects } from '@/hooks/api/useProjects';
-import { projectMembersService } from '@/lib/api/services/projects';
+import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
+import { useMultipleProjectMembersSWR } from '@/hooks/api/useProjectMembersSWR';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,40 +43,43 @@ export function NavUser({
   const { isMobile } = useSidebar();
   const { logout, user: authUser } = useAuth();
   const navigate = useNavigate();
-  const { projects } = useProjects();
-  const [userProjects, setUserProjects] = useState<UserProject[]>([]);
+  const { projects } = useProjectsSWR();
 
-  // Fetch user's projects with their roles
-  useEffect(() => {
-    const fetchUserProjects = async () => {
-      if (!authUser?.id || projects.length === 0) {
-        return;
+  // Get project IDs to fetch members for
+  const projectIds = useMemo(() => projects.map((p) => p.id), [projects]);
+
+  // Fetch members for all projects with automatic deduplication
+  const projectMembersMap = useMultipleProjectMembersSWR(projectIds);
+
+  // Compute user's projects with roles from cached members data
+  const userProjects = useMemo(() => {
+    if (!authUser?.id || projects.length === 0) {
+      return [];
+    }
+
+    const projectsWithRoles: UserProject[] = [];
+
+    for (const project of projects) {
+      const membersResult = projectMembersMap[project.id];
+
+      // Skip if members data is still loading or has error
+      if (!membersResult || membersResult.isLoading || membersResult.error) {
+        continue;
       }
 
-      const projectsWithRoles: UserProject[] = [];
+      const userMembership = membersResult.members.find((m) => m.member.user_id === authUser.id);
 
-      for (const project of projects) {
-        try {
-          const members = await projectMembersService.listProjectMembers(project.id);
-          const userMembership = members.find((m) => m.member.user_id === authUser.id);
-
-          if (userMembership) {
-            projectsWithRoles.push({
-              id: project.id,
-              name: project.name,
-              role: userMembership.member.role as ProjectRole,
-            });
-          }
-        } catch {
-          // Skip projects where we can't fetch members
-        }
+      if (userMembership) {
+        projectsWithRoles.push({
+          id: project.id,
+          name: project.name,
+          role: userMembership.member.role as ProjectRole,
+        });
       }
+    }
 
-      setUserProjects(projectsWithRoles);
-    };
-
-    fetchUserProjects();
-  }, [authUser, projects]);
+    return projectsWithRoles;
+  }, [authUser, projects, projectMembersMap]);
 
   const handleLogout = () => {
     logout();

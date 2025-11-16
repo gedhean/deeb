@@ -7,6 +7,11 @@
 
 export * from './useChangePlans';
 export * from './useProjects';
-export * from './usePolicies';
-export * from './useApprovals';
+export * from './usePoliciesSWR';
+export * from './useApprovalsSWR';
 export * from './useExecution';
+export * from './useEnvironmentsSWR';
+export * from './useDatabaseInstancesSWR';
+export * from './useDatabaseSWR';
+export * from './useAuditLogsSWR';
+export * from './useUsersSWR';

@@ -1,11 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { changePlanService } from '@/lib/api/services/changePlans';
-import { usersService } from '@/lib/api/services/users';
-import { APIError } from '@/lib/api/types';
-import type { Approval, User } from '@/lib/api/types';
+import { useUsers } from '@/hooks/api/useUsersSWR';
+import { useApprovalsSWR } from '@/hooks/api/useApprovalsSWR';
 import { CheckCircle2, XCircle, User as UserIcon, Calendar, MessageSquare } from 'lucide-react';
 
 interface ApprovalHistoryProps {
@@ -13,51 +11,11 @@ interface ApprovalHistoryProps {
 }
 
 export const ApprovalHistory: React.FC<ApprovalHistoryProps> = ({ changePlanId }) => {
-  const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [approvers, setApprovers] = useState<Map<string, User>>(new Map());
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Use SWR hook for approvals with automatic request deduplication
+  const { approvals, isLoading, error } = useApprovalsSWR(changePlanId);
 
-  useEffect(() => {
-    loadApprovalHistory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [changePlanId]);
-
-  const loadApprovalHistory = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-
-      // Load approval history
-      const history = await changePlanService.getApprovalHistory(changePlanId);
-      setApprovals(history.approvals || []);
-
-      // Load approver information
-      if (history.approvals && history.approvals.length > 0) {
-        const approverIds = [...new Set(history.approvals.map((a) => a.approver_id))];
-        const usersRes = await usersService.listUsers({ limit: 100 });
-
-        const approversMap = new Map<string, User>();
-        approverIds.forEach((approverId) => {
-          const approver = usersRes.items.find((u) => u.id === approverId);
-          if (approver) {
-            approversMap.set(approverId, approver);
-          }
-        });
-
-        setApprovers(approversMap);
-      }
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message || 'Failed to load approval history.');
-      } else {
-        setError('Failed to load approval history. Please try again.');
-      }
-      console.error('Failed to load approval history:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Use cached users from store
+  const { getUserById } = useUsers();
 
   const formatDate = (dateString: string): string => {
     try {
@@ -145,7 +103,7 @@ export const ApprovalHistory: React.FC<ApprovalHistoryProps> = ({ changePlanId }
       <CardContent>
         <div className="space-y-4">
           {approvals.map((approval) => {
-            const approver = approvers.get(approval.approver_id);
+            const approver = getUserById(approval.approver_id);
             const isApproved = approval.status === 'Approved';
 
             return (

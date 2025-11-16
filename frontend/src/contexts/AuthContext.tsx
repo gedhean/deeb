@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useCallback, useEffect } from 'react';
 import { authService } from '@/lib/api/services/auth';
 import type { User, LoginRequest, RegisterRequest } from '@/lib/api/types';
+import { useCurrentUserSWR } from '@/hooks/api/useAuthSWR';
 
 interface AuthContextType {
   user: User | null;
@@ -15,34 +16,23 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // Use SWR hook for automatic caching and deduplication
+  const { user, isLoading, refetch } = useCurrentUserSWR();
 
-  // Load user from backend on mount (validates HttpOnly cookie)
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await authService.getCurrentUser();
-        setUser(currentUser);
-      } catch {
-        // User is not authenticated or session expired
-        setUser(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadUser();
-  }, []);
-
-  // Listen for unauthorized events from API client
+  // Listen for auth events from API client
   useEffect(() => {
     const handleUnauthorized = () => {
-      setUser(null);
+      // DO NOT call refetch() here - it causes infinite loop!
+      // The 401 response from /api/auth/me triggers this event,
+      // and calling refetch() would make another request that gets 401,
+      // triggering the event again, creating an infinite loop.
+      // The user state will naturally be null/undefined when not authenticated.
     };
 
     const handleLogout = () => {
-      setUser(null);
+      // Clear user data by triggering a refetch (which will get 401 and clear state)
+      // Navigation happens in the logout callback function
+      refetch();
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
@@ -52,17 +42,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
       window.removeEventListener('auth:logout', handleLogout);
     };
-  }, []);
+  }, [refetch]);
 
-  const login = useCallback(async (credentials: LoginRequest) => {
-    try {
-      const response = await authService.login(credentials);
-      setUser(response.user);
-    } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
-    }
-  }, []);
+  const login = useCallback(
+    async (credentials: LoginRequest) => {
+      try {
+        await authService.login(credentials);
+        // Refetch user data after successful login
+        await refetch();
+      } catch (error) {
+        console.error('Login failed:', error);
+        throw error;
+      }
+    },
+    [refetch],
+  );
 
   const register = useCallback(async (data: RegisterRequest) => {
     try {
@@ -75,8 +69,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = useCallback(async () => {
+    // authService.logout() dispatches 'auth:logout' event which triggers refetch
     await authService.logout();
-    setUser(null);
+    // Hard redirect to login page after logout
+    window.location.replace('/login');
   }, []);
 
   const initiateGoogleAuth = useCallback(() => {

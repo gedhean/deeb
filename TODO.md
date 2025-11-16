@@ -16,31 +16,17 @@
     - [x] Engine column should be shown in the tables list only for MySQL databases
     - [x] Upgrade sql-schema pkg to latest version
     - [x] Use this pkg to generate schema metadata
-- [ ] Create database schema versions for schema change history
-    - [ ] UI to view schema history
-    - [ ] Button to set current schema as baseline version
-    - [ ] Create database schema snapshot only after schema change is applied (not before AND after)
-    - [ ] Use this sql-schema pkg to generate schema snapshot and metadata for schema change history
 - [x] Environment: Add "Allow Self Approval" checkbox to allow developers to approve their own changes without approval from a reviewer
-- [ ] Environment: Add "Require Approval" checkbox to require approval from a reviewer for all changes
 
 ### P2 (Low Priority)
 
 - [x] Use Monaco Editor for SQL editor (https://github.com/react-monaco-editor/react-monaco-editor)
 - [x] Update the Change Plan actions buttons to show a single button for main action based on status (Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled) and a three dots dropdown for other actions.
-- [ ] Update Tables to have pagination by default.
-- [ ] Create Helm Chart for Deeb deployment
-- [ ] Create Deeb CI/CD pipeline with GitHub Actions
-- [ ] SQL Review: SQL syntax built-in check
-- [ ] SQL Review: connection to the database built-in check
-- [ ] Optimize Frontend APIs calls: reduce the number of API calls and optimize the data fetching logic (use store to reuse data and avoid duplicate API calls).
+
 
 ### P3 (Low Priority)
 - [x] Add Start Background to Login Page and Register Page
-- [ ] Simplify the Change Plan create page with fewer fields and better UI.
-
-### Current
-
+- [x] Simplify the Change Plan create page with fewer fields and better UI.
 - [x] Non-admin users should be able to see only the projects they are members of
 - [x] Update Change Plan create page to use useCurrentProject hook to get the current project ID
 - [x] Omit project selector from Change Plan create page (set via useCurrentProject hook)
@@ -51,3 +37,25 @@
 - [x] Fix: Changes Plans page should show all changes plans for filter project: all.
 - [x] Database should be a project level resource (not organization level)
 - [x] Update get request for project level resources use useCurrentProject hook to get the current project ID
+
+### Current
+
+- [ ] Update Environments Page to use correct RBAC permissions
+- [ ] Optimize Frontend APIs calls: reduce the number of API calls and optimize the data fetching logic (use store to reuse data and avoid duplicate API calls).
+- [ ] SQL Review: SQL syntax built-in check
+- [ ] SQL Review: connection to the database built-in check
+- [ ] Update Tables to have pagination by default.
+- [ ] Create Helm Chart for Deeb deployment
+- [ ] Create Deeb CI/CD pipeline with GitHub Actions
+- [ ] Create database schema versions for schema change history
+    - [ ] UI to view schema history
+    - [ ] Button to set current schema as baseline version
+    - [ ] Create database schema snapshot only after schema change is applied (not before AND after)
+    - [ ] Use this sql-schema pkg to generate schema snapshot and metadata for schema change history
+- [ ] Refactor Audit Log to be at the middleware level with request/response and non-blocking run (async and do not block on error)
+- [ ] Better handling for updating requests that set values to undefined or null (e.g. update database instance request). Currently, if I set a field to undefined or null, the field is not updated in the database.
+- [ ] Update SQL Review rules to not use "both" for engine. Instead, use the specific engine.
+- [ ] Fix: Database test connection should work for existing databases instances (not just new ones).
+- [ ] Upgrade sql-reviewer pkg to latest version.
+- [ ] Upgrade sql-schema pkg to latest version.
+- [ ] Think how to handle large number of resource in the UI. Currenlty, we fetch with limit fixed and not offset. We need to handle this better.

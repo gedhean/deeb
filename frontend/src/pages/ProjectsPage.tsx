@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsService, projectMembersService } from '@/lib/api/services/projects';
+import { projectMembersService } from '@/lib/api/services/projects';
 import { hasOrganizationPermission, OrganizationPermission, isAdmin } from '@/lib/rbac';
 import type {
   AddProjectMemberRequest,
@@ -11,7 +11,6 @@ import type {
   ProjectRole,
   UpdateProjectRequest,
 } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,36 +59,51 @@ import { RoleBadge } from '@/components/RoleBadge';
 import { Plus, Pencil, Trash2, AlertTriangle, FolderOpen, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectPermissions } from '@/hooks/api/useProjectPermissions';
-import { usersService } from '@/lib/api/services/users';
-import type { User } from '@/lib/api/types';
-import { useProjects } from '@/hooks/api/useProjects';
+import { useUsers } from '@/hooks/api/useUsersSWR';
+import {
+  useProjectsSWR,
+  useCreateProjectSWR,
+  useUpdateProjectSWR,
+  useDeleteProjectSWR,
+} from '@/hooks/api/useProjectsSWR';
 
 export const ProjectsPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { projects: availableProjects } = useProjects(); // Projects from hook (may include user's projects)
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+
+  // Use cached projects from SWR hook
+  const {
+    projects: cachedProjects,
+    isLoading: projectsLoading,
+    error: projectsError,
+  } = useProjectsSWR();
+
+  // Use mutation hooks for create/update/delete
+  const { createProject, isLoading: isCreating, error: createError } = useCreateProjectSWR();
+  const { updateProject, isLoading: isUpdating, error: updateError } = useUpdateProjectSWR();
+  const { deleteProject, isLoading: isDeleting, error: deleteError } = useDeleteProjectSWR();
+
   const [error, setError] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Members management state
   const [members, setMembers] = useState<ProjectMemberWithUser[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [isSubmittingMember, setIsSubmittingMember] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isRemoveMemberOpen, setIsRemoveMemberOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<ProjectMemberWithUser | null>(null);
-  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [addMemberForm, setAddMemberForm] = useState<AddProjectMemberRequest>({
     user_id: '',
     project_role: 'ProjectDeveloper',
   });
+
+  // Use cached users from store
+  const { users: availableUsers, isLoading: isLoadingUsers } = useUsers();
 
   // Form state
   const [formData, setFormData] = useState<CreateProjectRequest>({
@@ -116,73 +130,23 @@ export const ProjectsPage: React.FC = () => {
     OrganizationPermission.ProjectsDelete,
   );
 
-  // Load projects - admins see all, non-admins see projects where they are members
+  // Projects are already loaded via useProjectsSWR hook
+  // Admins see all projects, non-admins see projects from the hook (which may be filtered by backend)
+  const projects = cachedProjects;
+  const isLoading = projectsLoading;
+
+  // Set error from SWR hook or mutation hooks if any
   useEffect(() => {
-    if (!user) {
-      setError('Authentication required.');
-      setIsLoading(false);
-      return;
+    if (projectsError) {
+      setError(projectsError);
+    } else if (createError) {
+      setError(createError);
+    } else if (updateError) {
+      setError(updateError);
+    } else if (deleteError) {
+      setError(deleteError);
     }
-
-    if (userIsAdmin) {
-      // Admins can list all projects
-      loadProjects();
-    } else {
-      // For non-admins, check projects from useProjects hook to see which ones they are members of
-      loadProjectsForMember();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userIsAdmin, availableProjects]);
-
-  // Load projects where user is a member (any role)
-  const loadProjectsForMember = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-
-      // Check projects from useProjects hook to see which ones user is a member of
-      const userProjects: Project[] = [];
-      for (const project of availableProjects) {
-        try {
-          const members = await projectMembersService.listProjectMembers(project.id);
-          const isMember = members.some((m) => m.member.user_id === user?.id);
-          if (isMember) {
-            userProjects.push(project);
-          }
-        } catch {
-          // Skip projects where we can't check membership or don't have access
-        }
-      }
-      setProjects(userProjects);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load projects. Contact an admin to be added as a project member.');
-      }
-      console.error('Failed to load projects:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadProjects = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-      const response = await projectsService.listProjects({ limit: 100 });
-      setProjects(response.items);
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to load projects. Please try again.');
-      }
-      console.error('Failed to load projects:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [projectsError, createError, updateError, deleteError]);
 
   // Validate form
   const validateForm = (): boolean => {
@@ -208,23 +172,18 @@ export const ProjectsPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      await projectsService.createProject(formData);
+    const result = await createProject(formData);
+    if (result) {
       setIsCreateOpen(false);
       setFormData({ name: '', description: '' });
       setFormErrors({});
       showSuccessToast('Project created successfully');
-      await loadProjects();
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
+    } else {
+      // Error is already set by the mutation hook and displayed via useEffect
+      handleApiError(new Error('Failed to create project'), {
         showToast: true,
         toastTitle: 'Failed to create project',
       });
-      setError(errorMsg);
-      console.error('Failed to create project:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -234,32 +193,27 @@ export const ProjectsPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const updateData: UpdateProjectRequest = {};
-      if (formData.name !== selectedProject.name) {
-        updateData.name = formData.name;
-      }
-      if (formData.description !== selectedProject.description) {
-        updateData.description = formData.description;
-      }
+    const updateData: UpdateProjectRequest = {};
+    if (formData.name !== selectedProject.name) {
+      updateData.name = formData.name;
+    }
+    if (formData.description !== selectedProject.description) {
+      updateData.description = formData.description;
+    }
 
-      await projectsService.updateProject(selectedProject.id, updateData);
+    const result = await updateProject(selectedProject.id, updateData);
+    if (result) {
       setIsEditOpen(false);
       setSelectedProject(null);
       setFormData({ name: '', description: '' });
       setFormErrors({});
       showSuccessToast('Project updated successfully');
-      await loadProjects();
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
+    } else {
+      // Error is already set by the mutation hook and displayed via useEffect
+      handleApiError(new Error('Failed to update project'), {
         showToast: true,
         toastTitle: 'Failed to update project',
       });
-      setError(errorMsg);
-      console.error('Failed to update project:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -269,22 +223,17 @@ export const ProjectsPage: React.FC = () => {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      await projectsService.deleteProject(selectedProject.id);
+    const success = await deleteProject(selectedProject.id);
+    if (success) {
       setIsDeleteOpen(false);
       setSelectedProject(null);
       showSuccessToast('Project deleted successfully');
-      await loadProjects();
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
+    } else {
+      // Error is already set by the mutation hook and displayed via useEffect
+      handleApiError(new Error('Failed to delete project'), {
         showToast: true,
         toastTitle: 'Failed to delete project',
       });
-      setError(errorMsg);
-      console.error('Failed to delete project:', err);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -329,18 +278,7 @@ export const ProjectsPage: React.FC = () => {
     }
   };
 
-  // Load available users for adding members
-  const loadAvailableUsers = async () => {
-    try {
-      setIsLoadingUsers(true);
-      const response = await usersService.listUsers({ limit: 100 });
-      setAvailableUsers(response.items);
-    } catch (err) {
-      console.error('Failed to load users:', err);
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  };
+  // Users are now loaded from cache via useUsers() hook above
 
   // Handle add member
   const handleAddMember = async () => {
@@ -349,7 +287,7 @@ export const ProjectsPage: React.FC = () => {
     }
 
     try {
-      setIsSubmitting(true);
+      setIsSubmittingMember(true);
       await projectMembersService.addProjectMember(selectedProject.id, addMemberForm);
       setIsAddMemberOpen(false);
       setAddMemberForm({ user_id: '', project_role: 'ProjectDeveloper' });
@@ -362,7 +300,7 @@ export const ProjectsPage: React.FC = () => {
       });
       console.error('Failed to add member:', err);
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingMember(false);
     }
   };
 
@@ -373,7 +311,7 @@ export const ProjectsPage: React.FC = () => {
     }
 
     try {
-      setIsSubmitting(true);
+      setIsSubmittingMember(true);
       await projectMembersService.removeProjectMember(
         selectedProject.id,
         selectedMember.member.user_id,
@@ -389,7 +327,7 @@ export const ProjectsPage: React.FC = () => {
       });
       console.error('Failed to remove member:', err);
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingMember(false);
     }
   };
 
@@ -400,7 +338,7 @@ export const ProjectsPage: React.FC = () => {
     }
 
     try {
-      setIsSubmitting(true);
+      setIsSubmittingMember(true);
       await projectMembersService.updateProjectMemberRole(
         selectedProject.id,
         member.member.user_id,
@@ -415,7 +353,7 @@ export const ProjectsPage: React.FC = () => {
       });
       console.error('Failed to update role:', err);
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingMember(false);
     }
   };
 
@@ -668,8 +606,8 @@ export const ProjectsPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={isSubmitting}>
-                {isSubmitting ? 'Creating...' : 'Create Project'}
+              <Button onClick={handleCreate} disabled={isCreating}>
+                {isCreating ? 'Creating...' : 'Create Project'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -717,8 +655,8 @@ export const ProjectsPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleEdit} disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
+              <Button onClick={handleEdit} disabled={isUpdating}>
+                {isUpdating ? 'Saving...' : 'Save Changes'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -745,8 +683,8 @@ export const ProjectsPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
-                {isSubmitting ? 'Deleting...' : 'Delete Project'}
+              <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Delete Project'}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -782,9 +720,8 @@ export const ProjectsPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-semibold">Members</h3>
                     <Button
-                      onClick={async () => {
+                      onClick={() => {
                         setAddMemberForm({ user_id: '', project_role: 'ProjectDeveloper' });
-                        await loadAvailableUsers();
                         setIsAddMemberOpen(true);
                       }}
                       size="sm"
@@ -813,9 +750,8 @@ export const ProjectsPage: React.FC = () => {
                       </EmptyHeader>
                       <EmptyContent>
                         <Button
-                          onClick={async () => {
+                          onClick={() => {
                             setAddMemberForm({ user_id: '', project_role: 'ProjectDeveloper' });
-                            await loadAvailableUsers();
                             setIsAddMemberOpen(true);
                           }}
                         >
@@ -856,7 +792,7 @@ export const ProjectsPage: React.FC = () => {
                                     onValueChange={(value) =>
                                       handleUpdateRole(memberWithUser, value as ProjectRole)
                                     }
-                                    disabled={isSubmitting}
+                                    disabled={isSubmittingMember}
                                   >
                                     <SelectTrigger className="w-[180px]">
                                       <SelectValue />
@@ -921,7 +857,7 @@ export const ProjectsPage: React.FC = () => {
                 <Select
                   value={addMemberForm.user_id}
                   onValueChange={(value) => setAddMemberForm({ ...addMemberForm, user_id: value })}
-                  disabled={isLoadingUsers || isSubmitting}
+                  disabled={isLoadingUsers || isSubmittingMember}
                 >
                   <SelectTrigger id="member-user">
                     <SelectValue placeholder="Select a user" />
@@ -954,7 +890,7 @@ export const ProjectsPage: React.FC = () => {
                   onValueChange={(value) =>
                     setAddMemberForm({ ...addMemberForm, project_role: value as ProjectRole })
                   }
-                  disabled={isSubmitting}
+                  disabled={isSubmittingMember}
                 >
                   <SelectTrigger id="member-role">
                     <SelectValue />
@@ -972,8 +908,11 @@ export const ProjectsPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsAddMemberOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAddMember} disabled={!addMemberForm.user_id || isSubmitting}>
-                {isSubmitting ? 'Adding...' : 'Add Member'}
+              <Button
+                onClick={handleAddMember}
+                disabled={!addMemberForm.user_id || isSubmittingMember}
+              >
+                {isSubmittingMember ? 'Adding...' : 'Add Member'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1005,8 +944,12 @@ export const ProjectsPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsRemoveMemberOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={handleRemoveMember} disabled={isSubmitting}>
-                {isSubmitting ? 'Removing...' : 'Remove Member'}
+              <Button
+                variant="destructive"
+                onClick={handleRemoveMember}
+                disabled={isSubmittingMember}
+              >
+                {isSubmittingMember ? 'Removing...' : 'Remove Member'}
               </Button>
             </DialogFooter>
           </DialogContent>

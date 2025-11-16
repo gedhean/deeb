@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -7,10 +7,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { changePlanService } from '@/lib/api/services/changePlans';
-import { usersService } from '@/lib/api/services/users';
-import { APIError } from '@/lib/api/types';
-import type { ChangePlan, ExecutionLog, User, ChangePlanStatus } from '@/lib/api/types';
+import { useExecutionLogsSWR } from '@/hooks/api/useChangePlansSWR';
+import type { ChangePlan, ChangePlanStatus } from '@/lib/api/types';
+import { useUsers } from '@/hooks/api/useUsersSWR';
 import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
 import {
   CheckCircle2,
@@ -26,60 +25,26 @@ interface ExecutionResultsProps {
 }
 
 export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ changePlan }) => {
-  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
-  const [executors, setExecutors] = useState<Map<string, User>>(new Map());
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Use cached users from store instead of fetching
+  const { getUserById } = useUsers();
 
-  useEffect(() => {
-    // Only load execution logs if change plan has been executed
-    if (
-      changePlan.status === 'Completed' ||
-      changePlan.status === 'Failed' ||
-      changePlan.executed_at
-    ) {
-      loadExecutionLogs();
-    } else {
-      setIsLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [changePlan.id, changePlan.status, changePlan.executed_at]);
+  // Only load execution logs if change plan has been executed
+  const shouldLoadLogs =
+    changePlan.status === 'Completed' || changePlan.status === 'Failed' || !!changePlan.executed_at;
 
-  const loadExecutionLogs = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
+  // Use SWR hook for execution logs with automatic caching
+  const {
+    executionLogs: executionLogsResponse,
+    isLoading,
+    error,
+  } = useExecutionLogsSWR(changePlan.id, {
+    enabled: shouldLoadLogs,
+  });
 
-      // Load execution log history
-      const history = await changePlanService.getExecutionLogHistory(changePlan.id);
-      setExecutionLogs(history.logs || []);
-
-      // Load executor information
-      if (history.logs && history.logs.length > 0) {
-        const executorIds = [...new Set(history.logs.map((log) => log.executor_id))];
-        const usersRes = await usersService.listUsers({ limit: 100 });
-
-        const executorsMap = new Map<string, User>();
-        executorIds.forEach((executorId) => {
-          const executor = usersRes.items.find((u) => u.id === executorId);
-          if (executor) {
-            executorsMap.set(executorId, executor);
-          }
-        });
-
-        setExecutors(executorsMap);
-      }
-    } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message || 'Failed to load execution logs.');
-      } else {
-        setError('Failed to load execution logs. Please try again.');
-      }
-      console.error('Failed to load execution logs:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Extract logs array from response
+  const executionLogs = useMemo(() => {
+    return executionLogsResponse?.logs || [];
+  }, [executionLogsResponse]);
 
   const formatDate = (dateString: string): string => {
     try {
@@ -255,7 +220,7 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ changePlan }
               <AccordionContent>
                 <div className="space-y-3 mt-4">
                   {executionLogs.map((log) => {
-                    const executor = executors.get(log.executor_id);
+                    const executor = getUserById(log.executor_id);
                     const logIsCompleted = log.status === 'Completed';
                     const logIsFailed = log.status === 'Failed';
 
@@ -344,7 +309,9 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ changePlan }
           <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20">
             <div className="flex items-center gap-2 text-red-800 dark:text-red-200">
               <XCircle className="h-4 w-4" />
-              <span className="text-sm">{error}</span>
+              <span className="text-sm">
+                {error || 'Failed to load execution logs. Please try again.'}
+              </span>
             </div>
           </div>
         )}

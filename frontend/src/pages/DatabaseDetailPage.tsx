@@ -1,21 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
-import { databasesService } from '@/lib/api/services/databases';
-import { changePlanService } from '@/lib/api/services/changePlans';
-import { projectsService } from '@/lib/api/services/projects';
-import { environmentsService } from '@/lib/api/services/environments';
-import { databaseInstancesService } from '@/lib/api/services/database-instances';
-import { usersService } from '@/lib/api/services/users';
-import type {
-  Database,
-  ChangePlan,
-  Project,
-  Environment,
-  DatabaseInstance,
-  User,
-} from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import { useUsers } from '@/hooks/api/useUsersSWR';
+import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
+import { useDatabaseSWR } from '@/hooks/api/useDatabaseSWR';
+import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
+import { useDatabaseInstancesSWR } from '@/hooks/api/useDatabaseInstancesSWR';
+import { useChangePlansSWR } from '@/hooks/api/useChangePlansSWR';
+import { useDatabaseSchemaSWR, useRefreshDatabaseSchema } from '@/hooks/api/useDatabaseSchemaSWR';
+import type { Project, Environment, DatabaseInstance } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -46,105 +39,71 @@ import { DatabaseInfoCard } from '@/components/database/DatabaseInfoCard';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 import { TableDetailSheet } from '@/components/database/TableDetailSheet';
 import { DatabaseMetadataSections } from '@/components/database/DatabaseMetadataSections';
-import { schemaService } from '@/lib/api/services/schema';
-import type { DatabaseSchemaMetadata } from '@/lib/api/types';
 
 export const DatabaseDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const [database, setDatabase] = useState<Database | null>(null);
-  const [changePlans, setChangePlans] = useState<ChangePlan[]>([]);
-  const [project, setProject] = useState<Project | null>(null);
-  const [environment, setEnvironment] = useState<Environment | null>(null);
-  const [instance, setInstance] = useState<DatabaseInstance | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingChangePlans, setIsLoadingChangePlans] = useState(false);
-  const [error, setError] = useState('');
   const [selectedTableName, setSelectedTableName] = useState<string | null>(null);
   const [isTableDetailOpen, setIsTableDetailOpen] = useState(false);
-  const [schemaMetadata, setSchemaMetadata] = useState<DatabaseSchemaMetadata | null>(null);
-  const [isLoadingSchema, setIsLoadingSchema] = useState(false);
-  const [isRefreshingSchema, setIsRefreshingSchema] = useState(false);
   const [isRefreshDisabled, setIsRefreshDisabled] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Use cached data from SWR hooks
+  const { getUserById } = useUsers();
+  const { getProjectById } = useProjectsSWR();
+  const { environments } = useEnvironmentsSWR();
+  const { databaseInstances } = useDatabaseInstancesSWR();
+
+  // Fetch database with SWR
+  const { database, isLoading, error: dbError } = useDatabaseSWR(id);
+
+  // Fetch schema metadata with SWR
+  const {
+    schemaMetadata,
+    isLoading: isLoadingSchema,
+    refetch: refetchSchema,
+  } = useDatabaseSchemaSWR(database?.id);
+
+  // Use refresh schema hook
+  const { refreshDatabaseSchema, isRefreshing: isRefreshingSchema } = useRefreshDatabaseSchema();
+
+  // Fetch change plans for this database with SWR
+  const changePlansParams = useMemo(
+    () => (database?.id ? { database_id: database.id, limit: 100 } : undefined),
+    [database],
+  );
+  const { changePlans, isLoading: isLoadingChangePlans } = useChangePlansSWR(
+    changePlansParams || {},
+  );
+
+  // Compute related entities from cached data
+  const project = useMemo<Project | null>(
+    () => (database ? getProjectById(database.project_id) || null : null),
+    [database, getProjectById],
+  );
+
+  const environment = useMemo<Environment | null>(
+    () => (database ? environments.find((e) => e.id === database.environment_id) || null : null),
+    [database, environments],
+  );
+
+  const instance = useMemo<DatabaseInstance | null>(
+    () =>
+      database
+        ? databaseInstances.find((i) => i.id === database.database_instance_id) || null
+        : null,
+    [database, databaseInstances],
+  );
+
+  const error = dbError || '';
 
   // Check if user has databases.read permission
   const canReadDatabases = hasOrganizationPermission(
     user?.organization_role,
     OrganizationPermission.DatabasesRead,
   );
-
-  const loadChangePlans = useCallback(async (databaseId: string) => {
-    try {
-      setIsLoadingChangePlans(true);
-      const response = await changePlanService.listChangePlans({
-        database_id: databaseId,
-        limit: 100,
-      });
-      setChangePlans(response.change_plans);
-    } catch (err) {
-      console.error('Failed to load change plans:', err);
-    } finally {
-      setIsLoadingChangePlans(false);
-    }
-  }, []);
-
-  const loadDatabase = useCallback(
-    async (databaseId: string) => {
-      try {
-        setIsLoading(true);
-        setError('');
-
-        // Load database
-        const databaseData = await databasesService.getDatabase(databaseId);
-        setDatabase(databaseData);
-
-        // Load change plans for this database
-        await loadChangePlans(databaseId);
-
-        // Load related data for display
-        const [projectsRes, environmentsRes, instancesRes, usersRes] = await Promise.all([
-          projectsService.listProjects({ limit: 100 }),
-          environmentsService.listEnvironments({ limit: 100 }),
-          databaseInstancesService.listDatabaseInstances({ limit: 100 }),
-          usersService.listUsers({ limit: 100 }),
-        ]);
-
-        // Find related entities
-        const foundProject = projectsRes.items.find((p) => p.id === databaseData.project_id);
-        const foundEnvironment = environmentsRes.items.find(
-          (e) => e.id === databaseData.environment_id,
-        );
-        const foundInstance = instancesRes.items.find(
-          (i) => i.id === databaseData.database_instance_id,
-        );
-
-        setProject(foundProject || null);
-        setEnvironment(foundEnvironment || null);
-        setInstance(foundInstance || null);
-        setUsers(usersRes.items);
-      } catch (err) {
-        if (err instanceof APIError) {
-          setError(err.message);
-        } else {
-          setError('Failed to load database. Please try again.');
-        }
-        console.error('Failed to load database:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [loadChangePlans],
-  );
-
-  useEffect(() => {
-    if (id) {
-      loadDatabase(id);
-    }
-  }, [id, loadDatabase]);
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -163,7 +122,7 @@ export const DatabaseDetailPage: React.FC = () => {
 
   // Get author name
   const getAuthorName = (authorId: string): string => {
-    const author = users.find((u) => u.id === authorId);
+    const author = getUserById(authorId);
     return author?.email || authorId;
   };
 
@@ -172,33 +131,6 @@ export const DatabaseDetailPage: React.FC = () => {
     setSelectedTableName(tableName);
     setIsTableDetailOpen(true);
   };
-
-  // Load schema metadata for views
-  const loadSchemaMetadata = useCallback(async (databaseId: string) => {
-    try {
-      setIsLoadingSchema(true);
-      const data = await schemaService.getDatabaseSchema(databaseId);
-      setSchemaMetadata(data);
-    } catch (err) {
-      // Clear schema metadata on error so UI shows empty state
-      setSchemaMetadata(null);
-
-      // Show user-facing error notification
-      if (err instanceof APIError) {
-        console.error('Failed to load schema metadata:', err.message);
-        toast.error('Failed to load schema metadata', {
-          description: err.message,
-        });
-      } else {
-        console.error('Failed to load schema metadata:', err);
-        toast.error('Failed to load schema metadata', {
-          description: 'An unexpected error occurred. Please try again.',
-        });
-      }
-    } finally {
-      setIsLoadingSchema(false);
-    }
-  }, []);
 
   // Refresh schema metadata with debounce and toast notifications
   const handleRefreshSchema = async () => {
@@ -212,45 +144,23 @@ export const DatabaseDetailPage: React.FC = () => {
 
     setIsRefreshDisabled(true);
 
-    try {
-      setIsRefreshingSchema(true);
-      toast.info('Schema refresh started', {
-        description: 'The refresh is running in the background and may take a few moments.',
-      });
+    toast.info('Schema refresh started', {
+      description: 'The refresh is running in the background and may take a few moments.',
+    });
 
-      const data = await schemaService.refreshDatabaseSchema(database.id);
-      setSchemaMetadata(data);
+    const result = await refreshDatabaseSchema(database.id);
 
-      toast.success('Schema refreshed successfully', {
-        description: 'The database schema metadata has been updated.',
-      });
-    } catch (err) {
-      if (err instanceof APIError) {
-        toast.error('Failed to refresh schema', {
-          description: err.message,
-        });
-        console.error('Failed to refresh schema metadata:', err.message);
-      } else {
-        toast.error('Failed to refresh schema', {
-          description: 'An unexpected error occurred. Please try again.',
-        });
-        console.error('Failed to refresh schema metadata:', err);
-      }
-    } finally {
-      // Enable debounce - disable button and loading state for 5 seconds
-      refreshTimerRef.current = setTimeout(() => {
-        setIsRefreshingSchema(false);
-        setIsRefreshDisabled(false);
-        refreshTimerRef.current = null;
-      }, 5000);
+    if (result) {
+      // Invalidate the schema cache to trigger a refetch
+      await refetchSchema();
     }
+
+    // Enable debounce - disable button for 5 seconds
+    refreshTimerRef.current = setTimeout(() => {
+      setIsRefreshDisabled(false);
+      refreshTimerRef.current = null;
+    }, 5000);
   };
-
-  useEffect(() => {
-    if (database?.id) {
-      loadSchemaMetadata(database.id);
-    }
-  }, [database?.id, loadSchemaMetadata]);
 
   // Cleanup timer on unmount
   useEffect(() => {

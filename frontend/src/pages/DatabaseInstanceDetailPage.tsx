@@ -1,12 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefaultLayout } from '@/components/layouts';
-import { databaseInstancesService } from '@/lib/api/services/database-instances';
-import { databasesService } from '@/lib/api/services/databases';
-import { projectsService } from '@/lib/api/services/projects';
-import { environmentsService } from '@/lib/api/services/environments';
-import type { DatabaseInstance, Database, Project, Environment } from '@/lib/api/types';
-import { APIError } from '@/lib/api/types';
+import { useDatabaseInstanceById } from '@/hooks/api/useDatabaseInstancesSWR';
+import { useDatabases } from '@/hooks/api/useDatabases';
+import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
+import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,13 +41,6 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const [instance, setInstance] = useState<DatabaseInstance | null>(null);
-  const [databases, setDatabases] = useState<Database[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingDatabases, setIsLoadingDatabases] = useState(false);
-  const [error, setError] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   // Check permissions
@@ -62,61 +53,32 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
     OrganizationPermission.DatabasesCreate,
   );
 
-  const loadDatabases = useCallback(async (instanceId: string) => {
-    try {
-      setIsLoadingDatabases(true);
-      const response = await databasesService.listDatabases({
-        database_instance_id: instanceId,
-        limit: 100,
-      });
-      setDatabases(response.items);
-    } catch (err) {
-      console.error('Failed to load databases:', err);
-    } finally {
-      setIsLoadingDatabases(false);
-    }
-  }, []);
+  // Use SWR hooks for data fetching
+  const {
+    databaseInstance: instance,
+    isLoading: isLoadingInstance,
+    error: instanceError,
+  } = useDatabaseInstanceById(id);
 
-  const loadInstance = useCallback(
-    async (instanceId: string) => {
-      try {
-        setIsLoading(true);
-        setError('');
-
-        // Load instance
-        const instanceData = await databaseInstancesService.getDatabaseInstance(instanceId);
-        setInstance(instanceData);
-
-        // Load databases for this instance
-        await loadDatabases(instanceId);
-
-        // Load related data for display
-        const [projectsRes, environmentsRes] = await Promise.all([
-          projectsService.listProjects({ limit: 100 }),
-          environmentsService.listEnvironments({ limit: 100 }),
-        ]);
-
-        setProjects(projectsRes.items);
-        setEnvironments(environmentsRes.items);
-      } catch (err) {
-        if (err instanceof APIError) {
-          setError(err.message);
-        } else {
-          setError('Failed to load database instance. Please try again.');
-        }
-        console.error('Failed to load database instance:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [loadDatabases],
+  // Fetch databases filtered by instance ID
+  const databasesParams = useMemo(
+    () => ({
+      database_instance_id: id,
+      limit: 100,
+    }),
+    [id],
   );
+  const { databases, isLoading: isLoadingDatabases } = useDatabases(databasesParams);
 
-  useEffect(() => {
-    if (id) {
-      loadInstance(id);
-    }
-  }, [id, loadInstance]);
+  // Fetch projects and environments for display
+  const { projects } = useProjectsSWR();
+  const { environments } = useEnvironmentsSWR();
+
+  // Compute combined loading and error states
+  const isLoading = isLoadingInstance;
+  const error = !canReadDatabaseInstances
+    ? 'Access denied. You do not have permission to view database instances.'
+    : instanceError || '';
 
   // Format date
   const formatDate = (dateString: string) => {

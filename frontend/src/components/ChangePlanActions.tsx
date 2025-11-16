@@ -15,7 +15,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { changePlanService } from '@/lib/api/services/changePlans';
+import {
+  useUpdateChangePlanSWR,
+  useApproveChangePlan,
+  useCloseChangePlan,
+  useExecuteChangePlan,
+} from '@/hooks/api/useChangePlansSWR';
 import type { ChangePlan } from '@/lib/api/types';
 import {
   Send,
@@ -26,7 +31,7 @@ import {
   AlertTriangle,
   MoreVertical,
 } from 'lucide-react';
-import { showSuccessToast, handleApiError } from '@/lib/errorHandling';
+import { showSuccessToast } from '@/lib/errorHandling';
 
 interface ChangePlanActionsProps {
   changePlan: ChangePlan;
@@ -45,11 +50,19 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   canReject,
   canExecute,
 }) => {
+  // Use SWR mutation hooks for consistent cache management
+  const { updateChangePlan, isLoading: isUpdating } = useUpdateChangePlanSWR();
+  const { approveChangePlan, isLoading: isApproving } = useApproveChangePlan();
+  const { closeChangePlan, isLoading: isClosing } = useCloseChangePlan();
+  const { executeChangePlan, isLoading: isExecuting } = useExecuteChangePlan();
+
   const [activeAction, setActiveAction] = useState<ActionType | null>(null);
   const [comments, setComments] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'executing' | 'success'>('idle');
+
+  // Computed combined loading state
+  const isSubmitting = isUpdating || isApproving || isClosing || isExecuting;
 
   // Reset state when dialog closes
   const handleDialogClose = () => {
@@ -102,29 +115,21 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
 
   // Handle submit for review
   const handleSubmit = async () => {
-    try {
-      setIsSubmitting(true);
-      setError('');
+    setError('');
 
-      await changePlanService.updateChangePlan(changePlan.id, {
-        status: 'Open',
-      });
+    const result = await updateChangePlan(changePlan.id, {
+      status: 'Open',
+    });
 
+    if (result) {
       handleDialogClose();
       showSuccessToast('Change plan submitted for review. SQL Review will run automatically.');
 
       if (onSuccess) {
         onSuccess();
       }
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
-        showToast: true,
-        toastTitle: 'Failed to submit change plan for review',
-      });
-      setError(errorMsg);
-      console.error('Failed to submit change plan for review:', err);
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      setError('Failed to submit change plan for review');
     }
   };
 
@@ -135,14 +140,13 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      setError('');
+    setError('');
 
-      await changePlanService.approveChangePlan(changePlan.id, {
-        comments: comments.trim() || undefined,
-      });
+    const success = await approveChangePlan(changePlan.id, {
+      comments: comments.trim() || undefined,
+    });
 
+    if (success) {
       handleDialogClose();
       showSuccessToast(
         changePlan.status === 'Failed'
@@ -153,15 +157,8 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
       if (onSuccess) {
         onSuccess();
       }
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
-        showToast: true,
-        toastTitle: 'Failed to approve change plan',
-      });
-      setError(errorMsg);
-      console.error('Failed to approve change plan:', err);
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      setError('Failed to approve change plan');
     }
   };
 
@@ -172,29 +169,21 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      setError('');
+    setError('');
 
-      await changePlanService.closeChangePlan(changePlan.id, {
-        comments: comments.trim() || undefined,
-      });
+    const success = await closeChangePlan(changePlan.id, {
+      comments: comments.trim() || undefined,
+    });
 
+    if (success) {
       handleDialogClose();
       showSuccessToast('Change plan closed successfully');
 
       if (onSuccess) {
         onSuccess();
       }
-    } catch (err) {
-      const errorMsg = handleApiError(err, {
-        showToast: true,
-        toastTitle: 'Failed to close change plan',
-      });
-      setError(errorMsg);
-      console.error('Failed to close change plan:', err);
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      setError('Failed to close change plan');
     }
   };
 
@@ -210,13 +199,12 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      setError('');
-      setExecutionStatus('executing');
+    setError('');
+    setExecutionStatus('executing');
 
-      await changePlanService.executeChangePlan(changePlan.id);
+    const success = await executeChangePlan(changePlan.id);
 
+    if (success) {
       setExecutionStatus('success');
       showSuccessToast('Change plan executed successfully');
 
@@ -228,16 +216,9 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           onSuccess();
         }
       }, 1500);
-    } catch (err) {
+    } else {
       setExecutionStatus('idle');
-      const errorMsg = handleApiError(err, {
-        showToast: true,
-        toastTitle: 'Failed to execute change plan',
-      });
-      setError(errorMsg);
-      console.error('Failed to execute change plan:', err);
-    } finally {
-      setIsSubmitting(false);
+      setError('Failed to execute change plan');
     }
   };
 

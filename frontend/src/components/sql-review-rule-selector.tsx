@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -17,7 +17,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { policiesService } from '@/lib/api/services/policies';
+import { useSQLReviewRules } from '@/hooks/api/usePoliciesSWR';
 import type {
   DatabaseEngine,
   RuleCategory,
@@ -37,29 +37,16 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
   config,
   onChange,
 }) => {
-  const [rules, setRules] = useState<Record<DatabaseEngine, Record<RuleCategory, RuleMetadata[]>>>(
-    {} as Record<DatabaseEngine, Record<RuleCategory, RuleMetadata[]>>,
-  );
-  const [loading, setLoading] = useState(true);
+  // Use SWR hook for automatic caching and revalidation
+  const { rules: rulesResponse, isLoading } = useSQLReviewRules();
   const [selectedEngine, setSelectedEngine] = useState<DatabaseEngine>('mysql');
 
-  useEffect(() => {
-    const loadRules = async () => {
-      try {
-        const response = await policiesService.getSQLReviewRules();
-        setRules({
-          mysql: (response.mysql || {}) as Record<RuleCategory, RuleMetadata[]>,
-          postgres: (response.postgres || {}) as Record<RuleCategory, RuleMetadata[]>,
-        });
-      } catch (error) {
-        console.error('Failed to load rules:', error);
-      } finally {
-        setLoading(false);
+  const rules: Record<DatabaseEngine, Record<RuleCategory, RuleMetadata[]>> = rulesResponse
+    ? {
+        mysql: (rulesResponse.mysql || {}) as Record<RuleCategory, RuleMetadata[]>,
+        postgres: (rulesResponse.postgres || {}) as Record<RuleCategory, RuleMetadata[]>,
       }
-    };
-
-    loadRules();
-  }, []);
+    : ({} as Record<DatabaseEngine, Record<RuleCategory, RuleMetadata[]>>);
 
   const convertParametersToPayload = (parameters?: RuleParameter[]): Record<string, unknown> => {
     if (!parameters || !Array.isArray(parameters)) {
@@ -236,7 +223,7 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return <div className="text-sm text-muted-foreground">Loading rules...</div>;
   }
 
