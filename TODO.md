@@ -37,16 +37,17 @@
 - [x] Fix: Changes Plans page should show all changes plans for filter project: all.
 - [x] Database should be a project level resource (not organization level)
 - [x] Update get request for project level resources use useCurrentProject hook to get the current project ID
+- [x] Optimize Frontend APIs calls: reduce the number of API calls and optimize the data fetching logic (use store to reuse data and avoid duplicate API calls).
 
 ### Current
 
 - [ ] Update Environments Page to use correct RBAC permissions
-- [ ] Optimize Frontend APIs calls: reduce the number of API calls and optimize the data fetching logic (use store to reuse data and avoid duplicate API calls).
-- [ ] SQL Review: SQL syntax built-in check
-- [ ] SQL Review: connection to the database built-in check
-- [ ] Update Tables to have pagination by default.
+- [ ] Update SQL Review: SQL syntax built-in check to use sql-reviewer pkg (DML dry-run validation).
+- [ ] Update SQL Review: connection to the database built-in check to use sql-reviewer pkg (connection validation).
+- [ ] Create reusable Table component to have pagination by default.
+- [ ] Update Tables to use the reusable Table component with pagination.
 - [ ] Create Helm Chart for Deeb deployment
-- [ ] Create Deeb CI/CD pipeline with GitHub Actions
+- [ ] Create Deeb CI/CD pipeline with GitHub Actions for deploy
 - [ ] Create database schema versions for schema change history
     - [ ] UI to view schema history
     - [ ] Button to set current schema as baseline version
