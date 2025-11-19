@@ -1,0 +1,246 @@
+name: 'Chart Releaser for ECR'
+description: 'Release Helm charts to AWS ECR with automatic versioning and GitHub releases'
+author: 'NSXBet'
+
+inputs:
+  aws-region:
+    description: 'AWS region for ECR'
+    required: false
+    default: 'us-east-1'
+  role-to-assume:
+    description: 'AWS IAM Role to assume for ECR access'
+    required: false
+    default: 'arn:aws:iam::492684252576:role/GithubHelmCharts'
+  ecr-registry:
+    description: 'ECR registry URL (without repository path)'
+    required: true
+  ecr-repository-prefix:
+    description: 'ECR repository prefix (e.g., "charts" results in charts/deeb)'
+    required: false
+    default: 'charts'
+  charts-dir:
+    description: 'Directory containing charts (relative to repo root)'
+    required: false
+    default: 'helm'
+  skip-existing:
+    description: 'Skip charts if version already exists in ECR'
+    required: false
+    default: 'true'
+  specific-chart:
+    description: 'Specific chart name to release (if empty, all changed charts)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: 'latest'
+
+    - name: Configure AWS Credentials
+      uses: nsx-actions/aws-actions_configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Login to Amazon ECR
+      uses: nsx-actions/aws-actions_amazon-ecr-login@v2
+      with:
+        mask-password: true
+
+    - name: Detect changed charts
+      id: changed-charts
+      shell: bash
+      env:
+        CHARTS_DIR: ${{ inputs.charts-dir }}
+        SPECIFIC_CHART: ${{ inputs.specific-chart }}
+      run: |
+        echo "🔍 Detecting changed charts..."
+
+        # If specific chart is provided (and not 'all'), use it
+        if [ -n "$SPECIFIC_CHART" ] && [ "$SPECIFIC_CHART" != "all" ]; then
+          echo "📦 Using specified chart: $SPECIFIC_CHART"
+          echo "charts=$SPECIFIC_CHART" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Get list of changed Chart.yaml files
+        CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep "^${CHARTS_DIR}/.*/Chart.yaml" || true)
+
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "No chart changes detected"
+          echo "charts=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Extract chart names
+        CHART_NAMES=""
+        for file in $CHANGED_FILES; do
+          CHART_DIR=$(dirname "$file")
+          CHART_NAME=$(basename "$CHART_DIR")
+          CHART_NAMES="$CHART_NAMES $CHART_NAME"
+        done
+
+        # Remove duplicates and trim
+        CHART_NAMES=$(echo "$CHART_NAMES" | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs)
+
+        echo "Changed charts: $CHART_NAMES"
+        echo "charts=$CHART_NAMES" >> $GITHUB_OUTPUT
+
+    - name: Release charts
+      shell: bash
+      env:
+        CHARTS_DIR: ${{ inputs.charts-dir }}
+        ECR_REGISTRY: ${{ inputs.ecr-registry }}
+        ECR_REPO_PREFIX: ${{ inputs.ecr-repository-prefix }}
+        AWS_REGION: ${{ inputs.aws-region }}
+        SKIP_EXISTING: ${{ inputs.skip-existing }}
+        CHANGED_CHARTS: ${{ steps.changed-charts.outputs.charts }}
+      run: |
+        if [ -z "$CHANGED_CHARTS" ]; then
+          echo "No charts to release"
+          exit 0
+        fi
+
+        for CHART_NAME in $CHANGED_CHARTS; do
+          echo ""
+          echo "================================================"
+          echo "📦 Processing chart: $CHART_NAME"
+          echo "================================================"
+
+          CHART_PATH="${CHARTS_DIR}/${CHART_NAME}"
+
+          if [ ! -f "$CHART_PATH/Chart.yaml" ]; then
+            echo "⚠️  Chart.yaml not found at $CHART_PATH/Chart.yaml"
+            continue
+          fi
+
+          # Extract version from Chart.yaml
+          VERSION=$(grep '^version:' "$CHART_PATH/Chart.yaml" | awk '{print $2}' | tr -d '"' | tr -d "'")
+
+          if [ -z "$VERSION" ]; then
+            echo "❌ Could not extract version from Chart.yaml"
+            exit 1
+          fi
+
+          ECR_REPO="${ECR_REPO_PREFIX}/${CHART_NAME}"
+
+          echo "Chart: $CHART_NAME"
+          echo "Version: $VERSION"
+          echo "ECR: $ECR_REGISTRY/$ECR_REPO:$VERSION"
+
+          TAG="${CHART_NAME}-${VERSION}"
+
+          # Check if git tag exists
+          TAG_EXISTS=false
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            TAG_EXISTS=true
+            echo "⚠️  Git tag $TAG already exists"
+          fi
+
+          # Check if version exists in ECR
+          ECR_EXISTS=false
+          if aws ecr describe-images \
+               --repository-name "$ECR_REPO" \
+               --image-ids imageTag="$VERSION" \
+               --region $AWS_REGION >/dev/null 2>&1; then
+            ECR_EXISTS=true
+            echo "⚠️  Version already exists in ECR"
+          fi
+
+          # Fail if BOTH tag exists AND ECR version exists
+          if [ "$TAG_EXISTS" = true ] && [ "$ECR_EXISTS" = true ]; then
+            echo ""
+            echo "❌ Release already exists!"
+            echo "Both git tag ($TAG) and ECR image exist."
+            echo "This release has already been published."
+            echo ""
+            exit 1
+          fi
+
+          # If only ECR exists but skip-existing is true, skip
+          if [ "$ECR_EXISTS" = true ] && [ "$SKIP_EXISTING" = "true" ]; then
+            echo "⏭️  Version already exists in ECR, skipping..."
+            continue
+          fi
+
+          # If only ECR exists and skip-existing is false, fail
+          if [ "$ECR_EXISTS" = true ] && [ "$SKIP_EXISTING" = "false" ]; then
+            echo "❌ Chart version already exists in ECR. Charts are immutable."
+            echo ""
+            echo "Action Required: Bump the version in $CHART_PATH/Chart.yaml"
+            exit 1
+          fi
+
+          echo "✓ Proceeding with release..."
+
+          # Ensure ECR repository exists
+          if ! aws ecr describe-repositories \
+               --repository-names "$ECR_REPO" \
+               --region $AWS_REGION >/dev/null 2>&1; then
+            echo "📝 Creating ECR repository: $ECR_REPO"
+            aws ecr create-repository \
+              --repository-name "$ECR_REPO" \
+              --region $AWS_REGION >/dev/null 2>&1
+          fi
+
+          # Package chart
+          echo "📦 Packaging chart..."
+          helm package "$CHART_PATH" --destination /tmp
+
+          # Push to ECR
+          echo "⬆️  Pushing to ECR..."
+          helm push "/tmp/${CHART_NAME}-${VERSION}.tgz" "oci://${ECR_REGISTRY}/${ECR_REPO_PREFIX}"
+
+          # Generate changelog: get all commits since last release tag for this chart
+          echo "📝 Generating changelog..."
+          PREV_TAG=$(git tag -l "${CHART_NAME}-*" --sort=-version:refname | head -n 1)
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --oneline --no-merges ${PREV_TAG}..HEAD -- "$CHART_PATH" | sed 's/^/- /')
+          else
+            CHANGELOG=$(git log --oneline --no-merges HEAD -- "$CHART_PATH" | sed 's/^/- /')
+          fi
+
+          # Create git tag (only if it doesn't exist)
+          if [ "$TAG_EXISTS" = false ]; then
+            echo "🏷️  Creating tag: $TAG"
+            git tag -a "$TAG" -m "Release $CHART_NAME version $VERSION"
+            git push origin "$TAG"
+          else
+            echo "ℹ️  Tag $TAG already exists, skipping tag creation"
+          fi
+
+          # Create GitHub Release
+          echo "🎉 Creating GitHub Release..."
+          gh release create "$TAG" \
+            --title "$CHART_NAME $VERSION" \
+            --notes "## Changes
+
+        $CHANGELOG
+
+        ## Chart Details
+
+        - **Chart**: $CHART_NAME
+        - **Version**: $VERSION
+        - **Registry**: \`oci://$ECR_REGISTRY/$ECR_REPO:$VERSION\`
+
+        ## Installation
+
+        \`\`\`bash
+        helm install $CHART_NAME oci://$ECR_REGISTRY/$ECR_REPO --version $VERSION
+        \`\`\`
+        "
+
+          echo "✅ Successfully released $CHART_NAME@$VERSION"
+        done
+
+        echo ""
+        echo "================================================"
+        echo "🎉 All charts processed successfully"
+        echo "================================================"
+
+branding:
+  icon: 'package'
+  color: 'blue'

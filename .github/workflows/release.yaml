@@ -1,0 +1,50 @@
+name: 'Charts: Release'
+
+on:
+  workflow_dispatch:
+    inputs:
+      chart:
+        description: 'Chart name to release'
+        required: false
+        type: choice
+        default: 'all'
+        options:
+          - 'all'
+          - 'deeb'
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - 'helm/**'
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  release:
+    name: Release Charts to ECR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Release Charts to ECR
+        uses: ./.github/actions/chart-releaser-ecr
+        with:
+          ecr-registry: 492684252576.dkr.ecr.us-east-1.amazonaws.com
+          ecr-repository-prefix: charts
+          charts-dir: helm
+          skip-existing: true
+          specific-chart: ${{ github.event.inputs.chart }}
+        env:
+          GH_TOKEN: ${{ github.token }}
