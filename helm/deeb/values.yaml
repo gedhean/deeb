@@ -286,7 +286,7 @@ frontend:
 
   # Environment variables for frontend
   env:
-    VITE_API_URL: ""  # Will be set to https://{{ .Values.global.domain }}/api
+    VITE_API_BASE_URL: ""  # Will be set to https://{{ .Values.global.domain }}/api
 
 # PostgreSQL database configuration (for metadata database)
 # Set enabled: true to deploy PostgreSQL as part of this chart

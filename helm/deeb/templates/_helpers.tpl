@@ -160,10 +160,10 @@ PostgreSQL service name
 API URL for frontend
 */}}
 {{- define "deeb.apiUrl" -}}
-{{- if .Values.frontend.env.VITE_API_URL }}
-{{- .Values.frontend.env.VITE_API_URL }}
+{{- if .Values.frontend.env.VITE_API_BASE_URL }}
+{{- .Values.frontend.env.VITE_API_BASE_URL }}
 {{- else }}
-{{- printf "https://%s/api" .Values.global.domain }}
+{{- printf "https://%s" .Values.global.domain | trimSuffix "/" }}
 {{- end }}
 {{- end }}
 
