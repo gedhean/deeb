@@ -1,5 +1,5 @@
 {{- if .Values.istio.enabled }}
-apiVersion: networking.istio.io/v1beta1
+apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
   name: {{ include "deeb.fullname" . }}
@@ -14,6 +14,8 @@ spec:
   - {{ .Values.istio.gateway.namespace }}/{{ .Values.istio.gateway.name }}
   http:
   # WebSocket routes - route to backend
+  # Note: Istio automatically handles WebSocket upgrade. No websocketUpgrade field needed.
+  # The long timeout allows WebSocket connections to stay open.
   - match:
     - uri:
         prefix: /ws
@@ -24,7 +26,6 @@ spec:
           number: {{ .Values.backend.service.port }}
       weight: 100
     timeout: 3600s  # 1 hour timeout for WebSocket connections
-    websocketUpgrade: true
 
   # API routes - route to backend
   - match:
