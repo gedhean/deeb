@@ -269,6 +269,8 @@ jobs:
           push: false
           load: true
           tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VITE_API_BASE_URL=https://deeb.nsx.services
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |
@@ -320,6 +322,8 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VITE_API_BASE_URL=https://deeb.nsx.services
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |

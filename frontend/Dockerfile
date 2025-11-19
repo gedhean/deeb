@@ -2,6 +2,9 @@
 # Stage 1: Build the React application
 FROM node:24-alpine AS builder
 
+# Build argument for API base URL
+ARG VITE_API_BASE_URL=https://deeb.nsx.services
+
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
@@ -20,7 +23,8 @@ COPY backend/config/iam /backend/config/iam
 # Copy source code
 COPY frontend/ .
 
-# Build the application
+# Build the application with API base URL
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN pnpm run build
 
 # Stage 2: Serve with nginx
