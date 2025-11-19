@@ -1,0 +1,367 @@
+name: 'Docker: Build and Push'
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Image to build and push'
+        required: false
+        type: choice
+        default: 'all'
+        options:
+          - 'all'
+          - 'backend'
+          - 'frontend'
+      tag:
+        description: 'Custom tag (leave empty to use git SHA)'
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/docker-build.yaml'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  ECR_REGISTRY: 492684252576.dkr.ecr.us-east-1.amazonaws.com
+  AWS_REGION: us-east-1
+
+jobs:
+  build-backend:
+    name: Build and Push Backend Image
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.image == 'all' || github.event.inputs.image == 'backend')) ||
+      (github.event_name == 'push') ||
+      (github.event_name == 'pull_request')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS Credentials
+        if: github.event_name != 'pull_request'
+        uses: nsx-actions/aws-actions_configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::492684252576:role/GithubEcr
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: github.event_name != 'pull_request'
+        uses: nsx-actions/aws-actions_amazon-ecr-login@v2
+        with:
+          mask-password: true
+
+      - name: Generate tags
+        id: meta
+        env:
+          CUSTOM_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          # Determine base tag
+          if [ -n "$CUSTOM_TAG" ]; then
+            BASE_TAG="$CUSTOM_TAG"
+          else
+            BASE_TAG="${GITHUB_SHA::7}"
+          fi
+
+          # Generate full tag list
+          TAGS="${{ env.ECR_REGISTRY }}/deeb-backend:${BASE_TAG}"
+
+          # Add 'latest' tag for main branch pushes
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+            TAGS="${TAGS},${{ env.ECR_REGISTRY }}/deeb-backend:latest"
+          fi
+
+          # Add branch tag for release branches
+          if [[ "${{ github.ref }}" == refs/heads/release/* ]]; then
+            BRANCH_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/||' | sed 's|/|-|g')
+            TAGS="${TAGS},${{ env.ECR_REGISTRY }}/deeb-backend:${BRANCH_NAME}"
+          fi
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "version=${BASE_TAG}" >> $GITHUB_OUTPUT
+
+          echo "📦 Generated tags:"
+          echo "$TAGS" | tr ',' '\n'
+
+      - name: Build Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/docker/Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Test Backend Image
+        run: |
+          echo "🧪 Testing backend image..."
+
+          # Get first tag for testing
+          TEST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | cut -d',' -f1)
+
+          # Run container and check if it starts
+          docker run --rm -d --name deeb-backend-test \
+            -e DATABASE_URL=postgresql://test:test@localhost:5432/test \
+            -e JWT_SECRET=test-secret \
+            -e OAUTH_GOOGLE_CLIENT_ID=test \
+            -e OAUTH_GOOGLE_CLIENT_SECRET=test \
+            -e OAUTH_GITHUB_CLIENT_ID=test \
+            -e OAUTH_GITHUB_CLIENT_SECRET=test \
+            $TEST_TAG ./deeb --help
+
+          # Wait for container to finish
+          sleep 5
+
+          echo "✅ Backend image test passed"
+
+      - name: Scan Backend Image for Vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/deeb-backend:${{ steps.meta.outputs.version }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Push Backend Image to ECR
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Ensure ECR Repository Exists
+        if: github.event_name != 'pull_request'
+        run: |
+          aws ecr describe-repositories --repository-names deeb-backend --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository --repository-name deeb-backend --region ${{ env.AWS_REGION }}
+
+      - name: Output Image Information
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## 🐳 Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Backend Image" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull command:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.ECR_REGISTRY }}/deeb-backend:${{ steps.meta.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment PR with Image Info
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `## 🐳 Docker Build Results
+
+            ### Backend Image Built Successfully
+
+            **Image tags that would be pushed:**
+            \`\`\`
+            ${{ steps.meta.outputs.tags }}
+            \`\`\`
+
+            > ⚠️ Images are only pushed to ECR on merges to \`main\` or \`release/**\` branches.
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+  build-frontend:
+    name: Build and Push Frontend Image
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.image == 'all' || github.event.inputs.image == 'frontend')) ||
+      (github.event_name == 'push') ||
+      (github.event_name == 'pull_request')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS Credentials
+        if: github.event_name != 'pull_request'
+        uses: nsx-actions/aws-actions_configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::492684252576:role/GithubHelmCharts
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: github.event_name != 'pull_request'
+        uses: nsx-actions/aws-actions_amazon-ecr-login@v2
+        with:
+          mask-password: true
+
+      - name: Generate tags
+        id: meta
+        env:
+          CUSTOM_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          # Determine base tag
+          if [ -n "$CUSTOM_TAG" ]; then
+            BASE_TAG="$CUSTOM_TAG"
+          else
+            BASE_TAG="${GITHUB_SHA::7}"
+          fi
+
+          # Generate full tag list
+          TAGS="${{ env.ECR_REGISTRY }}/deeb-frontend:${BASE_TAG}"
+
+          # Add 'latest' tag for main branch pushes
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+            TAGS="${TAGS},${{ env.ECR_REGISTRY }}/deeb-frontend:latest"
+          fi
+
+          # Add branch tag for release branches
+          if [[ "${{ github.ref }}" == refs/heads/release/* ]]; then
+            BRANCH_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/||' | sed 's|/|-|g')
+            TAGS="${TAGS},${{ env.ECR_REGISTRY }}/deeb-frontend:${BRANCH_NAME}"
+          fi
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "version=${BASE_TAG}" >> $GITHUB_OUTPUT
+
+          echo "📦 Generated tags:"
+          echo "$TAGS" | tr ',' '\n'
+
+      - name: Build Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Test Frontend Image
+        run: |
+          echo "🧪 Testing frontend image..."
+
+          # Get first tag for testing
+          TEST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | cut -d',' -f1)
+
+          # Run container and check if nginx starts and health check works
+          docker run --rm -d --name deeb-frontend-test -p 8081:80 $TEST_TAG
+
+          # Wait for container to start
+          sleep 5
+
+          # Check health endpoint
+          curl -f http://localhost:8081/health || exit 1
+
+          # Stop container
+          docker stop deeb-frontend-test
+
+          echo "✅ Frontend image test passed"
+
+      - name: Scan Frontend Image for Vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/deeb-frontend:${{ steps.meta.outputs.version }}
+          format: 'sarif'
+          output: 'trivy-results-frontend.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Push Frontend Image to ECR
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Ensure ECR Repository Exists
+        if: github.event_name != 'pull_request'
+        run: |
+          aws ecr describe-repositories --repository-names deeb-frontend --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository --repository-name deeb-frontend --region ${{ env.AWS_REGION }}
+
+      - name: Output Image Information
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## 🐳 Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Frontend Image" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull command:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.ECR_REGISTRY }}/deeb-frontend:${{ steps.meta.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment PR with Image Info
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `## 🐳 Docker Build Results
+
+            ### Frontend Image Built Successfully
+
+            **Image tags that would be pushed:**
+            \`\`\`
+            ${{ steps.meta.outputs.tags }}
+            \`\`\`
+
+            > ⚠️ Images are only pushed to ECR on merges to \`main\` or \`release/**\` branches.
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
