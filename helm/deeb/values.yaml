@@ -1,6 +1,8 @@
 # Default values for deeb
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
+nameOverride: ""
+fullnameOverride: ""
 
 # Global settings
 global:
@@ -266,7 +268,7 @@ frontend:
   livenessProbe:
     httpGet:
       path: /
-      port: 3000
+      port: 8080
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
@@ -276,7 +278,7 @@ frontend:
   readinessProbe:
     httpGet:
       path: /
-      port: 3000
+      port: 8080
     initialDelaySeconds: 10
     periodSeconds: 5
     timeoutSeconds: 3
