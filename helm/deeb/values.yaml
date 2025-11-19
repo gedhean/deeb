@@ -132,6 +132,67 @@ backend:
       defaultPolicy: "deny"
       logAllPaths: false
       redactionEnabled: true
+      resources:
+        # User resource - logs authentication and user management
+        user:
+          enabled: true
+          actions:
+            - login
+            - logout
+            - register
+            - create_user
+            - update_user
+            - delete_user
+            - update_user_role
+        # Change Plan resource - logs database change workflow
+        change_plan:
+          enabled: true
+          actions:
+            # Generic CRUD actions (used for standard HTTP methods like POST, GET, PUT, DELETE)
+            - create  # For POST /api/v1/change-plans
+            - update  # For PUT/PATCH /api/v1/change-plans/:id
+            - delete  # For DELETE /api/v1/change-plans/:id
+            # Specific workflow actions (detected by path suffix in middleware)
+            - approve_change_plan  # For POST /api/v1/change-plans/:id/approve
+            - reject_change_plan  # For POST /api/v1/change-plans/:id/reject
+            - close_change_plan  # For POST /api/v1/change-plans/:id/close
+            - execute_change_plan  # For POST /api/v1/change-plans/:id/execute
+        # Project resource - logs project management
+        project:
+          enabled: true
+          actions:
+            # Specific project actions
+            - create_project
+            - update_project
+            - delete_project
+            - add_project_member
+            - remove_project_member
+            - update_project_member_role
+        # Database resource - logs database and instance management
+        database:
+          enabled: true
+          actions:
+            - create_database
+            - update_database
+            - delete_database
+        # Database Instance resource
+        database_instance:
+          enabled: true
+          actions:
+            - create_database_instance
+            - update_database_instance
+            - delete_database_instance
+        # Environment resource - logs environment management
+        environment:
+          enabled: true
+          actions:
+            - create_environment
+            - update_environment
+            - delete_environment
+        # Policy resource - logs policy management
+        policy:
+          enabled: true
+          actions: [create_policy, update_policy, delete_policy]
 
 # Frontend configuration
 frontend:

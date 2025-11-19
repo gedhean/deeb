@@ -94,39 +94,39 @@ spec:
           valueFrom:
             secretKeyRef:
               name: {{ include "deeb.fullname" . }}-backend-secret
-              key: jwt-secret
+              key: JWT_SECRET
 
         # Encryption key from Secret
         - name: ENCRYPTION_KEY
           valueFrom:
             secretKeyRef:
               name: {{ include "deeb.fullname" . }}-backend-secret
-              key: encryption-key
+              key: ENCRYPTION_KEY
 
         # OAuth credentials from Secret
         - name: GOOGLE_CLIENT_ID
           valueFrom:
             secretKeyRef:
               name: {{ include "deeb.fullname" . }}-backend-secret
-              key: google-client-id
+              key: GOOGLE_CLIENT_ID
               optional: true
         - name: GOOGLE_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
               name: {{ include "deeb.fullname" . }}-backend-secret
-              key: google-client-secret
+              key: GOOGLE_CLIENT_SECRET
               optional: true
         - name: GITHUB_CLIENT_ID
           valueFrom:
             secretKeyRef:
               name: {{ include "deeb.fullname" . }}-backend-secret
-              key: github-client-id
+              key: GITHUB_CLIENT_ID
               optional: true
         - name: GITHUB_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
               name: {{ include "deeb.fullname" . }}-backend-secret
-              key: github-client-secret
+              key: GITHUB_CLIENT_SECRET
               optional: true
 
         # Server configuration from ConfigMap
