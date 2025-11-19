@@ -34,6 +34,7 @@ spec:
     {{- if .Values.istio.virtualService.cors.enabled }}
     corsPolicy:
       allowOrigins:
+      - exact: {{ include "deeb.frontendUrl" . | quote }}
       {{- range .Values.istio.virtualService.cors.allowOrigins }}
       {{- range $key, $value := . }}
       - {{ $key }}: {{ $value }}

@@ -228,7 +228,7 @@ frontend:
   service:
     type: ClusterIP
     port: 80
-    targetPort: 3000
+    targetPort: 8080
 
   resources:
     limits:
@@ -444,8 +444,7 @@ istio:
     # CORS configuration
     cors:
       enabled: true
-      allowOrigins:
-        - exact: "https://deeb.example.com"
+      allowOrigins: []
       allowMethods:
         - GET
         - POST
