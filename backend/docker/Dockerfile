@@ -42,6 +42,9 @@ COPY --from=builder /app/migrations ./migrations
 # Copy API documentation
 COPY --from=builder /app/api ./api
 
+# Copy production configuration
+COPY --from=builder /app/config.prd.yaml ./config.yaml
+
 # Change ownership to non-root user
 RUN chown -R deeb:deeb /app
 
@@ -55,5 +58,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-# Default command runs the server
-CMD ["./deeb", "server"]
+# Default command runs the server with config file
+CMD ["./deeb", "server", "--config", "config.yaml"]
