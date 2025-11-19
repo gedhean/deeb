@@ -9,13 +9,16 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 # Copy package files
-COPY package.json pnpm-lock.yaml ./
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
+# Copy backend IAM config for RBAC generation
+COPY backend/config/iam /backend/config/iam
+
 # Copy source code
-COPY . .
+COPY frontend/ .
 
 # Build the application
 RUN pnpm run build
