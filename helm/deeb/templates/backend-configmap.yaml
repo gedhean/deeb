@@ -25,7 +25,7 @@ data:
   logging.level: {{ .Values.backend.config.logging.level | quote }}
   logging.format: {{ .Values.backend.config.logging.format | quote }}
 
-  # Full config.yaml file
+  # Full config.yaml file (mainly for audit logging configuration)
   config.yaml: |
     server:
       host: {{ .Values.backend.config.server.host }}
@@ -70,3 +70,5 @@ data:
       default_policy: {{ .Values.backend.config.auditLogging.defaultPolicy | quote }}
       log_all_paths: {{ .Values.backend.config.auditLogging.logAllPaths }}
       redaction_enabled: {{ .Values.backend.config.auditLogging.redactionEnabled }}
+      resources:
+      {{- toYaml .Values.backend.config.auditLogging.resources | nindent 8 }}

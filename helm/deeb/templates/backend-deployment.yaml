@@ -46,6 +46,14 @@ spec:
         resources:
           {{- toYaml .Values.backend.resources | nindent 12 }}
         env:
+        {{- if .Values.externalSecrets.enabled }}
+        # Database configuration from deeb-postgres-secret (ExternalSecret)
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: deeb-postgres-secret
+              key: DATABASE_URL
+        {{- else }}
         # Database configuration from ConfigMap
         - name: DB_HOST
           valueFrom:
@@ -79,6 +87,7 @@ spec:
             secretKeyRef:
               name: {{ include "deeb.fullname" . }}-backend-secret
               key: database-password
+        {{- end }}
 
         # JWT Secret from Secret
         - name: JWT_SECRET
