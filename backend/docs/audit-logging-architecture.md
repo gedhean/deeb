@@ -212,32 +212,169 @@ When logging actions that may fail:
 
 ### 6. Middleware Integration
 
-The audit logging middleware automatically captures:
+The audit logging middleware (`AuditLogMiddleware`) automatically captures and logs all authenticated HTTP requests. It runs **after** the request handler completes, ensuring it captures the actual response state.
+
+**Architecture:**
+
+```
+HTTP Request
+    ↓
+Auth Middleware (sets user in context)
+    ↓
+Audit Middleware (wraps handler)
+    ↓
+Handler Execution
+    ↓
+Response Captured
+    ↓
+Build Details JSON
+    ↓
+Apply Redaction (automatic)
+    ↓
+Async Audit Log (non-blocking goroutine)
+    ↓
+HTTP Response
+```
+
+**Automatically Captured Fields:**
 - HTTP method (GET, POST, PUT, DELETE, etc.)
 - Request path
 - Response status code
 - User ID (from authenticated context)
-- IP address
+- IP address (supports `X-Forwarded-For` and `X-Real-IP` proxy headers)
 - User agent
 
-**Middleware should log:**
-- All authenticated requests (except health checks, static assets)
-- Include request/response details in `Details` JSON
+**HTTP Method to Action Mapping:**
 
-### 7. Service Method Pattern
+The middleware automatically maps HTTP methods to audit actions:
+- `POST` → `create`
+- `GET` → `read`
+- `PUT/PATCH` → `update`
+- `DELETE` → `delete`
 
-The audit logging service should provide helper methods for common patterns:
+**Path to Resource Type Extraction:**
+
+Resource types are extracted from the API path:
+```
+/api/v1/change-plans/{id} → resource_type: "change_plan"
+/api/v1/databases/{id}    → resource_type: "database"
+/api/v1/users/{id}        → resource_type: "user"
+```
+
+**Special Action Detection:**
+
+The middleware detects special actions from the request path:
+- `/approve` → `approve_change_plan`
+- `/reject` → `reject_change_plan`
+- `/execute` → `execute_change_plan`
+- `/close` → `close_change_plan`
+- `/login` → `login` (resource type: `user`)
+- `/logout` → `logout` (resource type: `user`)
+
+**What Gets Logged:**
+- All authenticated requests (user ID ≠ nil)
+- All response status codes (including errors)
+
+**What Gets Skipped:**
+- Health check endpoints (`/health`, `/healthz`, `/ready`)
+- Static assets (`/static/`, `/assets/`, `.css`, `.js`, `.png`, `.jpg`, `.ico`)
+- Swagger UI assets (`/api/docs/swagger`)
+- Unauthenticated requests (no user in context)
+
+**Async Logging:**
+
+Audit logging is performed asynchronously in a goroutine to avoid blocking the HTTP response:
+- Uses `context.Background()` instead of request context to prevent cancellation
+- Errors in audit logging are logged but don't fail the request
+- Even if the client disconnects, the audit log is still written
+
+### 7. Handler Enrichment Pattern
+
+Handlers can provide additional context to audit logs using the **AuditEnrichment** pattern. This allows handlers to add business-specific details that the middleware alone cannot capture.
+
+**AuditEnrichment Structure:**
 
 ```go
-// Log a simple action
+type AuditEnrichment struct {
+    Email         string                 `json:"email,omitempty"`
+    FailureReason string                 `json:"failure_reason,omitempty"`
+    ErrorMessage  string                 `json:"error_message,omitempty"`
+    Result        string                 `json:"result,omitempty"` // "success" or "failure"
+    Custom        map[string]interface{} `json:"-"`                // Merged inline
+}
+```
+
+**How to Use in Handlers:**
+
+```go
+func LoginHandler(c echo.Context) error {
+    // ... authentication logic ...
+
+    // Add enrichment for audit log
+    c.Set("audit_enrichment", &middleware.AuditEnrichment{
+        Email: email,
+        Result: "success",
+        Custom: map[string]interface{}{
+            "login_method": "oauth",
+            "provider": "google",
+        },
+    })
+
+    return c.JSON(http.StatusOK, response)
+}
+```
+
+**Enrichment for Failed Operations:**
+
+```go
+func CreateChangePlanHandler(c echo.Context) error {
+    // ... validation fails ...
+
+    c.Set("audit_enrichment", &middleware.AuditEnrichment{
+        Result: "failure",
+        ErrorMessage: "Invalid SQL syntax",
+        FailureReason: "validation_error",
+    })
+
+    return echo.NewHTTPError(http.StatusBadRequest, "Invalid request")
+}
+```
+
+**How Enrichment Works:**
+
+1. Handler sets enrichment in Echo context using `c.Set("audit_enrichment", ...)`
+2. Middleware checks for enrichment after handler completes
+3. Enrichment fields are merged into the audit log `Details` JSON
+4. Custom fields are merged inline (not nested)
+5. All fields go through automatic redaction before storage
+
+**Enrichment vs. Direct Logging:**
+
+- ✅ **Use enrichment** when the middleware logs the request (most cases)
+- ✅ **Use enrichment** to add business context (email, operation result, etc.)
+- ❌ **Don't use direct logging** in handlers unless the operation is not an HTTP request
+- ❌ **Don't bypass** the middleware - it ensures consistent logging
+
+### 8. Service Method Pattern
+
+The audit logging service provides helper methods for different logging scenarios:
+
+```go
+// Log a simple action (use when not in HTTP context)
 Log(ctx, userID, action, resourceType, resourceID, details)
 
-// Log with HTTP context (captures IP, user agent)
+// Log with HTTP context (captures IP, user agent) - used by middleware
 LogWithHTTP(ctx, userID, action, resourceType, resourceID, httpRequest, details)
 
-// Log state transition
+// Log state transition (convenience method)
 LogStateTransition(ctx, userID, resourceType, resourceID, fromStatus, toStatus, details)
 ```
+
+**When to Use Each Method:**
+
+- **LogWithHTTP**: Used by middleware automatically (don't call from handlers)
+- **Log**: Use for background jobs, scheduled tasks, or non-HTTP operations
+- **LogStateTransition**: Use for explicit state changes (rare - middleware handles most cases)
 
 ## Examples
 
@@ -272,41 +409,289 @@ details := json.RawMessage(`{
 auditService.Log(ctx, executorID, "execute_change_plan", "change_plan", changePlanID, details)
 ```
 
-### Example 4: Login (with HTTP context)
+### Example 4: Login with Enrichment (Middleware Pattern)
 
 ```go
-auditService.LogWithHTTP(ctx, userID, "login", "user", userID, httpRequest, json.RawMessage(`{
-  "result": "success",
-  "email": "user@example.com"
-}`))
+func LoginHandler(c echo.Context) error {
+    var req LoginRequest
+    if err := c.Bind(&req); err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, "Invalid request")
+    }
+
+    // Authenticate user
+    user, err := authService.Authenticate(req.Email, req.Password)
+    if err != nil {
+        // Enrichment for failed login
+        c.Set("audit_enrichment", &middleware.AuditEnrichment{
+            Email: req.Email,
+            Result: "failure",
+            FailureReason: "invalid_credentials",
+        })
+        return echo.NewHTTPError(http.StatusUnauthorized, "Invalid credentials")
+    }
+
+    // Enrichment for successful login
+    c.Set("audit_enrichment", &middleware.AuditEnrichment{
+        Email: user.Email,
+        Result: "success",
+        Custom: map[string]interface{}{
+            "login_method": "password",
+        },
+    })
+
+    return c.JSON(http.StatusOK, user)
+}
 ```
+
+**Resulting Audit Log (automatically redacted):**
+```json
+{
+  "user_id": "user-uuid",
+  "action": "login",
+  "resource_type": "user",
+  "resource_id": "user-uuid",
+  "details": {
+    "method": "POST",
+    "path": "/api/v1/auth/login",
+    "status": 200,
+    "status_code": 200,
+    "result": "success",
+    "email": "user@example.com",
+    "login_method": "password"
+  },
+  "ip_address": "192.168.1.1",
+  "user_agent": "Mozilla/5.0...",
+  "timestamp": "2025-01-18T10:30:00Z"
+}
+```
+
+### Example 5: Create Database Instance with Credentials (Redacted)
+
+```go
+func CreateDatabaseInstanceHandler(c echo.Context) error {
+    var req CreateDatabaseInstanceRequest
+    if err := c.Bind(&req); err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, "Invalid request")
+    }
+
+    // Create database instance
+    instance, err := dbService.CreateInstance(ctx, req)
+    if err != nil {
+        c.Set("audit_enrichment", &middleware.AuditEnrichment{
+            Result: "failure",
+            ErrorMessage: err.Error(),
+        })
+        return err
+    }
+
+    // Enrichment with connection details
+    c.Set("audit_enrichment", &middleware.AuditEnrichment{
+        Result: "success",
+        Custom: map[string]interface{}{
+            "database_name": req.DatabaseName,
+            "host": req.Host,
+            "port": req.Port,
+            // Note: Even if you accidentally include sensitive data,
+            // it will be automatically redacted
+            "connection_string": req.ConnectionString,
+            "db_password": req.Password,
+        },
+    })
+
+    return c.JSON(http.StatusCreated, instance)
+}
+```
+
+**Resulting Audit Log (with automatic redaction):**
+```json
+{
+  "user_id": "user-uuid",
+  "action": "create",
+  "resource_type": "database_instance",
+  "resource_id": "instance-uuid",
+  "details": {
+    "method": "POST",
+    "path": "/api/v1/database-instances",
+    "status": 201,
+    "status_code": 201,
+    "result": "success",
+    "database_name": "myapp_db",
+    "host": "db.example.com",
+    "port": 5432,
+    "connection_string": "[REDACTED]",
+    "db_password": "[REDACTED]"
+  },
+  "ip_address": "192.168.1.1",
+  "user_agent": "curl/7.68.0",
+  "timestamp": "2025-01-18T10:35:00Z"
+}
+```
+
+### Example 6: SQL Execution with Risk Assessment
+
+```go
+// In change plan execution handler
+sqlDetails := audit.SQLExecutionDetails{
+    Statement:       "DROP TABLE old_users",
+    StatementType:   audit.SQLTypeDDL,
+    RiskLevel:       audit.SQLRiskHigh,
+    DatabaseName:    "production_db",
+    Environment:     "production",
+    RowsAffected:    0,
+    ExecutionTimeMS: 125,
+    Success:         true,
+}
+
+detailsJSON, _ := json.Marshal(sqlDetails)
+
+c.Set("audit_enrichment", &middleware.AuditEnrichment{
+    Result: "success",
+    Custom: map[string]interface{}{
+        "sql_execution": sqlDetails,
+    },
+})
+```
+
+**Resulting Audit Log:**
+```json
+{
+  "user_id": "user-uuid",
+  "action": "execute_change_plan",
+  "resource_type": "change_plan",
+  "resource_id": "plan-uuid",
+  "details": {
+    "method": "POST",
+    "path": "/api/v1/change-plans/{id}/execute",
+    "status": 200,
+    "status_code": 200,
+    "result": "success",
+    "sql_execution": {
+      "statement": "DROP TABLE old_users",
+      "statement_type": "DDL",
+      "risk_level": "high",
+      "database_name": "production_db",
+      "environment": "production",
+      "rows_affected": 0,
+      "execution_time_ms": 125,
+      "success": true
+    }
+  },
+  "ip_address": "192.168.1.1",
+  "user_agent": "DeebCLI/1.0",
+  "timestamp": "2025-01-18T10:40:00Z"
+}
+```
+
+**Note:** Query results are **never** included in SQL execution audit logs.
 
 ## Security Considerations
 
-1. **Never log sensitive data** in Details:
-   - ❌ Passwords
-   - ❌ API keys
-   - ❌ Encryption keys
-   - ❌ Full SQL content (use previews/summaries)
+### Automatic Sensitive Data Redaction
 
-2. **Log access to sensitive resources:**
-   - Reading audit logs themselves
-   - Accessing user data
-   - Accessing database credentials
+The audit logging system includes a comprehensive redaction system that **automatically** strips sensitive data from audit logs before storage. This ensures security by default without requiring developers to manually redact data.
+
+**Redacted Field Patterns (case-insensitive):**
+
+1. **Passwords:**
+   - `password`, `passwd`, `pwd`
+   - `new_password`, `old_password`, `current_password`
+
+2. **Database Credentials:**
+   - `db_password`, `datasource_password`, `database_password`
+   - `connection_string` (credentials are stripped from connection URIs)
+
+3. **MFA/2FA Secrets:**
+   - `mfa_secret`, `totp_secret`, `otp_secret`
+   - `backup_codes`, `recovery_keys`, `two_factor_secret`
+
+4. **Authentication Tokens:**
+   - `api_key`, `api_secret`, `access_token`, `refresh_token`
+   - `auth_token`, `bearer_token`, `secret_key`, `private_key`, `encryption_key`
+
+5. **Financial Data:**
+   - `credit_card`, `card_number`, `cvv`, `ssn`, `social_security`
+
+6. **Personal Identifiable Information:**
+   - `passport`, `tax_id`, `license_number`
+
+**How Redaction Works:**
+
+- Redaction is applied in the middleware's `buildDetails()` method
+- All sensitive field values are replaced with `[REDACTED]`
+- Redaction works recursively on nested JSON objects and arrays
+- Redaction is **enabled by default** for security
+- Can be disabled for testing with `SetRedactionEnabled(false)`
+
+**Connection String Redaction:**
+
+Connection strings are specially handled to strip embedded credentials:
+```
+postgresql://user:password@host:5432/db
+→ postgresql://user:[REDACTED]@host:5432/db
+```
+
+### SQL Execution Logging
+
+SQL execution audit logs capture metadata but **never log query results** to prevent data leakage:
+
+**What Gets Logged:**
+- ✅ Full SQL statement text
+- ✅ Statement type (DDL, DML, DCL, TCL, Query)
+- ✅ Risk level (high/medium/low based on statement type)
+- ✅ Execution metadata: `rows_affected`, `execution_time_ms`, `database_name`, `environment`
+- ✅ Success/failure status and error messages
+
+**What NEVER Gets Logged:**
+- ❌ Query results
+- ❌ Returned rows
+- ❌ Data values from SELECT statements
+
+**Risk Level Classification:**
+- **High risk**: DROP, TRUNCATE, UPDATE/DELETE without WHERE clause
+- **Medium risk**: CREATE, ALTER, UPDATE/DELETE with WHERE clause, DCL operations
+- **Low risk**: SELECT, INSERT, SHOW, DESCRIBE, TCL operations
+
+### Best Practices for Developers
+
+1. **Never manually include sensitive data** in Details JSON:
+   - ❌ Don't pass raw passwords
+   - ❌ Don't pass API keys
+   - ❌ Don't pass SQL query results
+   - ✅ Use the enrichment pattern (see below) and let redaction handle it
+
+2. **Use the AuditEnrichment pattern** for adding context:
+   ```go
+   c.Set("audit_enrichment", &middleware.AuditEnrichment{
+       Email: email,
+       Result: "success",
+       Custom: map[string]interface{}{
+           "login_method": "oauth",
+       },
+   })
+   ```
 
 3. **Log failed authentication attempts:**
    - Failed logins
    - Invalid tokens
    - Permission denied errors
 
+4. **Adding new sensitive field patterns:**
+   ```go
+   redactor := audit.NewRedactor()
+   redactor.AddPattern(`(?i)custom_secret`, "Custom secret field")
+   ```
+
 ## Performance Considerations
 
-1. **Async logging** (future enhancement):
-   - Consider async logging for high-volume operations
-   - Use a queue/worker pattern for non-blocking audit logs
+1. **Async logging** (currently implemented):
+   - Audit logging is performed asynchronously in goroutines to avoid blocking HTTP responses
+   - Uses `context.Background()` instead of request context to prevent cancellation
+   - Errors in audit logging are logged but don't fail requests
+   - Non-blocking behavior ensures client requests complete quickly regardless of audit log performance
 
-2. **Batch logging** (future enhancement):
-   - Batch multiple log entries for bulk operations
+2. **Queue/batching optimizations** (future enhancement):
+   - Consider implementing a queue/worker pattern for higher throughput
+   - Batch multiple log entries for bulk operations to reduce database roundtrips
 
 3. **Indexing:**
    - All filterable fields are indexed (user_id, action, resource_type, resource_id, timestamp)

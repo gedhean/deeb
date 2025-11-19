@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
+import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 import type {
   CreateEnvironmentRequest,
   UpdateEnvironmentRequest,
@@ -16,7 +18,6 @@ import { usePolicies } from '@/hooks/api/usePoliciesSWR';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -35,15 +36,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle, Globe } from 'lucide-react';
+import { DataTable, DataTableToolbar } from '@/components/data-table';
+import type { FilterDefinition } from '@/components/data-table/types';
+import { getEnvironmentsColumns } from './environments/columns';
+import { Plus, AlertTriangle, Globe } from 'lucide-react';
 
 export const EnvironmentsPage: React.FC = () => {
   const { user } = useAuth();
@@ -51,6 +47,10 @@ export const EnvironmentsPage: React.FC = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedEnvironment, setSelectedEnvironment] = useState<Environment | null>(null);
+
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   // Form state
   const [formData, setFormData] = useState<CreateEnvironmentRequest>({
@@ -65,15 +65,30 @@ export const EnvironmentsPage: React.FC = () => {
     policy_id?: string;
   }>({});
 
-  // Check if user is admin
-  const isAdmin = user?.organization_role === 'OrganizationAdmin';
+  // Check permissions
+  const canRead = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.EnvironmentsRead,
+  );
+  const canCreate = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.EnvironmentsCreate,
+  );
+  const canUpdate = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.EnvironmentsUpdate,
+  );
+  const canDelete = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.EnvironmentsDelete,
+  );
 
   // Use SWR hooks for data fetching
   const { environments, isLoading, error } = useEnvironmentsSWR();
   const { policies, isLoading: isLoadingPolicies } = usePolicies({
     type: 'SQL_REVIEW',
     limit: 100,
-    enabled: isAdmin,
+    enabled: canRead,
   });
 
   // Use mutation hooks
@@ -160,14 +175,14 @@ export const EnvironmentsPage: React.FC = () => {
   };
 
   // Open create form
-  const openCreateForm = () => {
+  const openCreateForm = useCallback(() => {
     setFormData({ name: '', description: '', policy_id: undefined, allow_self_approval: false });
     setFormErrors({});
     setIsCreateOpen(true);
-  };
+  }, []);
 
   // Open edit form
-  const openEditForm = (environment: Environment) => {
+  const openEditForm = useCallback((environment: Environment) => {
     setSelectedEnvironment(environment);
     setFormData({
       name: environment.name,
@@ -177,38 +192,95 @@ export const EnvironmentsPage: React.FC = () => {
     });
     setFormErrors({});
     setIsEditOpen(true);
-  };
+  }, []);
 
   // Open delete confirmation
-  const openDeleteConfirmation = (environment: Environment) => {
+  const openDeleteConfirmation = useCallback((environment: Environment) => {
     setSelectedEnvironment(environment);
     setIsDeleteOpen(true);
-  };
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    } catch {
-      return dateString;
-    }
-  };
+  }, []);
 
   // Get policy name by ID
-  const getPolicyName = (policyId?: string): string => {
-    if (!policyId) {
-      return 'None';
-    }
-    const policy = policies.find((p) => p.id === policyId);
-    return policy?.name || 'Unknown';
-  };
+  const getPolicyName = useCallback(
+    (policyId?: string): string => {
+      if (!policyId) {
+        return 'None';
+      }
+      const policy = policies.find((p) => p.id === policyId);
+      return policy?.name || 'Unknown';
+    },
+    [policies],
+  );
 
-  // Render access denied
-  if (!isAdmin) {
+  // Get columns with action handlers
+  const columns = getEnvironmentsColumns({
+    onEdit: openEditForm,
+    onDelete: openDeleteConfirmation,
+    canUpdate: canUpdate,
+    canDelete: canDelete,
+    getPolicyName,
+  });
+
+  // Create policy filter options
+  const policyOptions = useMemo(
+    () =>
+      policies.map((policy) => ({
+        label: policy.name,
+        value: policy.id,
+      })),
+    [policies],
+  );
+
+  // Create filter definitions
+  const filterDefinitions: FilterDefinition[] = useMemo(
+    () => [
+      {
+        id: 'name',
+        type: 'search',
+        title: 'Name',
+        placeholder: 'Search names...',
+        defaultActive: true,
+      },
+      {
+        id: 'policy',
+        type: 'faceted',
+        title: 'Policy',
+        options: policyOptions,
+      },
+      {
+        id: 'allow_self_approval',
+        type: 'faceted',
+        title: 'Self Approval',
+        options: [
+          { label: 'Enabled', value: 'true' },
+          { label: 'Disabled', value: 'false' },
+        ],
+      },
+      {
+        id: 'created_at',
+        type: 'dateRange',
+        title: 'Created',
+        presets: [
+          {
+            label: 'Last 7 days',
+            getValue: () => [subDays(new Date(), 7), new Date()],
+          },
+          {
+            label: 'Last 30 days',
+            getValue: () => [subDays(new Date(), 30), new Date()],
+          },
+          {
+            label: 'Last 90 days',
+            getValue: () => [subDays(new Date(), 90), new Date()],
+          },
+        ],
+      },
+    ],
+    [policyOptions],
+  );
+
+  // Render access denied if user doesn't have read permission
+  if (!canRead) {
     return (
       <DefaultLayout breadcrumbs={[{ label: 'Environments', isCurrentPage: true }]}>
         <Card>
@@ -218,7 +290,7 @@ export const EnvironmentsPage: React.FC = () => {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This page requires Organization Admin role.
+              This page requires the environments.read permission.
             </p>
           </CardContent>
         </Card>
@@ -237,10 +309,12 @@ export const EnvironmentsPage: React.FC = () => {
               Manage environments and assign policies for database change requests
             </p>
           </div>
-          <Button onClick={openCreateForm}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Environment
-          </Button>
+          {canCreate && (
+            <Button onClick={openCreateForm}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Environment
+            </Button>
+          )}
         </div>
 
         {/* Error message */}
@@ -256,20 +330,7 @@ export const EnvironmentsPage: React.FC = () => {
         )}
 
         {/* Environments list */}
-        {isLoading ? (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
-                <Skeleton className="h-9 w-full" />
-                <div className="space-y-2">
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-4 w-32" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : environments.length === 0 ? (
+        {!isLoading && environments.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
               <Empty>
@@ -283,10 +344,12 @@ export const EnvironmentsPage: React.FC = () => {
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button onClick={openCreateForm}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Environment
-                  </Button>
+                  {canCreate && (
+                    <Button onClick={openCreateForm}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Environment
+                    </Button>
+                  )}
                 </EmptyContent>
               </Empty>
             </CardContent>
@@ -294,61 +357,25 @@ export const EnvironmentsPage: React.FC = () => {
         ) : (
           <Card>
             <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Policy</TableHead>
-                    <TableHead>Self Approval</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {environments.map((environment) => (
-                    <TableRow key={environment.id}>
-                      <TableCell className="font-medium">{environment.name}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {environment.description || '-'}
-                      </TableCell>
-                      <TableCell>{getPolicyName(environment.policy_id)}</TableCell>
-                      <TableCell>
-                        {environment.allow_self_approval ? (
-                          <Badge variant="secondary" className="bg-green-100 text-green-800">
-                            Enabled
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-800">
-                            Disabled
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{formatDate(environment.created_at)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditForm(environment)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openDeleteConfirmation(environment)}
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <DataTable
+                columns={columns}
+                data={environments}
+                isLoading={isLoading}
+                emptyMessage="No environments found."
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  totalCount: environments.length,
+                  onPageChange: setPageIndex,
+                  onPageSizeChange: (newSize) => {
+                    setPageSize(newSize);
+                    setPageIndex(0);
+                  },
+                  pageSizeOptions: [10, 20, 30, 50],
+                }}
+              >
+                {(table) => <DataTableToolbar table={table} filters={filterDefinitions} />}
+              </DataTable>
             </CardContent>
           </Card>
         )}

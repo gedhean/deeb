@@ -52,6 +52,8 @@ roles:
       - projects.read
       # Environment management (read-only)
       - environments.read
+      # Policy management (read-only)
+      - policies.read
   # ============================================
   # Project-Level Roles
   # ============================================

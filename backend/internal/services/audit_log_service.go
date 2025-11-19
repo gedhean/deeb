@@ -15,72 +15,99 @@ import (
 )
 
 // Action types for audit logging
+//
+// AUTHORITATIVE LIST: These constants define all valid action types for audit logging.
+// When adding new actions, ensure they are also added to the audit_logging configuration
+// in config.example.yaml to document them for users.
+//
+// Action Naming Convention:
+//   - Generic CRUD actions use simple verbs: "create", "read", "update", "delete"
+//   - Resource-specific actions use format: "{verb}_{resource}" (e.g., "approve_change_plan")
+//   - Actions should be in snake_case and lowercase
 const (
 	// Authentication actions
-	ActionLogin    = "login"
-	ActionLogout   = "logout"
-	ActionRegister = "register"
+	ActionLogin    = "login"    // User login attempt
+	ActionLogout   = "logout"   // User logout
+	ActionRegister = "register" // User registration
 
 	// CRUD actions (generic)
-	ActionCreate = "create"
-	ActionRead   = "read"
-	ActionUpdate = "update"
-	ActionDelete = "delete"
+	// These are automatically mapped from HTTP methods: POST→create, GET→read, PUT/PATCH→update, DELETE→delete
+	ActionCreate = "create" // Generic create action (POST)
+	ActionRead   = "read"   // Generic read action (GET)
+	ActionUpdate = "update" // Generic update action (PUT/PATCH)
+	ActionDelete = "delete" // Generic delete action (DELETE)
 
 	// Change plan actions
-	ActionCreateChangePlan  = "create_change_plan"
-	ActionUpdateChangePlan  = "update_change_plan"
-	ActionDeleteChangePlan  = "delete_change_plan"
-	ActionSubmitChangePlan  = "submit_change_plan"
-	ActionApproveChangePlan = "approve_change_plan"
-	ActionRejectChangePlan  = "reject_change_plan"
-	ActionCloseChangePlan   = "close_change_plan"
-	ActionExecuteChangePlan = "execute_change_plan"
-	ActionAssignReviewer    = "assign_reviewer"
-	ActionUnassignReviewer  = "unassign_reviewer"
+	ActionCreateChangePlan  = "create_change_plan"  // Create a new change plan
+	ActionUpdateChangePlan  = "update_change_plan"  // Update change plan details
+	ActionDeleteChangePlan  = "delete_change_plan"  // Delete a change plan
+	ActionSubmitChangePlan  = "submit_change_plan"  // Submit change plan for review
+	ActionApproveChangePlan = "approve_change_plan" // Approve change plan (POST /change-plans/{id}/approve)
+	ActionRejectChangePlan  = "reject_change_plan"  // Reject change plan (POST /change-plans/{id}/reject)
+	ActionCloseChangePlan   = "close_change_plan"   // Close change plan (POST /change-plans/{id}/close)
+	ActionExecuteChangePlan = "execute_change_plan" // Execute change plan (POST /change-plans/{id}/execute)
+	ActionAssignReviewer    = "assign_reviewer"     // Assign reviewer to change plan
+	ActionUnassignReviewer  = "unassign_reviewer"   // Remove reviewer from change plan
 
 	// Project actions
-	ActionCreateProject           = "create_project"
-	ActionUpdateProject           = "update_project"
-	ActionDeleteProject           = "delete_project"
-	ActionAddProjectMember        = "add_project_member"
-	ActionRemoveProjectMember     = "remove_project_member"
-	ActionUpdateProjectMemberRole = "update_project_member_role"
+	ActionCreateProject           = "create_project"             // Create new project
+	ActionUpdateProject           = "update_project"             // Update project settings
+	ActionDeleteProject           = "delete_project"             // Delete project
+	ActionAddProjectMember        = "add_project_member"         // Add member to project
+	ActionRemoveProjectMember     = "remove_project_member"      // Remove member from project
+	ActionUpdateProjectMemberRole = "update_project_member_role" // Update project member's role
 
 	// Database actions
-	ActionCreateDatabase         = "create_database"
-	ActionUpdateDatabase         = "update_database"
-	ActionDeleteDatabase         = "delete_database"
-	ActionCreateDatabaseInstance = "create_database_instance"
-	ActionUpdateDatabaseInstance = "update_database_instance"
-	ActionDeleteDatabaseInstance = "delete_database_instance"
+	ActionCreateDatabase         = "create_database"          // Create database configuration
+	ActionUpdateDatabase         = "update_database"          // Update database settings
+	ActionDeleteDatabase         = "delete_database"          // Delete database configuration
+	ActionCreateDatabaseInstance = "create_database_instance" // Create database instance
+	ActionUpdateDatabaseInstance = "update_database_instance" // Update database instance
+	ActionDeleteDatabaseInstance = "delete_database_instance" // Delete database instance
 
 	// User actions
-	ActionCreateUser     = "create_user"
-	ActionUpdateUser     = "update_user"
-	ActionDeleteUser     = "delete_user"
-	ActionUpdateUserRole = "update_user_role"
+	ActionCreateUser     = "create_user"      // Create new user
+	ActionUpdateUser     = "update_user"      // Update user details
+	ActionDeleteUser     = "delete_user"      // Delete user
+	ActionUpdateUserRole = "update_user_role" // Change user's role/permissions
 
 	// Environment actions
-	ActionCreateEnvironment = "create_environment"
-	ActionUpdateEnvironment = "update_environment"
-	ActionDeleteEnvironment = "delete_environment"
+	ActionCreateEnvironment = "create_environment" // Create environment (dev/staging/prod)
+	ActionUpdateEnvironment = "update_environment" // Update environment settings
+	ActionDeleteEnvironment = "delete_environment" // Delete environment
+
+	// Policy actions
+	ActionCreatePolicy = "create_policy" // Create validation policy
+	ActionUpdatePolicy = "update_policy" // Update policy rules
+	ActionDeletePolicy = "delete_policy" // Delete policy
 )
 
 // Resource types for audit logging
+//
+// AUTHORITATIVE LIST: These constants define all valid resource types for audit logging.
+// When adding new resource types:
+//  1. Add the constant here
+//  2. Map it in middleware/audit_log.go extractResourceType() function
+//  3. Add it to the audit_logging configuration in config.example.yaml
+//
+// Resource Naming Convention:
+//   - Use snake_case and lowercase
+//   - Be specific and descriptive
+//   - Match the database table name where applicable
 const (
-	ResourceTypeUser             = "user"
-	ResourceTypeProject          = "project"
-	ResourceTypeEnvironment      = "environment"
-	ResourceTypeDatabase         = "database"
-	ResourceTypeDatabaseInstance = "database_instance"
-	ResourceTypeChangePlan       = "change_plan"
-	ResourceTypeApproval         = "approval"
-	ResourceTypeExecutionLog     = "execution_log"
-	ResourceTypeSchemaSnapshot   = "schema_snapshot"
-	ResourceTypeAuditLog         = "audit_log"
-	ResourceTypePolicy           = "policy"
-	ResourceTypePolicyFinding    = "policy_finding"
+	ResourceTypeUser             = "user"              // User accounts and authentication
+	ResourceTypeProject          = "project"           // Project management
+	ResourceTypeEnvironment      = "environment"       // Environment configurations (dev/staging/prod)
+	ResourceTypeDatabase         = "database"          // Database configurations
+	ResourceTypeDatabaseInstance = "database_instance" // Database instance connections
+	ResourceTypeChangePlan       = "change_plan"       // Database change requests and workflow
+	ResourceTypeApproval         = "approval"          // Change plan approvals
+	ResourceTypeExecutionLog     = "execution_log"     // Change plan execution logs
+	ResourceTypeChangelog        = "changelog"         // Database change history
+	ResourceTypeSchemaHistory    = "schema_history"    // Schema version history
+	ResourceTypeAuditLog         = "audit_log"         // Audit log entries (self-referential)
+	ResourceTypePolicy           = "policy"            // Validation policies
+	ResourceTypePolicyFinding    = "policy_finding"    // Policy violation findings
 )
 
 // AuditLogService provides audit logging functionality
@@ -101,9 +128,10 @@ func NewAuditLogService(
 }
 
 // Log logs an audit entry for a user action
+// userID can be nil for unauthenticated events like failed login attempts
 func (s *AuditLogService) Log(
 	ctx context.Context,
-	userID uuid.UUID,
+	userID *uuid.UUID,
 	action string,
 	resourceType string,
 	resourceID uuid.UUID,
@@ -120,8 +148,12 @@ func (s *AuditLogService) Log(
 	}
 
 	if err := s.auditLogRepo.Create(ctx, auditLog); err != nil {
+		userIDStr := "nil"
+		if userID != nil {
+			userIDStr = userID.String()
+		}
 		s.logger.Error("Failed to create audit log",
-			zap.String("user_id", userID.String()),
+			zap.String("user_id", userIDStr),
 			zap.String("action", action),
 			zap.String("resource_type", resourceType),
 			zap.String("resource_id", resourceID.String()),
@@ -130,9 +162,13 @@ func (s *AuditLogService) Log(
 		return fmt.Errorf("failed to create audit log: %w", err)
 	}
 
+	userIDStr := "nil"
+	if userID != nil {
+		userIDStr = userID.String()
+	}
 	s.logger.Debug("Audit log created",
 		zap.String("audit_log_id", auditLog.ID.String()),
-		zap.String("user_id", userID.String()),
+		zap.String("user_id", userIDStr),
 		zap.String("action", action),
 		zap.String("resource_type", resourceType),
 	)
@@ -141,9 +177,10 @@ func (s *AuditLogService) Log(
 }
 
 // LogWithHTTP logs an audit entry with HTTP request context (captures IP address and user agent)
+// userID can be nil for unauthenticated events like failed login attempts
 func (s *AuditLogService) LogWithHTTP(
 	ctx context.Context,
-	userID uuid.UUID,
+	userID *uuid.UUID,
 	action string,
 	resourceType string,
 	resourceID uuid.UUID,
@@ -174,8 +211,12 @@ func (s *AuditLogService) LogWithHTTP(
 	}
 
 	if err := s.auditLogRepo.Create(ctx, auditLog); err != nil {
+		userIDStr := "nil"
+		if userID != nil {
+			userIDStr = userID.String()
+		}
 		s.logger.Error("Failed to create audit log with HTTP context",
-			zap.String("user_id", userID.String()),
+			zap.String("user_id", userIDStr),
 			zap.String("action", action),
 			zap.String("resource_type", resourceType),
 			zap.String("resource_id", resourceID.String()),
@@ -184,9 +225,13 @@ func (s *AuditLogService) LogWithHTTP(
 		return fmt.Errorf("failed to create audit log: %w", err)
 	}
 
+	userIDStr := "nil"
+	if userID != nil {
+		userIDStr = userID.String()
+	}
 	s.logger.Debug("Audit log created with HTTP context",
 		zap.String("audit_log_id", auditLog.ID.String()),
-		zap.String("user_id", userID.String()),
+		zap.String("user_id", userIDStr),
 		zap.String("action", action),
 		zap.String("resource_type", resourceType),
 	)
@@ -195,9 +240,10 @@ func (s *AuditLogService) LogWithHTTP(
 }
 
 // LogStateTransition logs a state transition for a resource (e.g., status change)
+// userID can be nil for unauthenticated events
 func (s *AuditLogService) LogStateTransition(
 	ctx context.Context,
-	userID uuid.UUID,
+	userID *uuid.UUID,
 	resourceType string,
 	resourceID uuid.UUID,
 	fromStatus string,
@@ -232,9 +278,10 @@ func (s *AuditLogService) LogStateTransition(
 }
 
 // LogWithResult logs an action with success/failure result
+// userID can be nil for unauthenticated events
 func (s *AuditLogService) LogWithResult(
 	ctx context.Context,
-	userID uuid.UUID,
+	userID *uuid.UUID,
 	action string,
 	resourceType string,
 	resourceID uuid.UUID,

@@ -1,27 +1,24 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
-	"github.com/nsxbet/deeb/internal/services"
+	"github.com/nsxbet/deeb/internal/middleware"
 	"go.uber.org/zap"
 )
 
 // LogoutHandler handles user logout requests.
 type LogoutHandler struct {
-	auditService *services.AuditLogService
-	logger       *zap.Logger
+	logger *zap.Logger
 }
 
 // NewLogoutHandler creates a new LogoutHandler with the provided logger.
-func NewLogoutHandler(auditService *services.AuditLogService, logger *zap.Logger) *LogoutHandler {
+func NewLogoutHandler(logger *zap.Logger) *LogoutHandler {
 	return &LogoutHandler{
-		auditService: auditService,
-		logger:       logger,
+		logger: logger,
 	}
 }
 
@@ -46,19 +43,16 @@ func (h *LogoutHandler) Logout(c echo.Context) error {
 	}
 	c.SetCookie(cookie)
 
-	// Log logout if user was authenticated
-	if userID != uuid.Nil && h.auditService != nil {
-		ctx := c.Request().Context()
-		detailsJSON, _ := json.Marshal(map[string]interface{}{})
-
-		if err := h.auditService.LogWithHTTP(ctx, userID, services.ActionLogout, services.ResourceTypeUser, userID, c.Request(), detailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for logout",
-				zap.String("user_id", userID.String()),
-				zap.Error(err))
-		}
+	// Enrich audit log if user was authenticated
+	if userID != uuid.Nil {
+		c.Set("audit_enrichment", &middleware.AuditEnrichment{
+			UserID: &userID, // Include user ID for audit log
+			Result: "success",
+		})
+		h.logger.Info("User logged out successfully", zap.String("user_id", userID.String()))
+	} else {
+		h.logger.Info("Logout called without authentication")
 	}
-
-	h.logger.Info("User logged out successfully")
 
 	return c.JSON(http.StatusOK, map[string]string{
 		"message": "logged out successfully",

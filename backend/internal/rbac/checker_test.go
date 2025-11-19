@@ -399,7 +399,7 @@ func TestGetOrganizationPermissions(t *testing.T) {
 		{
 			name:     "developer has basic permissions",
 			role:     OrganizationDeveloper,
-			expected: 8, // 8 basic permissions (users read, database instances read, databases read/create/update, projects create/read, environments read)
+			expected: 9, // 9 basic permissions (users read, database instances read, databases read/create/update, projects create/read, environments read, policies read)
 		},
 		{
 			name:     "invalid role has no permissions",

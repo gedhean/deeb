@@ -39,6 +39,10 @@ import { DatabaseInfoCard } from '@/components/database/DatabaseInfoCard';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 import { TableDetailSheet } from '@/components/database/TableDetailSheet';
 import { DatabaseMetadataSections } from '@/components/database/DatabaseMetadataSections';
+import { DataTable } from '@/components/data-table/data-table';
+import { changelogColumns } from './databases/changelog-columns';
+import { changelogService } from '@/lib/api/services/changelog';
+import useSWR from 'swr';
 
 export const DatabaseDetailPage: React.FC = () => {
   const navigate = useNavigate();
@@ -76,6 +80,15 @@ export const DatabaseDetailPage: React.FC = () => {
   );
   const { changePlans, isLoading: isLoadingChangePlans } = useChangePlansSWR(
     changePlansParams || {},
+  );
+
+  // Fetch changelog for this database with SWR
+  const {
+    data: changelogs,
+    error: changelogsError,
+    isLoading: isLoadingChangelogs,
+  } = useSWR(database?.id ? `/api/v1/databases/${database.id}/changelog` : null, () =>
+    database?.id ? changelogService.listDatabaseChangelog(database.id) : null,
   );
 
   // Compute related entities from cached data
@@ -247,16 +260,29 @@ export const DatabaseDetailPage: React.FC = () => {
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="change-plans">Change Plans</TabsTrigger>
+              <TabsTrigger value="changelog">Changelog</TabsTrigger>
             </TabsList>
             {activeTab === 'overview' && (
               <Button
                 variant="outline"
-                size="lg"
                 onClick={handleRefreshSchema}
                 disabled={isLoadingSchema || isRefreshingSchema || isRefreshDisabled}
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingSchema ? 'animate-spin' : ''}`} />
                 {isRefreshingSchema ? 'Refreshing...' : 'Refresh Schema'}
+              </Button>
+            )}
+            {activeTab === 'change-plans' && (
+              <Button
+                onClick={() => {
+                  if (database?.id) {
+                    navigate(`/change-plans/create?step=1&database_id=${database.id}`);
+                  }
+                }}
+                disabled={!database?.id}
+              >
+                <FileEdit className="h-4 w-4 mr-2" />
+                Create Change Plan
               </Button>
             )}
           </div>
@@ -370,7 +396,14 @@ export const DatabaseDetailPage: React.FC = () => {
                       </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>
-                      <Button onClick={() => navigate('/change-plans/create')}>
+                      <Button
+                        onClick={() => {
+                          if (database?.id) {
+                            navigate(`/change-plans/create?database_id=${database.id}`);
+                          }
+                        }}
+                        disabled={!database?.id}
+                      >
                         <FileEdit className="mr-2 h-4 w-4" />
                         Create Change Plan
                       </Button>
@@ -436,6 +469,66 @@ export const DatabaseDetailPage: React.FC = () => {
                       </TableBody>
                     </Table>
                   </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="changelog" className="space-y-6">
+            {/* Database Info */}
+            <DatabaseInfoCard
+              database={database}
+              project={project}
+              environment={environment}
+              instance={instance}
+              isLoading={isLoading}
+              onNavigate={navigate}
+              formatDate={formatDate}
+            />
+
+            {/* Changelog Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Database Changelog</CardTitle>
+                <CardDescription>
+                  {isLoadingChangelogs
+                    ? 'Loading changelog...'
+                    : `${changelogs?.length || 0} changelog ${(changelogs?.length || 0) === 1 ? 'entry' : 'entries'} for this database`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {changelogsError ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Failed to Load Changelog</h3>
+                    <p className="text-sm text-muted-foreground max-w-md">
+                      {changelogsError instanceof Error
+                        ? changelogsError.message
+                        : 'An error occurred while fetching the changelog. Please try again later.'}
+                    </p>
+                  </div>
+                ) : isLoadingChangelogs ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Skeleton className="h-32 w-full" />
+                  </div>
+                ) : !changelogs || changelogs.length === 0 ? (
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <FileEdit className="h-12 w-12 text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle>No Changelog Entries</EmptyTitle>
+                      <EmptyDescription>
+                        No change plans have been executed for this database yet.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (
+                  <DataTable
+                    columns={changelogColumns}
+                    data={changelogs}
+                    onRowClick={(row) => navigate(`/changelog/${row.id}`)}
+                  />
                 )}
               </CardContent>
             </Card>

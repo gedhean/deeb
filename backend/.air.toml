@@ -3,7 +3,7 @@ testdata_dir = "testdata"
 tmp_dir = "tmp"
 
 [build]
-  args_bin = ["server"]
+  args_bin = ["server", "--config", "config.dev.yaml"]
   bin = "./tmp/main"
   cmd = "go build -mod=mod -o ./tmp/main ."
   delay = 1000

@@ -446,6 +446,40 @@ export interface ExecutionLogHistoryResponse {
   logs: ExecutionLog[];
 }
 
+// Changelog Types
+export interface Changelog {
+  id: string;
+  database_instance_id: string;
+  database_id: string;
+  change_plan_id: string;
+  change_plan_title?: string; // Included in list view
+  status: 'pending' | 'done' | 'failed';
+  prev_schema_history_id: string | null;
+  schema_history_id: string | null;
+  created_at: string;
+}
+
+export interface SchemaHistory {
+  id: string;
+  database_instance_id: string;
+  database_id: string;
+  metadata: Record<string, unknown>;
+  raw_dump: string; // The SQL dump
+  created_at: string;
+}
+
+export interface ChangePlanSummary {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface ChangelogDetail {
+  changelog: Changelog;
+  change_plan: ChangePlanSummary;
+  schema_history: SchemaHistory | null;
+}
+
 // Audit Log Types
 export interface AuditLog {
   id: string;

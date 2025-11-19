@@ -175,17 +175,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       );
     }
 
-    // Environments - Admin only
+    // Environments - environment.read permission
     if (item.url === '/environments') {
-      return hasAnyOrganizationRole(user.organization_role, ['OrganizationAdmin']);
+      return hasOrganizationPermission(
+        user.organization_role,
+        OrganizationPermission.EnvironmentsRead,
+      );
     }
 
-    // Policies - Admin only
+    // Policies - policies.read permission
     if (item.url === '/policies') {
-      return hasAnyOrganizationRole(user.organization_role, ['OrganizationAdmin']);
+      return hasOrganizationPermission(user.organization_role, OrganizationPermission.PoliciesRead);
     }
 
-    // Users - Admin only
+    // Users - users.read permission
     if (item.url === '/users') {
       return hasOrganizationPermission(user.organization_role, OrganizationPermission.UsersRead);
     }

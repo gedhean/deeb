@@ -22,17 +22,19 @@ type ConnectionManagerInterface interface {
 
 // ExecutionService provides SQL execution functionality with transaction management
 type ExecutionService struct {
-	changePlanRepo   repository.ChangePlanRepository
-	dbInstanceRepo   repository.DatabaseInstanceRepository
-	databaseRepo     repository.DatabaseRepository
-	snapshotService  *SchemaSnapshotService
-	lockManager      ExecutionLockManager
-	queueService     *ExecutionQueueService
-	executionLogRepo repository.ExecutionLogRepository
-	connectionMgr    ConnectionManagerInterface
-	encryptionKey    string
-	executionTimeout time.Duration // Timeout for SQL execution (default: 5 minutes)
-	logger           *zap.Logger
+	changePlanRepo       repository.ChangePlanRepository
+	dbInstanceRepo       repository.DatabaseInstanceRepository
+	databaseRepo         repository.DatabaseRepository
+	changelogRepo        repository.ChangelogRepository
+	schemaHistoryRepo    repository.SchemaHistoryRepository
+	schemaVersionService *SchemaVersionService
+	lockManager          ExecutionLockManager
+	queueService         *ExecutionQueueService
+	executionLogRepo     repository.ExecutionLogRepository
+	connectionMgr        ConnectionManagerInterface
+	encryptionKey        string
+	executionTimeout     time.Duration // Timeout for SQL execution (default: 5 minutes)
+	logger               *zap.Logger
 }
 
 // ExecutionResult represents the result of a SQL execution
@@ -48,7 +50,9 @@ func NewExecutionService(
 	changePlanRepo repository.ChangePlanRepository,
 	dbInstanceRepo repository.DatabaseInstanceRepository,
 	databaseRepo repository.DatabaseRepository,
-	snapshotService *SchemaSnapshotService,
+	changelogRepo repository.ChangelogRepository,
+	schemaHistoryRepo repository.SchemaHistoryRepository,
+	schemaVersionService *SchemaVersionService,
 	lockManager ExecutionLockManager,
 	queueService *ExecutionQueueService,
 	executionLogRepo repository.ExecutionLogRepository,
@@ -59,17 +63,19 @@ func NewExecutionService(
 	executionTimeout := 5 * time.Minute // Default: 5 minutes
 
 	return &ExecutionService{
-		changePlanRepo:   changePlanRepo,
-		dbInstanceRepo:   dbInstanceRepo,
-		databaseRepo:     databaseRepo,
-		snapshotService:  snapshotService,
-		lockManager:      lockManager,
-		queueService:     queueService,
-		executionLogRepo: executionLogRepo,
-		connectionMgr:    connectionMgr,
-		encryptionKey:    encryptionKey,
-		executionTimeout: executionTimeout,
-		logger:           logger,
+		changePlanRepo:       changePlanRepo,
+		dbInstanceRepo:       dbInstanceRepo,
+		databaseRepo:         databaseRepo,
+		changelogRepo:        changelogRepo,
+		schemaHistoryRepo:    schemaHistoryRepo,
+		schemaVersionService: schemaVersionService,
+		lockManager:          lockManager,
+		queueService:         queueService,
+		executionLogRepo:     executionLogRepo,
+		connectionMgr:        connectionMgr,
+		encryptionKey:        encryptionKey,
+		executionTimeout:     executionTimeout,
+		logger:               logger,
 	}
 }
 
@@ -78,7 +84,9 @@ func NewExecutionServiceWithTimeout(
 	changePlanRepo repository.ChangePlanRepository,
 	dbInstanceRepo repository.DatabaseInstanceRepository,
 	databaseRepo repository.DatabaseRepository,
-	snapshotService *SchemaSnapshotService,
+	changelogRepo repository.ChangelogRepository,
+	schemaHistoryRepo repository.SchemaHistoryRepository,
+	schemaVersionService *SchemaVersionService,
 	lockManager ExecutionLockManager,
 	queueService *ExecutionQueueService,
 	executionLogRepo repository.ExecutionLogRepository,
@@ -88,17 +96,19 @@ func NewExecutionServiceWithTimeout(
 	logger *zap.Logger,
 ) *ExecutionService {
 	return &ExecutionService{
-		changePlanRepo:   changePlanRepo,
-		dbInstanceRepo:   dbInstanceRepo,
-		databaseRepo:     databaseRepo,
-		snapshotService:  snapshotService,
-		lockManager:      lockManager,
-		queueService:     queueService,
-		executionLogRepo: executionLogRepo,
-		connectionMgr:    connectionMgr,
-		encryptionKey:    encryptionKey,
-		executionTimeout: executionTimeout,
-		logger:           logger,
+		changePlanRepo:       changePlanRepo,
+		dbInstanceRepo:       dbInstanceRepo,
+		databaseRepo:         databaseRepo,
+		changelogRepo:        changelogRepo,
+		schemaHistoryRepo:    schemaHistoryRepo,
+		schemaVersionService: schemaVersionService,
+		lockManager:          lockManager,
+		queueService:         queueService,
+		executionLogRepo:     executionLogRepo,
+		connectionMgr:        connectionMgr,
+		encryptionKey:        encryptionKey,
+		executionTimeout:     executionTimeout,
+		logger:               logger,
 	}
 }
 
@@ -257,55 +267,73 @@ func (s *ExecutionService) Execute(
 		zap.String("change_plan_id", changePlanID.String()),
 	)
 
-	// Step 2: Capture before snapshot (skip if database doesn't exist yet)
-	var beforeSnapshot *models.SchemaSnapshot
-	var snapshotBeforeDuration time.Duration
+	// Step 2: Get latest schema version and create changelog entry
+	var prevSchemaHistoryID *uuid.UUID
 	if db.Status != models.DatabaseStatusPending {
-		snapshotBeforeStartTime := time.Now()
-		s.logger.Info("Capturing before snapshot",
-			zap.String("change_plan_id", changePlanID.String()),
-			zap.String("database_id", db.ID.String()),
-			zap.String("database_engine", string(dbInstance.DatabaseEngine)),
-		)
-
-		switch dbInstance.DatabaseEngine {
-		case models.DatabaseEnginePostgreSQL:
-			beforeSnapshot, err = s.snapshotService.CapturePostgreSQL(ctx, changePlanID, db.ID, models.SnapshotTypeBefore)
-		case models.DatabaseEngineMySQL:
-			beforeSnapshot, err = s.snapshotService.CaptureMySQL(ctx, changePlanID, db.ID, models.SnapshotTypeBefore)
-		default:
-			return nil, fmt.Errorf("unsupported database type: %s", dbInstance.DatabaseEngine)
-		}
-
+		// Get the latest schema version for this database (if exists)
+		latestSchema, err := s.schemaVersionService.GetLatestSchemaVersion(ctx, db.ID)
 		if err != nil {
-			s.logger.Error("Failed to capture before snapshot",
+			s.logger.Error("Failed to get latest schema version",
 				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_id", db.ID.String()),
 				zap.Error(err),
 			)
 			// Update status to Failed
 			changePlan.Status = models.ChangePlanStatusFailed
-			errorMsg := fmt.Sprintf("failed to capture before snapshot: %v", err)
+			errorMsg := fmt.Sprintf("failed to get latest schema version: %v", err)
 			changePlan.ErrorMessage = &errorMsg
 			changePlan.UpdatedAt = time.Now()
 			if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
 				s.logger.Error("Failed to update change plan status to Failed", zap.Error(updateErr))
 			}
-			return nil, fmt.Errorf("failed to capture before snapshot: %w", err)
+			return nil, fmt.Errorf("failed to get latest schema version: %w", err)
 		}
-
-		snapshotBeforeDuration = time.Since(snapshotBeforeStartTime)
-		s.logger.Info("Before snapshot captured successfully",
-			zap.String("change_plan_id", changePlanID.String()),
-			zap.String("snapshot_id", beforeSnapshot.ID.String()),
-			zap.Duration("snapshot_capture_duration", snapshotBeforeDuration),
-		)
+		if latestSchema != nil {
+			prevSchemaHistoryID = &latestSchema.ID
+			s.logger.Info("Found previous schema version",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("prev_schema_history_id", prevSchemaHistoryID.String()),
+			)
+		}
 	} else {
-		s.logger.Info("Skipping before snapshot - database does not exist yet",
+		s.logger.Info("No previous schema - database does not exist yet",
 			zap.String("change_plan_id", changePlanID.String()),
 			zap.String("database_id", db.ID.String()),
 			zap.String("database_status", string(db.Status)),
 		)
 	}
+
+	// Create changelog entry with status "pending"
+	changelog := &models.Changelog{
+		ID:                  uuid.New(),
+		DatabaseInstanceID:  dbInstance.ID,
+		DatabaseID:          db.ID,
+		ChangePlanID:        changePlanID,
+		Status:              models.ChangelogStatusPending,
+		PrevSchemaHistoryID: prevSchemaHistoryID,
+		SchemaHistoryID:     nil, // Will be set after execution
+		CreatedAt:           time.Now(),
+	}
+	if err := s.changelogRepo.Create(ctx, changelog); err != nil {
+		s.logger.Error("Failed to create changelog entry",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Error(err),
+		)
+		// Update status to Failed
+		changePlan.Status = models.ChangePlanStatusFailed
+		errorMsg := fmt.Sprintf("failed to create changelog entry: %v", err)
+		changePlan.ErrorMessage = &errorMsg
+		changePlan.UpdatedAt = time.Now()
+		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
+			s.logger.Error("Failed to update change plan status to Failed", zap.Error(updateErr))
+		}
+		return nil, fmt.Errorf("failed to create changelog entry: %w", err)
+	}
+	s.logger.Info("Changelog entry created",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("changelog_id", changelog.ID.String()),
+		zap.String("status", string(changelog.Status)),
+	)
 
 	// Step 3: Execute SQL in transaction with timeout
 	executionStartTime := time.Now()
@@ -397,6 +425,19 @@ func (s *ExecutionService) Execute(
 			// Don't fail the whole operation if update fails, but log it
 		}
 
+		// Update changelog status to "failed"
+		changelog.Status = models.ChangelogStatusFailed
+		if updateErr := s.changelogRepo.Update(ctx, changelog); updateErr != nil {
+			s.logger.Error("Failed to update changelog status to failed",
+				zap.String("changelog_id", changelog.ID.String()),
+				zap.Error(updateErr),
+			)
+		} else {
+			s.logger.Info("Changelog status updated to failed",
+				zap.String("changelog_id", changelog.ID.String()),
+			)
+		}
+
 		// Create execution log entry for failed execution with full context
 		if s.executionLogRepo != nil {
 			dbType := string(dbInstance.DatabaseEngine)
@@ -429,7 +470,7 @@ func (s *ExecutionService) Execute(
 		}, nil // Return result with error, don't propagate error
 	}
 
-	// Step 5: Execution succeeded - capture after snapshot
+	// Step 5: Execution succeeded - capture new schema version
 	s.logger.Info("SQL execution completed successfully",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("database_id", db.ID.String()),
@@ -437,46 +478,58 @@ func (s *ExecutionService) Execute(
 		zap.Duration("execution_duration", duration),
 	)
 
-	snapshotAfterStartTime := time.Now()
-	s.logger.Info("Capturing after snapshot",
+	schemaVersionStartTime := time.Now()
+	s.logger.Info("Capturing schema version",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("database_id", db.ID.String()),
 		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 	)
 
-	var afterSnapshot *models.SchemaSnapshot
-	switch dbInstance.DatabaseEngine {
-	case models.DatabaseEnginePostgreSQL:
-		afterSnapshot, err = s.snapshotService.CapturePostgreSQL(ctx, changePlanID, db.ID, models.SnapshotTypeAfter)
-	case models.DatabaseEngineMySQL:
-		afterSnapshot, err = s.snapshotService.CaptureMySQL(ctx, changePlanID, db.ID, models.SnapshotTypeAfter)
-	default:
-		return nil, fmt.Errorf("unsupported database type: %s", dbInstance.DatabaseEngine)
-	}
-
+	schemaHistory, err := s.schemaVersionService.CaptureSchemaVersion(ctx, db.ID)
 	if err != nil {
-		s.logger.Error("Failed to capture after snapshot",
+		s.logger.Error("Failed to capture schema version",
 			zap.String("change_plan_id", changePlanID.String()),
 			zap.Error(err),
 		)
 		// Update status to Failed even though SQL executed successfully
-		// This is a safety measure - we want to know if snapshot capture failed
+		// This is a safety measure - we want to know if schema capture failed
 		changePlan.Status = models.ChangePlanStatusFailed
-		errorMsg := fmt.Sprintf("SQL executed successfully but failed to capture after snapshot: %v", err)
+		errorMsg := fmt.Sprintf("SQL executed successfully but failed to capture schema version: %v", err)
 		changePlan.ErrorMessage = &errorMsg
 		changePlan.UpdatedAt = time.Now()
 		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
 			s.logger.Error("Failed to update change plan status to Failed", zap.Error(updateErr))
 		}
-		return nil, fmt.Errorf("failed to capture after snapshot: %w", err)
+		// Also update changelog to failed
+		changelog.Status = models.ChangelogStatusFailed
+		if updateErr := s.changelogRepo.Update(ctx, changelog); updateErr != nil {
+			s.logger.Error("Failed to update changelog status to failed", zap.Error(updateErr))
+		}
+		return nil, fmt.Errorf("failed to capture schema version: %w", err)
 	}
 
-	snapshotAfterDuration := time.Since(snapshotAfterStartTime)
-	s.logger.Info("After snapshot captured successfully",
+	schemaVersionDuration := time.Since(schemaVersionStartTime)
+	s.logger.Info("Schema version captured successfully",
 		zap.String("change_plan_id", changePlanID.String()),
-		zap.String("snapshot_id", afterSnapshot.ID.String()),
-		zap.Duration("snapshot_capture_duration", snapshotAfterDuration),
+		zap.String("schema_history_id", schemaHistory.ID.String()),
+		zap.Duration("schema_capture_duration", schemaVersionDuration),
 	)
+
+	// Update changelog status to "done" and link to schema_history
+	changelog.Status = models.ChangelogStatusDone
+	changelog.SchemaHistoryID = &schemaHistory.ID
+	if updateErr := s.changelogRepo.Update(ctx, changelog); updateErr != nil {
+		s.logger.Error("Failed to update changelog status to done",
+			zap.String("changelog_id", changelog.ID.String()),
+			zap.Error(updateErr),
+		)
+		// Continue anyway - the schema was captured successfully
+	} else {
+		s.logger.Info("Changelog status updated to done",
+			zap.String("changelog_id", changelog.ID.String()),
+			zap.String("schema_history_id", schemaHistory.ID.String()),
+		)
+	}
 
 	// Step 6: Update status to Completed
 	changePlan.Status = models.ChangePlanStatusCompleted
@@ -520,8 +573,7 @@ func (s *ExecutionService) Execute(
 		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 		zap.Int("rows_affected", result.RowsAffected),
 		zap.Duration("sql_execution_duration", duration),
-		zap.Duration("before_snapshot_duration", snapshotBeforeDuration),
-		zap.Duration("after_snapshot_duration", snapshotAfterDuration),
+		zap.Duration("schema_capture_duration", schemaVersionDuration),
 		zap.Duration("lock_acquisition_duration", lockDuration),
 		zap.Duration("total_execution_duration", overallDuration),
 	)

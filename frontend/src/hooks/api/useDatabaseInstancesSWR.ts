@@ -256,9 +256,13 @@ export function useDatabaseInstanceById(id: string | undefined): UseDatabaseInst
 
 interface TestConnectionResult {
   success: boolean;
+  message?: string;
   error?: string;
-  details?: string;
-  instance?: DatabaseInstance;
+  host?: string;
+  port?: number;
+  database?: string;
+  engine?: string;
+  username?: string;
 }
 
 interface UseTestConnectionResult {
@@ -268,9 +272,8 @@ interface UseTestConnectionResult {
 }
 
 /**
- * Hook for testing database instance connection
- *
- * Note: A temporary test instance may be created and should be deleted by the caller
+ * Hook for testing database instance connection with provided credentials
+ * Used for testing connection before creating a new instance
  */
 export function useTestConnection(): UseTestConnectionResult {
   const [isLoading, setIsLoading] = useState(false);
@@ -281,7 +284,7 @@ export function useTestConnection(): UseTestConnectionResult {
       try {
         setIsLoading(true);
         setError(null);
-        const result = await databaseInstancesService.testConnection(data);
+        const result = await databaseInstancesService.testConnectionWithCredentials(data);
         return result;
       } catch (err) {
         const errorMsg = err instanceof APIError ? err.message : 'Connection test failed';

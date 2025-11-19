@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { projectMembersService } from '@/lib/api/services/projects';
@@ -48,6 +49,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { DataTable, DataTableToolbar, DataTableViewOptions } from '@/components/data-table';
+import type { FilterDefinition } from '@/components/data-table/types';
+import { getProjectsColumns } from './projects/columns';
 import {
   Select,
   SelectContent,
@@ -56,7 +60,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { RoleBadge } from '@/components/RoleBadge';
-import { Plus, Pencil, Trash2, AlertTriangle, FolderOpen, Users } from 'lucide-react';
+import { Plus, AlertTriangle, FolderOpen, Users, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectPermissions } from '@/hooks/api/useProjectPermissions';
 import { useUsers } from '@/hooks/api/useUsersSWR';
@@ -134,6 +138,10 @@ export const ProjectsPage: React.FC = () => {
   // Admins see all projects, non-admins see projects from the hook (which may be filtered by backend)
   const projects = cachedProjects;
   const isLoading = projectsLoading;
+
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   // Set error from SWR hook or mutation hooks if any
   useEffect(() => {
@@ -245,7 +253,7 @@ export const ProjectsPage: React.FC = () => {
   };
 
   // Open edit form
-  const openEditForm = (project: Project) => {
+  const openEditForm = useCallback((project: Project) => {
     setSelectedProject(project);
     setFormData({
       name: project.name,
@@ -253,13 +261,13 @@ export const ProjectsPage: React.FC = () => {
     });
     setFormErrors({});
     setIsEditOpen(true);
-  };
+  }, []);
 
   // Open delete confirmation
-  const openDeleteConfirmation = (project: Project) => {
+  const openDeleteConfirmation = useCallback((project: Project) => {
     setSelectedProject(project);
     setIsDeleteOpen(true);
-  };
+  }, []);
 
   // Load members
   const loadMembers = async (projectId: string) => {
@@ -357,18 +365,51 @@ export const ProjectsPage: React.FC = () => {
     }
   };
 
-  // Format date
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    } catch {
-      return dateString;
-    }
-  };
+  // Get columns for projects table
+  const projectsColumns = useMemo(
+    () =>
+      getProjectsColumns({
+        onView: (project) => navigate(`/projects/${project.id}`),
+        onEdit: openEditForm,
+        onDelete: openDeleteConfirmation,
+        canUpdate: canUpdateProjects,
+        canDelete: canDeleteProjects,
+      }),
+    [navigate, openEditForm, openDeleteConfirmation, canUpdateProjects, canDeleteProjects],
+  );
+
+  // Define filter definitions for the toolbar
+  const filterDefinitions: FilterDefinition[] = useMemo(
+    () => [
+      {
+        id: 'name',
+        type: 'search',
+        title: 'Name',
+        placeholder: 'Search names...',
+        defaultActive: true,
+      },
+      {
+        id: 'created_at',
+        type: 'dateRange',
+        title: 'Created',
+        presets: [
+          {
+            label: 'Last 7 days',
+            getValue: () => [subDays(new Date(), 7), new Date()],
+          },
+          {
+            label: 'Last 30 days',
+            getValue: () => [subDays(new Date(), 30), new Date()],
+          },
+          {
+            label: 'Last 90 days',
+            getValue: () => [subDays(new Date(), 90), new Date()],
+          },
+        ],
+      },
+    ],
+    [],
+  );
 
   // Render access denied
   if (!user) {
@@ -417,43 +458,22 @@ export const ProjectsPage: React.FC = () => {
           </Card>
         )}
 
-        {/* Projects list */}
-        {isLoading ? (
-          <Card>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[1, 2, 3].map((i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-48" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-8 w-16 ml-auto" />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ) : projects.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6">
+        {/* Projects Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Projects</CardTitle>
+            <CardDescription>
+              {isLoading ? (
+                'Loading projects...'
+              ) : (
+                <>
+                  {projects.length} project{projects.length === 1 ? '' : 's'}
+                </>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!isLoading && projects.length === 0 ? (
               <Empty>
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -478,89 +498,34 @@ export const ProjectsPage: React.FC = () => {
                   )}
                 </EmptyContent>
               </Empty>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="overflow-x-auto -mx-6 px-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {projects.map((project) => (
-                      <TableRow
-                        key={project.id}
-                        onClick={() => navigate(`/projects/${project.id}`)}
-                        className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      >
-                        <TableCell className="font-medium">{project.name}</TableCell>
-                        <TableCell className="max-w-md">
-                          <span className="line-clamp-2 text-muted-foreground">
-                            {project.description}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatDate(project.created_at)}
-                        </TableCell>
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/projects/${project.id}`);
-                              }}
-                              className="h-11 w-11 p-0 touch-manipulation"
-                              aria-label="View project details"
-                            >
-                              <Users className="h-4 w-4" />
-                            </Button>
-                            {canUpdateProjects && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEditForm(project);
-                                }}
-                                className="h-11 w-11 p-0 touch-manipulation"
-                                aria-label="Edit project"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {canDeleteProjects && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openDeleteConfirmation(project);
-                                }}
-                                className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
-                                aria-label="Delete project"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <DataTable
+                columns={projectsColumns}
+                data={projects}
+                isLoading={isLoading}
+                emptyMessage="No projects found."
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  totalCount: projects.length,
+                  onPageChange: setPageIndex,
+                  onPageSizeChange: (newSize) => {
+                    setPageSize(newSize);
+                    setPageIndex(0);
+                  },
+                  pageSizeOptions: [10, 20, 30, 50],
+                }}
+                onRowClick={(project) => navigate(`/projects/${project.id}`)}
+              >
+                {(table) => (
+                  <DataTableToolbar table={table} filters={filterDefinitions}>
+                    <DataTableViewOptions table={table} />
+                  </DataTableToolbar>
+                )}
+              </DataTable>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Create Project Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>

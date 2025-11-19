@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { databasesService } from '@/lib/api/services/databases';
@@ -9,20 +10,11 @@ import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
 import { useDatabases } from '@/hooks/api/useDatabases';
 import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
 import { useDatabaseInstancesSWR } from '@/hooks/api/useDatabaseInstancesSWR';
-import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
 import type { CreateDatabaseRequest, Database, UpdateDatabaseRequest } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Empty,
   EmptyContent,
@@ -39,24 +31,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  AlertTriangle,
-  Database as DatabaseIcon,
-  Search,
-  X,
-  Eye,
-} from 'lucide-react';
+import { DataTable, DataTableToolbar, DataTableViewOptions } from '@/components/data-table';
+import type { FilterDefinition } from '@/components/data-table/types';
+import { getDatabasesColumns } from './databases/columns';
+import { Plus, AlertTriangle, Database as DatabaseIcon } from 'lucide-react';
 import { useCurrentProject } from '@/store';
 
 export const DatabasesPage: React.FC = () => {
@@ -73,22 +51,14 @@ export const DatabasesPage: React.FC = () => {
   // Use cached data from SWR hooks
   const { projects, isLoading: projectsLoading } = useProjectsSWR();
   const { databases, isLoading: databasesLoading, refetch: refetchDatabases } = useDatabases({});
-  const { environments, isLoading: environmentsLoading } = useEnvironmentsSWR();
-  const { databaseInstances, isLoading: instancesLoading } = useDatabaseInstancesSWR();
+  const { environments } = useEnvironmentsSWR();
+  const { databaseInstances } = useDatabaseInstancesSWR();
 
   const isLoading = projectsLoading || databasesLoading;
-  const isLoadingDropdowns = environmentsLoading || instancesLoading;
 
-  // Filter state - initialize with currentProject if available
-  const [filters, setFilters] = useState<{
-    search?: string;
-    project_id?: string;
-    environment_id?: string;
-    database_instance_id?: string;
-    status?: string;
-  }>({
-    project_id: currentProject?.id,
-  });
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   // Form state
   const [formData, setFormData] = useState<CreateDatabaseRequest>({
@@ -122,14 +92,6 @@ export const DatabasesPage: React.FC = () => {
     user?.organization_role,
     OrganizationPermission.DatabasesDelete,
   );
-
-  // Sync filters with currentProject on initial load (only if filter not already set)
-  useEffect(() => {
-    if (currentProject?.id && !filters.project_id) {
-      setFilters((prev) => ({ ...prev, project_id: currentProject.id }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject]);
 
   // Check permissions for error display
   useEffect(() => {
@@ -253,7 +215,7 @@ export const DatabasesPage: React.FC = () => {
   };
 
   // Open edit form
-  const openEditForm = (database: Database) => {
+  const openEditForm = useCallback((database: Database) => {
     setSelectedDatabase(database);
     setFormData({
       project_id: database.project_id,
@@ -264,99 +226,165 @@ export const DatabasesPage: React.FC = () => {
     });
     setFormErrors({});
     setIsEditOpen(true);
-  };
+  }, []);
 
   // Open delete confirmation
-  const openDeleteConfirmation = (database: Database) => {
+  const openDeleteConfirmation = useCallback((database: Database) => {
     setSelectedDatabase(database);
     setIsDeleteOpen(true);
-  };
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    } catch {
-      return dateString;
-    }
-  };
+  }, []);
 
   // Get related entity names
-  const getProjectName = (projectId: string): string => {
-    const project = projects.find((p) => p.id === projectId);
-    return project?.name || 'Unknown';
-  };
+  const getProjectName = useCallback(
+    (projectId: string): string => {
+      const project = projects.find((p) => p.id === projectId);
+      return project?.name || 'Unknown';
+    },
+    [projects],
+  );
 
-  const getEnvironmentName = (environmentId: string): string => {
-    const env = environments.find((e) => e.id === environmentId);
-    return env?.name || 'Unknown';
-  };
+  const getEnvironmentName = useCallback(
+    (environmentId: string): string => {
+      const env = environments.find((e) => e.id === environmentId);
+      return env?.name || 'Unknown';
+    },
+    [environments],
+  );
 
-  const getInstanceName = (instanceId: string): string => {
-    const instance = databaseInstances.find((i) => i.id === instanceId);
-    return instance?.name || 'Unknown';
-  };
+  const getInstanceName = useCallback(
+    (instanceId: string): string => {
+      const instance = databaseInstances.find((i) => i.id === instanceId);
+      return instance?.name || 'Unknown';
+    },
+    [databaseInstances],
+  );
 
-  // Handle filter changes
-  const handleFilterChange = (key: keyof typeof filters, value: string | undefined) => {
-    setFilters((prev) => {
-      const updated = { ...prev };
-      if (value && value.trim()) {
-        updated[key] = value;
-      } else {
-        delete updated[key];
-      }
-      return updated;
-    });
-  };
+  // Prepare filter options
+  const projectOptions = useMemo(
+    () =>
+      projects.map((project) => ({
+        label: project.name,
+        value: project.id,
+      })),
+    [projects],
+  );
 
-  // Clear all filters
-  const clearFilters = () => {
-    setFilters({});
-  };
+  const environmentOptions = useMemo(
+    () =>
+      environments.map((environment) => ({
+        label: environment.name,
+        value: environment.id,
+      })),
+    [environments],
+  );
 
-  // Filter databases
-  const filteredDatabases = databases.filter((database) => {
-    // Search filter
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      const matchesSearch =
-        database.database_name.toLowerCase().includes(searchLower) ||
-        (database.description && database.description.toLowerCase().includes(searchLower));
-      if (!matchesSearch) return false;
+  const instanceOptions = useMemo(
+    () =>
+      databaseInstances.map((instance) => ({
+        label: instance.name,
+        value: instance.id,
+      })),
+    [databaseInstances],
+  );
+
+  // Get columns for databases table
+  const databasesColumns = useMemo(
+    () =>
+      getDatabasesColumns({
+        onView: (database) => navigate(`/databases/${database.id}`),
+        onEdit: openEditForm,
+        onDelete: openDeleteConfirmation,
+        canUpdate: canUpdateDatabases,
+        canDelete: canDeleteDatabases,
+        getProjectName,
+        getEnvironmentName,
+        getInstanceName,
+      }),
+    [
+      navigate,
+      openEditForm,
+      openDeleteConfirmation,
+      canUpdateDatabases,
+      canDeleteDatabases,
+      getProjectName,
+      getEnvironmentName,
+      getInstanceName,
+    ],
+  );
+
+  // Calculate initial column filters
+  const initialColumnFilters = useMemo(() => {
+    const columnFilters: { id: string; value: unknown }[] = [];
+
+    // Set default project if currentProject exists
+    if (currentProject?.id) {
+      columnFilters.push({ id: 'project', value: [currentProject.id] });
     }
 
-    // Project filter
-    if (filters.project_id && database.project_id !== filters.project_id) {
-      return false;
-    }
+    return columnFilters;
+  }, [currentProject]);
 
-    // Environment filter
-    if (filters.environment_id && database.environment_id !== filters.environment_id) {
-      return false;
-    }
-
-    // Instance filter
-    if (
-      filters.database_instance_id &&
-      database.database_instance_id !== filters.database_instance_id
-    ) {
-      return false;
-    }
-
-    // Status filter
-    if (filters.status && database.status !== filters.status) {
-      return false;
-    }
-
-    return true;
-  });
-
-  const hasFilters = Object.keys(filters).length > 0;
+  // Define filter definitions for the toolbar
+  const filterDefinitions: FilterDefinition[] = useMemo(
+    () => [
+      {
+        id: 'database_name',
+        type: 'search',
+        title: 'Database Name',
+        placeholder: 'Search database names...',
+        defaultActive: true,
+      },
+      {
+        id: 'project',
+        type: 'faceted',
+        title: 'Project',
+        options: projectOptions,
+        defaultActive: true,
+      },
+      {
+        id: 'environment',
+        type: 'faceted',
+        title: 'Environment',
+        options: environmentOptions,
+      },
+      {
+        id: 'instance',
+        type: 'faceted',
+        title: 'Instance',
+        options: instanceOptions,
+      },
+      {
+        id: 'status',
+        type: 'faceted',
+        title: 'Status',
+        options: [
+          { label: 'Active', value: 'Active', icon: DatabaseIcon },
+          { label: 'Inactive', value: 'Inactive', icon: DatabaseIcon },
+          { label: 'Pending', value: 'Pending', icon: DatabaseIcon },
+        ],
+      },
+      {
+        id: 'created_at',
+        type: 'dateRange',
+        title: 'Created',
+        presets: [
+          {
+            label: 'Last 7 days',
+            getValue: () => [subDays(new Date(), 7), new Date()],
+          },
+          {
+            label: 'Last 30 days',
+            getValue: () => [subDays(new Date(), 30), new Date()],
+          },
+          {
+            label: 'Last 90 days',
+            getValue: () => [subDays(new Date(), 90), new Date()],
+          },
+        ],
+      },
+    ],
+    [projectOptions, environmentOptions, instanceOptions],
+  );
 
   // Render access denied
   if (!canReadDatabases) {
@@ -409,320 +437,71 @@ export const DatabasesPage: React.FC = () => {
           </Card>
         )}
 
-        {/* Filters */}
+        {/* Databases Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Filters</CardTitle>
+            <CardTitle>Databases</CardTitle>
             <CardDescription>
-              Filter databases by name, project, environment, instance, or status
+              {isLoading ? (
+                'Loading databases...'
+              ) : (
+                <>
+                  {databases.length} database{databases.length === 1 ? '' : 's'}
+                </>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-              {/* Search Filter */}
-              <div className="space-y-2">
-                <label htmlFor="filter-search" className="text-sm font-medium">
-                  Search
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="filter-search"
-                    placeholder="Search databases..."
-                    value={filters.search || ''}
-                    onChange={(e) => handleFilterChange('search', e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-
-              {/* Project Filter */}
-              <div className="space-y-2">
-                <label htmlFor="filter-project" className="text-sm font-medium">
-                  Project
-                </label>
-                {isLoadingDropdowns ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <Select
-                    value={filters.project_id || 'all'}
-                    onValueChange={(value) =>
-                      handleFilterChange('project_id', value === 'all' ? undefined : value)
-                    }
-                  >
-                    <SelectTrigger id="filter-project">
-                      <SelectValue placeholder="All Projects" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Projects</SelectItem>
-                      {projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              {/* Environment Filter */}
-              <div className="space-y-2">
-                <label htmlFor="filter-environment" className="text-sm font-medium">
-                  Environment
-                </label>
-                {isLoadingDropdowns ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <Select
-                    value={filters.environment_id || 'all'}
-                    onValueChange={(value) =>
-                      handleFilterChange('environment_id', value === 'all' ? undefined : value)
-                    }
-                  >
-                    <SelectTrigger id="filter-environment">
-                      <SelectValue placeholder="All Environments" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Environments</SelectItem>
-                      {environments.map((env) => (
-                        <SelectItem key={env.id} value={env.id}>
-                          {env.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              {/* Instance Filter */}
-              <div className="space-y-2">
-                <label htmlFor="filter-instance" className="text-sm font-medium">
-                  Instance
-                </label>
-                {isLoadingDropdowns ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <Select
-                    value={filters.database_instance_id || 'all'}
-                    onValueChange={(value) =>
-                      handleFilterChange(
-                        'database_instance_id',
-                        value === 'all' ? undefined : value,
-                      )
-                    }
-                  >
-                    <SelectTrigger id="filter-instance">
-                      <SelectValue placeholder="All Instances" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Instances</SelectItem>
-                      {databaseInstances.map((instance) => (
-                        <SelectItem key={instance.id} value={instance.id}>
-                          {instance.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              {/* Status Filter */}
-              <div className="space-y-2">
-                <label htmlFor="filter-status" className="text-sm font-medium">
-                  Status
-                </label>
-                <Select
-                  value={filters.status || 'all'}
-                  onValueChange={(value) =>
-                    handleFilterChange('status', value === 'all' ? undefined : value)
-                  }
-                >
-                  <SelectTrigger id="filter-status">
-                    <SelectValue placeholder="All Statuses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Clear Filters Button */}
-            {hasFilters && (
-              <div className="mt-4">
-                <Button variant="outline" size="sm" onClick={clearFilters}>
-                  <X className="mr-2 h-4 w-4" />
-                  Clear Filters
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Databases list */}
-        {isLoading ? (
-          <Card>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Database Name</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Environment</TableHead>
-                    <TableHead>Instance</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[1, 2, 3].map((i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-20" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-8 w-16 ml-auto" />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ) : filteredDatabases.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6">
+            {!isLoading && databases.length === 0 ? (
               <Empty>
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <DatabaseIcon className="h-12 w-12 text-muted-foreground" />
                   </EmptyMedia>
-                  <EmptyTitle>{hasFilters ? 'No Databases Found' : 'No Databases Yet'}</EmptyTitle>
+                  <EmptyTitle>No Databases Yet</EmptyTitle>
                   <EmptyDescription>
-                    {hasFilters
-                      ? 'No databases match your filters. Try adjusting your search criteria.'
-                      : 'Get started by creating your first database and assigning it to a project and environment.'}
+                    Get started by creating your first database and assigning it to a project and
+                    environment.
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  {hasFilters ? (
-                    <Button variant="outline" onClick={clearFilters}>
-                      <X className="mr-2 h-4 w-4" />
-                      Clear Filters
-                    </Button>
-                  ) : canCreateDatabases ? (
+                  {canCreateDatabases && (
                     <Button onClick={openCreateForm}>
                       <Plus className="mr-2 h-4 w-4" />
                       Create Database
                     </Button>
-                  ) : null}
+                  )}
                 </EmptyContent>
               </Empty>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Databases</CardTitle>
-              <CardDescription>
-                {filteredDatabases.length} of {databases.length} database
-                {databases.length === 1 ? '' : 's'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Database Name</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Environment</TableHead>
-                    <TableHead>Instance</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredDatabases.map((database) => (
-                    <TableRow
-                      key={database.id}
-                      onClick={() => navigate(`/databases/${database.id}`)}
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    >
-                      <TableCell className="font-medium">{database.database_name}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {getProjectName(database.project_id)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {getEnvironmentName(database.environment_id)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {getInstanceName(database.database_instance_id)}
-                      </TableCell>
-                      <TableCell>
-                        <DatabaseStatusBadge status={database.status} variant="database" />
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(database.created_at)}
-                      </TableCell>
-                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate(`/databases/${database.id}`)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {canUpdateDatabases && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditForm(database)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {canDeleteDatabases && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openDeleteConfirmation(database)}
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <DataTable
+                columns={databasesColumns}
+                data={databases}
+                isLoading={isLoading}
+                initialColumnFilters={initialColumnFilters}
+                emptyMessage="No databases match your filters. Try adjusting your search criteria."
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  totalCount: databases.length,
+                  onPageChange: setPageIndex,
+                  onPageSizeChange: (newSize) => {
+                    setPageSize(newSize);
+                    setPageIndex(0);
+                  },
+                  pageSizeOptions: [10, 20, 30, 50],
+                }}
+                onRowClick={(database) => navigate(`/databases/${database.id}`)}
+              >
+                {(table) => (
+                  <DataTableToolbar table={table} filters={filterDefinitions}>
+                    <DataTableViewOptions table={table} />
+                  </DataTableToolbar>
+                )}
+              </DataTable>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Create Database Sheet */}
         <CreateDatabaseDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />

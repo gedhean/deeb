@@ -141,7 +141,7 @@ func createTestUser(t *testing.T, db *sqlx.DB, email string, orgRole rbac.Organi
 	userRepo := postgres.NewUserRepository(db)
 	logger := zap.NewNop()
 
-	registerHandler := handlers.NewRegisterHandler(userRepo, nil, logger)
+	registerHandler := handlers.NewRegisterHandler(userRepo, logger)
 
 	registerReq := handlers.RegisterRequest{
 		Email:    email,

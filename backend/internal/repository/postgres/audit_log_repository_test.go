@@ -50,7 +50,7 @@ func TestAuditLogRepository_Create(t *testing.T) {
 
 		auditLog := &models.AuditLog{
 			ID:           uuid.New(),
-			UserID:       userID,
+			UserID:       &userID,
 			Action:       "create_change_plan",
 			ResourceType: "change_plan",
 			ResourceID:   resourceID,
@@ -92,7 +92,7 @@ func TestAuditLogRepository_Create(t *testing.T) {
 
 		auditLog := &models.AuditLog{
 			ID:           uuid.Nil, // Will be auto-generated
-			UserID:       uuid.New(),
+			UserID:       func() *uuid.UUID { u := uuid.New(); return &u }(),
 			Action:       "update_change_plan",
 			ResourceType: "change_plan",
 			ResourceID:   uuid.New(),
@@ -132,7 +132,7 @@ func TestAuditLogRepository_Create(t *testing.T) {
 
 		auditLog := &models.AuditLog{
 			ID:           uuid.New(),
-			UserID:       uuid.New(),
+			UserID:       func() *uuid.UUID { u := uuid.New(); return &u }(),
 			Action:       "delete_change_plan",
 			ResourceType: "change_plan",
 			ResourceID:   uuid.New(),
@@ -172,7 +172,7 @@ func TestAuditLogRepository_Create(t *testing.T) {
 
 		auditLog := &models.AuditLog{
 			ID:           uuid.New(),
-			UserID:       uuid.New(),
+			UserID:       func() *uuid.UUID { u := uuid.New(); return &u }(),
 			Action:       "create_change_plan",
 			ResourceType: "change_plan",
 			ResourceID:   uuid.New(),
@@ -307,10 +307,10 @@ func TestAuditLogRepository_GetByUserID(t *testing.T) {
 			WithArgs(userID, limit, offset).
 			WillReturnRows(rows)
 
-		logs, err := repo.GetByUserID(ctx, userID, limit, offset)
+		logs, err := repo.GetByUserID(ctx, &userID, limit, offset)
 		require.NoError(t, err)
 		assert.Len(t, logs, 1)
-		assert.Equal(t, userID, logs[0].UserID)
+		assert.Equal(t, userID, *logs[0].UserID)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
 
@@ -336,7 +336,7 @@ func TestAuditLogRepository_GetByUserID(t *testing.T) {
 			WithArgs(userID, 10, 0).
 			WillReturnRows(rows)
 
-		logs, err := repo.GetByUserID(ctx, userID, 10, 0)
+		logs, err := repo.GetByUserID(ctx, &userID, 10, 0)
 		require.NoError(t, err)
 		assert.Len(t, logs, 0)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
@@ -356,7 +356,8 @@ func TestAuditLogRepository_GetByUserID(t *testing.T) {
 		sqlMock.ExpectQuery(`SELECT.*FROM audit_logs.*WHERE user_id`).
 			WillReturnError(sql.ErrConnDone)
 
-		logs, err := repo.GetByUserID(ctx, uuid.New(), 10, 0)
+		userID := uuid.New()
+		logs, err := repo.GetByUserID(ctx, &userID, 10, 0)
 		require.Error(t, err)
 		assert.Nil(t, logs)
 		assert.Contains(t, err.Error(), "failed to get audit logs by user ID")
@@ -496,7 +497,7 @@ func TestAuditLogRepository_Filter(t *testing.T) {
 		filters := repository.AuditLogListFilters{
 			Limit:  10,
 			Offset: 0,
-			UserID: userID,
+			UserID: &userID,
 		}
 
 		rows := sqlmock.NewRows([]string{
@@ -673,7 +674,7 @@ func TestAuditLogRepository_Filter(t *testing.T) {
 		filters := repository.AuditLogListFilters{
 			Limit:        10,
 			Offset:       5,
-			UserID:       userID,
+			UserID:       &userID,
 			Action:       action,
 			ResourceType: resourceType,
 			ResourceID:   resourceID,
@@ -711,7 +712,7 @@ func TestAuditLogRepository_Filter(t *testing.T) {
 		filters := repository.AuditLogListFilters{
 			Limit:  0, // No limit
 			Offset: 0,
-			UserID: userID,
+			UserID: &userID,
 		}
 
 		rows := sqlmock.NewRows([]string{
@@ -774,7 +775,7 @@ func TestAuditLogRepository_Filter(t *testing.T) {
 		filters := repository.AuditLogListFilters{
 			Limit:  10,
 			Offset: 0,
-			UserID: uuid.New(),
+			UserID: func() *uuid.UUID { u := uuid.New(); return &u }(),
 		}
 
 		sqlMock.ExpectQuery(`SELECT.*FROM audit_logs`).
@@ -873,7 +874,7 @@ func TestAuditLogRepository_CountWithFilters(t *testing.T) {
 
 		userID := uuid.New()
 		filters := repository.AuditLogListFilters{
-			UserID: userID,
+			UserID: &userID,
 		}
 
 		expectedCount := int64(5)
@@ -909,7 +910,7 @@ func TestAuditLogRepository_CountWithFilters(t *testing.T) {
 		endDate := time.Now()
 
 		filters := repository.AuditLogListFilters{
-			UserID:       userID,
+			UserID:       &userID,
 			Action:       action,
 			ResourceType: resourceType,
 			StartDate:    &startDate,
@@ -970,7 +971,7 @@ func TestAuditLogRepository_CountWithFilters(t *testing.T) {
 		ctx := context.Background()
 
 		filters := repository.AuditLogListFilters{
-			UserID: uuid.New(),
+			UserID: func() *uuid.UUID { u := uuid.New(); return &u }(),
 		}
 
 		sqlMock.ExpectQuery(`SELECT COUNT\(\*\) FROM audit_logs`).

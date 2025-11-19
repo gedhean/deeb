@@ -21,7 +21,7 @@ type AuditLogRepository struct {
 // auditLogRow is a helper struct for scanning audit log rows from PostgreSQL
 type auditLogRow struct {
 	ID           string  `db:"id"`
-	UserID       string  `db:"user_id"`
+	UserID       *string `db:"user_id"` // Nullable for unauthenticated events
 	Action       string  `db:"action"`
 	ResourceType string  `db:"resource_type"`
 	ResourceID   string  `db:"resource_id"`
@@ -38,9 +38,14 @@ func (r *auditLogRow) toAuditLog() (*models.AuditLog, error) {
 		return nil, fmt.Errorf("failed to parse audit log ID: %w", err)
 	}
 
-	userID, err := uuid.Parse(r.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse user ID: %w", err)
+	// Parse user_id (nullable for unauthenticated events)
+	var userID *uuid.UUID
+	if r.UserID != nil && *r.UserID != "" {
+		parsedUserID, err := uuid.Parse(*r.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse user ID: %w", err)
+		}
+		userID = &parsedUserID
 	}
 
 	resourceID, err := uuid.Parse(r.ResourceID)
@@ -160,19 +165,37 @@ func (r *AuditLogRepository) List(ctx context.Context, limit, offset int) ([]*mo
 	return auditLogs, nil
 }
 
-// GetByUserID retrieves audit logs filtered by user ID
-func (r *AuditLogRepository) GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.AuditLog, error) {
-	query := `
-		SELECT id::text, user_id::text, action, resource_type, resource_id::text,
-			details, host(ip_address) as ip_address, user_agent, timestamp::text
-		FROM audit_logs
-		WHERE user_id = $1
-		ORDER BY timestamp DESC
-		LIMIT $2 OFFSET $3
-	`
+// GetByUserID retrieves audit logs filtered by user ID (pass nil to get logs with NULL user_id)
+func (r *AuditLogRepository) GetByUserID(ctx context.Context, userID *uuid.UUID, limit, offset int) ([]*models.AuditLog, error) {
+	var query string
+	var args []interface{}
+
+	if userID == nil {
+		// Query for NULL user_id
+		query = `
+			SELECT id::text, user_id::text, action, resource_type, resource_id::text,
+				details, host(ip_address) as ip_address, user_agent, timestamp::text
+			FROM audit_logs
+			WHERE user_id IS NULL
+			ORDER BY timestamp DESC
+			LIMIT $1 OFFSET $2
+		`
+		args = []interface{}{limit, offset}
+	} else {
+		// Query for specific user_id
+		query = `
+			SELECT id::text, user_id::text, action, resource_type, resource_id::text,
+				details, host(ip_address) as ip_address, user_agent, timestamp::text
+			FROM audit_logs
+			WHERE user_id = $1
+			ORDER BY timestamp DESC
+			LIMIT $2 OFFSET $3
+		`
+		args = []interface{}{userID, limit, offset}
+	}
 
 	var rows []auditLogRow
-	err := r.db.SelectContext(ctx, &rows, query, userID, limit, offset)
+	err := r.db.SelectContext(ctx, &rows, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get audit logs by user ID: %w", err)
 	}
@@ -258,9 +281,9 @@ func (r *AuditLogRepository) Filter(ctx context.Context, filters repository.Audi
 	args := []interface{}{}
 	argIndex := 1
 
-	if filters.UserID != uuid.Nil {
+	if filters.UserID != nil {
 		whereConditions = append(whereConditions, fmt.Sprintf("user_id = $%d", argIndex))
-		args = append(args, filters.UserID)
+		args = append(args, *filters.UserID)
 		argIndex++
 	}
 
@@ -357,9 +380,9 @@ func (r *AuditLogRepository) CountWithFilters(ctx context.Context, filters repos
 	args := []interface{}{}
 	argIndex := 1
 
-	if filters.UserID != uuid.Nil {
+	if filters.UserID != nil {
 		whereConditions = append(whereConditions, fmt.Sprintf("user_id = $%d", argIndex))
-		args = append(args, filters.UserID)
+		args = append(args, *filters.UserID)
 		argIndex++
 	}
 

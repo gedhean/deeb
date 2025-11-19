@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
+	"github.com/nsxbet/deeb/internal/database"
 	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
@@ -18,6 +19,7 @@ import (
 	"github.com/nsxbet/deeb/internal/review"
 	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/workflow"
+	"github.com/nsxbet/sql-reviewer/pkg/types"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +38,7 @@ type ChangePlanHandler struct {
 	reviewService        *review.ReviewService
 	approvalService      *services.ApprovalService
 	executionService     *services.ExecutionService
-	auditService         *services.AuditLogService
+	connectionManager    *database.ConnectionManager
 	logger               *zap.Logger
 }
 
@@ -55,7 +57,7 @@ func NewChangePlanHandler(
 	reviewService *review.ReviewService,
 	approvalService *services.ApprovalService,
 	executionService *services.ExecutionService,
-	auditService *services.AuditLogService,
+	connectionManager *database.ConnectionManager,
 	logger *zap.Logger,
 ) *ChangePlanHandler {
 	return &ChangePlanHandler{
@@ -72,7 +74,7 @@ func NewChangePlanHandler(
 		reviewService:        reviewService,
 		approvalService:      approvalService,
 		executionService:     executionService,
-		auditService:         auditService,
+		connectionManager:    connectionManager,
 		logger:               logger,
 	}
 }
@@ -183,22 +185,6 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		zap.String("change_plan_id", changePlan.ID.String()),
 		zap.String("project_id", changePlan.ProjectID.String()),
 	)
-
-	// Log audit entry
-	if h.auditService != nil {
-		detailsJSON, _ := json.Marshal(map[string]interface{}{
-			"title":              changePlan.Title,
-			"description":        changePlan.Description,
-			"change_type":        string(changePlan.ChangeType),
-			"project_id":         changePlan.ProjectID.String(),
-			"target_database_id": changePlan.TargetDatabaseID.String(),
-			"risk_level":         string(changePlan.RiskLevel),
-			"status":             string(changePlan.Status),
-		})
-		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeChangePlan, changePlan.ID, c.Request(), detailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for change plan creation", zap.Error(err))
-		}
-	}
 
 	return c.JSON(http.StatusCreated, changePlan.ToResponse())
 }
@@ -336,6 +322,7 @@ func (h *ChangePlanHandler) GetChangePlan(c echo.Context) error {
 	}
 
 	// Convert execution logs to response format
+	// Always initialize the slice to ensure consistent JSON serialization ([] instead of null)
 	if len(executionLogs) > 0 {
 		logResponses := make([]*models.ExecutionLogResponse, len(executionLogs))
 		for i, log := range executionLogs {
@@ -346,6 +333,9 @@ func (h *ChangePlanHandler) GetChangePlan(c echo.Context) error {
 		// Set last execution status from the most recent log (first in the list)
 		lastStatus := executionLogs[0].Status
 		response.LastExecutionStatus = &lastStatus
+	} else {
+		// Initialize empty slice to serialize as [] instead of null
+		response.ExecutionLogs = []*models.ExecutionLogResponse{}
 	}
 
 	return c.JSON(http.StatusOK, response)
@@ -686,12 +676,6 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		changePlan.RollbackSQL = req.RollbackSQL
 	}
 
-	// Capture old status before update if status is being changed
-	var oldStatus models.ChangePlanStatus
-	if req.Status != nil {
-		oldStatus = changePlan.Status
-	}
-
 	if req.Status != nil {
 		// Validate status transition
 		if err := workflow.ValidateTransition(changePlan.Status, *req.Status); err != nil {
@@ -791,33 +775,6 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		zap.String("change_plan_id", changePlan.ID.String()),
 	)
 
-	// Log audit entry
-	if h.auditService != nil {
-		claims, ok := auth.GetUserFromEchoContext(c)
-		if ok && claims != nil {
-			detailsJSON, _ := json.Marshal(map[string]interface{}{
-				"title":       changePlan.Title,
-				"description": changePlan.Description,
-				"change_type": string(changePlan.ChangeType),
-				"risk_level":  string(changePlan.RiskLevel),
-			})
-			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionUpdate, services.ResourceTypeChangePlan, changePlan.ID, c.Request(), detailsJSON); err != nil {
-				h.logger.Error("Failed to log audit entry for change plan update", zap.Error(err))
-			}
-
-			// Log status transition if status was updated
-			if req.Status != nil && oldStatus != *req.Status {
-				transitionDetailsJSON, _ := json.Marshal(map[string]interface{}{
-					"change_plan_id": changePlan.ID.String(),
-					"title":          changePlan.Title,
-				})
-				if err := h.auditService.LogStateTransition(ctx, claims.UserID, services.ResourceTypeChangePlan, changePlan.ID, string(oldStatus), string(*req.Status), transitionDetailsJSON); err != nil {
-					h.logger.Error("Failed to log audit entry for status transition", zap.Error(err))
-				}
-			}
-		}
-	}
-
 	return c.JSON(http.StatusOK, changePlan.ToResponse())
 }
 
@@ -842,7 +799,7 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 	ctx := c.Request().Context()
 
 	// Get database type from database instance
-	database, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+	db, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
 	if err != nil {
 		return &SQLReviewError{
 			HasErrors: false,
@@ -850,7 +807,7 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 		}
 	}
 
-	databaseInstance, err := h.databaseInstanceRepo.GetByID(ctx, database.DatabaseInstanceID)
+	databaseInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
 	if err != nil {
 		return &SQLReviewError{
 			HasErrors: false,
@@ -860,12 +817,45 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 
 	h.logger.Info("Running SQL Review")
 
+	// Attempt to establish database connection for advanced validation (DML dry-run, etc.)
+	// Connection is optional - review will work without it but with limited capabilities
+	var dbConn *sql.DB
+	if h.connectionManager != nil {
+		conn, connErr := h.connectionManager.Connect(ctx, database.ConnectionParams{
+			DatabaseInstance: databaseInstance,
+			Database:         db,
+			MaxOpenConns:     2, // Limit connections for review
+			MaxIdleConns:     1,
+			ConnMaxLifetime:  time.Minute * 2,
+		})
+		if connErr != nil {
+			h.logger.Warn("Failed to establish database connection for review - continuing without connection validation",
+				zap.Error(connErr),
+				zap.String("database_id", db.ID.String()))
+		} else {
+			dbConn = conn.DB
+			defer func() {
+				if closeErr := conn.Close(); closeErr != nil {
+					h.logger.Warn("Failed to close database connection after review",
+						zap.Error(closeErr))
+				}
+			}()
+		}
+	}
+
+	// Determine change type based on SQL content
+	changeType := types.PlanCheckRunConfig_SDL // Default to SDL (schema definition language) for comprehensive checking
+
 	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
-		ChangePlanID:   changePlan.ID,
-		EnvironmentID:  database.EnvironmentID,
-		DatabaseID:     &database.ID,
-		SQLContent:     changePlan.SQLContent,
-		DatabaseEngine: databaseInstance.DatabaseEngine,
+		ChangePlanID:             changePlan.ID,
+		EnvironmentID:            db.EnvironmentID,
+		DatabaseID:               &db.ID,
+		SQLContent:               changePlan.SQLContent,
+		DatabaseEngine:           databaseInstance.DatabaseEngine,
+		Driver:                   dbConn,
+		ChangeType:               &changeType,
+		EnableQueryLogging:       true,
+		UsePostgresDatabaseOwner: databaseInstance.DatabaseEngine == models.DatabaseEnginePostgreSQL,
 	})
 	if err != nil {
 		return &SQLReviewError{
@@ -1063,7 +1053,7 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 	}
 
 	// Get database type from database instance
-	database, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+	db, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
 	if err != nil {
 		h.logger.Error("Failed to get database", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -1071,7 +1061,7 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 		})
 	}
 
-	databaseInstance, err := h.databaseInstanceRepo.GetByID(ctx, database.DatabaseInstanceID)
+	databaseInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
 	if err != nil {
 		h.logger.Error("Failed to get database instance", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -1081,12 +1071,45 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 
 	h.logger.Info("Running manual SQL Review")
 
+	// Attempt to establish database connection for advanced validation (DML dry-run, etc.)
+	// Connection is optional - review will work without it but with limited capabilities
+	var dbConn *sql.DB
+	if h.connectionManager != nil {
+		conn, connErr := h.connectionManager.Connect(ctx, database.ConnectionParams{
+			DatabaseInstance: databaseInstance,
+			Database:         db,
+			MaxOpenConns:     2, // Limit connections for review
+			MaxIdleConns:     1,
+			ConnMaxLifetime:  time.Minute * 2,
+		})
+		if connErr != nil {
+			h.logger.Warn("Failed to establish database connection for review - continuing without connection validation",
+				zap.Error(connErr),
+				zap.String("database_id", db.ID.String()))
+		} else {
+			dbConn = conn.DB
+			defer func() {
+				if closeErr := conn.Close(); closeErr != nil {
+					h.logger.Warn("Failed to close database connection after review",
+						zap.Error(closeErr))
+				}
+			}()
+		}
+	}
+
+	// Determine change type based on SQL content
+	changeType := types.PlanCheckRunConfig_SDL // Default to SDL (schema definition language) for comprehensive checking
+
 	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
-		ChangePlanID:   changePlan.ID,
-		EnvironmentID:  database.EnvironmentID,
-		DatabaseID:     &database.ID,
-		SQLContent:     changePlan.SQLContent,
-		DatabaseEngine: databaseInstance.DatabaseEngine,
+		ChangePlanID:             changePlan.ID,
+		EnvironmentID:            db.EnvironmentID,
+		DatabaseID:               &db.ID,
+		SQLContent:               changePlan.SQLContent,
+		DatabaseEngine:           databaseInstance.DatabaseEngine,
+		Driver:                   dbConn,
+		ChangeType:               &changeType,
+		EnableQueryLogging:       true,
+		UsePostgresDatabaseOwner: databaseInstance.DatabaseEngine == models.DatabaseEnginePostgreSQL,
 	})
 	if err != nil {
 		h.logger.Error("Failed to run SQL Review", zap.Error(err))
@@ -1335,18 +1358,6 @@ func (h *ChangePlanHandler) DeleteChangePlan(c echo.Context) error {
 		zap.String("change_plan_id", changePlanID.String()),
 	)
 
-	// Log audit entry
-	if h.auditService != nil {
-		detailsJSON, _ := json.Marshal(map[string]interface{}{
-			"change_plan_id": changePlanID.String(),
-			"title":          changePlan.Title,
-			"status":         string(changePlan.Status),
-		})
-		if err := h.auditService.LogWithHTTP(ctx, userID, services.ActionDelete, services.ResourceTypeChangePlan, changePlanID, c.Request(), detailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for change plan deletion", zap.Error(err))
-		}
-	}
-
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -1439,21 +1450,6 @@ func (h *ChangePlanHandler) ApproveChangePlan(c echo.Context) error {
 		req.Comments = nil
 	}
 
-	// Get change plan to capture old status for audit logging
-	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
-	if err != nil {
-		if err == repository.ErrNotFound {
-			return c.JSON(http.StatusNotFound, map[string]interface{}{
-				"error": "Change plan not found",
-			})
-		}
-		h.logger.Error("Failed to get change plan", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to retrieve change plan",
-		})
-	}
-	oldStatus := changePlan.Status
-
 	// Use approval service to approve the change plan
 	// The service handles:
 	// - Change plan existence check
@@ -1514,18 +1510,6 @@ func (h *ChangePlanHandler) ApproveChangePlan(c echo.Context) error {
 		zap.String("approved_by", claims.UserID.String()),
 	)
 
-	// Log audit entry for status transition
-	if h.auditService != nil {
-		transitionDetailsJSON, _ := json.Marshal(map[string]interface{}{
-			"change_plan_id": changePlanID.String(),
-			"title":          changePlan.Title,
-			"comments":       req.Comments,
-		})
-		if err := h.auditService.LogStateTransition(ctx, claims.UserID, services.ResourceTypeChangePlan, changePlanID, string(oldStatus), string(models.ChangePlanStatusApproved), transitionDetailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for approval", zap.Error(err))
-		}
-	}
-
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message":        "Change plan approved successfully",
 		"change_plan_id": changePlanID.String(),
@@ -1565,21 +1549,6 @@ func (h *ChangePlanHandler) CloseChangePlan(c echo.Context) error {
 		// If binding fails, continue with empty comments (comments are optional)
 		req.Comments = nil
 	}
-
-	// Get change plan to capture old status for audit logging
-	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
-	if err != nil {
-		if err == repository.ErrNotFound {
-			return c.JSON(http.StatusNotFound, map[string]interface{}{
-				"error": "Change plan not found",
-			})
-		}
-		h.logger.Error("Failed to get change plan", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to retrieve change plan",
-		})
-	}
-	oldStatus := changePlan.Status
 
 	// Use approval service to close the change plan
 	// The service handles:
@@ -1628,18 +1597,6 @@ func (h *ChangePlanHandler) CloseChangePlan(c echo.Context) error {
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("closed_by", claims.UserID.String()),
 	)
-
-	// Log audit entry for status transition
-	if h.auditService != nil {
-		transitionDetailsJSON, _ := json.Marshal(map[string]interface{}{
-			"change_plan_id": changePlanID.String(),
-			"title":          changePlan.Title,
-			"comments":       req.Comments,
-		})
-		if err := h.auditService.LogStateTransition(ctx, claims.UserID, services.ResourceTypeChangePlan, changePlanID, string(oldStatus), string(models.ChangePlanStatusClosed), transitionDetailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for close", zap.Error(err))
-		}
-	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message":        "Change plan closed successfully",
@@ -2049,34 +2006,6 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 		zap.Int("rows_affected", result.RowsAffected),
 		zap.Duration("duration", result.Duration),
 	)
-
-	// Log audit entry for execution
-	if h.auditService != nil {
-		executionDetailsJSON, _ := json.Marshal(map[string]interface{}{
-			"change_plan_id": changePlanID.String(),
-			"title":          changePlan.Title,
-			"success":        result.Success,
-			"rows_affected":  result.RowsAffected,
-			"duration_ms":    result.Duration.Milliseconds(),
-		})
-		if err := h.auditService.LogWithHTTP(ctx, userID, services.ActionExecuteChangePlan, services.ResourceTypeChangePlan, changePlanID, c.Request(), executionDetailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for execution", zap.Error(err))
-		}
-
-		// Log status transition from Approved to final status (Completed or Failed)
-		finalStatus := models.ChangePlanStatusCompleted
-		if !result.Success {
-			finalStatus = models.ChangePlanStatusFailed
-		}
-		transitionDetailsJSON, _ := json.Marshal(map[string]interface{}{
-			"change_plan_id": changePlanID.String(),
-			"title":          changePlan.Title,
-			"success":        result.Success,
-		})
-		if err := h.auditService.LogStateTransition(ctx, userID, services.ResourceTypeChangePlan, changePlanID, string(models.ChangePlanStatusApproved), string(finalStatus), transitionDetailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for execution status transition", zap.Error(err))
-		}
-	}
 
 	// Build response with execution results
 	executionData := map[string]interface{}{

@@ -52,5 +52,13 @@ dev: ensure-concurrently
 # alias cmd for dev
 run: dev
 
+.PHONY: generate
+generate:
+	echo "Generating $(FRONTEND_DIR)..."
+	pnpm --dir $(FRONTEND_DIR) run generate:rbac
+
+	echo "Generating $(BACKEND_DIR)..."
+	make -C $(BACKEND_DIR) generate
+
 ensure-concurrently:
 	@which concurrently > /dev/null || (echo "Installing concurrently..." && pnpm install -g concurrently)

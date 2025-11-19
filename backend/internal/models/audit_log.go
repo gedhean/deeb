@@ -11,7 +11,7 @@ import (
 // AuditLog represents an audit log entry
 type AuditLog struct {
 	ID           uuid.UUID       `json:"id"                   db:"id"`
-	UserID       uuid.UUID       `json:"user_id"              db:"user_id"`
+	UserID       *uuid.UUID      `json:"user_id"              db:"user_id"` // Nullable for unauthenticated events
 	Action       string          `json:"action"               db:"action"`
 	ResourceType string          `json:"resource_type"        db:"resource_type"`
 	ResourceID   uuid.UUID       `json:"resource_id"          db:"resource_id"`
@@ -23,7 +23,7 @@ type AuditLog struct {
 
 // CreateAuditLogRequest represents the request to create a new audit log entry
 type CreateAuditLogRequest struct {
-	UserID       uuid.UUID       `json:"user_id"              validate:"required"`
+	UserID       *uuid.UUID      `json:"user_id"` // Nullable for unauthenticated events
 	Action       string          `json:"action"               validate:"required,max=100"`
 	ResourceType string          `json:"resource_type"        validate:"required,max=100"`
 	ResourceID   uuid.UUID       `json:"resource_id"          validate:"required"`
@@ -35,7 +35,7 @@ type CreateAuditLogRequest struct {
 // AuditLogResponse represents an audit log response
 type AuditLogResponse struct {
 	ID           uuid.UUID       `json:"id"`
-	UserID       uuid.UUID       `json:"user_id"`
+	UserID       *uuid.UUID      `json:"user_id"` // Nullable for unauthenticated events
 	Action       string          `json:"action"`
 	ResourceType string          `json:"resource_type"`
 	ResourceID   uuid.UUID       `json:"resource_id"`

@@ -23,6 +23,7 @@ type Config struct {
 	Security       SecurityConfig       `yaml:"security"`
 	Logging        LoggingConfig        `yaml:"logging"`
 	BackgroundJobs BackgroundJobsConfig `yaml:"background_jobs"`
+	AuditLogging   AuditLoggingConfig   `yaml:"audit_logging"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -83,6 +84,22 @@ type LoggingConfig struct {
 // BackgroundJobsConfig holds background job configuration
 type BackgroundJobsConfig struct {
 	SchemaSyncInterval time.Duration `yaml:"schema_sync_interval"` // How often to sync schema metadata
+}
+
+// AuditLoggingConfig holds audit logging configuration
+type AuditLoggingConfig struct {
+	Enabled          bool                    `yaml:"enabled"`           // Enable/disable audit logging globally
+	DefaultPolicy    string                  `yaml:"default_policy"`    // "allow" or "deny" - default behavior for unconfigured resources
+	LogAllPaths      bool                    `yaml:"log_all_paths"`     // If true, don't skip any paths (overrides hardcoded skips)
+	SkipPaths        []string                `yaml:"skip_paths"`        // Additional paths to skip (glob patterns supported)
+	Resources        map[string]ResourceRule `yaml:"resources"`         // Per-resource configuration
+	RedactionEnabled bool                    `yaml:"redaction_enabled"` // Enable/disable sensitive data redaction
+}
+
+// ResourceRule defines which actions should be audited for a specific resource type
+type ResourceRule struct {
+	Enabled bool     `yaml:"enabled"` // Enable/disable logging for this resource
+	Actions []string `yaml:"actions"` // List of action names to log (e.g., ["create", "update", "delete"])
 }
 
 // Load loads configuration from environment variables and optionally a YAML file
@@ -151,6 +168,14 @@ func (c *Config) setDefaults() {
 
 	// Background Jobs defaults
 	c.BackgroundJobs.SchemaSyncInterval = 1 * time.Hour
+
+	// Audit Logging defaults
+	c.AuditLogging.Enabled = true
+	c.AuditLogging.DefaultPolicy = "deny" // Opt-in by default (nothing logged unless explicitly configured)
+	c.AuditLogging.LogAllPaths = false
+	c.AuditLogging.SkipPaths = []string{}
+	c.AuditLogging.Resources = make(map[string]ResourceRule)
+	c.AuditLogging.RedactionEnabled = true
 }
 
 // loadFromFile loads configuration from a YAML file
@@ -363,6 +388,27 @@ func (c *Config) Validate() error {
 	if c.Logging.Format != "json" && c.Logging.Format != "console" {
 		return fmt.Errorf("logging.format must be one of: json, console, got %s", c.Logging.Format)
 	}
+
+	// Audit Logging validation
+	if err := c.validateAuditLogging(); err != nil {
+		return fmt.Errorf("audit_logging validation failed: %w", err)
+	}
+
+	return nil
+}
+
+// validateAuditLogging validates the audit logging configuration
+func (c *Config) validateAuditLogging() error {
+	// Validate default policy
+	if c.AuditLogging.DefaultPolicy != "allow" && c.AuditLogging.DefaultPolicy != "deny" {
+		return fmt.Errorf("default_policy must be 'allow' or 'deny', got %s", c.AuditLogging.DefaultPolicy)
+	}
+
+	// Note: Action and resource type validation is not performed at config load time.
+	// The authoritative list of valid actions and resources is defined in:
+	//   internal/services/audit_log_service.go
+	// Invalid actions/resources in config will simply not match any audit logs,
+	// which is acceptable behavior (fail-open for configuration flexibility).
 
 	return nil
 }

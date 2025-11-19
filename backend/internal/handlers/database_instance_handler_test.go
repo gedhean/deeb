@@ -365,7 +365,6 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -437,7 +436,6 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -487,7 +485,6 @@ func TestCreateDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -552,7 +549,6 @@ func TestListDatabaseInstances(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -591,7 +587,6 @@ func TestListDatabaseInstances(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -649,7 +644,6 @@ func TestGetDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -693,7 +687,6 @@ func TestGetDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -724,7 +717,6 @@ func TestGetDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -772,7 +764,6 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -829,7 +820,6 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -876,7 +866,6 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -914,7 +903,6 @@ func TestUpdateDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -966,7 +954,6 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -1006,7 +993,6 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 
@@ -1038,7 +1024,6 @@ func TestDeleteDatabaseInstance(t *testing.T) {
 			&mockChangePlanRepositoryForInstance{},
 			nil, // connManager
 			"12345678901234567890123456789012",
-			nil, // auditService
 			logger,
 		)
 

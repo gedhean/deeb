@@ -256,8 +256,8 @@ export const ChangePlanDetailPage: React.FC = () => {
                 <Badge variant="outline">{changePlan.risk_level}</Badge>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Left Column: Database, Project, Author */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Column 1: Database, Database Instance */}
                 <div className="space-y-3">
                   <div className="flex items-start gap-3">
                     <DatabaseIcon className="h-4 w-4 text-muted-foreground mt-1" />
@@ -270,6 +270,9 @@ export const ChangePlanDetailPage: React.FC = () => {
                           onClick={() => navigate(`/databases/${database.id}`)}
                         >
                           {database.database_name}
+                          {database.environment && (
+                            <span className="-ml-1">({database.environment.name})</span>
+                          )}
                         </Button>
                       ) : (
                         <p className="text-sm text-muted-foreground">
@@ -300,7 +303,10 @@ export const ChangePlanDetailPage: React.FC = () => {
                       )}
                     </div>
                   </div>
+                </div>
 
+                {/* Column 2: Project, Author */}
+                <div className="space-y-3">
                   <div className="flex items-start gap-3">
                     <FileCode className="h-4 w-4 text-muted-foreground mt-1" />
                     <div className="flex-1">
@@ -338,7 +344,7 @@ export const ChangePlanDetailPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Right Column: Timestamps */}
+                {/* Column 3: Created, Last Updated */}
                 <div className="space-y-3">
                   <div className="flex items-start gap-3">
                     <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
@@ -361,7 +367,10 @@ export const ChangePlanDetailPage: React.FC = () => {
                       </div>
                     </div>
                   )}
+                </div>
 
+                {/* Column 4: Scheduled For, Executed At */}
+                <div className="space-y-3">
                   {changePlan.scheduled_for && (
                     <div className="flex items-start gap-3">
                       <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
@@ -502,6 +511,7 @@ export const ChangePlanDetailPage: React.FC = () => {
               </div>
             ) : (
               <MonacoSQLEditor
+                key={`readonly-${changePlan.updated_at}`}
                 value={changePlan.sql_content}
                 onChange={() => {}}
                 readonly={true}

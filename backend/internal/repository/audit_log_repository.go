@@ -12,7 +12,7 @@ import (
 type AuditLogListFilters struct {
 	Limit        int        // Maximum number of results to return
 	Offset       int        // Number of results to skip
-	UserID       uuid.UUID  // Filter by user ID (Nil for all)
+	UserID       *uuid.UUID // Filter by user ID (nil for all, including NULL user_ids)
 	Action       string     // Filter by action (empty for all)
 	ResourceType string     // Filter by resource type (empty for all)
 	ResourceID   uuid.UUID  // Filter by resource ID (Nil for all)
@@ -28,8 +28,8 @@ type AuditLogRepository interface {
 	// List retrieves all audit logs with pagination
 	List(ctx context.Context, limit, offset int) ([]*models.AuditLog, error)
 
-	// GetByUserID retrieves audit logs filtered by user ID
-	GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.AuditLog, error)
+	// GetByUserID retrieves audit logs filtered by user ID (pass nil to get logs with NULL user_id)
+	GetByUserID(ctx context.Context, userID *uuid.UUID, limit, offset int) ([]*models.AuditLog, error)
 
 	// GetByAction retrieves audit logs filtered by action
 	GetByAction(ctx context.Context, action string, limit, offset int) ([]*models.AuditLog, error)

@@ -28,6 +28,7 @@ func NewAuthMiddleware(tokenManager *auth.TokenManager) *AuthMiddleware {
 // Authenticate is the Echo middleware handler that validates JWT tokens.
 // It first tries to extract the token from the HttpOnly cookie, then falls back to the Authorization header.
 // On successful validation, it stores the user claims in the Echo context with key "user".
+// On failure, it returns a 401 Unauthorized error.
 func (m *AuthMiddleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// Try to extract token from HttpOnly cookie first

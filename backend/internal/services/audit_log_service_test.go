@@ -36,7 +36,7 @@ func (m *MockAuditLogRepository) List(ctx context.Context, limit, offset int) ([
 
 func (m *MockAuditLogRepository) GetByUserID(
 	ctx context.Context,
-	userID uuid.UUID,
+	userID *uuid.UUID,
 	limit, offset int,
 ) ([]*models.AuditLog, error) {
 	args := m.Called(ctx, userID, limit, offset)
@@ -97,7 +97,7 @@ func TestAuditLogService_Log(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.Action == action &&
 			log.ResourceType == resourceType &&
 			log.ResourceID == resourceID &&
@@ -106,7 +106,7 @@ func TestAuditLogService_Log(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.Log(ctx, userID, action, resourceType, resourceID, details)
+	err := service.Log(ctx, &userID, action, resourceType, resourceID, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -131,7 +131,7 @@ func TestAuditLogService_LogWithHTTP(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.Action == action &&
 			log.ResourceType == resourceType &&
 			log.ResourceID == resourceID &&
@@ -142,7 +142,7 @@ func TestAuditLogService_LogWithHTTP(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -167,14 +167,14 @@ func TestAuditLogService_LogWithHTTP_XForwardedFor(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.IPAddress != nil &&
 			log.IPAddress.String() == "10.0.0.1"
 	})).Return(nil)
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -214,7 +214,7 @@ func TestAuditLogService_LogStateTransition(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogStateTransition(ctx, userID, resourceType, resourceID, fromStatus, toStatus, additionalDetails)
+	err := service.LogStateTransition(ctx, &userID, resourceType, resourceID, fromStatus, toStatus, additionalDetails)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -246,7 +246,7 @@ func TestAuditLogService_LogWithResult_Success(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogWithResult(ctx, userID, action, resourceType, resourceID, result, nil, additionalDetails)
+	err := service.LogWithResult(ctx, &userID, action, resourceType, resourceID, result, nil, additionalDetails)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -276,7 +276,7 @@ func TestAuditLogService_LogWithResult_Failure(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogWithResult(ctx, userID, action, resourceType, resourceID, result, &errorMessage, nil)
+	err := service.LogWithResult(ctx, &userID, action, resourceType, resourceID, result, &errorMessage, nil)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -296,7 +296,7 @@ func TestAuditLogService_Log_RepositoryError(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.Log(ctx, userID, action, resourceType, resourceID, nil)
+	err := service.Log(ctx, &userID, action, resourceType, resourceID, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create audit log")
@@ -333,7 +333,7 @@ func TestAuditLogService_LogWithHTTP_NilRequest(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.Action == action &&
 			log.ResourceType == resourceType &&
 			log.ResourceID == resourceID &&
@@ -343,7 +343,7 @@ func TestAuditLogService_LogWithHTTP_NilRequest(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, nil, details)
+	err := service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, nil, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -367,14 +367,14 @@ func TestAuditLogService_LogWithHTTP_XRealIP(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.IPAddress != nil &&
 			log.IPAddress.String() == "10.0.0.1"
 	})).Return(nil)
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -397,14 +397,14 @@ func TestAuditLogService_LogWithHTTP_RemoteAddr(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.IPAddress != nil &&
 			log.IPAddress.String() == "192.168.1.1"
 	})).Return(nil)
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -427,14 +427,14 @@ func TestAuditLogService_LogWithHTTP_RemoteAddrNoPort(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.IPAddress != nil &&
 			log.IPAddress.String() == "192.168.1.1"
 	})).Return(nil)
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -458,13 +458,13 @@ func TestAuditLogService_LogWithHTTP_EmptyUserAgent(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.UserAgent == nil
 	})).Return(nil)
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -497,7 +497,7 @@ func TestAuditLogService_LogStateTransition_NilAdditionalDetails(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogStateTransition(ctx, userID, resourceType, resourceID, fromStatus, toStatus, nil)
+	err := service.LogStateTransition(ctx, &userID, resourceType, resourceID, fromStatus, toStatus, nil)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -535,7 +535,7 @@ func TestAuditLogService_LogStateTransition_AllChangePlanStatuses(t *testing.T) 
 
 			service := NewAuditLogService(mockRepo, logger)
 
-			err := service.LogStateTransition(ctx, userID, resourceType, resourceID, "open", tc.toStatus, nil)
+			err := service.LogStateTransition(ctx, &userID, resourceType, resourceID, "open", tc.toStatus, nil)
 			require.NoError(t, err)
 			mockRepo.AssertExpectations(t)
 		})
@@ -561,7 +561,7 @@ func TestAuditLogService_LogStateTransition_GenericResourceType(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogStateTransition(ctx, userID, resourceType, resourceID, fromStatus, toStatus, nil)
+	err := service.LogStateTransition(ctx, &userID, resourceType, resourceID, fromStatus, toStatus, nil)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -598,7 +598,7 @@ func TestAuditLogService_LogStateTransition_InvalidJSONDetails(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogStateTransition(ctx, userID, resourceType, resourceID, fromStatus, toStatus, invalidJSON)
+	err := service.LogStateTransition(ctx, &userID, resourceType, resourceID, fromStatus, toStatus, invalidJSON)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -627,7 +627,7 @@ func TestAuditLogService_LogWithResult_NilAdditionalDetails(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogWithResult(ctx, userID, action, resourceType, resourceID, result, nil, nil)
+	err := service.LogWithResult(ctx, &userID, action, resourceType, resourceID, result, nil, nil)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -659,7 +659,7 @@ func TestAuditLogService_LogWithResult_InvalidJSONDetails(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogWithResult(ctx, userID, action, resourceType, resourceID, result, nil, invalidJSON)
+	err := service.LogWithResult(ctx, &userID, action, resourceType, resourceID, result, nil, invalidJSON)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -691,7 +691,7 @@ func TestAuditLogService_LogWithResult_WithAdditionalDetails(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogWithResult(ctx, userID, action, resourceType, resourceID, result, nil, additionalDetails)
+	err := service.LogWithResult(ctx, &userID, action, resourceType, resourceID, result, nil, additionalDetails)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -715,13 +715,13 @@ func TestAuditLogService_LogWithHTTP_InvalidIPAddress(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.IPAddress == nil // Invalid IP should result in nil
 	})).Return(nil)
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -745,14 +745,14 @@ func TestAuditLogService_LogWithHTTP_XForwardedForWithWhitespace(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.IPAddress != nil &&
 			log.IPAddress.String() == "10.0.0.1"
 	})).Return(nil)
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -776,14 +776,14 @@ func TestAuditLogService_LogWithHTTP_IPv6Address(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.IPAddress != nil &&
 			log.IPAddress.String() == "2001:db8:85a3::8a2e:370:7334"
 	})).Return(nil)
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -800,7 +800,7 @@ func TestAuditLogService_Log_EmptyDetails(t *testing.T) {
 
 	mockRepo := new(MockAuditLogRepository)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(log *models.AuditLog) bool {
-		return log.UserID == userID &&
+		return log.UserID != nil && *log.UserID == userID &&
 			log.Action == action &&
 			log.ResourceType == resourceType &&
 			log.ResourceID == resourceID &&
@@ -809,7 +809,7 @@ func TestAuditLogService_Log_EmptyDetails(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.Log(ctx, userID, action, resourceType, resourceID, nil)
+	err := service.Log(ctx, &userID, action, resourceType, resourceID, nil)
 
 	require.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -835,7 +835,7 @@ func TestAuditLogService_LogWithHTTP_RepositoryError(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err = service.LogWithHTTP(ctx, userID, action, resourceType, resourceID, req, details)
+	err = service.LogWithHTTP(ctx, &userID, action, resourceType, resourceID, req, details)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create audit log")
@@ -857,7 +857,7 @@ func TestAuditLogService_LogStateTransition_RepositoryError(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogStateTransition(ctx, userID, resourceType, resourceID, fromStatus, toStatus, nil)
+	err := service.LogStateTransition(ctx, &userID, resourceType, resourceID, fromStatus, toStatus, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create audit log")
@@ -879,7 +879,7 @@ func TestAuditLogService_LogWithResult_RepositoryError(t *testing.T) {
 
 	service := NewAuditLogService(mockRepo, logger)
 
-	err := service.LogWithResult(ctx, userID, action, resourceType, resourceID, result, nil, nil)
+	err := service.LogWithResult(ctx, &userID, action, resourceType, resourceID, result, nil, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create audit log")

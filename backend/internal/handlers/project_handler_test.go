@@ -439,7 +439,6 @@ func TestCreateProject(t *testing.T) {
 				&mockDatabaseRepositoryForProject{databases: []*models.Database{}},
 				mockMemberRepo,
 				&mockUserRepositoryForProject{},
-				nil,
 				logger,
 			)
 
@@ -619,7 +618,6 @@ func TestListProjects(t *testing.T) {
 				&mockDatabaseRepositoryForProject{databases: []*models.Database{}},
 				&mockProjectMemberRepositoryForProject{},
 				&mockUserRepositoryForProject{},
-				nil,
 				logger,
 			)
 
@@ -732,7 +730,6 @@ func TestGetProject(t *testing.T) {
 				&mockDatabaseRepositoryForProject{databases: []*models.Database{}},
 				&mockProjectMemberRepositoryForProject{},
 				&mockUserRepositoryForProject{},
-				nil,
 				logger,
 			)
 
@@ -847,7 +844,6 @@ func TestUpdateProject(t *testing.T) {
 				&mockDatabaseRepositoryForProject{databases: []*models.Database{}},
 				&mockProjectMemberRepositoryForProject{},
 				&mockUserRepositoryForProject{},
-				nil,
 				logger,
 			)
 
@@ -950,7 +946,6 @@ func TestDeleteProject(t *testing.T) {
 				mockDBRepo,
 				&mockProjectMemberRepositoryForProject{},
 				&mockUserRepositoryForProject{},
-				nil,
 				logger,
 			)
 

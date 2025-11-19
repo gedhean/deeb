@@ -39,7 +39,7 @@
 - [x] Update get request for project level resources use useCurrentProject hook to get the current project ID
 - [x] Optimize Frontend APIs calls: reduce the number of API calls and optimize the data fetching logic (use store to reuse data and avoid duplicate API calls).
 
-### Current
+### Current Todos
 
 - [ ] Update Environments Page to use correct RBAC permissions
 - [ ] Update SQL Review: SQL syntax built-in check to use sql-reviewer pkg (DML dry-run validation).

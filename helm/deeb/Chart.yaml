@@ -1,0 +1,24 @@
+apiVersion: v2
+name: deeb
+description: A Helm chart for deploying Deeb - Database Change Management Platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - database
+  - change-management
+  - devops
+  - sql-review
+  - rbac
+maintainers:
+  - name: Deeb Team
+    email: team@deeb.io
+home: https://github.com/NSXBet/deeb
+sources:
+  - https://github.com/NSXBet/deeb
+icon: https://deeb.io/icon.png
+dependencies:
+  - name: postgresql
+    version: "18.1.10"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled

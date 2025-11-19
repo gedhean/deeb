@@ -62,17 +62,80 @@ export function useProjectMembersSWR(projectId: string | undefined): UseProjectM
  * Hook for fetching members for multiple projects with automatic deduplication
  *
  * This hook fetches members for all provided project IDs and returns them grouped by project.
- * It leverages SWR's automatic request deduplication to avoid duplicate calls.
+ * It uses a stable key based on all project IDs to avoid hooks violations.
+ * Per-project errors are surfaced individually so callers can detect and handle individual failures.
  */
 export function useMultipleProjectMembersSWR(
   projectIds: string[],
 ): Record<string, UseProjectMembersResult> {
+  // Create a stable key for all projects
+  const projectIdsKey = projectIds.sort().join(',');
+
+  // Fetch all project members in parallel using a single SWR hook
+  const {
+    data: allMembersData,
+    error: swrError,
+    isLoading,
+    mutate,
+  } = useSWR<Record<string, { members: ProjectMemberWithUser[]; error?: unknown }>>(
+    projectIds.length > 0 ? `/api/projects/members?projects=${projectIdsKey}` : null,
+    async () => {
+      // Fetch members for all projects in parallel
+      const fetchPromises = projectIds.map(async (projectId) => {
+        try {
+          const members = await fetchProjectMembers(projectId);
+          return { projectId, members, error: undefined };
+        } catch (err) {
+          return { projectId, members: [], error: err };
+        }
+      });
+
+      const results = await Promise.all(fetchPromises);
+
+      // Convert to Record format, preserving both members and errors
+      const membersMap: Record<string, { members: ProjectMemberWithUser[]; error?: unknown }> = {};
+      for (const result of results) {
+        membersMap[result.projectId] = {
+          members: result.members,
+          error: result.error,
+        };
+      }
+
+      return membersMap;
+    },
+    {
+      revalidateIfStale: true,
+      keepPreviousData: true,
+    },
+  );
+
+  const refetch = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
+  const globalError = swrError
+    ? swrError instanceof Error
+      ? swrError.message
+      : 'Failed to load project members'
+    : null;
+
+  // Convert to the expected return format
   const results: Record<string, UseProjectMembersResult> = {};
 
-  // Use individual hooks for each project - SWR will deduplicate automatically
   for (const projectId of projectIds) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    results[projectId] = useProjectMembersSWR(projectId);
+    const projectData = allMembersData?.[projectId];
+    const projectError = projectData?.error
+      ? projectData.error instanceof Error
+        ? projectData.error.message
+        : 'Failed to load members for this project'
+      : null;
+
+    results[projectId] = {
+      members: projectData?.members || [],
+      isLoading,
+      error: projectError || globalError,
+      refetch,
+    };
   }
 
   return results;

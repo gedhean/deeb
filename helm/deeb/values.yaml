@@ -1,0 +1,467 @@
+# Default values for deeb
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings
+global:
+  # Domain name for the application
+  domain: deeb.example.com
+  # Environment name (dev, staging, production)
+  environment: production
+
+# Backend API configuration
+backend:
+  # Number of replicas
+  replicaCount: 2
+
+  image:
+    repository: your-registry.io/deeb-backend
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: ""
+
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+
+  podAnnotations: {}
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    readOnlyRootFilesystem: true
+
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - deeb-backend
+          topologyKey: kubernetes.io/hostname
+
+  # Liveness probe configuration
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # Readiness probe configuration
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # Application configuration
+  config:
+    server:
+      host: "0.0.0.0"
+      port: 8080
+      readTimeout: "10s"
+      writeTimeout: "10s"
+      shutdownTimeout: "30s"
+
+    logging:
+      level: "info"
+      format: "json"
+      output: "stdout"
+
+    security:
+      bcryptCost: 12
+      rateLimitEnabled: true
+      rateLimitRequests: 100
+      rateLimitWindow: "1m"
+
+    backgroundJobs:
+      schemaSyncInterval: "1h"
+
+    auditLogging:
+      enabled: true
+      defaultPolicy: "deny"
+      logAllPaths: false
+      redactionEnabled: true
+
+# Frontend configuration
+frontend:
+  # Number of replicas
+  replicaCount: 2
+
+  image:
+    repository: your-registry.io/deeb-frontend
+    pullPolicy: IfNotPresent
+    tag: ""
+
+  imagePullSecrets: []
+
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+
+  podAnnotations: {}
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    readOnlyRootFilesystem: true
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - deeb-frontend
+          topologyKey: kubernetes.io/hostname
+
+  # Liveness probe configuration
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # Readiness probe configuration
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # Environment variables for frontend
+  env:
+    VITE_API_URL: ""  # Will be set to https://{{ .Values.global.domain }}/api
+
+# PostgreSQL database configuration (for metadata database)
+# Set enabled: true to deploy PostgreSQL as part of this chart
+# Set enabled: false to use an external PostgreSQL instance
+#
+# SECURITY NOTE (CVE-2025-22248 Mitigation):
+# Updated to PostgreSQL chart v18.1.10 to address CVE-2025-22248 in older versions.
+# Pgpool and repmgr are disabled to reduce attack surface per Bitnami's 2025 security guidance.
+# All authentication uses password-based methods (no trust), services are bound to internal
+# interfaces, and network policies restrict access to authorized pods only.
+postgresql:
+  enabled: false
+
+  # Architecture: standalone (no replication/pgpool to minimize attack surface)
+  architecture: standalone
+
+  auth:
+    # PostgreSQL username (will be created if doesn't exist)
+    username: deeb
+    # Database name
+    database: deeb_metadata
+    # Use external secret for password
+    existingSecret: deeb-postgres-secret
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+    # Enforce password authentication (no trust methods)
+    enablePostgresUser: true
+
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+    # Security context for PostgreSQL
+    podSecurityContext:
+      fsGroup: 1001
+
+    containerSecurityContext:
+      runAsUser: 1001
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: false  # PostgreSQL needs write access to data dir
+
+    # Network configuration - bind to internal interfaces only
+    service:
+      type: ClusterIP
+      clusterIP: None  # Headless service for internal access only
+
+    # PostgreSQL configuration for security hardening
+    extendedConfiguration: |
+      # Connection security
+      listen_addresses = '127.0.0.1,*'
+      max_connections = 100
+
+      # Authentication and encryption
+      password_encryption = scram-sha-256
+      ssl = on
+      ssl_prefer_server_ciphers = on
+      ssl_min_protocol_version = 'TLSv1.2'
+
+      # Logging for security auditing
+      log_connections = on
+      log_disconnections = on
+      log_duration = off
+      log_hostname = off
+      log_line_prefix = '%m [%p] %u@%d '
+
+      # Statement timeout to prevent long-running queries
+      statement_timeout = '300000'  # 5 minutes
+
+      # Security settings
+      shared_preload_libraries = ''
+
+  # Disable Pgpool (CVE-2025-22248 mitigation - reduces attack surface)
+  pgpool:
+    enabled: false
+
+  # Disable repmgr (not needed for standalone architecture)
+  repmgr:
+    enabled: false
+
+  # Enable metrics for monitoring
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+
+  # Network policy for PostgreSQL (restrict access to backend pods only)
+  networkPolicy:
+    enabled: true
+    allowExternal: false
+    ingressRules:
+      primaryAccessOnlyFrom:
+        enabled: true
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: deeb-backend
+        namespaceSelector: {}
+
+  # External PostgreSQL configuration (when postgresql.enabled is false)
+  externalHost: ""  # e.g., "my-postgres.abc123.us-east-1.rds.amazonaws.com"
+  externalPort: 5432
+
+# External Secrets Operator configuration
+externalSecrets:
+  enabled: true
+  # Refresh interval for syncing secrets
+  refreshInterval: "1h"
+  # Reference to existing SecretStore or ClusterSecretStore
+  secretStore:
+    # Name of the SecretStore/ClusterSecretStore
+    name: "aws-secrets-manager"
+    # Kind: SecretStore or ClusterSecretStore
+    kind: "ClusterSecretStore"
+  # Secret paths in the secret backend (e.g., AWS Secrets Manager)
+  secrets:
+    # Backend secrets (JWT, OAuth, encryption keys)
+    backend: "deeb/backend"
+    # PostgreSQL credentials
+    postgres: "deeb/postgres"
+
+# Istio Ingress configuration
+istio:
+  enabled: true
+  gateway:
+    # Use existing Istio gateway or create new one
+    create: false
+    # Name of existing gateway (if create: false)
+    name: istio-gateway
+    # Namespace where gateway is deployed
+    namespace: istio-system
+
+  virtualService:
+    # Hosts for the virtual service
+    hosts:
+      - "deeb.example.com"
+
+    # TLS configuration
+    tls:
+      enabled: true
+      mode: SIMPLE
+      credentialName: deeb-tls-cert
+
+    # CORS configuration
+    cors:
+      enabled: true
+      allowOrigins:
+        - exact: "https://deeb.example.com"
+      allowMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - PATCH
+        - OPTIONS
+      allowHeaders:
+        - authorization
+        - content-type
+        - x-requested-with
+      exposeHeaders:
+        - content-length
+        - content-type
+      maxAge: "24h"
+      allowCredentials: true
+
+# Network Policies
+networkPolicy:
+  enabled: true
+  # Ingress rules
+  ingress:
+    # Allow traffic from Istio ingress gateway
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: istio-system
+  # Egress rules
+  egress:
+    # Allow DNS
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: UDP
+        port: 53
+    # Allow external HTTPS (for OAuth, AWS APIs, etc.)
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 443
+    # Allow PostgreSQL
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: postgresql
+      ports:
+      - protocol: TCP
+        port: 5432
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  backend:
+    minAvailable: 1
+  frontend:
+    minAvailable: 1
+
+# Monitoring (Prometheus/Grafana)
+monitoring:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+
+  # Grafana dashboards
+  grafana:
+    enabled: false
+    dashboardsConfigMap: ""
+
+# Backup configuration
+backup:
+  enabled: false
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: 7  # Keep 7 days of backups
+  s3:
+    bucket: ""
+    region: ""
+    prefix: "deeb-backups/"

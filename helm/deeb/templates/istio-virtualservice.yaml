@@ -1,0 +1,81 @@
+{{- if .Values.istio.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "deeb.fullname" . }}
+  labels:
+    {{- include "deeb.labels" . | nindent 4 }}
+spec:
+  hosts:
+  {{- range .Values.istio.virtualService.hosts }}
+  - {{ . | quote }}
+  {{- end }}
+  gateways:
+  - {{ .Values.istio.gateway.namespace }}/{{ .Values.istio.gateway.name }}
+  http:
+  # WebSocket routes - route to backend
+  - match:
+    - uri:
+        prefix: /ws
+    route:
+    - destination:
+        host: {{ include "deeb.backend.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+        port:
+          number: {{ .Values.backend.service.port }}
+      weight: 100
+    timeout: 3600s  # 1 hour timeout for WebSocket connections
+    websocketUpgrade: true
+
+  # API routes - route to backend
+  - match:
+    - uri:
+        prefix: /api
+    {{- if .Values.istio.virtualService.cors.enabled }}
+    corsPolicy:
+      allowOrigins:
+      {{- range .Values.istio.virtualService.cors.allowOrigins }}
+      {{- range $key, $value := . }}
+      - {{ $key }}: {{ $value }}
+      {{- end }}
+      {{- end }}
+      allowMethods:
+      {{- range .Values.istio.virtualService.cors.allowMethods }}
+      - {{ . }}
+      {{- end }}
+      allowHeaders:
+      {{- range .Values.istio.virtualService.cors.allowHeaders }}
+      - {{ . }}
+      {{- end }}
+      {{- if .Values.istio.virtualService.cors.exposeHeaders }}
+      exposeHeaders:
+      {{- range .Values.istio.virtualService.cors.exposeHeaders }}
+      - {{ . }}
+      {{- end }}
+      {{- end }}
+      maxAge: {{ .Values.istio.virtualService.cors.maxAge }}
+      allowCredentials: {{ .Values.istio.virtualService.cors.allowCredentials }}
+    {{- end }}
+    route:
+    - destination:
+        host: {{ include "deeb.backend.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+        port:
+          number: {{ .Values.backend.service.port }}
+      weight: 100
+    timeout: 60s
+    retries:
+      attempts: 3
+      perTryTimeout: 20s
+      retryOn: gateway-error,connect-failure,refused-stream
+
+  # Frontend routes - route to frontend
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: {{ include "deeb.frontend.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+        port:
+          number: {{ .Values.frontend.service.port }}
+      weight: 100
+    timeout: 30s
+{{- end }}

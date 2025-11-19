@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"testing"
 	"time"
 
@@ -55,36 +54,86 @@ func (m *MockExecutionLockManager) CleanupExpiredLocks(ctx context.Context) (int
 	return args.Int(0), args.Error(1)
 }
 
-// MockSchemaSnapshotService is a mock implementation of SchemaSnapshotService
-type MockSchemaSnapshotService struct {
+// MockChangelogRepository is a mock implementation of ChangelogRepository
+type MockChangelogRepository struct {
 	mock.Mock
 }
 
-func (m *MockSchemaSnapshotService) CapturePostgreSQL(
-	ctx context.Context,
-	changePlanID uuid.UUID,
-	databaseID uuid.UUID,
-	snapshotType models.SnapshotType,
-) (*models.SchemaSnapshot, error) {
-	args := m.Called(ctx, changePlanID, databaseID, snapshotType)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.SchemaSnapshot), args.Error(1)
+func (m *MockChangelogRepository) Create(ctx context.Context, changelog *models.Changelog) error {
+	args := m.Called(ctx, changelog)
+	return args.Error(0)
 }
 
-func (m *MockSchemaSnapshotService) CaptureMySQL(
-	ctx context.Context,
-	changePlanID uuid.UUID,
-	databaseID uuid.UUID,
-	snapshotType models.SnapshotType,
-) (*models.SchemaSnapshot, error) {
-	args := m.Called(ctx, changePlanID, databaseID, snapshotType)
+func (m *MockChangelogRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Changelog, error) {
+	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*models.SchemaSnapshot), args.Error(1)
+	return args.Get(0).(*models.Changelog), args.Error(1)
 }
+
+func (m *MockChangelogRepository) GetByDatabaseID(ctx context.Context, databaseID uuid.UUID) ([]*models.Changelog, error) {
+	args := m.Called(ctx, databaseID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Changelog), args.Error(1)
+}
+
+func (m *MockChangelogRepository) Update(ctx context.Context, changelog *models.Changelog) error {
+	args := m.Called(ctx, changelog)
+	return args.Error(0)
+}
+
+func (m *MockChangelogRepository) GetByChangePlanID(ctx context.Context, changePlanID uuid.UUID) ([]*models.Changelog, error) {
+	args := m.Called(ctx, changePlanID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Changelog), args.Error(1)
+}
+
+// MockSchemaHistoryRepository is a mock implementation of SchemaHistoryRepository
+type MockSchemaHistoryRepository struct {
+	mock.Mock
+}
+
+func (m *MockSchemaHistoryRepository) Create(ctx context.Context, history *models.SchemaHistory) error {
+	args := m.Called(ctx, history)
+	return args.Error(0)
+}
+
+func (m *MockSchemaHistoryRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.SchemaHistory, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.SchemaHistory), args.Error(1)
+}
+
+func (m *MockSchemaHistoryRepository) GetByDatabaseID(
+	ctx context.Context,
+	databaseID uuid.UUID,
+) ([]*models.SchemaHistory, error) {
+	args := m.Called(ctx, databaseID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.SchemaHistory), args.Error(1)
+}
+
+func (m *MockSchemaHistoryRepository) GetLatestByDatabaseID(
+	ctx context.Context,
+	databaseID uuid.UUID,
+) (*models.SchemaHistory, error) {
+	args := m.Called(ctx, databaseID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.SchemaHistory), args.Error(1)
+}
+
+// MockSchemaVersionService removed - use real SchemaVersionService with mock repositories instead
 
 // MockConnectionManager is a mock implementation of ConnectionManager
 type MockConnectionManager struct {
@@ -190,23 +239,26 @@ func TestNewExecutionService(t *testing.T) {
 	changePlanRepo := new(MockChangePlanRepository)
 	dbInstanceRepo := new(MockDatabaseInstanceRepository)
 	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
-	connectionMgr := database.NewConnectionManager("test-encryption-key-min-32-chars", zap.NewNop())
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		connectionMgr,
+	changelogRepo := new(MockChangelogRepository)
+	schemaHistoryRepo := new(MockSchemaHistoryRepository)
+	schemaVersionService := NewSchemaVersionService(
+		schemaHistoryRepo,
+		new(MockDatabaseInstanceRepository),
+		new(MockDatabaseRepository),
+		database.NewConnectionManager("test-encryption-key-min-32-chars", zap.NewNop()),
 		"test-encryption-key-min-32-chars",
 		zap.NewNop(),
 	)
+	connectionMgr := database.NewConnectionManager("test-encryption-key-min-32-chars", zap.NewNop())
 	logger := zap.NewNop()
 
 	service := NewExecutionService(
 		changePlanRepo,
 		dbInstanceRepo,
 		databaseRepo,
-		snapshotService,
+		changelogRepo,
+		schemaHistoryRepo,
+		schemaVersionService,
 		&MockExecutionLockManager{},
 		nil, // queueService - nil for this test
 		nil, // executionLogRepo - nil for this test
@@ -219,7 +271,9 @@ func TestNewExecutionService(t *testing.T) {
 	assert.Equal(t, changePlanRepo, service.changePlanRepo)
 	assert.Equal(t, dbInstanceRepo, service.dbInstanceRepo)
 	assert.Equal(t, databaseRepo, service.databaseRepo)
-	assert.Equal(t, snapshotService, service.snapshotService)
+	assert.Equal(t, changelogRepo, service.changelogRepo)
+	assert.Equal(t, schemaHistoryRepo, service.schemaHistoryRepo)
+	assert.Equal(t, schemaVersionService, service.schemaVersionService)
 	assert.Equal(t, connectionMgr, service.connectionMgr)
 	assert.Equal(t, "test-encryption-key-min-32-chars", service.encryptionKey)
 }
@@ -233,14 +287,15 @@ func TestExecutionService_Execute_ChangePlanNotFound(t *testing.T) {
 	changePlanRepo := new(MockChangePlanRepository)
 	dbInstanceRepo := new(MockDatabaseInstanceRepository)
 	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		connectionMgr,
-		encryptionKey,
-		logger,
+	changelogRepo := new(MockChangelogRepository)
+	schemaHistoryRepo := new(MockSchemaHistoryRepository)
+	schemaVersionService := NewSchemaVersionService(
+		schemaHistoryRepo,
+		new(MockDatabaseInstanceRepository),
+		new(MockDatabaseRepository),
+		database.NewConnectionManager("test-encryption-key-min-32-chars", zap.NewNop()),
+		"test-encryption-key-min-32-chars",
+		zap.NewNop(),
 	)
 
 	changePlanID := uuid.New()
@@ -253,7 +308,9 @@ func TestExecutionService_Execute_ChangePlanNotFound(t *testing.T) {
 		changePlanRepo,
 		dbInstanceRepo,
 		databaseRepo,
-		snapshotService,
+		changelogRepo,
+		schemaHistoryRepo,
+		schemaVersionService,
 		lockManager,
 		nil, // queueService - nil for this test
 		nil, // executionLogRepo - nil for this test
@@ -556,313 +613,6 @@ func TestExecutionService_executeInTransaction_BeginError(t *testing.T) {
 // These should be implemented as integration tests.
 // For now, we focus on testing error paths and validation logic.
 
-func TestExecutionService_Execute_Success_PostgreSQL(t *testing.T) {
-	t.Skip("Skipping successful execution test - requires pg_dump to be available. Should be integration test.")
-	logger := zap.NewNop()
-	ctx := context.Background()
-	encryptionKey := "12345678901234567890123456789012" // 32 bytes
-
-	changePlanID := uuid.New()
-	executorID := uuid.New()
-	databaseID := uuid.New()
-	databaseInstanceID := uuid.New()
-
-	changePlan := &models.ChangePlan{
-		ID:               changePlanID,
-		Status:           models.ChangePlanStatusApproved,
-		TargetDatabaseID: databaseID,
-		SQLContent:       "CREATE TABLE test (id UUID PRIMARY KEY);",
-	}
-
-	db := &models.Database{
-		ID:                 databaseID,
-		DatabaseInstanceID: databaseInstanceID,
-		DatabaseName:       "testdb",
-	}
-
-	dbInstance := &models.DatabaseInstance{
-		ID:             databaseInstanceID,
-		DatabaseEngine: models.DatabaseEnginePostgreSQL,
-		Host:           "localhost",
-		Port:           5432,
-		Username:       "testuser",
-	}
-
-	beforeSnapshot := &models.SchemaSnapshot{
-		ID:           uuid.New(),
-		ChangePlanID: changePlanID,
-		DatabaseID:   databaseID,
-		SnapshotType: models.SnapshotTypeBefore,
-	}
-
-	afterSnapshot := &models.SchemaSnapshot{
-		ID:           uuid.New(),
-		ChangePlanID: changePlanID,
-		DatabaseID:   databaseID,
-		SnapshotType: models.SnapshotTypeAfter,
-	}
-
-	// Create mock database for SQL execution
-	mockDB, sqlMock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	dbConn := sqlx.NewDb(mockDB, "sqlmock")
-	defer dbConn.Close()
-
-	// Mock transaction
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec("CREATE TABLE test").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	sqlMock.ExpectCommit()
-
-	// Setup mocks
-	changePlanRepo := new(MockChangePlanRepository)
-	dbInstanceRepo := new(MockDatabaseInstanceRepository)
-	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
-	lockManager := new(MockExecutionLockManager)
-	queueRepo := new(MockExecutionQueueRepository)
-	executionLogRepo := new(MockExecutionLogRepository)
-
-	// Use real ConnectionManager for SchemaSnapshotService (it will try to execute commands, but we'll handle that)
-	realConnectionMgr := database.NewConnectionManager(encryptionKey, logger)
-
-	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		realConnectionMgr,
-		encryptionKey,
-		logger,
-	)
-	queueService := NewExecutionQueueService(queueRepo, logger)
-
-	// Setup expectations
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
-	databaseRepo.On("GetByID", ctx, databaseID).Return(db, nil)
-	dbInstanceRepo.On("GetByID", ctx, databaseInstanceID).Return(dbInstance, nil)
-	lockManager.On("AcquireLock", ctx, databaseID, changePlanID, executorID).Return(nil)
-	lockManager.On("ReleaseLock", ctx, databaseID).Return(nil)
-
-	// Mock snapshot capture - the service will try to execute pg_dump, but we'll mock the repository save
-	snapshotRepo.On("Create", ctx, mock.MatchedBy(func(ss *models.SchemaSnapshot) bool {
-		return ss.ChangePlanID == changePlanID && ss.DatabaseID == databaseID && ss.SnapshotType == models.SnapshotTypeBefore
-	})).Return(nil).Run(func(args mock.Arguments) {
-		ss := args.Get(1).(*models.SchemaSnapshot)
-		ss.ID = beforeSnapshot.ID
-	})
-	snapshotRepo.On("Create", ctx, mock.MatchedBy(func(ss *models.SchemaSnapshot) bool {
-		return ss.ChangePlanID == changePlanID && ss.DatabaseID == databaseID && ss.SnapshotType == models.SnapshotTypeAfter
-	})).Return(nil).Run(func(args mock.Arguments) {
-		ss := args.Get(1).(*models.SchemaSnapshot)
-		ss.ID = afterSnapshot.ID
-	})
-
-	// Mock connection for SQL execution
-	mockDB, sqlMock, err = sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-	dbConn = sqlx.NewDb(mockDB, "sqlmock")
-	defer dbConn.Close()
-
-	// Create a mock connection manager that returns our mocked DB for SQL execution
-	mockConnectionMgr := new(MockConnectionManager)
-	mockConnectionMgr.On("Connect", ctx, mock.Anything).Return(dbConn, nil)
-
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusInProgress
-	})).Return(nil)
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusCompleted && cp.AffectedRows != nil && *cp.AffectedRows == 0
-	})).Return(nil)
-	executionLogRepo.On("Create", ctx, mock.MatchedBy(func(log *models.ExecutionLog) bool {
-		return log.Status == models.ExecutionLogStatusCompleted && log.ChangePlanID == changePlanID
-	})).Return(nil)
-
-	service := NewExecutionService(
-		changePlanRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		snapshotService,
-		lockManager,
-		queueService,
-		executionLogRepo,
-		mockConnectionMgr, // Use mock for SQL execution
-		encryptionKey,
-		logger,
-	)
-
-	result, err := service.Execute(ctx, changePlanID, executorID)
-
-	require.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.True(t, result.Success)
-	assert.Equal(t, 0, result.RowsAffected)
-	assert.Greater(t, result.Duration, time.Duration(0))
-	assert.Nil(t, result.ErrorMessage)
-
-	require.NoError(t, sqlMock.ExpectationsWereMet())
-	changePlanRepo.AssertExpectations(t)
-	dbInstanceRepo.AssertExpectations(t)
-	databaseRepo.AssertExpectations(t)
-	snapshotRepo.AssertExpectations(t)
-	lockManager.AssertExpectations(t)
-	executionLogRepo.AssertExpectations(t)
-	mockConnectionMgr.AssertExpectations(t)
-}
-
-func TestExecutionService_Execute_Success_MySQL(t *testing.T) {
-	t.Skip("Skipping successful execution test - requires mysqldump to be available. Should be integration test.")
-	logger := zap.NewNop()
-	ctx := context.Background()
-	encryptionKey := "12345678901234567890123456789012" // 32 bytes
-
-	changePlanID := uuid.New()
-	executorID := uuid.New()
-	databaseID := uuid.New()
-	databaseInstanceID := uuid.New()
-
-	changePlan := &models.ChangePlan{
-		ID:               changePlanID,
-		Status:           models.ChangePlanStatusApproved,
-		TargetDatabaseID: databaseID,
-		SQLContent:       "CREATE TABLE test (id INT PRIMARY KEY);",
-	}
-
-	db := &models.Database{
-		ID:                 databaseID,
-		DatabaseInstanceID: databaseInstanceID,
-		DatabaseName:       "testdb",
-	}
-
-	dbInstance := &models.DatabaseInstance{
-		ID:             databaseInstanceID,
-		DatabaseEngine: models.DatabaseEngineMySQL,
-		Host:           "localhost",
-		Port:           3306,
-		Username:       "testuser",
-	}
-
-	beforeSnapshot := &models.SchemaSnapshot{
-		ID:           uuid.New(),
-		ChangePlanID: changePlanID,
-		DatabaseID:   databaseID,
-		SnapshotType: models.SnapshotTypeBefore,
-	}
-
-	afterSnapshot := &models.SchemaSnapshot{
-		ID:           uuid.New(),
-		ChangePlanID: changePlanID,
-		DatabaseID:   databaseID,
-		SnapshotType: models.SnapshotTypeAfter,
-	}
-
-	// Create mock database for SQL execution
-	mockDB, sqlMock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	dbConn := sqlx.NewDb(mockDB, "sqlmock")
-	defer dbConn.Close()
-
-	// Mock transaction
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec("CREATE TABLE test").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	sqlMock.ExpectCommit()
-
-	// Setup mocks
-	changePlanRepo := new(MockChangePlanRepository)
-	dbInstanceRepo := new(MockDatabaseInstanceRepository)
-	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
-	lockManager := new(MockExecutionLockManager)
-	queueRepo := new(MockExecutionQueueRepository)
-	executionLogRepo := new(MockExecutionLogRepository)
-	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
-
-	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		connectionMgr,
-		encryptionKey,
-		logger,
-	)
-	queueService := NewExecutionQueueService(queueRepo, logger)
-
-	// Setup expectations
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
-	databaseRepo.On("GetByID", ctx, databaseID).Return(db, nil)
-	dbInstanceRepo.On("GetByID", ctx, databaseInstanceID).Return(dbInstance, nil)
-	lockManager.On("AcquireLock", ctx, databaseID, changePlanID, executorID).Return(nil)
-	lockManager.On("ReleaseLock", ctx, databaseID).Return(nil)
-	snapshotRepo.On("Create", ctx, mock.MatchedBy(func(ss *models.SchemaSnapshot) bool {
-		return ss.ChangePlanID == changePlanID && ss.DatabaseID == databaseID && ss.SnapshotType == models.SnapshotTypeBefore
-	})).Return(nil).Run(func(args mock.Arguments) {
-		ss := args.Get(1).(*models.SchemaSnapshot)
-		ss.ID = beforeSnapshot.ID
-	})
-	snapshotRepo.On("Create", ctx, mock.MatchedBy(func(ss *models.SchemaSnapshot) bool {
-		return ss.ChangePlanID == changePlanID && ss.DatabaseID == databaseID && ss.SnapshotType == models.SnapshotTypeAfter
-	})).Return(nil).Run(func(args mock.Arguments) {
-		ss := args.Get(1).(*models.SchemaSnapshot)
-		ss.ID = afterSnapshot.ID
-	})
-
-	// Mock connection for SQL execution
-	mockDB, sqlMock, err = sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-	dbConn = sqlx.NewDb(mockDB, "sqlmock")
-	defer dbConn.Close()
-
-	// Create a mock connection manager that returns our mocked DB for SQL execution
-	mockConnectionMgr := new(MockConnectionManager)
-	mockConnectionMgr.On("Connect", ctx, mock.Anything).Return(dbConn, nil)
-
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusInProgress
-	})).Return(nil)
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusCompleted
-	})).Return(nil)
-	executionLogRepo.On("Create", ctx, mock.MatchedBy(func(log *models.ExecutionLog) bool {
-		return log.Status == models.ExecutionLogStatusCompleted
-	})).Return(nil)
-
-	service := NewExecutionService(
-		changePlanRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		snapshotService,
-		lockManager,
-		queueService,
-		executionLogRepo,
-		mockConnectionMgr, // Use mock for SQL execution
-		encryptionKey,
-		logger,
-	)
-
-	result, err := service.Execute(ctx, changePlanID, executorID)
-
-	require.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.True(t, result.Success)
-
-	require.NoError(t, sqlMock.ExpectationsWereMet())
-	changePlanRepo.AssertExpectations(t)
-	dbInstanceRepo.AssertExpectations(t)
-	databaseRepo.AssertExpectations(t)
-	snapshotRepo.AssertExpectations(t)
-	lockManager.AssertExpectations(t)
-	executionLogRepo.AssertExpectations(t)
-	mockConnectionMgr.AssertExpectations(t)
-}
-
 func TestExecutionService_Execute_InvalidStatus(t *testing.T) {
 	logger := zap.NewNop()
 	ctx := context.Background()
@@ -879,15 +629,16 @@ func TestExecutionService_Execute_InvalidStatus(t *testing.T) {
 	changePlanRepo := new(MockChangePlanRepository)
 	dbInstanceRepo := new(MockDatabaseInstanceRepository)
 	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
+	changelogRepo := new(MockChangelogRepository)
+	schemaHistoryRepo := new(MockSchemaHistoryRepository)
 	lockManager := new(MockExecutionLockManager)
 	queueRepo := new(MockExecutionQueueRepository)
 	executionLogRepo := new(MockExecutionLogRepository)
 	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
 
 	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
+	schemaVersionService := NewSchemaVersionService(
+		schemaHistoryRepo,
 		dbInstanceRepo,
 		databaseRepo,
 		connectionMgr,
@@ -902,7 +653,9 @@ func TestExecutionService_Execute_InvalidStatus(t *testing.T) {
 		changePlanRepo,
 		dbInstanceRepo,
 		databaseRepo,
-		snapshotService,
+		changelogRepo,
+		schemaHistoryRepo,
+		schemaVersionService,
 		lockManager,
 		queueService,
 		executionLogRepo,
@@ -938,15 +691,16 @@ func TestExecutionService_Execute_DatabaseNotFound(t *testing.T) {
 	changePlanRepo := new(MockChangePlanRepository)
 	dbInstanceRepo := new(MockDatabaseInstanceRepository)
 	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
+	changelogRepo := new(MockChangelogRepository)
+	schemaHistoryRepo := new(MockSchemaHistoryRepository)
 	lockManager := new(MockExecutionLockManager)
 	queueRepo := new(MockExecutionQueueRepository)
 	executionLogRepo := new(MockExecutionLogRepository)
 	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
 
 	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
+	schemaVersionService := NewSchemaVersionService(
+		schemaHistoryRepo,
 		dbInstanceRepo,
 		databaseRepo,
 		connectionMgr,
@@ -962,7 +716,9 @@ func TestExecutionService_Execute_DatabaseNotFound(t *testing.T) {
 		changePlanRepo,
 		dbInstanceRepo,
 		databaseRepo,
-		snapshotService,
+		changelogRepo,
+		schemaHistoryRepo,
+		schemaVersionService,
 		lockManager,
 		queueService,
 		executionLogRepo,
@@ -1005,15 +761,16 @@ func TestExecutionService_Execute_DatabaseInstanceNotFound(t *testing.T) {
 	changePlanRepo := new(MockChangePlanRepository)
 	dbInstanceRepo := new(MockDatabaseInstanceRepository)
 	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
+	changelogRepo := new(MockChangelogRepository)
+	schemaHistoryRepo := new(MockSchemaHistoryRepository)
 	lockManager := new(MockExecutionLockManager)
 	queueRepo := new(MockExecutionQueueRepository)
 	executionLogRepo := new(MockExecutionLogRepository)
 	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
 
 	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
+	schemaVersionService := NewSchemaVersionService(
+		schemaHistoryRepo,
 		dbInstanceRepo,
 		databaseRepo,
 		connectionMgr,
@@ -1030,7 +787,9 @@ func TestExecutionService_Execute_DatabaseInstanceNotFound(t *testing.T) {
 		changePlanRepo,
 		dbInstanceRepo,
 		databaseRepo,
-		snapshotService,
+		changelogRepo,
+		schemaHistoryRepo,
+		schemaVersionService,
 		lockManager,
 		queueService,
 		executionLogRepo,
@@ -1088,15 +847,16 @@ func TestExecutionService_Execute_DatabaseLocked_WithQueue(t *testing.T) {
 	changePlanRepo := new(MockChangePlanRepository)
 	dbInstanceRepo := new(MockDatabaseInstanceRepository)
 	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
+	changelogRepo := new(MockChangelogRepository)
+	schemaHistoryRepo := new(MockSchemaHistoryRepository)
 	lockManager := new(MockExecutionLockManager)
 	queueRepo := new(MockExecutionQueueRepository)
 	executionLogRepo := new(MockExecutionLogRepository)
 	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
 
 	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
+	schemaVersionService := NewSchemaVersionService(
+		schemaHistoryRepo,
 		dbInstanceRepo,
 		databaseRepo,
 		connectionMgr,
@@ -1121,7 +881,9 @@ func TestExecutionService_Execute_DatabaseLocked_WithQueue(t *testing.T) {
 		changePlanRepo,
 		dbInstanceRepo,
 		databaseRepo,
-		snapshotService,
+		changelogRepo,
+		schemaHistoryRepo,
+		schemaVersionService,
 		lockManager,
 		queueService,
 		executionLogRepo,
@@ -1172,14 +934,15 @@ func TestExecutionService_Execute_DatabaseLocked_WithoutQueue(t *testing.T) {
 	changePlanRepo := new(MockChangePlanRepository)
 	dbInstanceRepo := new(MockDatabaseInstanceRepository)
 	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
+	changelogRepo := new(MockChangelogRepository)
+	schemaHistoryRepo := new(MockSchemaHistoryRepository)
 	lockManager := new(MockExecutionLockManager)
 	executionLogRepo := new(MockExecutionLogRepository)
 	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
 
 	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
+	schemaVersionService := NewSchemaVersionService(
+		schemaHistoryRepo,
 		dbInstanceRepo,
 		databaseRepo,
 		connectionMgr,
@@ -1196,7 +959,9 @@ func TestExecutionService_Execute_DatabaseLocked_WithoutQueue(t *testing.T) {
 		changePlanRepo,
 		dbInstanceRepo,
 		databaseRepo,
-		snapshotService,
+		changelogRepo,
+		schemaHistoryRepo,
+		schemaVersionService,
 		lockManager,
 		nil, // No queue service
 		executionLogRepo,
@@ -1215,345 +980,6 @@ func TestExecutionService_Execute_DatabaseLocked_WithoutQueue(t *testing.T) {
 	databaseRepo.AssertExpectations(t)
 	dbInstanceRepo.AssertExpectations(t)
 	lockManager.AssertExpectations(t)
-}
-
-func TestExecutionService_Execute_BeforeSnapshotFailure(t *testing.T) {
-	logger := zap.NewNop()
-	ctx := context.Background()
-	encryptionKey := "12345678901234567890123456789012"
-
-	changePlanID := uuid.New()
-	executorID := uuid.New()
-	databaseID := uuid.New()
-	databaseInstanceID := uuid.New()
-
-	changePlan := &models.ChangePlan{
-		ID:               changePlanID,
-		Status:           models.ChangePlanStatusApproved,
-		TargetDatabaseID: databaseID,
-	}
-
-	db := &models.Database{
-		ID:                 databaseID,
-		DatabaseInstanceID: databaseInstanceID,
-	}
-
-	dbInstance := &models.DatabaseInstance{
-		ID:             databaseInstanceID,
-		DatabaseEngine: models.DatabaseEnginePostgreSQL,
-	}
-
-	changePlanRepo := new(MockChangePlanRepository)
-	dbInstanceRepo := new(MockDatabaseInstanceRepository)
-	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
-	lockManager := new(MockExecutionLockManager)
-	queueRepo := new(MockExecutionQueueRepository)
-	executionLogRepo := new(MockExecutionLogRepository)
-	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
-
-	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		connectionMgr,
-		encryptionKey,
-		logger,
-	)
-	queueService := NewExecutionQueueService(queueRepo, logger)
-
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
-	databaseRepo.On("GetByID", ctx, databaseID).Return(db, nil)
-	dbInstanceRepo.On("GetByID", ctx, databaseInstanceID).Return(dbInstance, nil)
-	lockManager.On("AcquireLock", ctx, databaseID, changePlanID, executorID).Return(nil)
-	lockManager.On("ReleaseLock", ctx, databaseID).Return(nil)
-	// Mock snapshot repository to return error on create
-	snapshotRepo.On("Create", ctx, mock.MatchedBy(func(ss *models.SchemaSnapshot) bool {
-		return ss.ChangePlanID == changePlanID && ss.DatabaseID == databaseID && ss.SnapshotType == models.SnapshotTypeBefore
-	})).Return(fmt.Errorf("snapshot failed"))
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusInProgress
-	})).Return(nil)
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusFailed
-	})).Return(nil)
-
-	service := NewExecutionService(
-		changePlanRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		snapshotService,
-		lockManager,
-		queueService,
-		executionLogRepo,
-		connectionMgr,
-		encryptionKey,
-		logger,
-	)
-
-	result, err := service.Execute(ctx, changePlanID, executorID)
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "failed to capture before snapshot")
-
-	changePlanRepo.AssertExpectations(t)
-	dbInstanceRepo.AssertExpectations(t)
-	databaseRepo.AssertExpectations(t)
-	lockManager.AssertExpectations(t)
-}
-
-func TestExecutionService_Execute_AfterSnapshotFailure(t *testing.T) {
-	t.Skip("Skipping after snapshot failure test - requires pg_dump to be available. Should be integration test.")
-	logger := zap.NewNop()
-	ctx := context.Background()
-	encryptionKey := "12345678901234567890123456789012"
-
-	changePlanID := uuid.New()
-	executorID := uuid.New()
-	databaseID := uuid.New()
-	databaseInstanceID := uuid.New()
-
-	changePlan := &models.ChangePlan{
-		ID:               changePlanID,
-		Status:           models.ChangePlanStatusApproved,
-		TargetDatabaseID: databaseID,
-		SQLContent:       "CREATE TABLE test (id UUID PRIMARY KEY);",
-	}
-
-	db := &models.Database{
-		ID:                 databaseID,
-		DatabaseInstanceID: databaseInstanceID,
-		DatabaseName:       "testdb",
-	}
-
-	dbInstance := &models.DatabaseInstance{
-		ID:             databaseInstanceID,
-		DatabaseEngine: models.DatabaseEnginePostgreSQL,
-		Host:           "localhost",
-		Port:           5432,
-		Username:       "testuser",
-	}
-
-	beforeSnapshot := &models.SchemaSnapshot{
-		ID:           uuid.New(),
-		ChangePlanID: changePlanID,
-		DatabaseID:   databaseID,
-		SnapshotType: models.SnapshotTypeBefore,
-	}
-
-	// Create mock database for SQL execution
-	mockDB, sqlMock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	dbConn := sqlx.NewDb(mockDB, "sqlmock")
-	defer dbConn.Close()
-
-	// Mock transaction
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec("CREATE TABLE test").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	sqlMock.ExpectCommit()
-
-	changePlanRepo := new(MockChangePlanRepository)
-	dbInstanceRepo := new(MockDatabaseInstanceRepository)
-	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
-	lockManager := new(MockExecutionLockManager)
-	queueRepo := new(MockExecutionQueueRepository)
-	executionLogRepo := new(MockExecutionLogRepository)
-	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
-
-	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		connectionMgr,
-		encryptionKey,
-		logger,
-	)
-	queueService := NewExecutionQueueService(queueRepo, logger)
-
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
-	databaseRepo.On("GetByID", ctx, databaseID).Return(db, nil)
-	dbInstanceRepo.On("GetByID", ctx, databaseInstanceID).Return(dbInstance, nil)
-	lockManager.On("AcquireLock", ctx, databaseID, changePlanID, executorID).Return(nil)
-	lockManager.On("ReleaseLock", ctx, databaseID).Return(nil)
-	snapshotRepo.On("Create", ctx, mock.MatchedBy(func(ss *models.SchemaSnapshot) bool {
-		return ss.ChangePlanID == changePlanID && ss.DatabaseID == databaseID && ss.SnapshotType == models.SnapshotTypeBefore
-	})).Return(nil).Run(func(args mock.Arguments) {
-		ss := args.Get(1).(*models.SchemaSnapshot)
-		ss.ID = beforeSnapshot.ID
-	})
-	snapshotRepo.On("Create", ctx, mock.MatchedBy(func(ss *models.SchemaSnapshot) bool {
-		return ss.ChangePlanID == changePlanID && ss.DatabaseID == databaseID && ss.SnapshotType == models.SnapshotTypeAfter
-	})).Return(fmt.Errorf("after snapshot failed"))
-	mockConnectionMgr := new(MockConnectionManager)
-	mockConnectionMgr.On("Connect", ctx, mock.Anything).Return(dbConn, nil)
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusInProgress
-	})).Return(nil)
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusFailed
-	})).Return(nil)
-
-	service := NewExecutionService(
-		changePlanRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		snapshotService,
-		lockManager,
-		queueService,
-		executionLogRepo,
-		mockConnectionMgr,
-		encryptionKey,
-		logger,
-	)
-
-	result, err := service.Execute(ctx, changePlanID, executorID)
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "failed to capture after snapshot")
-
-	require.NoError(t, sqlMock.ExpectationsWereMet())
-	changePlanRepo.AssertExpectations(t)
-	snapshotRepo.AssertExpectations(t)
-	lockManager.AssertExpectations(t)
-	mockConnectionMgr.AssertExpectations(t)
-}
-
-func TestExecutionService_Execute_Timeout(t *testing.T) {
-	t.Skip("Skipping timeout test - requires database connection. Should be integration test.")
-	logger := zap.NewNop()
-	ctx := context.Background()
-	encryptionKey := "12345678901234567890123456789012"
-	timeout := 100 * time.Millisecond
-
-	changePlanID := uuid.New()
-	executorID := uuid.New()
-	databaseID := uuid.New()
-	databaseInstanceID := uuid.New()
-
-	changePlan := &models.ChangePlan{
-		ID:               changePlanID,
-		Status:           models.ChangePlanStatusApproved,
-		TargetDatabaseID: databaseID,
-		SQLContent:       "SELECT pg_sleep(1);", // Will timeout
-	}
-
-	db := &models.Database{
-		ID:                 databaseID,
-		DatabaseInstanceID: databaseInstanceID,
-		DatabaseName:       "testdb",
-	}
-
-	dbInstance := &models.DatabaseInstance{
-		ID:             databaseInstanceID,
-		DatabaseEngine: models.DatabaseEnginePostgreSQL,
-		Host:           "localhost",
-		Port:           5432,
-		Username:       "testuser",
-	}
-
-	beforeSnapshot := &models.SchemaSnapshot{
-		ID:           uuid.New(),
-		ChangePlanID: changePlanID,
-		DatabaseID:   databaseID,
-		SnapshotType: models.SnapshotTypeBefore,
-	}
-
-	// Create mock database for SQL execution
-	mockDB, sqlMock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	dbConn := sqlx.NewDb(mockDB, "sqlmock")
-	defer dbConn.Close()
-
-	// Mock transaction begin - but execution will timeout
-	sqlMock.ExpectBegin()
-	// Note: We can't actually simulate a timeout with sqlmock, but we can test the timeout error handling
-
-	changePlanRepo := new(MockChangePlanRepository)
-	dbInstanceRepo := new(MockDatabaseInstanceRepository)
-	databaseRepo := new(MockDatabaseRepository)
-	snapshotRepo := new(MockSchemaSnapshotRepository)
-	lockManager := new(MockExecutionLockManager)
-	queueRepo := new(MockExecutionQueueRepository)
-	executionLogRepo := new(MockExecutionLogRepository)
-	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
-
-	// Create real services with mocked repositories
-	snapshotService := NewSchemaSnapshotService(
-		snapshotRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		connectionMgr,
-		encryptionKey,
-		logger,
-	)
-	queueService := NewExecutionQueueService(queueRepo, logger)
-
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
-	databaseRepo.On("GetByID", ctx, databaseID).Return(db, nil)
-	dbInstanceRepo.On("GetByID", ctx, databaseInstanceID).Return(dbInstance, nil)
-	lockManager.On("AcquireLock", ctx, databaseID, changePlanID, executorID).Return(nil)
-	lockManager.On("ReleaseLock", ctx, databaseID).Return(nil)
-	snapshotRepo.On("Create", ctx, mock.MatchedBy(func(ss *models.SchemaSnapshot) bool {
-		return ss.ChangePlanID == changePlanID && ss.DatabaseID == databaseID && ss.SnapshotType == models.SnapshotTypeBefore
-	})).Return(nil).Run(func(args mock.Arguments) {
-		ss := args.Get(1).(*models.SchemaSnapshot)
-		ss.ID = beforeSnapshot.ID
-	})
-	mockConnectionMgr := new(MockConnectionManager)
-	mockConnectionMgr.On("Connect", ctx, mock.Anything).Return(dbConn, nil)
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusInProgress
-	})).Return(nil)
-	changePlanRepo.On("Update", ctx, mock.MatchedBy(func(cp *models.ChangePlan) bool {
-		return cp.Status == models.ChangePlanStatusFailed
-	})).Return(nil)
-	executionLogRepo.On("Create", ctx, mock.MatchedBy(func(log *models.ExecutionLog) bool {
-		return log.Status == models.ExecutionLogStatusFailed
-	})).Return(nil)
-
-	service := NewExecutionServiceWithTimeout(
-		changePlanRepo,
-		dbInstanceRepo,
-		databaseRepo,
-		snapshotService,
-		lockManager,
-		queueService,
-		executionLogRepo,
-		mockConnectionMgr,
-		encryptionKey,
-		timeout,
-		logger,
-	)
-
-	// Use a context with timeout to simulate timeout scenario
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	result, err := service.Execute(timeoutCtx, changePlanID, executorID)
-
-	// The timeout should occur during execution
-	// Note: sqlmock doesn't actually delay, so we test the error path
-	assert.Error(t, err)
-	// The result will be nil on error, but if timeout handling works, error message should indicate timeout
-	if err != nil {
-		// Timeout error should be handled
-		assert.NotNil(t, result) // Result is returned even on error for failed executions
-	}
-
-	changePlanRepo.AssertExpectations(t)
-	snapshotRepo.AssertExpectations(t)
-	lockManager.AssertExpectations(t)
-	mockConnectionMgr.AssertExpectations(t)
 }
 
 func TestExecutionService_GetQueueStatus(t *testing.T) {

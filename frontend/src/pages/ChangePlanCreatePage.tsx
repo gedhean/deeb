@@ -62,7 +62,7 @@ export const ChangePlanCreatePage: React.FC = () => {
     return 1;
   };
 
-  // Get initial form data from session storage
+  // Get initial form data from session storage or query params
   const getInitialFormData = (): FormData => {
     const stored = sessionStorage.getItem(FORM_DATA_KEY);
     if (stored) {
@@ -75,9 +75,13 @@ export const ChangePlanCreatePage: React.FC = () => {
         // Invalid stored data, return default
       }
     }
+
+    // Check for database_id query parameter
+    const databaseIdParam = searchParams.get('database_id');
+
     return {
       project_id: currentProject?.id || '',
-      target_database_id: '',
+      target_database_id: databaseIdParam || '',
       title: '',
       description: '',
       change_type: 'DDL',
@@ -103,8 +107,11 @@ export const ChangePlanCreatePage: React.FC = () => {
   // Save current step to session storage and URL
   useEffect(() => {
     sessionStorage.setItem(STEP_KEY, currentStep.toString());
-    setSearchParams({ step: currentStep.toString() }, { replace: true });
-  }, [currentStep, setSearchParams]);
+    // Preserve existing query parameters and only update the step
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set('step', currentStep.toString());
+    setSearchParams(newParams, { replace: true });
+  }, [currentStep, searchParams, setSearchParams]);
 
   // Clear session storage on unmount (successful submission or cancel)
   useEffect(() => {
@@ -369,13 +376,8 @@ export const ChangePlanCreatePage: React.FC = () => {
       sessionStorage.removeItem(FORM_DATA_KEY);
       sessionStorage.removeItem(STEP_KEY);
 
-      // Redirect to dashboard
-      navigate('/dashboard', {
-        state: {
-          message: `Change Plan "${createdChangePlan.title}" created successfully`,
-          createdChangePlanId: createdChangePlan.id,
-        },
-      });
+      // Redirect to change plan detail page
+      navigate(`/change-plans/${createdChangePlan.id}`);
     } catch (err) {
       if (err instanceof APIError) {
         setError(err.message);

@@ -11,7 +11,6 @@
  *   1. Edit the YAML files
  *   2. Run: pnpm generate:rbac
  *
- * Generated at: 2025-11-16T20:41:22.822Z
  */
 
 // Organization roles
@@ -111,6 +110,7 @@ export const organizationRolePermissions: Record<OrganizationRole, OrganizationP
     OrganizationPermission.ProjectsCreate,
     OrganizationPermission.ProjectsRead,
     OrganizationPermission.EnvironmentsRead,
+    OrganizationPermission.PoliciesRead,
   ],
 };
 

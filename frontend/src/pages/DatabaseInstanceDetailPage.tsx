@@ -16,32 +16,33 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/data-table';
+import { getDatabasesColumns } from './database-instances/databases-columns';
 import {
   ArrowLeft,
   AlertTriangle,
   Calendar,
   Database as DatabaseIcon,
-  ExternalLink,
   Plus,
+  Cable,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
 import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
+import { databaseInstancesService } from '@/lib/api/services/database-instances';
+import { toast } from 'sonner';
 
 export const DatabaseInstanceDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+
+  // Pagination state for databases table
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   // Check permissions
   const canReadDatabaseInstances = hasOrganizationPermission(
@@ -105,6 +106,38 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
   const getEnvironmentName = (environmentId: string): string => {
     const env = environments.find((e) => e.id === environmentId);
     return env?.name || 'Unknown';
+  };
+
+  // Get columns for databases table
+  const databasesColumns = getDatabasesColumns({
+    getProjectName,
+    getEnvironmentName,
+  });
+
+  // Handle test connection
+  const handleTestConnection = async () => {
+    if (!id) return;
+
+    setIsTestingConnection(true);
+    try {
+      const result = await databaseInstancesService.testConnection(id);
+
+      if (result.success) {
+        toast.success('Connection Successful', {
+          description: `Connected to ${result.host}:${result.port}/${result.database}`,
+        });
+      } else {
+        toast.error('Connection Failed', {
+          description: result.error || 'Failed to connect to database',
+        });
+      }
+    } catch (error) {
+      toast.error('Error', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsTestingConnection(false);
+    }
   };
 
   // Render access denied
@@ -188,8 +221,21 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
         ) : instance ? (
           <Card>
             <CardHeader>
-              <CardTitle>Instance Information</CardTitle>
-              <CardDescription>Details about this database instance connection</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Instance Information</CardTitle>
+                  <CardDescription>Details about this database instance connection</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestConnection}
+                  disabled={isTestingConnection}
+                >
+                  <Cable className="h-4 w-4 mr-2" />
+                  {isTestingConnection ? 'Testing...' : 'Test Connection'}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
@@ -269,44 +315,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            {isLoadingDatabases ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Database Name</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Environment</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[1, 2, 3].map((i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-20" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-8 w-16 ml-auto" />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : databases.length === 0 ? (
+            {!isLoadingDatabases && databases.length === 0 ? (
               <Empty>
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -325,49 +334,27 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
                 </EmptyContent>
               </Empty>
             ) : (
-              <div className="overflow-x-auto -mx-6 px-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Database Name</TableHead>
-                      <TableHead>Project</TableHead>
-                      <TableHead>Environment</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {databases.map((database) => (
-                      <TableRow key={database.id}>
-                        <TableCell className="font-medium">{database.database_name}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {getProjectName(database.project_id)}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {getEnvironmentName(database.environment_id)}
-                        </TableCell>
-                        <TableCell>
-                          <DatabaseStatusBadge status={database.status} variant="database" />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatDate(database.created_at)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate(`/databases`)}
-                            className="h-8"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <DataTable
+                columns={databasesColumns}
+                data={databases}
+                isLoading={isLoadingDatabases}
+                searchable
+                searchKey="database_name"
+                searchPlaceholder="Search by database name..."
+                emptyMessage="No databases found."
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  totalCount: databases.length,
+                  onPageChange: setPageIndex,
+                  onPageSizeChange: (newSize) => {
+                    setPageSize(newSize);
+                    setPageIndex(0);
+                  },
+                  pageSizeOptions: [10, 20, 30, 50],
+                }}
+                onRowClick={(database) => navigate(`/databases/${database.id}`)}
+              />
             )}
           </CardContent>
         </Card>

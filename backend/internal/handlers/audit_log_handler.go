@@ -88,7 +88,7 @@ func (h *AuditLogHandler) ListAuditLogs(c echo.Context) error {
 				"error": "Invalid user_id parameter",
 			})
 		}
-		filters.UserID = userID
+		filters.UserID = &userID
 	}
 
 	// Parse optional action filter

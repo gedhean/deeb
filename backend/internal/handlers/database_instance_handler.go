@@ -13,7 +13,6 @@ import (
 	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
-	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/utils"
 	"go.uber.org/zap"
 )
@@ -27,7 +26,6 @@ type DatabaseInstanceHandler struct {
 	changePlanRepo  repository.ChangePlanRepository
 	connManager     *database.ConnectionManager
 	encryptionKey   string
-	auditService    *services.AuditLogService
 	logger          *zap.Logger
 }
 
@@ -40,7 +38,6 @@ func NewDatabaseInstanceHandler(
 	changePlanRepo repository.ChangePlanRepository,
 	connManager *database.ConnectionManager,
 	encryptionKey string,
-	auditService *services.AuditLogService,
 	logger *zap.Logger,
 ) *DatabaseInstanceHandler {
 	return &DatabaseInstanceHandler{
@@ -51,7 +48,6 @@ func NewDatabaseInstanceHandler(
 		changePlanRepo:  changePlanRepo,
 		connManager:     connManager,
 		encryptionKey:   encryptionKey,
-		auditService:    auditService,
 		logger:          logger,
 	}
 }
@@ -173,21 +169,6 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 		zap.String("database_instance_id", instance.ID.String()),
 		zap.String("name", instance.Name),
 	)
-
-	// Log audit entry
-	if h.auditService != nil {
-		detailsJSON, _ := json.Marshal(map[string]interface{}{
-			"name":            instance.Name,
-			"description":     instance.Description,
-			"database_engine": string(instance.DatabaseEngine),
-			"host":            instance.Host,
-			"port":            instance.Port,
-			"username":        instance.Username,
-		})
-		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeDatabaseInstance, instance.ID, c.Request(), detailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for database instance creation", zap.Error(err))
-		}
-	}
 
 	return c.JSON(http.StatusCreated, instance.ToResponse())
 }
@@ -476,24 +457,6 @@ func (h *DatabaseInstanceHandler) UpdateDatabaseInstance(c echo.Context) error {
 
 	h.logger.Info("Database instance updated successfully", zap.String("id", instance.ID.String()))
 
-	// Log audit entry
-	if h.auditService != nil {
-		claims, ok := auth.GetUserFromEchoContext(c)
-		if ok && claims != nil {
-			detailsJSON, _ := json.Marshal(map[string]interface{}{
-				"name":            instance.Name,
-				"description":     instance.Description,
-				"database_engine": string(instance.DatabaseEngine),
-				"host":            instance.Host,
-				"port":            instance.Port,
-				"username":        instance.Username,
-			})
-			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionUpdate, services.ResourceTypeDatabaseInstance, id, c.Request(), detailsJSON); err != nil {
-				h.logger.Error("Failed to log audit entry for database instance update", zap.Error(err))
-			}
-		}
-	}
-
 	return c.JSON(http.StatusOK, instance.ToResponse())
 }
 
@@ -553,19 +516,6 @@ func (h *DatabaseInstanceHandler) DeleteDatabaseInstance(c echo.Context) error {
 	}
 
 	h.logger.Info("Database instance deleted successfully", zap.String("id", id.String()))
-
-	// Log audit entry
-	if h.auditService != nil {
-		claims, ok := auth.GetUserFromEchoContext(c)
-		if ok && claims != nil {
-			detailsJSON, _ := json.Marshal(map[string]interface{}{
-				"database_instance_id": id.String(),
-			})
-			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionDelete, services.ResourceTypeDatabaseInstance, id, c.Request(), detailsJSON); err != nil {
-				h.logger.Error("Failed to log audit entry for database instance deletion", zap.Error(err))
-			}
-		}
-	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Database instance deleted successfully",
@@ -696,21 +646,6 @@ func (h *DatabaseInstanceHandler) CreateDatabaseForInstance(c echo.Context) erro
 
 		h.logger.Info("Database imported", zap.String("id", database.ID.String()), zap.String("name", database.DatabaseName))
 
-		// Log audit entry
-		if h.auditService != nil {
-			detailsJSON, _ := json.Marshal(map[string]interface{}{
-				"database_name":        database.DatabaseName,
-				"description":          database.Description,
-				"project_id":           database.ProjectID.String(),
-				"environment_id":       database.EnvironmentID.String(),
-				"database_instance_id": database.DatabaseInstanceID.String(),
-				"imported":             true,
-			})
-			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeDatabase, database.ID, c.Request(), detailsJSON); err != nil {
-				h.logger.Error("Failed to log audit entry for database import", zap.Error(err))
-			}
-		}
-
 		return c.JSON(http.StatusOK, database)
 	}
 
@@ -783,21 +718,181 @@ func (h *DatabaseInstanceHandler) CreateDatabaseForInstance(c echo.Context) erro
 		zap.String("database_id", database.ID.String()),
 	)
 
-	// Log audit entry
-	if h.auditService != nil {
-		detailsJSON, _ := json.Marshal(map[string]interface{}{
-			"database_name":        database.DatabaseName,
-			"description":          database.Description,
-			"project_id":           database.ProjectID.String(),
-			"environment_id":       database.EnvironmentID.String(),
-			"database_instance_id": database.DatabaseInstanceID.String(),
-			"change_plan_id":       changePlan.ID.String(),
-			"pending":              true,
+	return c.JSON(http.StatusOK, changePlan)
+}
+
+// TestDatabaseInstanceConnection handles both:
+// - POST /api/v1/database-instances/:id/test-connection (existing instance)
+// - POST /api/v1/database-instances/test-connection (new instance with credentials)
+func (h *DatabaseInstanceHandler) TestDatabaseInstanceConnection(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
 		})
-		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeDatabase, database.ID, c.Request(), detailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for pending database creation", zap.Error(err))
+	}
+
+	var instance *models.DatabaseInstance
+	var testDatabaseName string
+
+	// Check if this is for an existing instance (has :id param) or new credentials
+	instanceIDStr := c.Param("id")
+	if instanceIDStr != "" {
+		// Existing instance - fetch from database
+		instanceID, err := uuid.Parse(instanceIDStr)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid instance ID format",
+			})
+		}
+
+		instance, err = h.dbInstanceRepo.GetByID(ctx, instanceID)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				return c.JSON(http.StatusNotFound, map[string]interface{}{
+					"error": "Database instance not found",
+				})
+			}
+			h.logger.Error("Failed to get database instance", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to retrieve database instance",
+			})
+		}
+
+		// Parse optional database name from request body
+		var req struct {
+			DatabaseName string `json:"database_name,omitempty"`
+		}
+		if err := c.Bind(&req); err != nil {
+			h.logger.Debug("No request body provided, will use default database", zap.Error(err))
+		}
+		testDatabaseName = req.DatabaseName
+	} else {
+		// New instance - parse credentials from request body
+		var req struct {
+			Host           string `json:"host" validate:"required"`
+			Port           int    `json:"port" validate:"required,min=1,max=65535"`
+			Username       string `json:"username" validate:"required"`
+			Password       string `json:"password"`
+			DatabaseEngine string `json:"database_engine" validate:"required,oneof=mysql postgresql"`
+			DatabaseName   string `json:"database_name"`
+			UseRDSIAMAuth  bool   `json:"use_rds_iam_auth"`
+			RequireSSL     bool   `json:"require_ssl"`
+		}
+
+		if err := c.Bind(&req); err != nil {
+			h.logger.Error("Failed to bind request", zap.Error(err))
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid request format",
+			})
+		}
+
+		// Validate required fields
+		if req.Host == "" || req.Port == 0 || req.Username == "" || req.DatabaseEngine == "" {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Missing required fields: host, port, username, database_engine",
+			})
+		}
+
+		// Encrypt the password for connection testing
+		// The password needs to be in JSON format: {"password":"..."}
+		var encryptedPassword *string
+		if req.Password != "" {
+			passwordJSON, err := json.Marshal(map[string]string{"password": req.Password})
+			if err != nil {
+				h.logger.Error("Failed to marshal password for connection test", zap.Error(err))
+				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+					"error": "Failed to process credentials",
+				})
+			}
+			encrypted, err := utils.Encrypt(string(passwordJSON), h.encryptionKey)
+			if err != nil {
+				h.logger.Error("Failed to encrypt password for connection test", zap.Error(err))
+				return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+					"error": "Failed to process credentials",
+				})
+			}
+			encryptedPassword = &encrypted
+		}
+
+		// Create a temporary database instance for connection testing
+		instance = &models.DatabaseInstance{
+			Host:                       req.Host,
+			Port:                       req.Port,
+			Username:                   req.Username,
+			ConnectionDetailsEncrypted: encryptedPassword,
+			DatabaseEngine:             models.DatabaseEngine(req.DatabaseEngine),
+			UseRDSIAMAuth:              req.UseRDSIAMAuth,
+			RequireSSL:                 req.RequireSSL,
+		}
+		testDatabaseName = req.DatabaseName
+	}
+
+	// Determine which database to test against
+	if testDatabaseName == "" {
+		// Use default system database if no specific database provided
+		switch instance.DatabaseEngine {
+		case models.DatabaseEngineMySQL:
+			testDatabaseName = "mysql"
+		case models.DatabaseEnginePostgreSQL:
+			// For PostgreSQL, try to connect to a database with the same name as the username
+			// This is the default behavior when no database is specified
+			// If the user doesn't have their own database, they likely have access to it
+			testDatabaseName = "postgres"
 		}
 	}
 
-	return c.JSON(http.StatusOK, changePlan)
+	// Create a temporary database model for connection testing
+	testDB := &models.Database{
+		DatabaseName: testDatabaseName,
+	}
+
+	// Attempt connection using connection manager
+	conn, connErr := h.connManager.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: instance,
+		Database:         testDB,
+		MaxOpenConns:     1,
+		MaxIdleConns:     0,
+		ConnMaxLifetime:  0, // Close immediately after test
+	})
+
+	if connErr != nil {
+		h.logger.Warn("Database connection test failed",
+			zap.Error(connErr),
+			zap.String("host", instance.Host),
+			zap.Int("port", instance.Port),
+			zap.String("database", testDatabaseName))
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"success":  false,
+			"message":  "Connection test failed",
+			"error":    connErr.Error(),
+			"host":     instance.Host,
+			"port":     instance.Port,
+			"database": testDatabaseName,
+		})
+	}
+
+	// Close connection immediately
+	if closeErr := conn.Close(); closeErr != nil {
+		h.logger.Warn("Failed to close test connection", zap.Error(closeErr))
+	}
+
+	h.logger.Info("Database connection test successful",
+		zap.String("host", instance.Host),
+		zap.Int("port", instance.Port),
+		zap.String("database", testDatabaseName))
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success":  true,
+		"message":  "Connection test successful",
+		"host":     instance.Host,
+		"port":     instance.Port,
+		"database": testDatabaseName,
+		"engine":   string(instance.DatabaseEngine),
+		"username": instance.Username,
+	})
 }

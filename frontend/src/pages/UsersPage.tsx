@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '@/hooks/api/useUsersSWR';
 import type { CreateUserRequest, User, UpdateUserRequest } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   Empty,
   EmptyContent,
@@ -23,16 +23,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Plus, Pencil, Trash2, AlertTriangle, Users } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { DataTable, DataTableToolbar } from '@/components/data-table';
+import type { FilterDefinition } from '@/components/data-table/types';
+import { getUsersColumns } from './users/columns';
+import { Plus, AlertTriangle, Users, Shield, UserCog, User as UserIcon } from 'lucide-react';
 import { RoleBadge } from '@/components/RoleBadge';
 import { UserForm, type UserFormData, type UserFormErrors } from '@/components/user-form';
 import {
@@ -49,6 +43,10 @@ export const UsersPage: React.FC = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   // Use mutation hooks
   const { createUser, isLoading: isCreating } = useCreateUser();
@@ -200,7 +198,7 @@ export const UsersPage: React.FC = () => {
   };
 
   // Open create form
-  const openCreateForm = () => {
+  const openCreateForm = useCallback(() => {
     setFormData({
       email: '',
       password: '',
@@ -209,10 +207,10 @@ export const UsersPage: React.FC = () => {
     });
     setFormErrors({});
     setIsCreateOpen(true);
-  };
+  }, []);
 
   // Open edit form
-  const openEditForm = (user: User) => {
+  const openEditForm = useCallback((user: User) => {
     setSelectedUser(user);
     setEditFormData({
       display_name: user.display_name || '',
@@ -225,26 +223,74 @@ export const UsersPage: React.FC = () => {
     });
     setFormErrors({});
     setIsEditOpen(true);
-  };
+  }, []);
 
   // Open delete confirmation
-  const openDeleteConfirmation = (user: User) => {
+  const openDeleteConfirmation = useCallback((user: User) => {
     setSelectedUser(user);
     setIsDeleteOpen(true);
-  };
+  }, []);
 
-  // Format date
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    } catch {
-      return dateString;
-    }
-  };
+  // Get columns with action handlers
+  const columns = getUsersColumns({
+    onView: (user) => navigate(`/users/${user.id}`),
+    onEdit: openEditForm,
+    onDelete: openDeleteConfirmation,
+    canUpdate: canUpdateUsers,
+    canDelete: canDeleteUsers,
+  });
+
+  // Create filter definitions
+  const filterDefinitions: FilterDefinition[] = useMemo(
+    () => [
+      {
+        id: 'email',
+        type: 'search',
+        title: 'Email',
+        placeholder: 'Search emails...',
+        defaultActive: true,
+      },
+      {
+        id: 'organization_role',
+        type: 'faceted',
+        title: 'Role',
+        options: [
+          { label: 'Organization Admin', value: 'OrganizationAdmin', icon: Shield },
+          { label: 'Organization DBA', value: 'OrganizationDBA', icon: UserCog },
+          { label: 'Organization Developer', value: 'OrganizationDeveloper', icon: UserIcon },
+        ],
+      },
+      {
+        id: 'is_active',
+        type: 'select',
+        title: 'Status',
+        options: [
+          { label: 'Active', value: 'true' },
+          { label: 'Inactive', value: 'false' },
+        ],
+      },
+      {
+        id: 'created_at',
+        type: 'dateRange',
+        title: 'Created',
+        presets: [
+          {
+            label: 'Last 7 days',
+            getValue: () => [subDays(new Date(), 7), new Date()],
+          },
+          {
+            label: 'Last 30 days',
+            getValue: () => [subDays(new Date(), 30), new Date()],
+          },
+          {
+            label: 'Last 90 days',
+            getValue: () => [subDays(new Date(), 90), new Date()],
+          },
+        ],
+      },
+    ],
+    [],
+  );
 
   // Render access denied
   if (!canReadUsers) {
@@ -295,20 +341,7 @@ export const UsersPage: React.FC = () => {
         )}
 
         {/* Users list */}
-        {isLoading ? (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
-                <Skeleton className="h-9 w-full" />
-                <div className="space-y-2">
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-4 w-32" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : users.length === 0 ? (
+        {!isLoading && users.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
               <Empty>
@@ -336,78 +369,26 @@ export const UsersPage: React.FC = () => {
         ) : (
           <Card>
             <CardContent className="pt-6">
-              <div className="overflow-x-auto -mx-6 px-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Last Login</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.map((user) => (
-                      <TableRow
-                        key={user.id}
-                        onClick={() => navigate(`/users/${user.id}`)}
-                        className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      >
-                        <TableCell className="font-medium">{user.email}</TableCell>
-                        <TableCell>
-                          <RoleBadge
-                            role={user.organization_role as OrganizationRole}
-                            showTooltip={true}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={user.is_active ? 'default' : 'secondary'}>
-                            {user.is_active ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {user.last_login_at ? formatDate(user.last_login_at) : 'Never'}
-                        </TableCell>
-                        <TableCell>{formatDate(user.created_at)}</TableCell>
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-2">
-                            {canUpdateUsers && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEditForm(user);
-                                }}
-                                className="h-11 w-11 p-0 touch-manipulation"
-                                aria-label="Edit user"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {canDeleteUsers && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openDeleteConfirmation(user);
-                                }}
-                                className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
-                                aria-label="Delete user"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <DataTable
+                columns={columns}
+                data={users}
+                isLoading={isLoading}
+                emptyMessage="No users found."
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  totalCount: users.length,
+                  onPageChange: setPageIndex,
+                  onPageSizeChange: (newSize) => {
+                    setPageSize(newSize);
+                    setPageIndex(0);
+                  },
+                  pageSizeOptions: [10, 20, 30, 50],
+                }}
+                onRowClick={(user) => navigate(`/users/${user.id}`)}
+              >
+                {(table) => <DataTableToolbar table={table} filters={filterDefinitions} />}
+              </DataTable>
             </CardContent>
           </Card>
         )}

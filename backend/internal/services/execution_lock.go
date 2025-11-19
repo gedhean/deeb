@@ -231,5 +231,7 @@ func isUniqueViolationError(err error) bool {
 
 // Execution lock errors
 var (
-	ErrDatabaseLocked = fmt.Errorf("database is currently locked by another execution")
+	ErrDatabaseLocked           = fmt.Errorf("database is currently locked by another execution")
+	ErrDatabaseNotFound         = fmt.Errorf("database not found")
+	ErrDatabaseInstanceNotFound = fmt.Errorf("database instance not found")
 )

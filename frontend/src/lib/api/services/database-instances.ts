@@ -88,32 +88,83 @@ export const databaseInstancesService = {
   },
 
   /**
-   * Test database connection
-   * Note: Since backend doesn't have a dedicated test endpoint,
-   * this will attempt to create an instance (which tests connection).
-   * The frontend should handle this appropriately - if successful,
-   * a test instance will be created that should be deleted.
+   * Test database connection for an existing instance
+   * Uses the dedicated test connection endpoint
    */
-  async testConnection(data: CreateDatabaseInstanceRequest): Promise<{
+  async testConnection(
+    instanceId: string,
+    databaseName?: string,
+  ): Promise<{
     success: boolean;
+    message?: string;
     error?: string;
-    details?: string;
-    instance?: DatabaseInstance;
+    host?: string;
+    port?: number;
+    database?: string;
+    engine?: string;
+    username?: string;
   }> {
     try {
-      // Make a test request - backend will validate connection
-      // If connection fails, backend returns 400 with error details
-      const instance = await this.createDatabaseInstance(data);
-      // If we get here, connection was successful
-      return { success: true, instance };
+      const response = await apiClient.post<{
+        success: boolean;
+        message: string;
+        error?: string;
+        host: string;
+        port: number;
+        database: string;
+        engine: string;
+      }>(`/api/v1/database-instances/${instanceId}/test-connection`, {
+        database_name: databaseName,
+      });
+      return response;
     } catch (error: unknown) {
       if (error && typeof error === 'object' && 'response' in error) {
-        const apiError = error as { response?: { data?: { error?: string; details?: string } } };
+        const apiError = error as { response?: { data?: { error?: string } } };
         if (apiError.response?.data) {
           return {
             success: false,
             error: apiError.response.data.error || 'Connection test failed',
-            details: apiError.response.data.details,
+          };
+        }
+      }
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  },
+
+  /**
+   * Test database connection with provided credentials (for new instances before creation)
+   * Uses the test connection endpoint without requiring an existing instance
+   */
+  async testConnectionWithCredentials(credentials: CreateDatabaseInstanceRequest): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    host?: string;
+    port?: number;
+    database?: string;
+    engine?: string;
+  }> {
+    try {
+      const response = await apiClient.post<{
+        success: boolean;
+        message: string;
+        error?: string;
+        host: string;
+        port: number;
+        database: string;
+        engine: string;
+      }>('/api/v1/database-instances/test-connection', credentials);
+      return response;
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'response' in error) {
+        const apiError = error as { response?: { data?: { error?: string } } };
+        if (apiError.response?.data) {
+          return {
+            success: false,
+            error: apiError.response.data.error || 'Connection test failed',
           };
         }
       }

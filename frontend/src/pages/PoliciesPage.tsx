@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import type {
@@ -18,7 +19,6 @@ import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   Sheet,
   SheetContent,
@@ -27,8 +27,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Plus, Pencil, Trash2, AlertTriangle, Code2 } from 'lucide-react';
+import { DataTable, DataTableToolbar } from '@/components/data-table';
+import type { FilterDefinition } from '@/components/data-table/types';
+import { getPoliciesColumns } from './policies/columns';
+import { Plus, AlertTriangle, Code2, FileCheck2, Info } from 'lucide-react';
 import { SQLReviewRuleSelector } from '@/components/sql-review-rule-selector';
+import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 
 export const PoliciesPage: React.FC = () => {
   const { user } = useAuth();
@@ -39,6 +43,10 @@ export const PoliciesPage: React.FC = () => {
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null);
   const [useJsonEditor, setUseJsonEditor] = useState(false);
   const [jsonEditorError, setJsonEditorError] = useState('');
+
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   // Form state
   const [formData, setFormData] = useState<CreatePolicyRequest>({
@@ -53,17 +61,32 @@ export const PoliciesPage: React.FC = () => {
     policy_config?: string;
   }>({});
 
-  // Check if user is admin
-  const isAdmin = user?.organization_role === 'OrganizationAdmin';
+  // Check permissions
+  const canReadPolicies = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.PoliciesRead,
+  );
+  const canCreatePolicies = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.PoliciesCreate,
+  );
+  const canUpdatePolicies = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.PoliciesUpdate,
+  );
+  const canDeletePolicies = hasOrganizationPermission(
+    user?.organization_role,
+    OrganizationPermission.PoliciesDelete,
+  );
 
   // Use SWR hooks for data fetching
   const policiesParams = useMemo(
     () => ({
       type: filterType === 'SQL_REVIEW' ? ('SQL_REVIEW' as const) : undefined,
       limit: 100,
-      enabled: isAdmin,
+      enabled: canReadPolicies,
     }),
-    [filterType, isAdmin],
+    [filterType, canReadPolicies],
   );
 
   const { policies, isLoading, error } = usePolicies(policiesParams);
@@ -177,16 +200,16 @@ export const PoliciesPage: React.FC = () => {
   };
 
   // Open create form
-  const openCreateForm = () => {
+  const openCreateForm = useCallback(() => {
     setFormData({ name: '', description: '', type: 'SQL_REVIEW', policy_config: { rules: {} } });
     setFormErrors({});
     setUseJsonEditor(false);
     setJsonEditorError('');
     setIsCreateOpen(true);
-  };
+  }, []);
 
   // Open edit form
-  const openEditForm = (policy: Policy) => {
+  const openEditForm = useCallback((policy: Policy) => {
     setSelectedPolicy(policy);
     const config = policy.policy_config as SQLReviewPolicyConfig;
     setFormData({
@@ -199,39 +222,94 @@ export const PoliciesPage: React.FC = () => {
     setUseJsonEditor(false);
     setJsonEditorError('');
     setIsEditOpen(true);
-  };
+  }, []);
 
   // Open delete confirmation
-  const openDeleteConfirmation = (policy: Policy) => {
+  const openDeleteConfirmation = useCallback((policy: Policy) => {
     setSelectedPolicy(policy);
     setIsDeleteOpen(true);
-  };
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    } catch {
-      return dateString;
-    }
-  };
+  }, []);
 
   // Check if policy is referenced by environments
-  const isPolicyReferenced = (policyId: string): boolean => {
-    return environments.some((env) => env.policy_id === policyId);
-  };
+  const isPolicyReferenced = useCallback(
+    (policyId: string): boolean => {
+      return environments.some((env) => env.policy_id === policyId);
+    },
+    [environments],
+  );
 
   // Get environments using this policy
-  const getReferencingEnvironments = (policyId: string): Environment[] => {
-    return environments.filter((env) => env.policy_id === policyId);
-  };
+  const getReferencingEnvironments = useCallback(
+    (policyId: string): Environment[] => {
+      return environments.filter((env) => env.policy_id === policyId);
+    },
+    [environments],
+  );
+
+  // Get count of environments using this policy
+  const getReferencingEnvironmentsCount = useCallback(
+    (policyId: string): number => {
+      return environments.filter((env) => env.policy_id === policyId).length;
+    },
+    [environments],
+  );
+
+  // Get columns with action handlers
+  const columns = getPoliciesColumns({
+    onEdit: openEditForm,
+    onDelete: openDeleteConfirmation,
+    canUpdate: canUpdatePolicies,
+    canDelete: canDeletePolicies,
+    getReferencingEnvironmentsCount,
+  });
+
+  // Create filter definitions
+  const filterDefinitions: FilterDefinition[] = useMemo(
+    () => [
+      {
+        id: 'name',
+        type: 'search',
+        title: 'Name',
+        placeholder: 'Search names...',
+        defaultActive: true,
+      },
+      {
+        id: 'type',
+        type: 'faceted',
+        title: 'Type',
+        options: [
+          { label: 'Syntax', value: 'Syntax', icon: FileCheck2 },
+          { label: 'Security', value: 'Security', icon: AlertTriangle },
+          { label: 'Performance', value: 'Performance', icon: Info },
+          { label: 'Backwards Compatibility', value: 'BackwardsCompatibility', icon: FileCheck2 },
+          { label: 'Best Practices', value: 'BestPractices', icon: Info },
+        ],
+      },
+      {
+        id: 'created_at',
+        type: 'dateRange',
+        title: 'Created',
+        presets: [
+          {
+            label: 'Last 7 days',
+            getValue: () => [subDays(new Date(), 7), new Date()],
+          },
+          {
+            label: 'Last 30 days',
+            getValue: () => [subDays(new Date(), 30), new Date()],
+          },
+          {
+            label: 'Last 90 days',
+            getValue: () => [subDays(new Date(), 90), new Date()],
+          },
+        ],
+      },
+    ],
+    [],
+  );
 
   // Render access denied
-  if (!isAdmin) {
+  if (!canReadPolicies) {
     return (
       <DefaultLayout breadcrumbs={[{ label: 'Policies', isCurrentPage: true }]}>
         <Card>
@@ -241,7 +319,7 @@ export const PoliciesPage: React.FC = () => {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This page requires Organization Admin role.
+              This page requires the policies.read permission.
             </p>
           </CardContent>
         </Card>
@@ -260,10 +338,12 @@ export const PoliciesPage: React.FC = () => {
               Manage SQL review policies and validator configurations
             </p>
           </div>
-          <Button onClick={openCreateForm}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Policy
-          </Button>
+          {canCreatePolicies && (
+            <Button onClick={openCreateForm}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Policy
+            </Button>
+          )}
         </div>
 
         {/* Filter */}
@@ -295,80 +375,44 @@ export const PoliciesPage: React.FC = () => {
         )}
 
         {/* Policies list */}
-        {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-48 mt-2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-24 mt-2" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : policies.length === 0 ? (
+        {!isLoading && policies.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
               <div className="text-center py-8">
                 <p className="text-muted-foreground">No policies found.</p>
-                <Button onClick={openCreateForm} className="mt-4">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Your First Policy
-                </Button>
+                {canCreatePolicies && (
+                  <Button onClick={openCreateForm} className="mt-4">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Your First Policy
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {policies.map((policy) => (
-              <Card key={policy.id}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{policy.name}</CardTitle>
-                  <CardDescription className="line-clamp-2 mt-1">
-                    {policy.description || 'No description'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Type:</span> {policy.type}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Created {formatDate(policy.created_at)}
-                    </div>
-                    {isPolicyReferenced(policy.id) && (
-                      <div className="text-xs text-yellow-600 dark:text-yellow-400">
-                        ⚠️ Referenced by {getReferencingEnvironments(policy.id).length}{' '}
-                        environment(s)
-                      </div>
-                    )}
-                    <div className="flex items-center justify-end gap-2 pt-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditForm(policy)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteConfirmation(policy)}
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <DataTable
+                columns={columns}
+                data={policies}
+                isLoading={isLoading}
+                emptyMessage="No policies found."
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  totalCount: policies.length,
+                  onPageChange: setPageIndex,
+                  onPageSizeChange: (newSize) => {
+                    setPageSize(newSize);
+                    setPageIndex(0);
+                  },
+                  pageSizeOptions: [10, 20, 30, 50],
+                }}
+              >
+                {(table) => <DataTableToolbar table={table} filters={filterDefinitions} />}
+              </DataTable>
+            </CardContent>
+          </Card>
         )}
 
         {/* Create Policy Sheet */}

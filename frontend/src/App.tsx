@@ -24,6 +24,7 @@ import { ProfilePage } from '@/pages/ProfilePage';
 import { ChangePlanCreatePage } from '@/pages/ChangePlanCreatePage';
 import { ChangePlansPage } from '@/pages/ChangePlansPage';
 import { ChangePlanDetailPage } from '@/pages/ChangePlanDetailPage';
+import { ChangelogDetailPage } from '@/pages/ChangelogDetailPage';
 import { AuditLogPage } from '@/pages/AuditLogPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import './App.css';
@@ -170,6 +171,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <ChangePlanDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/changelog/:id"
+                element={
+                  <ProtectedRoute>
+                    <ChangelogDetailPage />
                   </ProtectedRoute>
                 }
               />

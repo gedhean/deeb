@@ -57,6 +57,25 @@ Refer to [docs/architecture.png](docs/architecture.png) for visual representatio
 - **Start the Frontend**: `pnpm --dir frontend run dev`
 - **Start the Backend**: `cd backend && make run`
 
+#### Design Principles
+
+**KISS (Keep It Simple, Stupid)**
+- Encourages Claude to write straightforward, uncomplicated solutions
+- Avoids over-engineering and unnecessary complexity
+- Results in more readable and maintainable code
+
+**YAGNI (You Aren't Gonna Need It)**
+- Prevents Claude from adding speculative features
+- Focuses on implementing only what's currently needed
+- Reduces code bloat and maintenance overhead
+
+**SOLID Principles**
+- **Single Responsibility Principle**
+- **Open-Closed Principle**
+- **Liskov Substitution Principle**
+- **Interface Segregation Principle**
+- **Dependency Inversion Principle**
+
 ## Database Change Lifecycle
 
 1. **Planning**: Define change type (DDL/DML), target database(s), and change details
@@ -66,14 +85,3 @@ Refer to [docs/architecture.png](docs/architecture.png) for visual representatio
 3. **Approval**: Multi-step approval process with risk-based workflows (e.g., production changes require senior engineer approval)
 4. **Application**: Changes applied in controlled manner with rollback capability, supports immediate or scheduled execution
 5. **Monitoring**: Continuous schema drift detection
-
-## Development Status
-
-**IMPORTANT**: This repository currently contains planning documentation only. No implementation code exists yet. When implementing:
-
-- Follow the architecture described in [docs/project.md](docs/project.md)
-- Ensure all security features are properly implemented
-- Maintain full audit trail capabilities
-- Design for multi-database support from the start
-- Let's use the github.com/labstack/echo backend server routing and middleware.
-- Save general docs at docs/ folder and specific docs at frontend/docs/ or backend/docs/.

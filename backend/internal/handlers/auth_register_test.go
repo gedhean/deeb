@@ -76,7 +76,7 @@ func TestRegisterHandler_ServeHTTP_Success(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
@@ -121,7 +121,7 @@ func TestRegisterHandler_ServeHTTP_CustomOrganizationRole(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	customRole := "OrganizationAdmin"
 
@@ -178,7 +178,7 @@ func TestRegisterHandler_ServeHTTP_InvalidEmailFormat(t *testing.T) {
 			// Setup
 			mockRepo := new(MockUserRepository)
 			logger := zap.NewNop()
-			handler := NewRegisterHandler(mockRepo, nil, logger)
+			handler := NewRegisterHandler(mockRepo, logger)
 
 			// Create request
 			reqBody := RegisterRequest{
@@ -210,7 +210,7 @@ func TestRegisterHandler_ServeHTTP_PasswordTooShort(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Create request with short password
 	reqBody := RegisterRequest{
@@ -240,7 +240,7 @@ func TestRegisterHandler_ServeHTTP_PasswordTooLong(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Create request with password > 72 characters
 	longPassword := make([]byte, 73)
@@ -275,7 +275,7 @@ func TestRegisterHandler_ServeHTTP_EmptyPassword(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Create request with empty password
 	reqBody := RegisterRequest{
@@ -305,7 +305,7 @@ func TestRegisterHandler_ServeHTTP_DuplicateEmail(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Mock existing user
 	existingUser := &models.User{
@@ -348,7 +348,7 @@ func TestRegisterHandler_ServeHTTP_MalformedJSON(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Create request with malformed JSON
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader([]byte("{invalid json")))
@@ -373,7 +373,7 @@ func TestRegisterHandler_ServeHTTP_DatabaseErrorOnGetByEmail(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Mock database error
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, errors.New("database connection failed"))
@@ -408,7 +408,7 @@ func TestRegisterHandler_ServeHTTP_DatabaseErrorOnCreate(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
@@ -445,7 +445,7 @@ func TestRegisterHandler_ServeHTTP_MethodNotAllowed(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Create GET request (should only accept POST)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/register", nil)
@@ -469,7 +469,7 @@ func TestRegisterHandler_ServeHTTP_EmailNormalization(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Mock expectations - email should be lowercased and trimmed
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
@@ -502,7 +502,7 @@ func TestRegisterHandler_ServeHTTP_FirstUserBecomesAdmin(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Mock expectations for first user (no existing users)
 	mockRepo.On("GetByEmail", mock.Anything, "first@example.com").Return(nil, sql.ErrNoRows)
@@ -546,7 +546,7 @@ func TestRegisterHandler_ServeHTTP_SecondUserGetsDeveloperRole(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Mock expectations for second user (one user already exists)
 	existingUser := &models.User{
@@ -597,7 +597,7 @@ func TestRegisterHandler_ServeHTTP_FirstUserSetup_DatabaseError(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, nil, logger)
+	handler := NewRegisterHandler(mockRepo, logger)
 
 	// Mock expectations - List() returns an error
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)

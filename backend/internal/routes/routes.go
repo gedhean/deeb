@@ -42,10 +42,21 @@ func Setup(
 	projectMemberRepo := postgres.NewProjectMemberRepository(db)
 	policyFindingRepo := postgres.NewPolicyFindingRepository(db)
 	approvalRepo := postgres.NewApprovalRepository(db)
+	changelogRepo := postgres.NewChangelogRepository(db)
+	schemaHistoryRepo := postgres.NewSchemaHistoryRepository(db)
 
 	// Initialize audit log repository and service
 	auditLogRepo := postgres.NewAuditLogRepository(db)
 	auditLogService := services.NewAuditLogService(auditLogRepo, logger.Get())
+
+	// Create protected route group with authentication and audit logging
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	auditLogMiddleware := middleware.NewAuditLogMiddleware(auditLogService, logger.Get(), &cfg.AuditLogging)
+
+	// Protected routes group - applies auth and audit middleware to all routes under /api/v1
+	authenticated := e.Group("/api/v1")
+	authenticated.Use(authMiddleware.Authenticate)
+	authenticated.Use(auditLogMiddleware.AuditLog)
 
 	// Initialize connection manager
 	connectionMgr := database.NewConnectionManager(cfg.Security.EncryptionKey, logger.Get())
@@ -75,15 +86,18 @@ func Setup(
 	schemaSyncJob.Start(ctx)
 
 	// Setup API routes
+	// Public routes (no authentication required)
 	setupHealthRoute(e, db, version)
 	setupSetupRoutes(e, userRepo)
-	setupAuthRoutes(e, cfg, userRepo, tokenManager, loginRateLimiter, auditLogService)
-	setupUserRoutes(e, userRepo, tokenManager)
-	setupProjectRoutes(e, projectRepo, dbRepo, projectMemberRepo, userRepo, tokenManager, auditLogService)
-	setupEnvironmentRoutes(e, envRepo, db, tokenManager, auditLogService)
-	setupPolicyRoutes(e, policyRepo, envRepo, tokenManager)
+	setupAuthRoutes(e, authenticated, cfg, userRepo, tokenManager, loginRateLimiter, auditLogMiddleware)
+
+	// Protected routes (authentication required via authenticated group)
+	setupUserRoutes(authenticated, userRepo)
+	setupProjectRoutes(authenticated, projectRepo, dbRepo, projectMemberRepo, userRepo)
+	setupEnvironmentRoutes(authenticated, envRepo, db)
+	setupPolicyRoutes(authenticated, policyRepo, envRepo)
 	setupDatabaseInstanceRoutes(
-		e,
+		authenticated,
 		dbInstanceRepo,
 		dbRepo,
 		projectRepo,
@@ -91,23 +105,19 @@ func Setup(
 		changePlanRepo,
 		connectionMgr,
 		cfg.Security.EncryptionKey,
-		tokenManager,
-		auditLogService,
 	)
 	setupDatabaseRoutes(
-		e,
+		authenticated,
 		dbRepo,
 		projectRepo,
 		envRepo,
 		dbInstanceRepo,
 		changePlanRepo,
 		projectMemberRepo,
-		tokenManager,
-		auditLogService,
 		schemaMetadataService,
 	)
 	setupChangePlanRoutes(
-		e,
+		authenticated,
 		changePlanRepo,
 		changeHistoryRepo,
 		projectRepo,
@@ -121,10 +131,9 @@ func Setup(
 		db,
 		connectionMgr,
 		cfg.Security.EncryptionKey,
-		tokenManager,
-		auditLogService,
 	)
-	setupAuditLogRoutes(e, auditLogRepo, tokenManager)
+	setupAuditLogRoutes(authenticated, auditLogRepo)
+	setupChangelogRoutes(authenticated, changelogRepo, schemaHistoryRepo, changePlanRepo, projectMemberRepo)
 
 	// Setup Swagger documentation
 	SetupSwaggerRoutes(e)
@@ -150,18 +159,17 @@ func setupSetupRoutes(e *echo.Echo, userRepo repository.UserRepository) {
 // setupAuthRoutes registers authentication routes
 func setupAuthRoutes(
 	e *echo.Echo,
+	authenticated *echo.Group,
 	cfg *config.Config,
 	userRepo repository.UserRepository,
 	tokenManager *auth.TokenManager,
 	loginRateLimiter *handlers.RateLimiter,
-	auditLogService *services.AuditLogService,
+	auditLogMiddleware *middleware.AuditLogMiddleware,
 ) {
-	authGroup := e.Group("/api/v1/auth")
-
 	// Initialize handlers
-	registerHandler := handlers.NewRegisterHandler(userRepo, auditLogService, logger.Get())
-	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, loginRateLimiter, auditLogService, logger.Get())
-	logoutHandler := handlers.NewLogoutHandler(auditLogService, logger.Get())
+	registerHandler := handlers.NewRegisterHandler(userRepo, logger.Get())
+	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, loginRateLimiter, logger.Get())
+	logoutHandler := handlers.NewLogoutHandler(logger.Get())
 	meHandler := handlers.NewMeHandler(userRepo, logger.Get())
 	googleHandler := handlers.NewGoogleOAuthHandler(
 		userRepo,
@@ -173,99 +181,89 @@ func setupAuthRoutes(
 		logger.Get(),
 	)
 
-	// Register routes - use Echo handlers directly
-	authGroup.POST("/register", registerHandler.Register)
-	authGroup.POST("/login", loginHandler.Login)
-	authGroup.POST("/logout", logoutHandler.Logout)
-	authGroup.GET("/google", googleHandler.InitiateGoogleAuth)
-	authGroup.GET("/google/callback", googleHandler.GoogleCallback)
+	// Public routes - no authentication required, but audit logging enabled
+	publicAuthGroup := e.Group("/api/v1/auth")
+	publicAuthGroup.Use(auditLogMiddleware.AuditLog) // Apply audit logging middleware
+	publicAuthGroup.POST("/register", registerHandler.Register)
+	publicAuthGroup.POST("/login", loginHandler.Login)
+	publicAuthGroup.GET("/google", googleHandler.InitiateGoogleAuth)
+	publicAuthGroup.GET("/google/callback", googleHandler.GoogleCallback)
 
-	// Protected routes - require authentication
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
-	authGroup.GET("/me", meHandler.GetCurrentUser, authMiddleware.Authenticate)
+	// Protected routes - use authenticated group (auth already applied)
+	authGroup := authenticated.Group("/auth")
+	authGroup.POST("/logout", logoutHandler.Logout)
+	authGroup.GET("/me", meHandler.GetCurrentUser)
 }
 
 // setupUserRoutes registers user management routes
-func setupUserRoutes(e *echo.Echo, userRepo repository.UserRepository, tokenManager *auth.TokenManager) {
+func setupUserRoutes(authenticated *echo.Group, userRepo repository.UserRepository) {
 	userHandler := handlers.NewUserHandler(userRepo, logger.Get())
-	usersGroup := e.Group("/api/v1/users")
+	usersGroup := authenticated.Group("/users")
 
-	// Authentication middleware required for all user routes
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	// Authorization middleware
 	authzMiddleware := middleware.NewAuthzMiddleware()
 
-	// All user management routes require authentication and admin role
+	// All user management routes require authentication (via group) and admin role
 	usersGroup.GET(
 		"",
 		userHandler.ListUsers,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersRead),
 	)
 	usersGroup.GET(
 		"/:id",
 		userHandler.GetUser,
-		authMiddleware.Authenticate,
 		// Authorization check is in handler - allows users to view own profile
 	)
 	usersGroup.POST(
 		"",
 		userHandler.CreateUser,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersCreate),
 	)
 	usersGroup.PUT(
 		"/:id",
 		userHandler.UpdateUser,
-		authMiddleware.Authenticate,
 		// Authorization check is in handler - allows users to update own profile
 	)
 	usersGroup.DELETE(
 		"/:id",
 		userHandler.DeleteUser,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionUsersDelete),
 	)
 }
 
 // setupProjectRoutes registers project management routes
 func setupProjectRoutes(
-	e *echo.Echo,
+	authenticated *echo.Group,
 	projectRepo repository.ProjectRepository,
 	databaseRepo repository.DatabaseRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
 	userRepo repository.UserRepository,
-	tokenManager *auth.TokenManager,
-	auditLogService *services.AuditLogService,
 ) {
 	projectHandler := handlers.NewProjectHandler(
 		projectRepo,
 		databaseRepo,
 		projectMemberRepo,
 		userRepo,
-		auditLogService,
 		logger.Get(),
 	)
-	projectsGroup := e.Group("/api/v1/projects")
+	projectsGroup := authenticated.Group("/projects")
 
-	// Authentication and authorization middleware
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	// Authorization middleware
 	authzMiddleware := middleware.NewAuthzMiddlewareWithRepo(projectMemberRepo)
 
 	// POST requires project.create permission
 	projectsGroup.POST(
 		"",
 		projectHandler.CreateProject,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionProjectsCreate),
 	)
 
-	// GET endpoints require authentication
+	// GET endpoints require authentication (via group)
 	// List all projects requires project.read permission
-	projectsGroup.GET("", projectHandler.ListProjects, authMiddleware.Authenticate)
+	projectsGroup.GET("", projectHandler.ListProjects)
 	projectsGroup.GET(
 		"/:id",
 		projectHandler.GetProject,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionProjectsRead),
 	)
 
@@ -273,131 +271,130 @@ func setupProjectRoutes(
 	projectsGroup.PUT(
 		"/:id",
 		projectHandler.UpdateProject,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionProjectsUpdate),
 	)
 	projectsGroup.DELETE(
 		"/:id",
 		projectHandler.DeleteProject,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionProjectsDelete),
 	)
 
-	// Project member routes require authentication and project-level permissions
+	// Project member routes require authentication (via group) and project-level permissions
 	// POST requires project.members.create permission
 	projectsGroup.POST(
 		"/:id/members",
 		projectHandler.AddProjectMember,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireProjectPermission(rbac.PermissionProjectMembersCreate),
 	)
 	// GET requires project.members.read permission
 	projectsGroup.GET(
 		"/:id/members",
 		projectHandler.ListProjectMembers,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireProjectPermission(rbac.PermissionProjectMembersRead),
 	)
 	// DELETE requires project.members.delete permission
 	projectsGroup.DELETE(
 		"/:id/members/:user_id",
 		projectHandler.RemoveProjectMember,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireProjectPermission(rbac.PermissionProjectMembersDelete),
 	)
 	// PUT requires project.members.update permission
 	projectsGroup.PUT(
 		"/:id/members/:user_id",
 		projectHandler.UpdateProjectMemberRole,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireProjectPermission(rbac.PermissionProjectMembersUpdate),
 	)
 }
 
 // setupEnvironmentRoutes registers environment management routes
 func setupEnvironmentRoutes(
-	e *echo.Echo,
+	authenticated *echo.Group,
 	envRepo repository.EnvironmentRepository,
 	db *sqlx.DB,
-	tokenManager *auth.TokenManager,
-	auditLogService *services.AuditLogService,
 ) {
-	envHandler := handlers.NewEnvironmentHandler(envRepo, db, auditLogService, logger.Get())
-	environmentsGroup := e.Group("/api/v1/environments")
+	envHandler := handlers.NewEnvironmentHandler(envRepo, db, logger.Get())
+	environmentsGroup := authenticated.Group("/environments")
 
-	// Authentication and authorization middleware
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	// Authorization middleware
 	authzMiddleware := middleware.NewAuthzMiddleware()
 
 	// All environment routes require environments.create permission
 	environmentsGroup.POST(
 		"",
 		envHandler.CreateEnvironment,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionEnvironmentsCreate),
 	)
 	// GET requires environments.read permission
 	environmentsGroup.GET(
 		"",
 		envHandler.ListEnvironments,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionEnvironmentsRead),
 	)
 	// GET requires environments.read permission
 	environmentsGroup.GET(
 		"/:id",
 		envHandler.GetEnvironment,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionEnvironmentsRead),
 	)
 	// PUT requires environments.update permission
 	environmentsGroup.PUT(
 		"/:id",
 		envHandler.UpdateEnvironment,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionEnvironmentsUpdate),
 	)
 	// DELETE requires environments.delete permission
 	environmentsGroup.DELETE(
 		"/:id",
 		envHandler.DeleteEnvironment,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionEnvironmentsDelete),
 	)
 }
 
 // setupPolicyRoutes registers policy management routes
 func setupPolicyRoutes(
-	e *echo.Echo,
+	authenticated *echo.Group,
 	policyRepo repository.PolicyRepository,
 	envRepo repository.EnvironmentRepository,
-	tokenManager *auth.TokenManager,
 ) {
 	policyHandler := handlers.NewPolicyHandler(policyRepo, envRepo, logger.Get())
-	policiesGroup := e.Group("/api/v1/policies")
+	policiesGroup := authenticated.Group("/policies")
 
-	// Authentication and authorization middleware
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	// Authorization middleware
 	authzMiddleware := middleware.NewAuthzMiddleware()
 
 	// All policy routes require admin role
-	policiesGroup.POST("", policyHandler.CreatePolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	policiesGroup.GET("", policyHandler.ListPolicies, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	policiesGroup.GET("/:id", policyHandler.GetPolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
-	policiesGroup.PUT("/:id", policyHandler.UpdatePolicy, authMiddleware.Authenticate, authzMiddleware.RequireOrganizationAdmin())
+	policiesGroup.POST(
+		"",
+		policyHandler.CreatePolicy,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionPoliciesCreate),
+	)
+	policiesGroup.GET(
+		"",
+		policyHandler.ListPolicies,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionPoliciesRead),
+	)
+	policiesGroup.GET(
+		"/:id",
+		policyHandler.GetPolicy,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionPoliciesRead),
+	)
+	policiesGroup.PUT(
+		"/:id",
+		policyHandler.UpdatePolicy,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionPoliciesUpdate),
+	)
 	policiesGroup.DELETE(
 		"/:id",
 		policyHandler.DeletePolicy,
-		authMiddleware.Authenticate,
-		authzMiddleware.RequireOrganizationAdmin(),
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionPoliciesDelete),
 	)
 	// SQL Review rules endpoint - accessible to all authenticated users
-	policiesGroup.GET("/sql-review/rules", policyHandler.GetSQLReviewRules, authMiddleware.Authenticate)
+	policiesGroup.GET("/sql-review/rules", policyHandler.GetSQLReviewRules)
 }
 
 // setupDatabaseInstanceRoutes registers database instance management routes
 func setupDatabaseInstanceRoutes(
-	e *echo.Echo,
+	authenticated *echo.Group,
 	dbInstanceRepo repository.DatabaseInstanceRepository,
 	databaseRepo repository.DatabaseRepository,
 	projectRepo repository.ProjectRepository,
@@ -405,8 +402,6 @@ func setupDatabaseInstanceRoutes(
 	changePlanRepo repository.ChangePlanRepository,
 	connManager *database.ConnectionManager,
 	encryptionKey string,
-	tokenManager *auth.TokenManager,
-	auditLogService *services.AuditLogService,
 ) {
 	dbInstanceHandler := handlers.NewDatabaseInstanceHandler(
 		dbInstanceRepo,
@@ -416,70 +411,74 @@ func setupDatabaseInstanceRoutes(
 		changePlanRepo,
 		connManager,
 		encryptionKey,
-		auditLogService,
 		logger.Get(),
 	)
-	dbInstancesGroup := e.Group("/api/v1/database-instances")
+	dbInstancesGroup := authenticated.Group("/database-instances")
 
-	// Authentication and authorization middleware
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	// Authorization middleware
 	authzMiddleware := middleware.NewAuthzMiddleware()
 
+	// POST test connection for existing instance - must come before /test-connection
+	// Requires database_instances.read permission
+	dbInstancesGroup.POST(
+		"/:id/test-connection",
+		dbInstanceHandler.TestDatabaseInstanceConnection,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabaseInstancesRead),
+	)
+	// POST test connection with credentials (for new instances before creation)
+	// Requires database_instances.create permission
+	dbInstancesGroup.POST(
+		"/test-connection",
+		dbInstanceHandler.TestDatabaseInstanceConnection,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabaseInstancesCreate),
+	)
 	// POST requires database_instances.create permission
 	dbInstancesGroup.POST(
 		"",
 		dbInstanceHandler.CreateDatabaseInstance,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabaseInstancesCreate),
 	)
 	// GET requires database_instances.read permission
 	dbInstancesGroup.GET(
 		"",
 		dbInstanceHandler.ListDatabaseInstances,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)
 	// GET requires database_instances.read permission
 	dbInstancesGroup.GET(
 		"/:id",
 		dbInstanceHandler.GetDatabaseInstance,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)
 	// PUT requires database_instances.update permission
 	dbInstancesGroup.PUT(
 		"/:id",
 		dbInstanceHandler.UpdateDatabaseInstance,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabaseInstancesUpdate),
 	)
 	// DELETE requires database_instances.delete permission
 	dbInstancesGroup.DELETE(
 		"/:id",
 		dbInstanceHandler.DeleteDatabaseInstance,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabaseInstancesDelete),
 	)
 	// POST requires databases.create permission
 	dbInstancesGroup.POST(
 		"/:id/databases",
 		dbInstanceHandler.CreateDatabaseForInstance,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesCreate),
 	)
 }
 
 // setupDatabaseRoutes registers database management routes
 func setupDatabaseRoutes(
-	e *echo.Echo,
+	authenticated *echo.Group,
 	dbRepo repository.DatabaseRepository,
 	projectRepo repository.ProjectRepository,
 	envRepo repository.EnvironmentRepository,
 	dbInstanceRepo repository.DatabaseInstanceRepository,
 	changePlanRepo repository.ChangePlanRepository,
 	projectMemberRepo repository.ProjectMemberRepository,
-	tokenManager *auth.TokenManager,
-	auditLogService *services.AuditLogService,
 	schemaMetadataService *services.SchemaMetadataService,
 ) {
 	dbHandler := handlers.NewDatabaseHandler(
@@ -488,56 +487,49 @@ func setupDatabaseRoutes(
 		envRepo,
 		dbInstanceRepo,
 		changePlanRepo,
-		auditLogService,
 		schemaMetadataService,
 		logger.Get(),
 	)
-	databasesGroup := e.Group("/api/v1/databases")
+	databasesGroup := authenticated.Group("/databases")
 
-	// Authentication and authorization middleware
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	// Authorization middleware
 	authzMiddleware := middleware.NewAuthzMiddlewareWithRepo(projectMemberRepo)
 
 	// POST requires admin role
 	databasesGroup.POST(
 		"",
 		dbHandler.CreateDatabase,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesCreate),
 	)
-	// GET endpoints require authentication and read permission
+	// GET endpoints require authentication (via group) and read permission
 	databasesGroup.GET(
 		"",
 		dbHandler.ListDatabases,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)
 	databasesGroup.GET(
 		"/:id",
 		dbHandler.GetDatabase,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)
 	// PUT and DELETE require admin role
 	databasesGroup.PUT(
 		"/:id",
 		dbHandler.UpdateDatabase,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesUpdate),
 	)
 	databasesGroup.DELETE(
 		"/:id",
 		dbHandler.DeleteDatabase,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesDelete),
 	)
 
 	// Project-scoped database routes require organization-level read permission
 	// (Organization admins, DBAs, and Developers have PermissionDatabasesRead)
-	e.GET(
-		"/api/v1/projects/:project_id/databases",
+	projectsGroup := authenticated.Group("/projects")
+	projectsGroup.GET(
+		"/:project_id/databases",
 		dbHandler.ListProjectDatabases,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)
 
@@ -545,26 +537,23 @@ func setupDatabaseRoutes(
 	databasesGroup.GET(
 		"/:id/schema",
 		dbHandler.GetDatabaseSchema,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)
 	databasesGroup.GET(
 		"/:id/tables/:tableName",
 		dbHandler.GetTableDetail,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)
 	databasesGroup.POST(
 		"/:id/schema/refresh",
 		dbHandler.RefreshDatabaseSchema,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)
 }
 
 // setupChangePlanRoutes registers change plan management routes
 func setupChangePlanRoutes(
-	e *echo.Echo,
+	authenticated *echo.Group,
 	changePlanRepo repository.ChangePlanRepository,
 	changeHistoryRepo repository.ChangeHistoryRepository,
 	projectRepo repository.ProjectRepository,
@@ -578,8 +567,6 @@ func setupChangePlanRoutes(
 	db *sqlx.DB,
 	connectionMgr *database.ConnectionManager,
 	encryptionKey string,
-	tokenManager *auth.TokenManager,
-	auditLogService *services.AuditLogService,
 ) {
 	// Initialize risk assessment service
 	riskAssessmentSvc := services.NewRiskAssessmentService(
@@ -611,12 +598,15 @@ func setupChangePlanRoutes(
 		logger.Get(),
 	)
 
-	// Initialize schema snapshot repository
-	snapshotRepo := postgres.NewSchemaSnapshotRepository(db)
+	// Initialize changelog repository
+	changelogRepo := postgres.NewChangelogRepository(db)
 
-	// Initialize schema snapshot service
-	snapshotService := services.NewSchemaSnapshotService(
-		snapshotRepo,
+	// Initialize schema history repository
+	schemaHistoryRepo := postgres.NewSchemaHistoryRepository(db)
+
+	// Initialize schema version service
+	schemaVersionService := services.NewSchemaVersionService(
+		schemaHistoryRepo,
 		databaseInstanceRepo,
 		databaseRepo,
 		connectionMgr,
@@ -641,7 +631,9 @@ func setupChangePlanRoutes(
 		changePlanRepo,
 		databaseInstanceRepo,
 		databaseRepo,
-		snapshotService,
+		changelogRepo,
+		schemaHistoryRepo,
+		schemaVersionService,
 		lockManager,
 		queueService,
 		executionLogRepo,
@@ -670,13 +662,12 @@ func setupChangePlanRoutes(
 		reviewService,
 		approvalService,
 		executionService,
-		auditLogService,
+		connectionMgr,
 		logger.Get(),
 	)
-	changePlansGroup := e.Group("/api/v1/change-plans")
+	changePlansGroup := authenticated.Group("/change-plans")
 
-	// Authentication and authorization middleware
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	// Authorization middleware
 	authzMiddleware := middleware.NewAuthzMiddlewareWithRepo(projectMemberRepo)
 	changePlanExtractor := middleware.NewChangePlanProjectExtractor(changePlanRepo)
 
@@ -689,7 +680,6 @@ func setupChangePlanRoutes(
 	// CREATE change plan - requires project-level changes.create permission
 	changePlansGroup.POST("",
 		changePlanHandler.CreateChangePlan,
-		authMiddleware.Authenticate,
 		middleware.ExtractProjectFromBody(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesCreate),
 	)
@@ -697,7 +687,6 @@ func setupChangePlanRoutes(
 	// GET change plan by ID - requires changes.read permission
 	changePlansGroup.GET("/:id",
 		changePlanHandler.GetChangePlan,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
 	)
@@ -705,7 +694,6 @@ func setupChangePlanRoutes(
 	// GET approval history - requires changes.read permission
 	changePlansGroup.GET("/:id/approvals",
 		changePlanHandler.GetApprovalHistory,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
 	)
@@ -713,13 +701,11 @@ func setupChangePlanRoutes(
 	// LIST change plans - no project-level check (filtered by handler based on user's projects)
 	changePlansGroup.GET("",
 		changePlanHandler.ListChangePlans,
-		authMiddleware.Authenticate,
 	)
 
 	// UPDATE change plan - requires changes.update permission
 	changePlansGroup.PUT("/:id",
 		changePlanHandler.UpdateChangePlan,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
 		statusTransitionMiddleware.ValidateStatusTransition,
@@ -728,7 +714,6 @@ func setupChangePlanRoutes(
 	// ASSIGN reviewer - requires changes.update permission
 	changePlansGroup.PUT("/:id/reviewer",
 		changePlanHandler.AssignReviewer,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
 	)
@@ -736,7 +721,6 @@ func setupChangePlanRoutes(
 	// DELETE change plan - requires changes.delete permission
 	changePlansGroup.DELETE("/:id",
 		changePlanHandler.DeleteChangePlan,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesDelete),
 	)
@@ -744,7 +728,6 @@ func setupChangePlanRoutes(
 	// TRIGGER SQL review - requires changes.create permission
 	changePlansGroup.POST("/:id/review",
 		changePlanHandler.TriggerSQLReview,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesCreate),
 	)
@@ -752,7 +735,6 @@ func setupChangePlanRoutes(
 	// GET review findings - requires changes.read permission
 	changePlansGroup.GET("/:id/review/findings",
 		changePlanHandler.GetReviewFindings,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
 	)
@@ -760,7 +742,6 @@ func setupChangePlanRoutes(
 	// APPROVE change plan - requires changes.approve permission
 	changePlansGroup.POST("/:id/approve",
 		changePlanHandler.ApproveChangePlan,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesApprove),
 	)
@@ -768,7 +749,6 @@ func setupChangePlanRoutes(
 	// CLOSE change plan - requires changes.update permission
 	changePlansGroup.POST("/:id/close",
 		changePlanHandler.CloseChangePlan,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
 	)
@@ -776,14 +756,12 @@ func setupChangePlanRoutes(
 	// EXECUTE change plan - uses special execution middleware with complex permission logic
 	changePlansGroup.POST("/:id/execute",
 		changePlanHandler.ExecuteChangePlan,
-		authMiddleware.Authenticate,
 		executionAuthMiddleware.RequireExecutionPermission(),
 	)
 
 	// GET queue status - requires changes.read permission
 	changePlansGroup.GET("/:id/queue-status",
 		changePlanHandler.GetQueueStatus,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
 	)
@@ -791,7 +769,6 @@ func setupChangePlanRoutes(
 	// GET execution logs - requires changes.read permission
 	changePlansGroup.GET("/:id/execution-logs",
 		changePlanHandler.GetExecutionLogHistory,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
 	)
@@ -799,7 +776,6 @@ func setupChangePlanRoutes(
 	// RESUBMIT change plan - requires changes.update permission
 	changePlansGroup.POST("/:id/resubmit",
 		changePlanHandler.ResubmitChangePlan,
-		authMiddleware.Authenticate,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
 	)
@@ -807,22 +783,54 @@ func setupChangePlanRoutes(
 
 // setupAuditLogRoutes registers audit log querying routes
 func setupAuditLogRoutes(
-	e *echo.Echo,
+	authenticated *echo.Group,
 	auditLogRepo repository.AuditLogRepository,
-	tokenManager *auth.TokenManager,
 ) {
 	auditLogHandler := handlers.NewAuditLogHandler(auditLogRepo, logger.Get())
-	auditLogsGroup := e.Group("/api/v1/audit-logs")
+	auditLogsGroup := authenticated.Group("/audit-logs")
 
-	// Authentication middleware for protected routes
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	// Authorization middleware
 	authzMiddleware := middleware.NewAuthzMiddleware()
 
-	// All audit log routes require authentication and audit_logs.read permission
+	// All audit log routes require authentication (via group) and audit_logs.read permission
 	auditLogsGroup.GET(
 		"",
 		auditLogHandler.ListAuditLogs,
-		authMiddleware.Authenticate,
 		authzMiddleware.RequireOrganizationPermission(rbac.PermissionAuditLogsRead),
+	)
+}
+
+// setupChangelogRoutes registers changelog querying routes
+func setupChangelogRoutes(
+	authenticated *echo.Group,
+	changelogRepo repository.ChangelogRepository,
+	schemaHistoryRepo repository.SchemaHistoryRepository,
+	changePlanRepo repository.ChangePlanRepository,
+	projectMemberRepo repository.ProjectMemberRepository,
+) {
+	changelogHandler := handlers.NewChangelogHandler(
+		changelogRepo,
+		schemaHistoryRepo,
+		changePlanRepo,
+		logger.Get(),
+	)
+
+	// Authorization middleware
+	authzMiddleware := middleware.NewAuthzMiddlewareWithRepo(projectMemberRepo)
+
+	// Database-specific changelog route - requires databases.read permission
+	databasesGroup := authenticated.Group("/databases")
+	databasesGroup.GET(
+		"/:id/changelog",
+		changelogHandler.ListDatabaseChangelog,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
+	)
+
+	// Changelog detail route - requires databases.read permission
+	changelogGroup := authenticated.Group("/changelog")
+	changelogGroup.GET(
+		"/:id",
+		changelogHandler.GetChangelogDetails,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesRead),
 	)
 }

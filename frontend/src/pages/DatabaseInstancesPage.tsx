@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -12,7 +13,7 @@ import {
 import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 import { objDiff } from '@/lib/utils';
-import { DatabaseStatusBadge } from '@/components/DatabaseStatusBadge';
+import { databaseInstancesService } from '@/lib/api/services/database-instances';
 import {
   DatabaseInstanceForm,
   type DatabaseInstanceFormData,
@@ -22,26 +23,10 @@ import type {
   CreateDatabaseInstanceRequest,
   DatabaseInstance,
   UpdateDatabaseInstanceRequest,
+  DatabaseEngine,
 } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
 import {
   Sheet,
   SheetContent,
@@ -50,27 +35,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
-  Server,
-  Search,
-  X,
-  Eye,
-} from 'lucide-react';
-import type { DatabaseEngine } from '@/lib/api/types.ts';
+import { DataTable, DataTableToolbar, DataTableViewOptions } from '@/components/data-table';
+import type { FilterDefinition } from '@/components/data-table/types';
+import { getDatabaseInstancesColumns } from './database-instances/columns';
+import { Plus, AlertTriangle, CheckCircle2, Loader2, Server } from 'lucide-react';
 
 export const DatabaseInstancesPage: React.FC = () => {
   const { user } = useAuth();
@@ -98,13 +66,9 @@ export const DatabaseInstancesPage: React.FC = () => {
   const { deleteDatabaseInstance, isLoading: isDeleting } = useDeleteDatabaseInstance();
   const { testConnection, isLoading: isTestingConnection } = useTestConnection();
 
-  // Filter state
-  const [filters, setFilters] = useState<{
-    search?: string;
-    database_engine?: DatabaseEngine;
-    status?: string;
-    environment_id?: string;
-  }>({});
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   // Form state
   const [formData, setFormData] = useState<DatabaseInstanceFormData>({
@@ -185,36 +149,36 @@ export const DatabaseInstancesPage: React.FC = () => {
 
     setConnectionTestResult(null);
 
-    // Create a test request with a temporary name to avoid conflicts
-    const testData: CreateDatabaseInstanceRequest = {
-      ...formData,
-      name: `__TEST__${formData.name}_${Date.now()}`,
-    };
+    let result;
 
-    // Test connection using SWR mutation hook
-    const result = await testConnection(testData);
+    // If we're editing an existing instance, use the dedicated endpoint
+    if (selectedInstance?.id) {
+      result = await databaseInstancesService.testConnection(selectedInstance.id);
+    } else {
+      // For new instances, test with credentials
+      // Only send the fields needed for connection testing
+      const testData: CreateDatabaseInstanceRequest = {
+        host: formData.host,
+        port: formData.port,
+        username: formData.username,
+        password: formData.password,
+        database_engine: formData.database_engine,
+        use_rds_iam_auth: formData.use_rds_iam_auth,
+        require_ssl: formData.require_ssl,
+        name: '', // Not used for testing, but required by type
+      };
+      result = await testConnection(testData);
+    }
 
     if (result.success) {
-      // Connection was successful
-      // If we got an instance back, delete it immediately to clean up
-      if (result.instance) {
-        const deleted = await deleteDatabaseInstance(result.instance.id);
-        setConnectionTestResult({
-          success: true,
-          message: deleted
-            ? 'Connection test successful!'
-            : 'Connection test successful! Note: A test instance was created (you can delete it).',
-        });
-      } else {
-        setConnectionTestResult({
-          success: true,
-          message: 'Connection test successful!',
-        });
-      }
+      setConnectionTestResult({
+        success: true,
+        message: `Connection successful to ${result.username}@${result.host}:${result.port}/${result.database}.`,
+      });
     } else {
       setConnectionTestResult({
         success: false,
-        message: result.details || result.error || 'Connection test failed',
+        message: result.error || 'Connection test failed',
       });
     }
   };
@@ -326,6 +290,7 @@ export const DatabaseInstancesPage: React.FC = () => {
 
   // Open create form
   const openCreateForm = () => {
+    setSelectedInstance(null); // Clear selected instance for new creation
     setFormData({
       name: '',
       description: '',
@@ -343,7 +308,7 @@ export const DatabaseInstancesPage: React.FC = () => {
   };
 
   // Open edit form
-  const openEditForm = (instance: DatabaseInstance) => {
+  const openEditForm = useCallback((instance: DatabaseInstance) => {
     setSelectedInstance(instance);
     setFormData({
       name: instance.name,
@@ -360,77 +325,116 @@ export const DatabaseInstancesPage: React.FC = () => {
     setFormErrors({});
     setConnectionTestResult(null);
     setIsEditOpen(true);
+  }, []);
+
+  // Close edit form
+  const closeEditForm = () => {
+    setIsEditOpen(false);
+    setSelectedInstance(null); // Clear selected instance
   };
 
   // Open delete confirmation
-  const openDeleteConfirmation = (instance: DatabaseInstance) => {
+  const openDeleteConfirmation = useCallback((instance: DatabaseInstance) => {
     setSelectedInstance(instance);
     setIsDeleteOpen(true);
-  };
+  }, []);
 
-  // Format date
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    } catch {
-      return dateString;
-    }
-  };
+  // Helper to get environment name
+  const getEnvironmentName = useCallback(
+    (environmentId?: string): string => {
+      if (!environmentId) return '-';
+      return environments.find((env) => env.id === environmentId)?.name || 'Unknown';
+    },
+    [environments],
+  );
 
-  // Handle filter changes
-  const handleFilterChange = (key: keyof typeof filters, value: string | undefined) => {
-    setFilters((prev) => {
-      const updated = { ...prev };
-      if (value && value.trim()) {
-        updated[key] = value as unknown as DatabaseEngine;
-      } else {
-        delete updated[key];
-      }
-      return updated;
-    });
-  };
+  // Create filter options
+  const environmentOptions = useMemo(
+    () =>
+      environments.map((env) => ({
+        label: env.name,
+        value: env.id,
+      })),
+    [environments],
+  );
 
-  // Clear all filters
-  const clearFilters = () => {
-    setFilters({});
-  };
+  // Get columns with action handlers
+  const columns = useMemo(
+    () =>
+      getDatabaseInstancesColumns({
+        onView: (instance) => navigate(`/database-instances/${instance.id}`),
+        onEdit: openEditForm,
+        onDelete: openDeleteConfirmation,
+        canUpdate: canUpdateDatabaseInstances,
+        canDelete: canDeleteDatabaseInstances,
+        getEnvironmentName,
+      }),
+    [
+      navigate,
+      openEditForm,
+      openDeleteConfirmation,
+      canUpdateDatabaseInstances,
+      canDeleteDatabaseInstances,
+      getEnvironmentName,
+    ],
+  );
 
-  // Filter instances
-  const filteredInstances = instances.filter((instance) => {
-    // Search filter (name and host)
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      const matchesSearch =
-        instance.name.toLowerCase().includes(searchLower) ||
-        instance.host.toLowerCase().includes(searchLower) ||
-        instance.username.toLowerCase().includes(searchLower) ||
-        (instance.description && instance.description.toLowerCase().includes(searchLower));
-      if (!matchesSearch) return false;
-    }
-
-    // Database type filter
-    if (filters.database_engine && instance.database_engine !== filters.database_engine) {
-      return false;
-    }
-
-    // Status filter
-    if (filters.status && instance.status !== filters.status) {
-      return false;
-    }
-
-    // Environment filter
-    if (filters.environment_id && instance.environment_id !== filters.environment_id) {
-      return false;
-    }
-
-    return true;
-  });
-
-  const hasFilters = Object.keys(filters).length > 0;
+  // Define filter definitions for the toolbar
+  const filterDefinitions: FilterDefinition[] = useMemo(
+    () => [
+      {
+        id: 'name',
+        type: 'search',
+        title: 'Name',
+        placeholder: 'Search names...',
+        defaultActive: true,
+      },
+      {
+        id: 'database_engine',
+        type: 'faceted',
+        title: 'Engine',
+        options: [
+          { label: 'PostgreSQL', value: 'postgres', icon: Server },
+          { label: 'MySQL', value: 'mysql', icon: Server },
+        ],
+      },
+      {
+        id: 'environment',
+        type: 'faceted',
+        title: 'Environment',
+        options: environmentOptions,
+      },
+      {
+        id: 'status',
+        type: 'faceted',
+        title: 'Status',
+        options: [
+          { label: 'Active', value: 'Active', icon: Server },
+          { label: 'Inactive', value: 'Inactive', icon: Server },
+        ],
+      },
+      {
+        id: 'created_at',
+        type: 'dateRange',
+        title: 'Created',
+        presets: [
+          {
+            label: 'Last 7 days',
+            getValue: () => [subDays(new Date(), 7), new Date()],
+          },
+          {
+            label: 'Last 30 days',
+            getValue: () => [subDays(new Date(), 30), new Date()],
+          },
+          {
+            label: 'Last 90 days',
+            getValue: () => [subDays(new Date(), 90), new Date()],
+          },
+        ],
+      },
+    ],
+    [environmentOptions],
+  );
 
   // Render access denied
   if (!canReadDatabaseInstances) {
@@ -483,289 +487,35 @@ export const DatabaseInstancesPage: React.FC = () => {
           </Card>
         )}
 
-        {/* Filters */}
+        {/* Instances list */}
         <Card>
-          <CardHeader>
-            <CardTitle>Filters</CardTitle>
-            <CardDescription>
-              Filter database instances by name, host, type, or status
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {/* Search Filter */}
-              <div className="space-y-2">
-                <label htmlFor="filter-search" className="text-sm font-medium">
-                  Search
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="filter-search"
-                    placeholder="Search instances..."
-                    value={filters.search || ''}
-                    onChange={(e) => handleFilterChange('search', e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-
-              {/* Database Engine Filter */}
-              <div className="space-y-2">
-                <label htmlFor="filter-type" className="text-sm font-medium">
-                  Database Engine
-                </label>
-                <Select
-                  value={filters.database_engine || 'all'}
-                  onValueChange={(value) =>
-                    handleFilterChange('database_engine', value === 'all' ? undefined : value)
-                  }
-                >
-                  <SelectTrigger id="filter-type">
-                    <SelectValue placeholder="All Types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="postgres">PostgreSQL</SelectItem>
-                    <SelectItem value="mysql">MySQL</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Status Filter */}
-              <div className="space-y-2">
-                <label htmlFor="filter-status" className="text-sm font-medium">
-                  Status
-                </label>
-                <Select
-                  value={filters.status || 'all'}
-                  onValueChange={(value) =>
-                    handleFilterChange('status', value === 'all' ? undefined : value)
-                  }
-                >
-                  <SelectTrigger id="filter-status">
-                    <SelectValue placeholder="All Statuses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                    <SelectItem value="Maintenance">Maintenance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Environment Filter */}
-              <div className="space-y-2">
-                <label htmlFor="filter-environment" className="text-sm font-medium">
-                  Environment
-                </label>
-                <Select
-                  value={filters.environment_id || 'all'}
-                  onValueChange={(value) =>
-                    handleFilterChange('environment_id', value === 'all' ? undefined : value)
-                  }
-                >
-                  <SelectTrigger id="filter-environment">
-                    <SelectValue placeholder="All Environments" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Environments</SelectItem>
-                    {environments.map((env) => (
-                      <SelectItem key={env.id} value={env.id}>
-                        {env.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Clear Filters Button */}
-            {hasFilters && (
-              <div className="mt-4">
-                <Button variant="outline" size="sm" onClick={clearFilters}>
-                  <X className="mr-2 h-4 w-4" />
-                  Clear Filters
-                </Button>
-              </div>
-            )}
+          <CardContent className="pt-6">
+            <DataTable
+              columns={columns}
+              data={instances}
+              isLoading={isLoading}
+              emptyMessage="No database instances match your filters. Try adjusting your search criteria."
+              pagination={{
+                pageIndex,
+                pageSize,
+                totalCount: instances.length,
+                onPageChange: setPageIndex,
+                onPageSizeChange: (newSize) => {
+                  setPageSize(newSize);
+                  setPageIndex(0);
+                },
+                pageSizeOptions: [10, 20, 30, 50],
+              }}
+              onRowClick={(instance) => navigate(`/database-instances/${instance.id}`)}
+            >
+              {(table) => (
+                <DataTableToolbar table={table} filters={filterDefinitions}>
+                  <DataTableViewOptions table={table} />
+                </DataTableToolbar>
+              )}
+            </DataTable>
           </CardContent>
         </Card>
-
-        {/* Instances list */}
-        {isLoading ? (
-          <Card>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Host</TableHead>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[1, 2, 3].map((i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-40" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-20" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-24" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-8 w-16 ml-auto" />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ) : filteredInstances.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6">
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Server className="h-12 w-12 text-muted-foreground" />
-                  </EmptyMedia>
-                  <EmptyTitle>
-                    {hasFilters ? 'No Instances Found' : 'No Database Instances Yet'}
-                  </EmptyTitle>
-                  <EmptyDescription>
-                    {hasFilters
-                      ? 'No database instances match your filters. Try adjusting your search criteria.'
-                      : 'Get started by creating your first database instance connection to manage server credentials.'}
-                  </EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  {hasFilters ? (
-                    <Button variant="outline" onClick={clearFilters}>
-                      <X className="mr-2 h-4 w-4" />
-                      Clear Filters
-                    </Button>
-                  ) : canCreateDatabaseInstances ? (
-                    <Button onClick={openCreateForm}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Create Instance
-                    </Button>
-                  ) : null}
-                </EmptyContent>
-              </Empty>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Database Instances</CardTitle>
-              <CardDescription>
-                {filteredInstances.length} of {instances.length} instance
-                {instances.length === 1 ? '' : 's'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="overflow-x-auto -mx-6 px-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Host</TableHead>
-                      <TableHead>Username</TableHead>
-                      <TableHead>Environment</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredInstances.map((instance) => (
-                      <TableRow
-                        key={instance.id}
-                        onClick={() => navigate(`/database-instances/${instance.id}`)}
-                        className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      >
-                        <TableCell className="font-medium">{instance.name}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {instance.database_engine}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {instance.host}:{instance.port}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{instance.username}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {instance.environment_id
-                            ? environments.find((env) => env.id === instance.environment_id)
-                                ?.name || 'Unknown'
-                            : '-'}
-                        </TableCell>
-                        <TableCell>
-                          <DatabaseStatusBadge status={instance.status} variant="instance" />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatDate(instance.created_at)}
-                        </TableCell>
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => navigate(`/database-instances/${instance.id}`)}
-                              className="h-11 w-11 p-0 touch-manipulation"
-                              aria-label="View instance"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            {canUpdateDatabaseInstances && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openEditForm(instance)}
-                                className="h-11 w-11 p-0 touch-manipulation"
-                                aria-label="Edit instance"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {canDeleteDatabaseInstances && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openDeleteConfirmation(instance)}
-                                className="h-11 w-11 p-0 text-destructive hover:text-destructive touch-manipulation"
-                                aria-label="Delete instance"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Create Instance Sheet */}
         <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -909,7 +659,7 @@ export const DatabaseInstancesPage: React.FC = () => {
               </Button>
             </div>
             <SheetFooter>
-              <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+              <Button variant="outline" onClick={closeEditForm}>
                 Cancel
               </Button>
               <Button onClick={handleEdit} disabled={isUpdating || isTestingConnection}>

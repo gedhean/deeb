@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { DefaultLayout } from '@/components/layouts';
-import type { ListAuditLogsParams } from '@/lib/api/types';
+import type { ListAuditLogsParams, AuditLog } from '@/lib/api/types';
 import { useUsers } from '@/hooks/api/useUsersSWR';
 import { useAuditLogsSWR } from '@/hooks/api/useAuditLogsSWR';
 import { Button } from '@/components/ui/button';
@@ -16,16 +16,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DataTable } from '@/components/data-table';
+import { getAuditLogsColumns } from './audit-logs/columns';
+import { AlertTriangle, Filter, X, Calendar, User, Activity, Database } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Calendar, Filter, X } from 'lucide-react';
+import { CodeBlock } from '@/components/ui/code-block';
 
 // Common actions and resource types for filters
 // Actions match backend constants (lowercase with underscores)
@@ -41,7 +43,8 @@ const RESOURCE_TYPES = [
   'change_plan',
   'approval',
   'execution_log',
-  'schema_snapshot',
+  'changelog',
+  'schema_history',
   'audit_log',
   'policy',
   'policy_finding',
@@ -49,17 +52,20 @@ const RESOURCE_TYPES = [
 
 export const AuditLogPage: React.FC = () => {
   const { user } = useAuth();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [limit] = useState(50);
+
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
 
   // Use cached users from store instead of fetching
   const { getUserById } = useUsers();
 
   // Filters
-  const [filters, setFilters] = useState<ListAuditLogsParams>({
-    limit,
-    offset: 0,
-  });
+  const [filters, setFilters] = useState<ListAuditLogsParams>({});
+
+  // Sheet state for audit log details
+  const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   // Check if user is admin
   const isAdmin = user?.organization_role === 'OrganizationAdmin';
@@ -68,10 +74,10 @@ export const AuditLogPage: React.FC = () => {
   const params = useMemo(
     () => ({
       ...filters,
-      limit,
-      offset: (currentPage - 1) * limit,
+      limit: pageSize,
+      offset: pageIndex * pageSize,
     }),
-    [filters, limit, currentPage],
+    [filters, pageSize, pageIndex],
   );
 
   // Use SWR hook for data fetching
@@ -87,7 +93,7 @@ export const AuditLogPage: React.FC = () => {
       }
       return newFilters;
     });
-    setCurrentPage(1);
+    setPageIndex(0);
   };
 
   const handleDateFilterChange = (key: 'start_date' | 'end_date', value: string) => {
@@ -104,39 +110,24 @@ export const AuditLogPage: React.FC = () => {
       }
       return newFilters;
     });
-    setCurrentPage(1);
+    setPageIndex(0);
   };
 
   const clearFilters = () => {
-    setFilters({ limit, offset: 0 });
-    setCurrentPage(1);
+    setFilters({});
+    setPageIndex(0);
   };
 
-  const formatDate = (dateString: string): string => {
-    try {
-      return new Date(dateString).toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    } catch {
-      return dateString;
-    }
+  // Handler for row clicks
+  const handleRowClick = (auditLog: AuditLog) => {
+    setSelectedAuditLog(auditLog);
+    setIsSheetOpen(true);
   };
 
-  const formatDetails = (details?: Record<string, unknown>): string => {
-    if (!details) return '-';
-    try {
-      return JSON.stringify(details, null, 2);
-    } catch {
-      return String(details);
-    }
-  };
-
-  const totalPages = Math.ceil(total / limit);
+  // Get columns for audit logs table
+  const auditLogsColumns = getAuditLogsColumns({
+    getUserById,
+  });
 
   if (!isAdmin) {
     return (
@@ -301,132 +292,180 @@ export const AuditLogPage: React.FC = () => {
           <CardHeader>
             <CardTitle>Audit Log Entries</CardTitle>
             <CardDescription>
-              {total > 0 ? (
-                <>
-                  Showing {auditLogs.length} of {total} entries
-                </>
+              {isLoading ? (
+                'Loading audit logs...'
               ) : (
-                'No audit log entries found'
+                <>
+                  {total > 0
+                    ? `Showing ${auditLogs.length} of ${total} entries`
+                    : 'No audit log entries found'}
+                </>
               )}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            ) : auditLogs.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No audit log entries found.</p>
-                {(filters.user_id ||
-                  filters.action ||
-                  filters.target_type ||
-                  filters.target_id ||
-                  filters.start_date ||
-                  filters.end_date) && (
-                  <Button variant="outline" className="mt-4" onClick={clearFilters}>
-                    Clear Filters
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Timestamp</TableHead>
-                        <TableHead>User</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>Resource Type</TableHead>
-                        <TableHead>Resource ID</TableHead>
-                        <TableHead>IP Address</TableHead>
-                        <TableHead>Details</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {auditLogs.map((log) => {
-                        const logUser = getUserById(log.user_id);
-                        return (
-                          <TableRow key={log.id}>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{formatDate(log.timestamp)}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm">
-                                {logUser?.email || log.user_id.slice(0, 8)}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{log.action}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">{log.resource_type}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <code className="text-xs">{log.resource_id.slice(0, 8)}...</code>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm text-muted-foreground">
-                                {log.ip_address || '-'}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              {log.details ? (
-                                <details className="text-xs">
-                                  <summary className="cursor-pointer text-primary hover:underline">
-                                    View Details
-                                  </summary>
-                                  <pre className="mt-2 p-2 bg-muted rounded-md overflow-x-auto max-w-md">
-                                    {formatDetails(log.details)}
-                                  </pre>
-                                </details>
-                              ) : (
-                                <span className="text-sm text-muted-foreground">-</span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="text-sm text-muted-foreground">
-                      Page {currentPage} of {totalPages}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1 || isLoading}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages || isLoading}
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+            <DataTable
+              columns={auditLogsColumns}
+              data={auditLogs}
+              isLoading={isLoading}
+              onRowClick={handleRowClick}
+              emptyMessage={
+                filters.user_id ||
+                filters.action ||
+                filters.target_type ||
+                filters.target_id ||
+                filters.start_date ||
+                filters.end_date
+                  ? 'No audit log entries match your filters.'
+                  : 'No audit log entries found.'
+              }
+              pagination={{
+                pageIndex,
+                pageSize,
+                totalCount: total,
+                onPageChange: setPageIndex,
+                onPageSizeChange: (newSize) => {
+                  setPageSize(newSize);
+                  setPageIndex(0);
+                },
+                pageSizeOptions: [10, 20, 50, 100],
+              }}
+            />
           </CardContent>
         </Card>
+
+        {/* Audit Log Detail Sheet */}
+        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+          <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Audit Log Details</SheetTitle>
+              <SheetDescription>Detailed information about this audit log entry</SheetDescription>
+            </SheetHeader>
+
+            {selectedAuditLog && (
+              <Tabs defaultValue="overview" className="mt-6">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="info">Info</TabsTrigger>
+                </TabsList>
+
+                {/* Overview Tab */}
+                <TabsContent value="overview" className="space-y-4 mt-4">
+                  {/* Main Metadata Card */}
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                        {/* Timestamp */}
+                        <div className="flex items-start gap-2">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-muted-foreground">Timestamp</p>
+                            <p className="text-sm font-medium">
+                              {new Date(selectedAuditLog.timestamp).toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* User */}
+                        <div className="flex items-start gap-2">
+                          <User className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-muted-foreground">User</p>
+                            <p className="text-sm font-medium truncate">
+                              {getUserById(selectedAuditLog.user_id)?.email || 'Unknown'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Action */}
+                        <div className="flex items-start gap-2">
+                          <Activity className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-muted-foreground">Action</p>
+                            <Badge variant="outline" className="text-xs mt-0.5">
+                              {selectedAuditLog.action}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Resource Type */}
+                        <div className="flex items-start gap-2">
+                          <Database className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-muted-foreground">Resource Type</p>
+                            <Badge variant="secondary" className="text-xs mt-0.5">
+                              {selectedAuditLog.resource_type}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Details - Full Space */}
+                  {selectedAuditLog.details && Object.keys(selectedAuditLog.details).length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold">Details</h3>
+                      <CodeBlock
+                        language="json"
+                        filename="details.json"
+                        code={JSON.stringify(selectedAuditLog.details, null, 2)}
+                      />
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Info Tab */}
+                <TabsContent value="info" className="space-y-4 mt-4">
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="space-y-3 text-sm font-mono">
+                        {/* Resource ID */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Resource ID:</p>
+                          <code className="bg-muted px-2 py-1 rounded block break-all">
+                            {selectedAuditLog.resource_id}
+                          </code>
+                        </div>
+
+                        {/* IP Address */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">IP:</p>
+                          <code className="bg-muted px-2 py-1 rounded block">
+                            {selectedAuditLog.ip_address || 'N/A'}
+                          </code>
+                        </div>
+
+                        {/* User ID */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">User ID:</p>
+                          <code className="bg-muted px-2 py-1 rounded block break-all">
+                            {selectedAuditLog.user_id?.toString() || 'N/A'}
+                          </code>
+                        </div>
+
+                        {/* User Agent */}
+                        {selectedAuditLog.user_agent && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">UA:</p>
+                            <code className="bg-muted px-2 py-1 rounded block break-all">
+                              {selectedAuditLog.user_agent}
+                            </code>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            )}
+          </SheetContent>
+        </Sheet>
       </div>
     </DefaultLayout>
   );

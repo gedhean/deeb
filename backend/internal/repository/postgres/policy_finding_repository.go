@@ -40,6 +40,8 @@ func (r *PolicyFindingRepository) Create(ctx context.Context, finding *models.Po
 			message, line_number, column_number, created_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (change_plan_id, validator_type, severity, rule_name, message, COALESCE(line_number, -1), COALESCE(column_number, -1))
+		DO NOTHING
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -83,6 +85,8 @@ func (r *PolicyFindingRepository) CreateBatch(ctx context.Context, findings []*m
 			message, line_number, column_number, created_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (change_plan_id, validator_type, severity, rule_name, message, COALESCE(line_number, -1), COALESCE(column_number, -1))
+		DO NOTHING
 	`
 
 	stmt, err := tx.PreparexContext(ctx, query)

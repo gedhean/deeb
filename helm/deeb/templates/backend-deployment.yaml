@@ -1,0 +1,189 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "deeb.fullname" . }}-backend
+  labels:
+    {{- include "deeb.backend.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "deeb.backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/backend-configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/backend-externalsecret.yaml") . | sha256sum }}
+        {{- with .Values.backend.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "deeb.backend.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.backend.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "deeb.backend.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.backend.podSecurityContext | nindent 8 }}
+      containers:
+      - name: backend
+        securityContext:
+          {{- toYaml .Values.backend.securityContext | nindent 12 }}
+        image: {{ include "deeb.backend.image" . }}
+        imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.backend.service.targetPort }}
+          protocol: TCP
+        livenessProbe:
+          {{- toYaml .Values.backend.livenessProbe | nindent 12 }}
+        readinessProbe:
+          {{- toYaml .Values.backend.readinessProbe | nindent 12 }}
+        resources:
+          {{- toYaml .Values.backend.resources | nindent 12 }}
+        env:
+        # Database configuration from ConfigMap
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: database.host
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: database.port
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: database.user
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: database.database
+        - name: DB_SSLMODE
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: database.sslMode
+
+        # Database password from Secret
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-secret
+              key: database-password
+
+        # JWT Secret from Secret
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-secret
+              key: jwt-secret
+
+        # Encryption key from Secret
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-secret
+              key: encryption-key
+
+        # OAuth credentials from Secret
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-secret
+              key: google-client-id
+              optional: true
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-secret
+              key: google-client-secret
+              optional: true
+        - name: GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-secret
+              key: github-client-id
+              optional: true
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-secret
+              key: github-client-secret
+              optional: true
+
+        # Server configuration from ConfigMap
+        - name: SERVER_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: server.host
+        - name: SERVER_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: server.port
+        - name: SERVER_CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: server.corsOrigins
+        - name: SERVER_FRONTEND_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: server.frontendUrl
+        - name: AUTH_CALLBACK_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: auth.callbackUrl
+
+        # Logging configuration from ConfigMap
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: logging.level
+        - name: LOG_FORMAT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "deeb.fullname" . }}-backend-config
+              key: logging.format
+
+        # Mount config file
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "deeb.fullname" . }}-backend-config
+          items:
+          - key: config.yaml
+            path: config.yaml
+      - name: tmp
+        emptyDir: {}
+      {{- with .Values.backend.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

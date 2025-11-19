@@ -30,6 +30,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Get config file from parent command
 	configPath, _ := cmd.Flags().GetString("config")
 
+	// Log config path
+	logger.Info("Loading config from path", zap.String("config_path", configPath))
+
 	// Create and initialize application
 	application, err := app.New(version, configPath)
 	if err != nil {

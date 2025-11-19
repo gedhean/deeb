@@ -40,3 +40,118 @@ logging:
   file_path: ''  # Log file path (if output is file)
 background_jobs:
   schema_sync_interval: 1h  # How often to sync database schema metadata (e.g., 30m, 1h, 2h)
+# Audit Logging Configuration
+# Controls what resources and actions are logged to the audit trail
+audit_logging:
+  enabled: true  # Enable/disable audit logging globally
+  default_policy: deny  # Default policy: "allow" (log everything unless disabled) or "deny" (log nothing unless enabled)
+  log_all_paths: false  # If true, don't skip any paths (overrides hardcoded skip rules for health checks, static assets)
+  redaction_enabled: true  # Enable automatic redaction of sensitive data (passwords, tokens, etc.)
+  # Custom paths to skip (supports wildcards with * at the end)
+  skip_paths:
+    - /metrics
+    - /debug/*
+  # Per-resource configuration
+  # Define which resources should be audited and which actions to log
+  resources:
+    # User resource - logs authentication and user management
+    user:
+      enabled: true
+      actions:
+        - login
+        - logout
+        - register
+        - create_user
+        - update_user
+        - delete_user
+        - update_user_role
+    # Change Plan resource - logs database change workflow
+    change_plan:
+      enabled: true
+      actions:
+        # Generic CRUD actions (used for standard HTTP methods like POST, GET, PUT, DELETE)
+        - create  # For POST /api/v1/change-plans
+        - read  # For GET /api/v1/change-plans or GET /api/v1/change-plans/:id
+        - update  # For PUT/PATCH /api/v1/change-plans/:id
+        - delete  # For DELETE /api/v1/change-plans/:id
+        # Specific workflow actions (detected by path suffix in middleware)
+        - approve_change_plan  # For POST /api/v1/change-plans/:id/approve
+        - reject_change_plan  # For POST /api/v1/change-plans/:id/reject
+        - close_change_plan  # For POST /api/v1/change-plans/:id/close
+        - execute_change_plan  # For POST /api/v1/change-plans/:id/execute
+    # Project resource - logs project management
+    project:
+      enabled: true
+      actions:
+        # Generic CRUD actions
+        - create
+        - read
+        - update
+        - delete
+        # Specific project actions
+        - create_project
+        - update_project
+        - delete_project
+        - add_project_member
+        - remove_project_member
+        - update_project_member_role
+    # Database resource - logs database and instance management
+    database:
+      enabled: true
+      actions:
+        - create_database
+        - update_database
+        - delete_database
+    # Database Instance resource
+    database_instance:
+      enabled: true
+      actions:
+        - create_database_instance
+        - update_database_instance
+        - delete_database_instance
+    # Environment resource - logs environment management
+    environment:
+      enabled: true
+      actions:
+        - create_environment
+        - update_environment
+        - delete_environment
+    # Policy resource - logs policy management
+    policy:
+      enabled: true
+      actions:
+        - create_policy
+        - update_policy
+        - delete_policy
+        #  # Example: To log all CRUD operations but not read operations
+        # approval:
+        #   enabled: true
+        #   actions:
+        #     - create
+        #     - update
+        #     - delete
+#  # Example: To log everything for a resource (empty actions list)
+# policy:
+#   enabled: true
+#   actions: []
+
+#  # Example: To disable logging for a specific resource
+# execution_log:
+#   enabled: false
+#   actions: []
+
+# Available Actions (39 total):
+# Authentication: login, logout, register
+# CRUD (generic): create, read, update, delete
+# Change Plan: approve_change_plan, reject_change_plan, close_change_plan, execute_change_plan
+# Project: create_project, update_project, delete_project, add_project_member,
+#          remove_project_member, update_project_member_role
+# Database: create_database, update_database, delete_database, create_database_instance,
+#           update_database_instance, delete_database_instance
+# User: create_user, update_user, delete_user, update_user_role
+# Environment: create_environment, update_environment, delete_environment
+# Policy: create_policy, update_policy, delete_policy
+
+# Available Resource Types (13 total):
+# user, project, environment, database, database_instance, change_plan,
+# approval, execution_log, changelog, schema_history, audit_log, policy, policy_finding

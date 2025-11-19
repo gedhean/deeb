@@ -254,7 +254,6 @@ function generateTypeScriptFile(permissions: string[], roles: Role[]): string {
   code += ' *   1. Edit the YAML files\n';
   code += ' *   2. Run: pnpm generate:rbac\n';
   code += ' *\n';
-  code += ` * Generated at: ${new Date().toISOString()}\n`;
   code += ' */\n\n';
 
   // Generate role types

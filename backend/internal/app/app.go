@@ -15,9 +15,7 @@ import (
 	"github.com/nsxbet/deeb/internal/logger"
 	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/migrate"
-	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/routes"
-	"github.com/nsxbet/deeb/internal/services"
 	"github.com/nsxbet/deeb/internal/validator"
 	"go.uber.org/zap"
 )
@@ -51,11 +49,30 @@ func New(version string, configPath string) (*App, error) {
 
 	logger.Info("Starting Deeb server",
 		zap.String("version", version),
+		zap.String("config_path", configPath),
 		zap.String("host", cfg.Server.Host),
 		zap.Int("port", cfg.Server.Port),
 		zap.String("log_level", cfg.Logging.Level),
 		zap.String("log_format", cfg.Logging.Format),
 	)
+
+	// Log audit logging configuration
+	logger.Info("Audit logging configuration loaded",
+		zap.Bool("enabled", cfg.AuditLogging.Enabled),
+		zap.String("default_policy", cfg.AuditLogging.DefaultPolicy),
+		zap.Int("configured_resources", len(cfg.AuditLogging.Resources)),
+		zap.Bool("redaction_enabled", cfg.AuditLogging.RedactionEnabled),
+	)
+
+	// Log each configured resource (debug level)
+	for resourceType, rule := range cfg.AuditLogging.Resources {
+		logger.Debug("Audit resource configured",
+			zap.String("resource_type", resourceType),
+			zap.Bool("enabled", rule.Enabled),
+			zap.Int("actions_count", len(rule.Actions)),
+			zap.Strings("actions", rule.Actions),
+		)
+	}
 
 	// Connect to database
 	db, err := database.Connect(cfg, logger.Get())
@@ -100,17 +117,13 @@ func New(version string, configPath string) (*App, error) {
 	// Initialize rate limiter for login attempts
 	loginRateLimiter := handlers.NewRateLimiter()
 
-	// Initialize audit log repository and service
-	auditLogRepo := postgres.NewAuditLogRepository(db)
-	auditLogService := services.NewAuditLogService(auditLogRepo, logger.Get())
-
 	// Create Echo instance
 	e := echo.New()
 	e.HideBanner = true
 	e.Validator = validator.New()
 
-	// Configure middleware (including audit logging)
-	middleware.Setup(e, cfg, auditLogService)
+	// Configure middleware
+	middleware.Setup(e, cfg)
 
 	app := &App{
 		Config:           cfg,

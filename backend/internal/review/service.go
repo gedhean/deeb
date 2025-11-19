@@ -2,6 +2,7 @@ package review
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -61,6 +62,18 @@ type ReviewOptions struct {
 
 	// Schema is optional pre-loaded schema metadata
 	Schema *types.DatabaseSchemaMetadata
+
+	// Driver is optional database connection for DML dry-run and other checks
+	Driver *sql.DB
+
+	// ChangeType specifies the type of database change (DDL, DML, DDL_DML)
+	ChangeType *types.PlanCheckRunConfig_ChangeDatabaseType
+
+	// EnableQueryLogging enables detailed SQL query logging for debugging
+	EnableQueryLogging bool
+
+	// UsePostgresDatabaseOwner enables using PostgreSQL database owner role
+	UsePostgresDatabaseOwner bool
 
 	// Timeout for the review operation
 	Timeout time.Duration
@@ -148,19 +161,49 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 		schema = s.schemaCache.Get(ctx, *opts.DatabaseID)
 	}
 
+	// Build reviewer options
+	reviewOpts := []reviewer.ReviewOption{}
+
+	// Add database driver if provided
+	if opts.Driver != nil {
+		s.logger.Debug("Adding database driver to reviewer options")
+		reviewOpts = append(reviewOpts, reviewer.WithDriver(opts.Driver))
+	}
+
+	// Add change type if provided
+	if opts.ChangeType != nil {
+		s.logger.Debug("Adding change type to reviewer options",
+			zap.Int32("change_type", int32(*opts.ChangeType)))
+		reviewOpts = append(reviewOpts, reviewer.WithChangeType(*opts.ChangeType))
+	}
+
+	// Add query logging if enabled
+	if opts.EnableQueryLogging {
+		s.logger.Debug("Enabling query logging in reviewer")
+		reviewOpts = append(reviewOpts, reviewer.WithQueryLogging(true))
+	}
+
+	// Add PostgreSQL database owner option if enabled
+	if opts.UsePostgresDatabaseOwner && opts.DatabaseEngine == models.DatabaseEnginePostgreSQL {
+		s.logger.Debug("Enabling PostgreSQL database owner role")
+		reviewOpts = append(reviewOpts, reviewer.WithPostgresDatabaseOwner(true))
+	}
+
 	// Execute review
 	var result *reviewer.ReviewResult
 	if schema != nil {
 		s.logger.Info("Running schema-aware SQL review",
 			zap.String("database_id", opts.DatabaseID.String()),
-			zap.Int("rules", len(rules)))
-		result, err = rev.ReviewWithSchema(ctx, opts.SQLContent, schema)
+			zap.Int("rules", len(rules)),
+			zap.Int("review_options", len(reviewOpts)))
+		result, err = rev.ReviewWithSchema(ctx, opts.SQLContent, schema, reviewOpts...)
 	} else {
 		s.logger.Info("Running SQL review without schema",
 			zap.Int("rules", len(rules)),
 			zap.String("sql_content", opts.SQLContent),
-			zap.String("database_engine", string(opts.DatabaseEngine)))
-		result, err = rev.Review(ctx, opts.SQLContent)
+			zap.String("database_engine", string(opts.DatabaseEngine)),
+			zap.Int("review_options", len(reviewOpts)))
+		result, err = rev.Review(ctx, opts.SQLContent, reviewOpts...)
 	}
 
 	if err != nil {

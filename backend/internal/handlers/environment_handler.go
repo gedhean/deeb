@@ -13,30 +13,26 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
-	"github.com/nsxbet/deeb/internal/services"
 	"go.uber.org/zap"
 )
 
 // EnvironmentHandler handles environment management endpoints
 type EnvironmentHandler struct {
-	envRepo      repository.EnvironmentRepository
-	db           *sqlx.DB
-	auditService *services.AuditLogService
-	logger       *zap.Logger
+	envRepo repository.EnvironmentRepository
+	db      *sqlx.DB
+	logger  *zap.Logger
 }
 
 // NewEnvironmentHandler creates a new environment handler
 func NewEnvironmentHandler(
 	envRepo repository.EnvironmentRepository,
 	db *sqlx.DB,
-	auditService *services.AuditLogService,
 	logger *zap.Logger,
 ) *EnvironmentHandler {
 	return &EnvironmentHandler{
-		envRepo:      envRepo,
-		db:           db,
-		auditService: auditService,
-		logger:       logger,
+		envRepo: envRepo,
+		db:      db,
+		logger:  logger,
 	}
 }
 
@@ -123,19 +119,6 @@ func (h *EnvironmentHandler) CreateEnvironment(c echo.Context) error {
 	}
 
 	h.logger.Info("Environment created successfully", zap.String("environment_id", environment.ID.String()))
-
-	// Log audit entry
-	if h.auditService != nil {
-		detailsJSON, _ := json.Marshal(map[string]interface{}{
-			"environment_name":    environment.Name,
-			"description":         environment.Description,
-			"policy_id":           environment.PolicyID,
-			"allow_self_approval": environment.AllowSelfApproval,
-		})
-		if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionCreate, services.ResourceTypeEnvironment, environment.ID, c.Request(), detailsJSON); err != nil {
-			h.logger.Error("Failed to log audit entry for environment creation", zap.Error(err))
-		}
-	}
 
 	return c.JSON(http.StatusCreated, environment.ToResponse())
 }
@@ -309,22 +292,6 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 
 	h.logger.Info("Environment updated successfully", zap.String("environment_id", environmentID.String()))
 
-	// Log audit entry
-	if h.auditService != nil {
-		claims, ok := auth.GetUserFromEchoContext(c)
-		if ok && claims != nil {
-			detailsJSON, _ := json.Marshal(map[string]interface{}{
-				"environment_name":    environment.Name,
-				"description":         environment.Description,
-				"policy_id":           environment.PolicyID,
-				"allow_self_approval": environment.AllowSelfApproval,
-			})
-			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionUpdate, services.ResourceTypeEnvironment, environmentID, c.Request(), detailsJSON); err != nil {
-				h.logger.Error("Failed to log audit entry for environment update", zap.Error(err))
-			}
-		}
-	}
-
 	return c.JSON(http.StatusOK, environment.ToResponse())
 }
 
@@ -368,19 +335,6 @@ func (h *EnvironmentHandler) DeleteEnvironment(c echo.Context) error {
 	}
 
 	h.logger.Info("Environment deleted successfully", zap.String("environment_id", environmentID.String()))
-
-	// Log audit entry
-	if h.auditService != nil {
-		claims, ok := auth.GetUserFromEchoContext(c)
-		if ok && claims != nil {
-			detailsJSON, _ := json.Marshal(map[string]interface{}{
-				"environment_id": environmentID.String(),
-			})
-			if err := h.auditService.LogWithHTTP(ctx, claims.UserID, services.ActionDelete, services.ResourceTypeEnvironment, environmentID, c.Request(), detailsJSON); err != nil {
-				h.logger.Error("Failed to log audit entry for environment deletion", zap.Error(err))
-			}
-		}
-	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "Environment deleted successfully",
