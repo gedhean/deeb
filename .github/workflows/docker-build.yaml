@@ -283,14 +283,14 @@ jobs:
           # Get first tag for testing
           TEST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | cut -d',' -f1)
 
-          # Run container and check if nginx starts and health check works
-          docker run --rm -d --name deeb-frontend-test -p 8081:80 $TEST_TAG
+          # Run container and check if nginx starts
+          docker run --rm -d --name deeb-frontend-test -p 8080:8080 $TEST_TAG
 
           # Wait for container to start
           sleep 5
 
           # Check health endpoint
-          curl -f http://localhost:8081/health || exit 1
+          curl -f http://localhost:8080/health || exit 1
 
           # Stop container
           docker stop deeb-frontend-test
