@@ -23,7 +23,10 @@ func Setup(e *echo.Echo, cfg *config.Config) {
 	e.Use(middleware.RequestID())
 
 	// Custom request logger with Zap integration and correlation IDs
-	e.Use(RequestLogger())
+	// Skip logging for health check endpoints to reduce noise
+	e.Use(RequestLoggerWithConfig(RequestLoggerConfig{
+		SkipPaths: []string{"/api/v1/health"},
+	}))
 
 	// CORS middleware - configure cross-origin requests
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{

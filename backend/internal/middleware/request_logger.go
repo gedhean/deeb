@@ -17,10 +17,22 @@ const (
 	CorrelationIDKey = "correlation_id"
 )
 
+// RequestLoggerConfig holds configuration for request logger middleware
+type RequestLoggerConfig struct {
+	// SkipPaths is a list of paths to skip logging (e.g., health check endpoints)
+	SkipPaths []string
+}
+
 // RequestLogger creates a middleware that logs HTTP requests with Zap logger.
 // Uses Echo's RequestID middleware for request tracking and logs request/response details
 // including method, URI, status, latency, and bytes transferred.
 func RequestLogger() echo.MiddlewareFunc {
+	return RequestLoggerWithConfig(RequestLoggerConfig{})
+}
+
+// RequestLoggerWithConfig creates a middleware that logs HTTP requests with Zap logger,
+// with configurable skip paths.
+func RequestLoggerWithConfig(config RequestLoggerConfig) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Get request ID from Echo's RequestID middleware
@@ -43,59 +55,72 @@ func RequestLogger() echo.MiddlewareFunc {
 				uri = "/"
 			}
 
+			// Check if this path should be skipped
+			shouldSkip := false
+			for _, skipPath := range config.SkipPaths {
+				if uri == skipPath {
+					shouldSkip = true
+					break
+				}
+			}
+
 			// Process request
 			err := next(c)
 
 			// Calculate duration and get response details
 			duration := time.Since(start)
 			status := c.Response().Status
-			bytesIn := req.ContentLength
-			if bytesIn < 0 {
-				bytesIn = 0
+
+			// Skip logging if configured to do so
+			if !shouldSkip {
+				bytesIn := req.ContentLength
+				if bytesIn < 0 {
+					bytesIn = 0
+				}
+				bytesOut := c.Response().Size
+
+				// Format error message
+				errorMsg := ""
+				if err != nil {
+					errorMsg = err.Error()
+				}
+
+				// Build log entry matching the requested format
+				// Using a struct to maintain field order in JSON output
+				logEntry := struct {
+					Time     string `json:"time"`
+					Method   string `json:"method"`
+					URI      string `json:"uri"`
+					Status   int    `json:"status"`
+					Latency  string `json:"latency"`
+					BytesIn  int64  `json:"bytes_in"`
+					BytesOut int64  `json:"bytes_out"`
+					Error    string `json:"error"`
+				}{
+					Time:     start.Add(duration).Format(time.RFC3339),
+					Method:   method,
+					URI:      uri,
+					Status:   status,
+					Latency:  formatDuration(duration),
+					BytesIn:  bytesIn,
+					BytesOut: bytesOut,
+					Error:    errorMsg,
+				}
+
+				// Convert to JSON
+				logJSON, _ := json.Marshal(logEntry)
+
+				// Determine log level based on status code
+				logFunc := logger.Info
+				if status >= 500 {
+					logFunc = logger.Error
+				} else if status >= 400 {
+					logFunc = logger.Warn
+				}
+
+				// Log with the JSON string
+				logFunc(string(logJSON))
 			}
-			bytesOut := c.Response().Size
-
-			// Format error message
-			errorMsg := ""
-			if err != nil {
-				errorMsg = err.Error()
-			}
-
-			// Build log entry matching the requested format
-			// Using a struct to maintain field order in JSON output
-			logEntry := struct {
-				Time     string `json:"time"`
-				Method   string `json:"method"`
-				URI      string `json:"uri"`
-				Status   int    `json:"status"`
-				Latency  string `json:"latency"`
-				BytesIn  int64  `json:"bytes_in"`
-				BytesOut int64  `json:"bytes_out"`
-				Error    string `json:"error"`
-			}{
-				Time:     start.Add(duration).Format(time.RFC3339),
-				Method:   method,
-				URI:      uri,
-				Status:   status,
-				Latency:  formatDuration(duration),
-				BytesIn:  bytesIn,
-				BytesOut: bytesOut,
-				Error:    errorMsg,
-			}
-
-			// Convert to JSON
-			logJSON, _ := json.Marshal(logEntry)
-
-			// Determine log level based on status code
-			logFunc := logger.Info
-			if status >= 500 {
-				logFunc = logger.Error
-			} else if status >= 400 {
-				logFunc = logger.Warn
-			}
-
-			// Log with the JSON string
-			logFunc(string(logJSON))
 
 			return err
 		}
