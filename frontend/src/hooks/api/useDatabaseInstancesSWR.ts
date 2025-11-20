@@ -72,7 +72,6 @@ interface UseCreateDatabaseInstanceResult {
 export function useCreateDatabaseInstance(): UseCreateDatabaseInstanceResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate } = useSWR('/api/database-instances');
 
   const createDatabaseInstance = useCallback(
     async (data: CreateDatabaseInstanceRequest): Promise<DatabaseInstance | null> => {
@@ -81,8 +80,8 @@ export function useCreateDatabaseInstance(): UseCreateDatabaseInstanceResult {
         setError(null);
         const result = await databaseInstancesService.createDatabaseInstance(data);
 
-        // Invalidate list cache
-        await mutate();
+        // Invalidate database instances cache using global mutate
+        await globalMutate('/api/database-instances', undefined, { revalidate: true });
 
         // Invalidate the new instance cache if we have the ID
         if (result?.id) {
@@ -103,7 +102,7 @@ export function useCreateDatabaseInstance(): UseCreateDatabaseInstanceResult {
         setIsLoading(false);
       }
     },
-    [mutate],
+    [],
   );
 
   return { createDatabaseInstance, isLoading, error };
@@ -124,7 +123,6 @@ interface UseUpdateDatabaseInstanceResult {
 export function useUpdateDatabaseInstance(): UseUpdateDatabaseInstanceResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate } = useSWR('/api/database-instances');
 
   const updateDatabaseInstance = useCallback(
     async (id: string, data: UpdateDatabaseInstanceRequest): Promise<DatabaseInstance | null> => {
@@ -133,8 +131,8 @@ export function useUpdateDatabaseInstance(): UseUpdateDatabaseInstanceResult {
         setError(null);
         const result = await databaseInstancesService.updateDatabaseInstance(id, data);
 
-        // Invalidate list cache
-        await mutate();
+        // Invalidate database instances cache using global mutate
+        await globalMutate('/api/database-instances', undefined, { revalidate: true });
 
         // Invalidate the specific instance cache
         await globalMutate(`/api/database-instances/${id}`);
@@ -153,7 +151,7 @@ export function useUpdateDatabaseInstance(): UseUpdateDatabaseInstanceResult {
         setIsLoading(false);
       }
     },
-    [mutate],
+    [],
   );
 
   return { updateDatabaseInstance, isLoading, error };
@@ -171,7 +169,6 @@ interface UseDeleteDatabaseInstanceResult {
 export function useDeleteDatabaseInstance(): UseDeleteDatabaseInstanceResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate } = useSWR('/api/database-instances');
 
   const deleteDatabaseInstance = useCallback(
     async (id: string): Promise<boolean> => {
@@ -180,8 +177,8 @@ export function useDeleteDatabaseInstance(): UseDeleteDatabaseInstanceResult {
         setError(null);
         await databaseInstancesService.deleteDatabaseInstance(id);
 
-        // Invalidate list cache
-        await mutate();
+        // Invalidate database instances cache using global mutate
+        await globalMutate('/api/database-instances', undefined, { revalidate: true });
 
         // Invalidate the specific instance cache
         await globalMutate(`/api/database-instances/${id}`);
@@ -201,7 +198,7 @@ export function useDeleteDatabaseInstance(): UseDeleteDatabaseInstanceResult {
         setIsLoading(false);
       }
     },
-    [mutate],
+    [],
   );
 
   return { deleteDatabaseInstance, isLoading, error };

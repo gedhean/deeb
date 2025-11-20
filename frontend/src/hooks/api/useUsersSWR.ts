@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 import { useCallback, useState } from 'react';
 import { usersService } from '@/lib/api/services/users';
 import type { User, CreateUserRequest, UpdateUserRequest } from '@/lib/api/types';
@@ -125,7 +125,6 @@ interface UseCreateUserResult {
 export function useCreateUser(): UseCreateUserResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate } = useSWR('/api/users');
 
   const createUser = useCallback(
     async (data: CreateUserRequest): Promise<User | null> => {
@@ -134,8 +133,8 @@ export function useCreateUser(): UseCreateUserResult {
         setError(null);
         const result = await usersService.createUser(data);
 
-        // Invalidate cache immediately
-        await mutate();
+        // Invalidate users cache using global mutate
+        await mutate('/api/users', undefined, { revalidate: true });
 
         return result;
       } catch (err) {
@@ -147,7 +146,7 @@ export function useCreateUser(): UseCreateUserResult {
         setIsLoading(false);
       }
     },
-    [mutate],
+    [],
   );
 
   return {
@@ -169,7 +168,6 @@ interface UseUpdateUserResult {
 export function useUpdateUser(): UseUpdateUserResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate } = useSWR('/api/users');
 
   const updateUser = useCallback(
     async (id: string, data: UpdateUserRequest): Promise<User | null> => {
@@ -178,8 +176,8 @@ export function useUpdateUser(): UseUpdateUserResult {
         setError(null);
         const result = await usersService.updateUser(id, data);
 
-        // Invalidate cache immediately
-        await mutate();
+        // Invalidate users cache using global mutate
+        await mutate('/api/users', undefined, { revalidate: true });
 
         return result;
       } catch (err) {
@@ -191,7 +189,7 @@ export function useUpdateUser(): UseUpdateUserResult {
         setIsLoading(false);
       }
     },
-    [mutate],
+    [],
   );
 
   return {
@@ -213,7 +211,6 @@ interface UseDeleteUserResult {
 export function useDeleteUser(): UseDeleteUserResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate } = useSWR('/api/users');
 
   const deleteUser = useCallback(
     async (id: string): Promise<boolean> => {
@@ -222,8 +219,8 @@ export function useDeleteUser(): UseDeleteUserResult {
         setError(null);
         await usersService.deleteUser(id);
 
-        // Invalidate cache immediately
-        await mutate();
+        // Invalidate users cache using global mutate
+        await mutate('/api/users', undefined, { revalidate: true });
 
         return true;
       } catch (err) {
@@ -235,7 +232,7 @@ export function useDeleteUser(): UseDeleteUserResult {
         setIsLoading(false);
       }
     },
-    [mutate],
+    [],
   );
 
   return {
