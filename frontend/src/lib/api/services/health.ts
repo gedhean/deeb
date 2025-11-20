@@ -6,6 +6,6 @@ export const healthService = {
    * Check API health status
    */
   async check(): Promise<HealthCheckResponse> {
-    return apiClient.get<HealthCheckResponse>('/health');
+    return apiClient.get<HealthCheckResponse>('/api/v1/health');
   },
 };
