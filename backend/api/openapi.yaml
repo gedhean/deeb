@@ -49,7 +49,7 @@ tags:
   - name: Change Plans
     description: Change plan management and SQL review operations
 paths:
-  /health:
+  /api/v1/health:
     get:
       tags: [Health]
       summary: Health check

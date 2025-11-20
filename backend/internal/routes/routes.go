@@ -87,9 +87,9 @@ func Setup(
 
 	// Setup API routes
 	// Public routes (no authentication required)
-	setupHealthRoute(e, db, version)
 	setupSetupRoutes(e, userRepo)
 	setupAuthRoutes(e, authenticated, cfg, userRepo, tokenManager, loginRateLimiter, auditLogMiddleware)
+	setupHealthRoute(e, db, version)
 
 	// Protected routes (authentication required via authenticated group)
 	setupUserRoutes(authenticated, userRepo)
@@ -144,7 +144,7 @@ func Setup(
 // setupHealthRoute registers the health check endpoint
 func setupHealthRoute(e *echo.Echo, db *sqlx.DB, version string) {
 	healthHandler := handlers.NewHealthHandler(db, logger.Get(), version)
-	e.GET("/health", healthHandler.Health)
+	e.GET("/api/v1/health", healthHandler.Health)
 }
 
 // setupSetupRoutes registers setup and initialization routes

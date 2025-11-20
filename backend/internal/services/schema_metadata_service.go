@@ -290,8 +290,11 @@ func (s *SchemaMetadataService) extractPostgreSQLSchema(
 		zap.String("database_name", db.DatabaseName),
 	)
 
-	// Create extractor and extract schema
-	extractor := postgresextractor.NewExtractor(sqlxDB.DB, db.DatabaseName)
+	// Create extractor with options to run ANALYZE for accurate row counts
+	opts := &postgresextractor.ExtractorOptions{
+		RunAnalyze: true, // Run ANALYZE to ensure row count statistics are current
+	}
+	extractor := postgresextractor.NewExtractorWithOptions(sqlxDB.DB, db.DatabaseName, opts)
 	dbSchema, err := extractor.ExtractSchema(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract PostgreSQL schema: %w", err)

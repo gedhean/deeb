@@ -21,12 +21,11 @@ interface UseCurrentUserResult {
 /**
  * Hook for fetching current user with SWR caching
  *
- * This hook provides automatic request deduplication and background revalidation
+ * This hook provides automatic request deduplication and caching
  * for the authenticated user. Use this instead of calling authService.getCurrentUser() directly.
  *
  * Benefits:
  * - Automatic request deduplication (multiple calls = single API request)
- * - Background revalidation on window focus
  * - Cached data available immediately on subsequent mounts
  * - Works correctly with React StrictMode (no duplicate API calls)
  */
@@ -39,7 +38,7 @@ export function useCurrentUserSWR(): UseCurrentUserResult {
   } = useSWR<User>('/api/auth/me', fetchCurrentUser, {
     revalidateIfStale: true,
     keepPreviousData: true,
-    revalidateOnFocus: true,
+    revalidateOnFocus: false, // Disable focus revalidation to prevent unnecessary refetches
     dedupingInterval: 2000, // Deduplicate requests within 2 seconds
     shouldRetryOnError: false, // Don't retry on auth errors (401/403)
     onError: (error) => {

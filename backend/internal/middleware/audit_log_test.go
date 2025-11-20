@@ -198,7 +198,7 @@ func TestAuditLogMiddleware_AuditLog(t *testing.T) {
 		mockAuditService := new(MockAuditLogService)
 		middleware := NewAuditLogMiddleware(mockAuditService, logger, newTestAuditConfig())
 
-		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 

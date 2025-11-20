@@ -286,7 +286,7 @@ func (m *AuditLogMiddleware) shouldSkipAuditLog(path string) bool {
 
 	// Apply hardcoded skip rules (health checks, static assets, etc.)
 	// Skip health check endpoints
-	if path == "/health" || path == "/healthz" || path == "/ready" {
+	if path == "/api/v1/health" || path == "/healthz" || path == "/ready" {
 		return true
 	}
 
