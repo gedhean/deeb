@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -170,7 +171,25 @@ func (h *DatabaseInstanceHandler) CreateDatabaseInstance(c echo.Context) error {
 		zap.String("name", instance.Name),
 	)
 
-	return c.JSON(http.StatusCreated, instance.ToResponse())
+	// Sync databases if requested
+	var syncResult *models.DatabaseSyncResult
+	if req.SyncAllDatabases {
+		syncResult = h.syncDatabasesFromInstance(ctx, instance, claims.UserID)
+		h.logger.Info(
+			"Database sync completed",
+			zap.String("database_instance_id", instance.ID.String()),
+			zap.Int("total_found", syncResult.TotalFound),
+			zap.Int("synced", syncResult.Synced),
+			zap.Int("failed", syncResult.Failed),
+			zap.Int("skipped", syncResult.Skipped),
+		)
+	}
+
+	// Build response with sync results if available
+	response := instance.ToResponse()
+	response.SyncResults = syncResult
+
+	return c.JSON(http.StatusCreated, response)
 }
 
 // ListDatabaseInstances handles GET /api/v1/database-instances
@@ -630,8 +649,8 @@ func (h *DatabaseInstanceHandler) CreateDatabaseForInstance(c echo.Context) erro
 		database := &models.Database{
 			DatabaseName:       req.DatabaseName,
 			DatabaseInstanceID: instanceID,
-			ProjectID:          req.ProjectID,
-			EnvironmentID:      req.EnvironmentID,
+			ProjectID:          &req.ProjectID,
+			EnvironmentID:      &req.EnvironmentID,
 			Description:        req.Description,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        claims.UserID,
@@ -653,8 +672,8 @@ func (h *DatabaseInstanceHandler) CreateDatabaseForInstance(c echo.Context) erro
 	database := &models.Database{
 		DatabaseName:       req.DatabaseName,
 		DatabaseInstanceID: instanceID,
-		ProjectID:          req.ProjectID,
-		EnvironmentID:      req.EnvironmentID,
+		ProjectID:          &req.ProjectID,
+		EnvironmentID:      &req.EnvironmentID,
 		Description:        req.Description,
 		Status:             models.DatabaseStatusPending,
 		CreatedByID:        claims.UserID,
@@ -895,4 +914,141 @@ func (h *DatabaseInstanceHandler) TestDatabaseInstanceConnection(c echo.Context)
 		"engine":   string(instance.DatabaseEngine),
 		"username": instance.Username,
 	})
+}
+
+// SyncDatabases handles POST /api/v1/database-instances/:id/sync
+func (h *DatabaseInstanceHandler) SyncDatabases(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Get instance ID from path
+	instanceIDStr := c.Param("id")
+	instanceID, err := uuid.Parse(instanceIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid database instance ID",
+		})
+	}
+
+	// Fetch database instance
+	instance, err := h.dbInstanceRepo.GetByID(ctx, instanceID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Database instance not found",
+			})
+		}
+		h.logger.Error("Failed to get database instance", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve database instance",
+		})
+	}
+
+	// Perform sync
+	syncResult := h.syncDatabasesFromInstance(ctx, instance, claims.UserID)
+
+	h.logger.Info(
+		"Database sync completed",
+		zap.String("database_instance_id", instance.ID.String()),
+		zap.Int("total_found", syncResult.TotalFound),
+		zap.Int("synced", syncResult.Synced),
+		zap.Int("failed", syncResult.Failed),
+		zap.Int("skipped", syncResult.Skipped),
+	)
+
+	return c.JSON(http.StatusOK, syncResult)
+}
+
+// syncDatabasesFromInstance discovers and imports all databases from a database instance
+// Returns sync results with statistics about the operation
+func (h *DatabaseInstanceHandler) syncDatabasesFromInstance(
+	ctx context.Context,
+	instance *models.DatabaseInstance,
+	createdByID uuid.UUID,
+) *models.DatabaseSyncResult {
+	result := &models.DatabaseSyncResult{
+		FailedDatabases:  []string{},
+		SkippedDatabases: []string{},
+	}
+
+	// Discover databases on the instance
+	databaseNames, err := h.connManager.ListDatabasesOnInstance(ctx, instance)
+	if err != nil {
+		h.logger.Error("Failed to list databases on instance",
+			zap.String("instance_id", instance.ID.String()),
+			zap.Error(err),
+		)
+		// Return early with error - total found is 0, all failed
+		result.TotalFound = 0
+		result.Failed = 1
+		result.FailedDatabases = append(result.FailedDatabases, fmt.Sprintf("discovery-error: %s", err.Error()))
+		return result
+	}
+
+	result.TotalFound = len(databaseNames)
+
+	// Process each discovered database
+	for _, dbName := range databaseNames {
+		// Check if database already exists in Deeb
+		existingDB, err := h.databaseRepo.GetByInstanceAndName(ctx, instance.ID, dbName)
+		if err != nil && err != repository.ErrNotFound {
+			// Error checking for existing database
+			result.Failed++
+			result.FailedDatabases = append(result.FailedDatabases, fmt.Sprintf("%s (check failed)", dbName))
+			h.logger.Error("Failed to check if database exists",
+				zap.String("database_name", dbName),
+				zap.String("instance_id", instance.ID.String()),
+				zap.Error(err),
+			)
+			continue
+		}
+		if existingDB != nil {
+			// Database already exists, skip it
+			result.Skipped++
+			result.SkippedDatabases = append(result.SkippedDatabases, dbName)
+			h.logger.Debug("Database already exists, skipping",
+				zap.String("database_name", dbName),
+				zap.String("instance_id", instance.ID.String()),
+				zap.String("existing_id", existingDB.ID.String()),
+			)
+			continue
+		}
+
+		// Create new database record with nil project_id and environment_id
+		database := &models.Database{
+			DatabaseName:       dbName,
+			DatabaseInstanceID: instance.ID,
+			ProjectID:          nil, // Unassigned
+			EnvironmentID:      nil, // Unassigned
+			Status:             models.DatabaseStatusActive,
+			CreatedByID:        createdByID,
+		}
+
+		if err := h.databaseRepo.Create(ctx, database); err != nil {
+			result.Failed++
+			result.FailedDatabases = append(result.FailedDatabases, dbName)
+			h.logger.Error("Failed to create database record during sync",
+				zap.String("database_name", dbName),
+				zap.String("instance_id", instance.ID.String()),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		result.Synced++
+		h.logger.Debug("Database synced successfully",
+			zap.String("database_id", database.ID.String()),
+			zap.String("database_name", dbName),
+			zap.String("instance_id", instance.ID.String()),
+		)
+	}
+
+	return result
 }

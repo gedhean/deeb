@@ -121,6 +121,15 @@ export interface ProjectMembersListResponse {
 }
 
 // Database Instance Types
+export interface DatabaseSyncResult {
+  total_found: number;
+  synced: number;
+  failed: number;
+  skipped: number;
+  failed_databases?: string[];
+  skipped_databases?: string[];
+}
+
 export interface DatabaseInstance {
   id: string;
   name: string;
@@ -135,6 +144,7 @@ export interface DatabaseInstance {
   environment_id?: string;
   created_at: string;
   updated_at: string;
+  sync_results?: DatabaseSyncResult;
 }
 
 export interface CreateDatabaseInstanceRequest {
@@ -148,6 +158,7 @@ export interface CreateDatabaseInstanceRequest {
   use_rds_iam_auth?: boolean;
   require_ssl?: boolean;
   environment_id?: string;
+  sync_all_databases?: boolean;
 }
 
 export interface UpdateDatabaseInstanceRequest {
@@ -171,9 +182,9 @@ export type DatabaseInstanceStatus = 'Active' | 'Inactive' | 'Maintenance';
 // Database Types
 export interface Database {
   id: string;
-  project_id: string;
+  project_id?: string | null;
   database_instance_id: string;
-  environment_id: string;
+  environment_id?: string | null;
   database_name: string;
   description?: string;
   status: DatabaseStatus;

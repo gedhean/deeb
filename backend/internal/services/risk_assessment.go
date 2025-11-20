@@ -57,12 +57,16 @@ func (s *RiskAssessmentService) AssessRisk(
 	riskScore += sqlRiskScore
 
 	// Analyze environment (Production = higher risk)
-	environment, err := s.environmentRepo.GetByID(ctx, database.EnvironmentID)
-	if err != nil {
-		s.logger.Error("Failed to get environment for risk assessment", zap.Error(err))
-		return models.RiskLevelMedium, err
+	// If database is unassigned (nil EnvironmentID), use default risk
+	envRiskScore := 1 // Default risk for unassigned databases
+	if database.EnvironmentID != nil {
+		environment, err := s.environmentRepo.GetByID(ctx, *database.EnvironmentID)
+		if err != nil {
+			s.logger.Error("Failed to get environment for risk assessment", zap.Error(err))
+			return models.RiskLevelMedium, err
+		}
+		envRiskScore = s.analyzeEnvironment(environment.Name)
 	}
-	envRiskScore := s.analyzeEnvironment(environment.Name)
 	riskScore += envRiskScore
 
 	// Analyze database type (for future extensions)

@@ -218,9 +218,9 @@ export const DatabasesPage: React.FC = () => {
   const openEditForm = useCallback((database: Database) => {
     setSelectedDatabase(database);
     setFormData({
-      project_id: database.project_id,
+      project_id: database.project_id || '',
       database_instance_id: database.database_instance_id,
-      environment_id: database.environment_id,
+      environment_id: database.environment_id || '',
       database_name: database.database_name,
       description: database.description || '',
     });
@@ -236,7 +236,8 @@ export const DatabasesPage: React.FC = () => {
 
   // Get related entity names
   const getProjectName = useCallback(
-    (projectId: string): string => {
+    (projectId: string | null | undefined): string => {
+      if (!projectId) return 'Unassigned';
       const project = projects.find((p) => p.id === projectId);
       return project?.name || 'Unknown';
     },
@@ -244,7 +245,8 @@ export const DatabasesPage: React.FC = () => {
   );
 
   const getEnvironmentName = useCallback(
-    (environmentId: string): string => {
+    (environmentId: string | null | undefined): string => {
+      if (!environmentId) return 'Unassigned';
       const env = environments.find((e) => e.id === environmentId);
       return env?.name || 'Unknown';
     },

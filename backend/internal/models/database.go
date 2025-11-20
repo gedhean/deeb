@@ -19,16 +19,16 @@ const (
 
 // Database represents an individual database within a database instance
 type Database struct {
-	ID                 uuid.UUID      `json:"id"                    db:"id"`
-	ProjectID          uuid.UUID      `json:"project_id"            db:"project_id"`
-	DatabaseInstanceID uuid.UUID      `json:"database_instance_id"  db:"database_instance_id"`
-	EnvironmentID      uuid.UUID      `json:"environment_id"        db:"environment_id"`
-	DatabaseName       string         `json:"database_name"         db:"database_name"`
-	Description        *string        `json:"description,omitempty" db:"description"`
-	Status             DatabaseStatus `json:"status"                db:"status"`
-	CreatedByID        uuid.UUID      `json:"created_by_id"         db:"created_by_id"`
-	CreatedAt          time.Time      `json:"created_at"            db:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"            db:"updated_at"`
+	ID                 uuid.UUID      `json:"id"                       db:"id"`
+	ProjectID          *uuid.UUID     `json:"project_id,omitempty"     db:"project_id"` // Nullable for unassigned databases
+	DatabaseInstanceID uuid.UUID      `json:"database_instance_id"     db:"database_instance_id"`
+	EnvironmentID      *uuid.UUID     `json:"environment_id,omitempty" db:"environment_id"` // Nullable for unassigned databases
+	DatabaseName       string         `json:"database_name"            db:"database_name"`
+	Description        *string        `json:"description,omitempty"    db:"description"`
+	Status             DatabaseStatus `json:"status"                   db:"status"`
+	CreatedByID        uuid.UUID      `json:"created_by_id"            db:"created_by_id"`
+	CreatedAt          time.Time      `json:"created_at"               db:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"               db:"updated_at"`
 
 	// Related entities (populated with joins)
 	Project          *Project          `json:"project,omitempty"           db:"-"`
@@ -55,9 +55,9 @@ type UpdateDatabaseRequest struct {
 // DatabaseResponse represents a database response
 type DatabaseResponse struct {
 	ID                 uuid.UUID      `json:"id"`
-	ProjectID          uuid.UUID      `json:"project_id"`
+	ProjectID          *uuid.UUID     `json:"project_id,omitempty"` // Nullable for unassigned databases
 	DatabaseInstanceID uuid.UUID      `json:"database_instance_id"`
-	EnvironmentID      uuid.UUID      `json:"environment_id"`
+	EnvironmentID      *uuid.UUID     `json:"environment_id,omitempty"` // Nullable for unassigned databases
 	DatabaseName       string         `json:"database_name"`
 	Description        *string        `json:"description,omitempty"`
 	Status             DatabaseStatus `json:"status"`
@@ -70,17 +70,20 @@ type DatabaseResponse struct {
 }
 
 // Validate validates the database fields
+// Note: ProjectID and EnvironmentID can be nil for unassigned databases (created via sync)
 func (d *Database) Validate() error {
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
 	}
-	if d.ProjectID == uuid.Nil {
+	// ProjectID and EnvironmentID are now optional (can be nil for unassigned databases)
+	// But if provided, they must be valid UUIDs
+	if d.ProjectID != nil && *d.ProjectID == uuid.Nil {
 		return ErrDatabaseProjectIDRequired
 	}
 	if d.DatabaseInstanceID == uuid.Nil {
 		return ErrDatabaseInstanceIDRequired
 	}
-	if d.EnvironmentID == uuid.Nil {
+	if d.EnvironmentID != nil && *d.EnvironmentID == uuid.Nil {
 		return ErrDatabaseEnvironmentIDRequired
 	}
 	if strings.TrimSpace(d.DatabaseName) == "" {

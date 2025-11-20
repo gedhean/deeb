@@ -19,8 +19,8 @@ const formatDate = (dateString: string) => {
 };
 
 export interface DatabasesColumnsProps {
-  getProjectName: (projectId: string) => string;
-  getEnvironmentName: (environmentId: string) => string;
+  getProjectName: (projectId: string | null | undefined) => string;
+  getEnvironmentName: (environmentId: string | null | undefined) => string;
 }
 
 export const getDatabasesColumns = ({

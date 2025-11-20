@@ -25,6 +25,8 @@ import {
   Database as DatabaseIcon,
   Plus,
   Cable,
+  RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
@@ -39,6 +41,15 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
   const { user } = useAuth();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    total_found: number;
+    synced: number;
+    failed: number;
+    skipped: number;
+    failed_databases?: string[];
+    skipped_databases?: string[];
+  } | null>(null);
 
   // Pagination state for databases table
   const [pageIndex, setPageIndex] = useState(0);
@@ -97,13 +108,15 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
   };
 
   // Get project name
-  const getProjectName = (projectId: string): string => {
+  const getProjectName = (projectId: string | null | undefined): string => {
+    if (!projectId) return 'Unassigned';
     const project = projects.find((p) => p.id === projectId);
     return project?.name || 'Unknown';
   };
 
   // Get environment name
-  const getEnvironmentName = (environmentId: string): string => {
+  const getEnvironmentName = (environmentId: string | null | undefined): string => {
+    if (!environmentId) return 'Unassigned';
     const env = environments.find((e) => e.id === environmentId);
     return env?.name || 'Unknown';
   };
@@ -137,6 +150,38 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
       });
     } finally {
       setIsTestingConnection(false);
+    }
+  };
+
+  // Handle sync databases
+  const handleSyncDatabases = async () => {
+    if (!id) return;
+
+    setIsSyncing(true);
+    try {
+      const result = await databaseInstancesService.syncDatabases(id);
+      setSyncResult(result);
+
+      // Show toast notification
+      if (result.synced > 0) {
+        toast.success('Sync Completed', {
+          description: `Synced ${result.synced} database(s). ${result.skipped} skipped, ${result.failed} failed.`,
+        });
+      } else if (result.failed > 0) {
+        toast.error('Sync Failed', {
+          description: `Failed to sync ${result.failed} database(s). ${result.skipped} already existed.`,
+        });
+      } else {
+        toast.info('No New Databases', {
+          description: `All ${result.total_found} database(s) already exist in Deeb.`,
+        });
+      }
+    } catch (error) {
+      toast.error('Sync Error', {
+        description: error instanceof Error ? error.message : 'Unknown error occurred',
+      });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -190,6 +235,30 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
               </p>
             </div>
           </div>
+          {!isLoading && instance && (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestConnection}
+                disabled={isTestingConnection}
+              >
+                <Cable className="h-4 w-4 mr-2" />
+                {isTestingConnection ? 'Testing...' : 'Test Connection'}
+              </Button>
+              {canCreateDatabases && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncDatabases}
+                  disabled={isSyncing}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                  {isSyncing ? 'Syncing...' : 'Sync Databases'}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Error message */}
@@ -221,21 +290,8 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
         ) : instance ? (
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Instance Information</CardTitle>
-                  <CardDescription>Details about this database instance connection</CardDescription>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleTestConnection}
-                  disabled={isTestingConnection}
-                >
-                  <Cable className="h-4 w-4 mr-2" />
-                  {isTestingConnection ? 'Testing...' : 'Test Connection'}
-                </Button>
-              </div>
+              <CardTitle>Instance Information</CardTitle>
+              <CardDescription>Details about this database instance connection</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
@@ -288,6 +344,74 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
             </CardContent>
           </Card>
         ) : null}
+
+        {/* Database Sync Results */}
+        {syncResult && (
+          <Card className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+            <CardContent className="pt-6">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <h3 className="font-semibold text-green-800 dark:text-green-200">
+                      Database Sync Completed
+                    </h3>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSyncResult(null)}
+                    className="text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100"
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+                <div className="grid grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-green-700 dark:text-green-300">Total Found:</span>{' '}
+                    <span className="font-medium text-green-900 dark:text-green-100">
+                      {syncResult.total_found}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-green-700 dark:text-green-300">Synced:</span>{' '}
+                    <span className="font-medium text-green-900 dark:text-green-100">
+                      {syncResult.synced}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-green-700 dark:text-green-300">Skipped:</span>{' '}
+                    <span className="font-medium text-green-900 dark:text-green-100">
+                      {syncResult.skipped}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-green-700 dark:text-green-300">Failed:</span>{' '}
+                    <span className="font-medium text-green-900 dark:text-green-100">
+                      {syncResult.failed}
+                    </span>
+                  </div>
+                </div>
+                {syncResult.skipped_databases && syncResult.skipped_databases.length > 0 && (
+                  <div className="text-sm">
+                    <span className="text-green-700 dark:text-green-300">Skipped databases:</span>{' '}
+                    <span className="text-green-800 dark:text-green-200">
+                      {syncResult.skipped_databases.join(', ')}
+                    </span>
+                  </div>
+                )}
+                {syncResult.failed_databases && syncResult.failed_databases.length > 0 && (
+                  <div className="text-sm">
+                    <span className="text-red-700 dark:text-red-300">Failed databases:</span>{' '}
+                    <span className="text-red-800 dark:text-red-200">
+                      {syncResult.failed_databases.join(', ')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Databases Table */}
         <Card>

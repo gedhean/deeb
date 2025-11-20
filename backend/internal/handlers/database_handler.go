@@ -117,8 +117,8 @@ func (h *DatabaseHandler) CreateDatabase(c echo.Context) error {
 	database := &models.Database{
 		DatabaseName:       req.DatabaseName,
 		DatabaseInstanceID: req.DatabaseInstanceID,
-		ProjectID:          req.ProjectID,
-		EnvironmentID:      req.EnvironmentID,
+		ProjectID:          &req.ProjectID,
+		EnvironmentID:      &req.EnvironmentID,
 		Description:        req.Description,
 		Status:             models.DatabaseStatusActive,
 		CreatedByID:        claims.UserID,
@@ -140,9 +140,11 @@ func (h *DatabaseHandler) CreateDatabase(c echo.Context) error {
 func (h *DatabaseHandler) ToResponseWithDetails(ctx context.Context, database *models.Database) *models.DatabaseResponse {
 	resp := database.ToResponse()
 
-	// Fetch project
-	if project, err := h.projectRepo.GetByID(ctx, database.ProjectID); err == nil {
-		resp.Project = project
+	// Fetch project (only if assigned)
+	if database.ProjectID != nil {
+		if project, err := h.projectRepo.GetByID(ctx, *database.ProjectID); err == nil {
+			resp.Project = project
+		}
 	}
 
 	// Fetch database instance
@@ -150,9 +152,11 @@ func (h *DatabaseHandler) ToResponseWithDetails(ctx context.Context, database *m
 		resp.DatabaseInstance = instance
 	}
 
-	// Fetch environment
-	if env, err := h.environmentRepo.GetByID(ctx, database.EnvironmentID); err == nil {
-		resp.Environment = env
+	// Fetch environment (only if assigned)
+	if database.EnvironmentID != nil {
+		if env, err := h.environmentRepo.GetByID(ctx, *database.EnvironmentID); err == nil {
+			resp.Environment = env
+		}
 	}
 
 	return resp
@@ -219,7 +223,7 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 		// Filter by environment
 		databases = []*models.Database{}
 		for _, db := range projectDatabases {
-			if db.EnvironmentID == environmentID {
+			if db.EnvironmentID != nil && *db.EnvironmentID == environmentID {
 				databases = append(databases, db)
 			}
 		}
@@ -419,30 +423,34 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 	}
 
 	// Validate that project/environment constraints are maintained
-	// (The database must belong to exactly one project and one environment)
+	// (The database must belong to exactly one project and one environment if assigned)
 	// This is enforced by the schema, but we verify the related entities exist
-	if _, err := h.projectRepo.GetByID(ctx, database.ProjectID); err != nil {
-		if err == repository.ErrNotFound {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "Database project not found",
+	if database.ProjectID != nil {
+		if _, err := h.projectRepo.GetByID(ctx, *database.ProjectID); err != nil {
+			if err == repository.ErrNotFound {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Database project not found",
+				})
+			}
+			h.logger.Error("Failed to validate project", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to validate project",
 			})
 		}
-		h.logger.Error("Failed to validate project", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to validate project",
-		})
 	}
 
-	if _, err := h.environmentRepo.GetByID(ctx, database.EnvironmentID); err != nil {
-		if err == repository.ErrNotFound {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "Database environment not found",
+	if database.EnvironmentID != nil {
+		if _, err := h.environmentRepo.GetByID(ctx, *database.EnvironmentID); err != nil {
+			if err == repository.ErrNotFound {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Database environment not found",
+				})
+			}
+			h.logger.Error("Failed to validate environment", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to validate environment",
 			})
 		}
-		h.logger.Error("Failed to validate environment", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to validate environment",
-		})
 	}
 
 	// Apply updates

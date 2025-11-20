@@ -114,7 +114,9 @@ export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesRes
   const getDatabasesByProjectId = useCallback(
     (projectId: string) => {
       const databases = swrDatabases || storeDatabases;
-      return databases.filter((database) => database.project_id === projectId);
+      return databases.filter(
+        (database) => database.project_id && database.project_id === projectId,
+      );
     },
     [swrDatabases, storeDatabases],
   );

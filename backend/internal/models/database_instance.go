@@ -46,16 +46,17 @@ type DatabaseInstance struct {
 
 // CreateDatabaseInstanceRequest represents the request to create a new database instance
 type CreateDatabaseInstanceRequest struct {
-	Name           string         `json:"name"                  validate:"required,max=100"`
-	Description    *string        `json:"description,omitempty"`
-	DatabaseEngine DatabaseEngine `json:"database_engine"       validate:"required,oneof=mysql postgres"`
-	Host           string         `json:"host"                  validate:"required,max=255"`
-	Port           int            `json:"port"                  validate:"required,min=1,max=65535"`
-	Username       string         `json:"username"              validate:"required,max=255"`
-	Password       string         `json:"password"              validate:"required"` // Plain password (will be encrypted)
-	UseRDSIAMAuth  bool           `json:"use_rds_iam_auth"`
-	RequireSSL     bool           `json:"require_ssl"`
-	EnvironmentID  *uuid.UUID     `json:"environment_id"`
+	Name             string         `json:"name"                  validate:"required,max=100"`
+	Description      *string        `json:"description,omitempty"`
+	DatabaseEngine   DatabaseEngine `json:"database_engine"       validate:"required,oneof=mysql postgres"`
+	Host             string         `json:"host"                  validate:"required,max=255"`
+	Port             int            `json:"port"                  validate:"required,min=1,max=65535"`
+	Username         string         `json:"username"              validate:"required,max=255"`
+	Password         string         `json:"password"              validate:"required"` // Plain password (will be encrypted)
+	UseRDSIAMAuth    bool           `json:"use_rds_iam_auth"`
+	RequireSSL       bool           `json:"require_ssl"`
+	EnvironmentID    *uuid.UUID     `json:"environment_id"`
+	SyncAllDatabases bool           `json:"sync_all_databases"` // Automatically import all databases from this instance
 }
 
 // UpdateDatabaseInstanceRequest represents the request to update a database instance
@@ -73,6 +74,16 @@ type UpdateDatabaseInstanceRequest struct {
 	EnvironmentID  *uuid.UUID              `json:"environment_id"`
 }
 
+// DatabaseSyncResult contains the results of a database sync operation
+type DatabaseSyncResult struct {
+	TotalFound       int      `json:"total_found"`                 // Total databases found on instance
+	Synced           int      `json:"synced"`                      // Number successfully synced
+	Failed           int      `json:"failed"`                      // Number that failed to sync
+	Skipped          int      `json:"skipped"`                     // Number skipped (already exist)
+	FailedDatabases  []string `json:"failed_databases,omitempty"`  // Names of databases that failed
+	SkippedDatabases []string `json:"skipped_databases,omitempty"` // Names of databases that were skipped
+}
+
 // DatabaseInstanceResponse represents a database instance response
 type DatabaseInstanceResponse struct {
 	ID             uuid.UUID              `json:"id"`
@@ -88,6 +99,7 @@ type DatabaseInstanceResponse struct {
 	EnvironmentID  *uuid.UUID             `json:"environment_id"`
 	CreatedAt      time.Time              `json:"created_at"`
 	UpdatedAt      time.Time              `json:"updated_at"`
+	SyncResults    *DatabaseSyncResult    `json:"sync_results,omitempty"` // Results if sync was performed
 }
 
 // ToResponse converts a DatabaseInstance to DatabaseInstanceResponse

@@ -4,6 +4,7 @@ import type {
   ListResponse,
   DatabaseInstance,
   UpdateDatabaseInstanceRequest,
+  DatabaseSyncResult,
 } from '../types';
 
 export const databaseInstancesService = {
@@ -173,5 +174,17 @@ export const databaseInstancesService = {
         error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
     }
+  },
+
+  /**
+   * Sync databases from an existing database instance
+   * Discovers all databases on the instance and creates records in Deeb
+   * Requires database_instances.create permission
+   */
+  async syncDatabases(instanceId: string): Promise<DatabaseSyncResult> {
+    const response = await apiClient.post<DatabaseSyncResult>(
+      `/api/v1/database-instances/${instanceId}/sync`,
+    );
+    return response;
   },
 };

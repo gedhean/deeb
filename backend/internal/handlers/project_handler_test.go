@@ -191,7 +191,7 @@ func (m *mockDatabaseRepositoryForProject) ListByProject(
 	}
 	var result []*models.Database
 	for _, db := range m.databases {
-		if db.ProjectID == projectID {
+		if db.ProjectID != nil && *db.ProjectID == projectID {
 			result = append(result, db)
 		}
 	}
@@ -906,10 +906,12 @@ func TestDeleteProject(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:           "cannot delete project with databases",
-			projectID:      testProjectID,
-			mockProjects:   []*models.Project{testProject},
-			mockDatabases:  []*models.Database{{ProjectID: uuid.MustParse(testProjectID)}},
+			name:         "cannot delete project with databases",
+			projectID:    testProjectID,
+			mockProjects: []*models.Project{testProject},
+			mockDatabases: []*models.Database{
+				{ProjectID: func() *uuid.UUID { id := uuid.MustParse(testProjectID); return &id }()},
+			},
 			expectedStatus: http.StatusConflict,
 		},
 		{

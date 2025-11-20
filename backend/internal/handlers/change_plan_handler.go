@@ -133,9 +133,9 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 	}
 
 	// Verify database belongs to the project
-	if database.ProjectID != req.ProjectID {
+	if database.ProjectID == nil || *database.ProjectID != req.ProjectID {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": "Database does not belong to the specified project",
+			"error": "Database does not belong to the specified project or is unassigned",
 		})
 	}
 
@@ -846,9 +846,15 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 	// Determine change type based on SQL content
 	changeType := types.PlanCheckRunConfig_SDL // Default to SDL (schema definition language) for comprehensive checking
 
+	// Determine environment ID for review (use zero UUID if unassigned)
+	var envID uuid.UUID
+	if db.EnvironmentID != nil {
+		envID = *db.EnvironmentID
+	}
+
 	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
 		ChangePlanID:             changePlan.ID,
-		EnvironmentID:            db.EnvironmentID,
+		EnvironmentID:            envID,
 		DatabaseID:               &db.ID,
 		SQLContent:               changePlan.SQLContent,
 		DatabaseEngine:           databaseInstance.DatabaseEngine,
@@ -1100,9 +1106,15 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 	// Determine change type based on SQL content
 	changeType := types.PlanCheckRunConfig_SDL // Default to SDL (schema definition language) for comprehensive checking
 
+	// Determine environment ID for review (use zero UUID if unassigned)
+	var envID uuid.UUID
+	if db.EnvironmentID != nil {
+		envID = *db.EnvironmentID
+	}
+
 	reviewResult, err := h.reviewService.Review(ctx, review.ReviewOptions{
 		ChangePlanID:             changePlan.ID,
-		EnvironmentID:            db.EnvironmentID,
+		EnvironmentID:            envID,
 		DatabaseID:               &db.ID,
 		SQLContent:               changePlan.SQLContent,
 		DatabaseEngine:           databaseInstance.DatabaseEngine,

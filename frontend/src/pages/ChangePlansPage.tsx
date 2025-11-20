@@ -57,7 +57,8 @@ export const ChangePlansPage: React.FC = () => {
 
   // Helper functions to get names
   const getProjectName = useCallback(
-    (projectId: string): string => {
+    (projectId: string | null | undefined): string => {
+      if (!projectId) return 'Unassigned';
       const project = projects.find((p) => p.id === projectId);
       return project?.name || projectId;
     },

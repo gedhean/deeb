@@ -93,12 +93,15 @@ export const DatabaseDetailPage: React.FC = () => {
 
   // Compute related entities from cached data
   const project = useMemo<Project | null>(
-    () => (database ? getProjectById(database.project_id) || null : null),
+    () => (database?.project_id ? getProjectById(database.project_id) || null : null),
     [database, getProjectById],
   );
 
   const environment = useMemo<Environment | null>(
-    () => (database ? environments.find((e) => e.id === database.environment_id) || null : null),
+    () =>
+      database?.environment_id
+        ? environments.find((e) => e.id === database.environment_id) || null
+        : null,
     [database, environments],
   );
 

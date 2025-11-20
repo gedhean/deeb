@@ -611,8 +611,19 @@ func TestDatabase_Validate(t *testing.T) {
 			database: &Database{
 				DatabaseName:       "test_db",
 				DatabaseInstanceID: uuid.New(),
-				ProjectID:          uuid.New(),
-				EnvironmentID:      uuid.New(),
+				ProjectID:          uuidPtr(uuid.New()),
+				EnvironmentID:      uuidPtr(uuid.New()),
+				CreatedByID:        uuid.New(),
+			},
+			wantErr: nil,
+		},
+		{
+			name: "valid database with nil project and environment",
+			database: &Database{
+				DatabaseName:       "test_db",
+				DatabaseInstanceID: uuid.New(),
+				ProjectID:          nil,
+				EnvironmentID:      nil,
 				CreatedByID:        uuid.New(),
 			},
 			wantErr: nil,
@@ -622,8 +633,8 @@ func TestDatabase_Validate(t *testing.T) {
 			database: &Database{
 				DatabaseName:       "",
 				DatabaseInstanceID: uuid.New(),
-				ProjectID:          uuid.New(),
-				EnvironmentID:      uuid.New(),
+				ProjectID:          uuidPtr(uuid.New()),
+				EnvironmentID:      uuidPtr(uuid.New()),
 			},
 			wantErr: ErrDatabaseNameRequired,
 		},
@@ -632,8 +643,8 @@ func TestDatabase_Validate(t *testing.T) {
 			database: &Database{
 				DatabaseName:       string(make([]byte, 256)),
 				DatabaseInstanceID: uuid.New(),
-				ProjectID:          uuid.New(),
-				EnvironmentID:      uuid.New(),
+				ProjectID:          uuidPtr(uuid.New()),
+				EnvironmentID:      uuidPtr(uuid.New()),
 			},
 			wantErr: ErrDatabaseNameTooLong,
 		},
@@ -642,38 +653,18 @@ func TestDatabase_Validate(t *testing.T) {
 			database: &Database{
 				DatabaseName:       "test_db",
 				DatabaseInstanceID: uuid.Nil,
-				ProjectID:          uuid.New(),
-				EnvironmentID:      uuid.New(),
+				ProjectID:          uuidPtr(uuid.New()),
+				EnvironmentID:      uuidPtr(uuid.New()),
 			},
 			wantErr: ErrDatabaseInstanceIDRequired,
-		},
-		{
-			name: "nil project ID",
-			database: &Database{
-				DatabaseName:       "test_db",
-				DatabaseInstanceID: uuid.New(),
-				ProjectID:          uuid.Nil,
-				EnvironmentID:      uuid.New(),
-			},
-			wantErr: ErrDatabaseProjectIDRequired,
-		},
-		{
-			name: "nil environment ID",
-			database: &Database{
-				DatabaseName:       "test_db",
-				DatabaseInstanceID: uuid.New(),
-				ProjectID:          uuid.New(),
-				EnvironmentID:      uuid.Nil,
-			},
-			wantErr: ErrDatabaseEnvironmentIDRequired,
 		},
 		{
 			name: "trimmed whitespace",
 			database: &Database{
 				DatabaseName:       "  test_db  ",
 				DatabaseInstanceID: uuid.New(),
-				ProjectID:          uuid.New(),
-				EnvironmentID:      uuid.New(),
+				ProjectID:          uuidPtr(uuid.New()),
+				EnvironmentID:      uuidPtr(uuid.New()),
 				CreatedByID:        uuid.New(),
 			},
 			wantErr: nil,
@@ -739,26 +730,6 @@ func TestValidateCreateDatabaseRequest(t *testing.T) {
 				EnvironmentID:      uuid.New(),
 			},
 			wantErr: ErrDatabaseInstanceIDRequired,
-		},
-		{
-			name: "nil project ID",
-			req: &CreateDatabaseRequest{
-				DatabaseName:       "test_db",
-				DatabaseInstanceID: uuid.New(),
-				ProjectID:          uuid.Nil,
-				EnvironmentID:      uuid.New(),
-			},
-			wantErr: ErrDatabaseProjectIDRequired,
-		},
-		{
-			name: "nil environment ID",
-			req: &CreateDatabaseRequest{
-				DatabaseName:       "test_db",
-				DatabaseInstanceID: uuid.New(),
-				ProjectID:          uuid.New(),
-				EnvironmentID:      uuid.Nil,
-			},
-			wantErr: ErrDatabaseEnvironmentIDRequired,
 		},
 	}
 
@@ -832,4 +803,8 @@ func stringPtr(s string) *string {
 
 func intPtr(i int) *int {
 	return &i
+}
+
+func uuidPtr(u uuid.UUID) *uuid.UUID {
+	return &u
 }

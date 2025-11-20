@@ -52,7 +52,7 @@ export const ChangePlanDetailPage: React.FC = () => {
 
   // Get related entities from cache
   const project = useMemo(() => {
-    return changePlan ? getProjectById(changePlan.project_id) : null;
+    return changePlan?.project_id ? getProjectById(changePlan.project_id) : null;
   }, [changePlan, getProjectById]);
 
   const database = useMemo(() => {
@@ -320,7 +320,9 @@ export const ChangePlanDetailPage: React.FC = () => {
                           {project.name}
                         </Button>
                       ) : (
-                        <p className="text-sm text-muted-foreground">{changePlan.project_id}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {changePlan.project_id || 'Unassigned'}
+                        </p>
                       )}
                     </div>
                   </div>

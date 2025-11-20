@@ -66,20 +66,26 @@ export const DatabaseInfoCard: React.FC<DatabaseInfoCardProps> = ({
             <p className="text-sm font-medium text-muted-foreground">Project</p>
             <div className="flex items-center gap-2">
               <FolderGit2 className="h-4 w-4 text-muted-foreground" />
-              <Button
-                variant="link"
-                className="h-auto p-0 text-sm"
-                onClick={() => onNavigate(`/projects/${database.project_id}`)}
-              >
-                {project?.name || database.project_id}
-              </Button>
+              {database.project_id ? (
+                <Button
+                  variant="link"
+                  className="h-auto p-0 text-sm"
+                  onClick={() => onNavigate(`/projects/${database.project_id}`)}
+                >
+                  {project?.name || database.project_id}
+                </Button>
+              ) : (
+                <span className="text-sm text-muted-foreground">Unassigned</span>
+              )}
             </div>
           </div>
           <div className="space-y-1">
             <p className="text-sm font-medium text-muted-foreground">Environment</p>
             <div className="flex items-center gap-2">
               <Globe className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">{environment?.name || database.environment_id}</span>
+              <span className="text-sm">
+                {environment?.name || database.environment_id || 'Unassigned'}
+              </span>
             </div>
           </div>
           <div className="space-y-1">

@@ -418,6 +418,13 @@ func setupDatabaseInstanceRoutes(
 	// Authorization middleware
 	authzMiddleware := middleware.NewAuthzMiddleware()
 
+	// POST sync databases for existing instance
+	// Requires databases.create permission (to create database records)
+	dbInstancesGroup.POST(
+		"/:id/sync",
+		dbInstanceHandler.SyncDatabases,
+		authzMiddleware.RequireOrganizationPermission(rbac.PermissionDatabasesCreate),
+	)
 	// POST test connection for existing instance - must come before /test-connection
 	// Requires database_instances.read permission
 	dbInstancesGroup.POST(

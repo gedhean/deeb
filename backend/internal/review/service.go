@@ -223,6 +223,12 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 
 // loadPolicyForEnvironment loads the SQL_REVIEW policy for an environment
 func (s *ReviewService) loadPolicyForEnvironment(ctx context.Context, environmentID uuid.UUID) (*models.Policy, error) {
+	// If environment ID is nil/zero, treat as unassigned (no environment)
+	if environmentID == uuid.Nil {
+		s.logger.Debug("No environment assigned, skipping policy load")
+		return nil, nil
+	}
+
 	// Fetch the environment
 	environment, err := s.environmentRepo.GetByID(ctx, environmentID)
 	if err != nil {

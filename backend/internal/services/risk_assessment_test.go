@@ -224,7 +224,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 
 				dbRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 					ID:                 dbID,
-					EnvironmentID:      envID,
+					EnvironmentID:      &envID,
 					DatabaseInstanceID: instanceID,
 				}, nil)
 
@@ -253,7 +253,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 
 				dbRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 					ID:                 dbID,
-					EnvironmentID:      envID,
+					EnvironmentID:      &envID,
 					DatabaseInstanceID: instanceID,
 				}, nil)
 
@@ -282,7 +282,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 
 				dbRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 					ID:                 dbID,
-					EnvironmentID:      envID,
+					EnvironmentID:      &envID,
 					DatabaseInstanceID: instanceID,
 				}, nil)
 
@@ -311,7 +311,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 
 				dbRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 					ID:                 dbID,
-					EnvironmentID:      envID,
+					EnvironmentID:      &envID,
 					DatabaseInstanceID: instanceID,
 				}, nil)
 
@@ -340,7 +340,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 
 				dbRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 					ID:                 dbID,
-					EnvironmentID:      envID,
+					EnvironmentID:      &envID,
 					DatabaseInstanceID: instanceID,
 				}, nil)
 
@@ -369,7 +369,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 
 				dbRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 					ID:                 dbID,
-					EnvironmentID:      envID,
+					EnvironmentID:      &envID,
 					DatabaseInstanceID: instanceID,
 				}, nil)
 
@@ -398,7 +398,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 
 				dbRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 					ID:                 dbID,
-					EnvironmentID:      envID,
+					EnvironmentID:      &envID,
 					DatabaseInstanceID: instanceID,
 				}, nil)
 
@@ -427,7 +427,7 @@ func TestRiskAssessmentService_AssessRisk(t *testing.T) {
 
 				dbRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 					ID:                 dbID,
-					EnvironmentID:      envID,
+					EnvironmentID:      &envID,
 					DatabaseInstanceID: instanceID,
 				}, nil)
 
@@ -742,7 +742,7 @@ func TestRiskAssessmentService_AssessRisk_ErrorHandling(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, targetDatabaseID).Return(&models.Database{
 			ID:                 targetDatabaseID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -775,7 +775,7 @@ func TestRiskAssessmentService_AssessRisk_ErrorHandling(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, targetDatabaseID).Return(&models.Database{
 			ID:                 targetDatabaseID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -819,7 +819,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -861,7 +861,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -903,7 +903,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -946,7 +946,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -989,7 +989,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -1032,7 +1032,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -1100,7 +1100,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 				mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 					ID:                 dbID,
-					EnvironmentID:      envID,
+					EnvironmentID:      &envID,
 					DatabaseInstanceID: instanceID,
 				}, nil)
 
@@ -1150,7 +1150,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -1193,7 +1193,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -1236,7 +1236,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 
@@ -1279,7 +1279,7 @@ func TestRiskAssessmentService_EdgeCases(t *testing.T) {
 
 		mockDBRepo.On("GetByID", ctx, mock.Anything).Return(&models.Database{
 			ID:                 dbID,
-			EnvironmentID:      envID,
+			EnvironmentID:      &envID,
 			DatabaseInstanceID: instanceID,
 		}, nil)
 

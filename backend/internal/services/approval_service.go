@@ -318,7 +318,12 @@ func (s *ApprovalService) verifySelfApprovalAllowed(
 	}
 
 	// Get the environment to check allow_self_approval setting
-	environment, err := s.environmentRepo.GetByID(ctx, database.EnvironmentID)
+	// Skip environment check if database is unassigned (nil EnvironmentID)
+	if database.EnvironmentID == nil {
+		return fmt.Errorf("cannot approve change plan for database without environment assignment")
+	}
+
+	environment, err := s.environmentRepo.GetByID(ctx, *database.EnvironmentID)
 	if err != nil {
 		if err == repository.ErrNotFound {
 			return fmt.Errorf("environment not found")

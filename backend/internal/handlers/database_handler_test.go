@@ -66,7 +66,7 @@ func (m *mockDatabaseRepository) ListByProject(
 	}
 	var filtered []*models.Database
 	for _, db := range m.databases {
-		if db.ProjectID == projectID {
+		if db.ProjectID != nil && *db.ProjectID == projectID {
 			filtered = append(filtered, db)
 		}
 	}
@@ -161,7 +161,7 @@ func (m *mockDatabaseRepository) ListByEnvironmentID(
 ) ([]*models.Database, error) {
 	var filtered []*models.Database
 	for _, db := range m.databases {
-		if db.EnvironmentID == environmentID {
+		if db.EnvironmentID != nil && *db.EnvironmentID == environmentID {
 			filtered = append(filtered, db)
 		}
 	}
@@ -438,21 +438,22 @@ func TestListDatabases(t *testing.T) {
 
 	t.Run("list databases successfully", func(t *testing.T) {
 		projectID := uuid.New()
+		envID := uuid.New()
 		repo := &mockDatabaseRepository{
 			databases: []*models.Database{
 				{
 					ID:                 uuid.New(),
 					DatabaseName:       "database1",
 					DatabaseInstanceID: uuid.New(),
-					ProjectID:          projectID,
-					EnvironmentID:      uuid.New(),
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
 				},
 				{
 					ID:                 uuid.New(),
 					DatabaseName:       "database2",
 					DatabaseInstanceID: uuid.New(),
-					ProjectID:          projectID,
-					EnvironmentID:      uuid.New(),
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
 				},
 			},
 		}
@@ -502,21 +503,23 @@ func TestListDatabases(t *testing.T) {
 	t.Run("list databases with project filter", func(t *testing.T) {
 		projectID := uuid.New()
 		otherProjectID := uuid.New()
+		envID := uuid.New()
+		otherEnvID := uuid.New()
 		repo := &mockDatabaseRepository{
 			databases: []*models.Database{
 				{
 					ID:                 uuid.New(),
 					DatabaseName:       "database1",
 					DatabaseInstanceID: uuid.New(),
-					ProjectID:          projectID,
-					EnvironmentID:      uuid.New(),
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
 				},
 				{
 					ID:                 uuid.New(),
 					DatabaseName:       "database2",
 					DatabaseInstanceID: uuid.New(),
-					ProjectID:          otherProjectID,
-					EnvironmentID:      uuid.New(),
+					ProjectID:          &otherProjectID,
+					EnvironmentID:      &otherEnvID,
 				},
 			},
 		}
@@ -608,14 +611,16 @@ func TestGetDatabase(t *testing.T) {
 
 	t.Run("get database successfully", func(t *testing.T) {
 		databaseID := uuid.New()
+		projectID := uuid.New()
+		envID := uuid.New()
 		repo := &mockDatabaseRepository{
 			databases: []*models.Database{
 				{
 					ID:                 databaseID,
 					DatabaseName:       "test_database",
 					DatabaseInstanceID: uuid.New(),
-					ProjectID:          uuid.New(),
-					EnvironmentID:      uuid.New(),
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
 				},
 			},
 		}
@@ -708,21 +713,22 @@ func TestListProjectDatabases(t *testing.T) {
 
 	t.Run("list project databases successfully", func(t *testing.T) {
 		projectID := uuid.New()
+		envID := uuid.New()
 		repo := &mockDatabaseRepository{
 			databases: []*models.Database{
 				{
 					ID:                 uuid.New(),
 					DatabaseName:       "database1",
 					DatabaseInstanceID: uuid.New(),
-					ProjectID:          projectID,
-					EnvironmentID:      uuid.New(),
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
 				},
 				{
 					ID:                 uuid.New(),
 					DatabaseName:       "database2",
 					DatabaseInstanceID: uuid.New(),
-					ProjectID:          projectID,
-					EnvironmentID:      uuid.New(),
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
 				},
 			},
 		}
@@ -818,14 +824,16 @@ func TestUpdateDatabase(t *testing.T) {
 
 	t.Run("update database successfully", func(t *testing.T) {
 		databaseID := uuid.New()
+		projectID := uuid.New()
+		envID := uuid.New()
 		repo := &mockDatabaseRepository{
 			databases: []*models.Database{
 				{
 					ID:                 databaseID,
 					DatabaseName:       "original_name",
 					DatabaseInstanceID: uuid.New(),
-					ProjectID:          uuid.New(),
-					EnvironmentID:      uuid.New(),
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
 				},
 			},
 		}
@@ -930,14 +938,16 @@ func TestDeleteDatabase(t *testing.T) {
 
 	t.Run("delete database successfully", func(t *testing.T) {
 		databaseID := uuid.New()
+		projectID := uuid.New()
+		envID := uuid.New()
 		repo := &mockDatabaseRepository{
 			databases: []*models.Database{
 				{
 					ID:                 databaseID,
 					DatabaseName:       "test_database",
 					DatabaseInstanceID: uuid.New(),
-					ProjectID:          uuid.New(),
-					EnvironmentID:      uuid.New(),
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
 				},
 			},
 		}

@@ -51,6 +51,14 @@ export const DatabaseInstancesPage: React.FC = () => {
     success: boolean;
     message?: string;
   } | null>(null);
+  const [syncResult, setSyncResult] = useState<{
+    total_found: number;
+    synced: number;
+    failed: number;
+    skipped: number;
+    failed_databases?: string[];
+    skipped_databases?: string[];
+  } | null>(null);
 
   // Use SWR hooks for data fetching
   const {
@@ -82,6 +90,7 @@ export const DatabaseInstancesPage: React.FC = () => {
     use_rds_iam_auth: false,
     require_ssl: false,
     environment_id: undefined,
+    sync_all_databases: false,
   });
   const [formErrors, setFormErrors] = useState<DatabaseInstanceFormErrors>({});
 
@@ -200,10 +209,16 @@ export const DatabaseInstancesPage: React.FC = () => {
       use_rds_iam_auth: formData.use_rds_iam_auth,
       require_ssl: formData.require_ssl,
       environment_id: formData.environment_id,
+      sync_all_databases: formData.sync_all_databases,
     };
 
     const result = await createDatabaseInstance(createData);
     if (result) {
+      // Store sync results if present
+      if (result.sync_results) {
+        setSyncResult(result.sync_results);
+      }
+
       setIsCreateOpen(false);
       setFormData({
         name: '',
@@ -216,6 +231,7 @@ export const DatabaseInstancesPage: React.FC = () => {
         use_rds_iam_auth: false,
         require_ssl: false,
         environment_id: undefined,
+        sync_all_databases: false,
       });
       setFormErrors({});
       setConnectionTestResult(null);
@@ -482,6 +498,74 @@ export const DatabaseInstancesPage: React.FC = () => {
               <div className="flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <span className="text-sm">{error}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Database Sync Results */}
+        {syncResult && (
+          <Card className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+            <CardContent className="pt-6">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <h3 className="font-semibold text-green-800 dark:text-green-200">
+                      Database Sync Completed
+                    </h3>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSyncResult(null)}
+                    className="text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100"
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+                <div className="grid grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-green-700 dark:text-green-300">Total Found:</span>{' '}
+                    <span className="font-medium text-green-900 dark:text-green-100">
+                      {syncResult.total_found}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-green-700 dark:text-green-300">Synced:</span>{' '}
+                    <span className="font-medium text-green-900 dark:text-green-100">
+                      {syncResult.synced}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-green-700 dark:text-green-300">Skipped:</span>{' '}
+                    <span className="font-medium text-green-900 dark:text-green-100">
+                      {syncResult.skipped}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-green-700 dark:text-green-300">Failed:</span>{' '}
+                    <span className="font-medium text-green-900 dark:text-green-100">
+                      {syncResult.failed}
+                    </span>
+                  </div>
+                </div>
+                {syncResult.skipped_databases && syncResult.skipped_databases.length > 0 && (
+                  <div className="text-sm">
+                    <span className="text-green-700 dark:text-green-300">Skipped databases:</span>{' '}
+                    <span className="text-green-800 dark:text-green-200">
+                      {syncResult.skipped_databases.join(', ')}
+                    </span>
+                  </div>
+                )}
+                {syncResult.failed_databases && syncResult.failed_databases.length > 0 && (
+                  <div className="text-sm">
+                    <span className="text-red-700 dark:text-red-300">Failed databases:</span>{' '}
+                    <span className="text-red-800 dark:text-red-200">
+                      {syncResult.failed_databases.join(', ')}
+                    </span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

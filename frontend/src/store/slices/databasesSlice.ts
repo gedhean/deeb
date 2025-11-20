@@ -121,6 +121,8 @@ export const createDatabasesSlice: StateCreator<DatabasesSlice, [], [], Database
   // Helper to get databases by project ID
   getDatabasesByProjectId: (projectId) => {
     const state = get();
-    return state.databases.filter((database) => database.project_id === projectId);
+    return state.databases.filter(
+      (database) => database.project_id && database.project_id === projectId,
+    );
   },
 });

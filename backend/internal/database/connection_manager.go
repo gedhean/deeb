@@ -532,3 +532,143 @@ func (cm *ConnectionManager) checkPostgreSQLDatabaseExists(
 
 	return true, nil
 }
+
+// ListDatabasesOnInstance lists all databases on the database instance, excluding system databases
+func (cm *ConnectionManager) ListDatabasesOnInstance(
+	ctx context.Context,
+	instance *models.DatabaseInstance,
+) ([]string, error) {
+	if instance == nil {
+		return nil, fmt.Errorf("database instance is required")
+	}
+
+	switch instance.DatabaseEngine {
+	case models.DatabaseEngineMySQL:
+		return cm.listMySQLDatabases(ctx, instance)
+	case models.DatabaseEnginePostgreSQL:
+		return cm.listPostgreSQLDatabases(ctx, instance)
+	default:
+		return nil, fmt.Errorf("unsupported database type: %s", instance.DatabaseEngine)
+	}
+}
+
+// listMySQLDatabases lists all databases on a MySQL instance, excluding system databases
+func (cm *ConnectionManager) listMySQLDatabases(
+	ctx context.Context,
+	instance *models.DatabaseInstance,
+) ([]string, error) {
+	// Decrypt password
+	password, err := utils.DecryptPassword(instance.ConnectionDetailsEncrypted, cm.encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt password: %w", err)
+	}
+
+	// Build MySQL DSN without database name to connect to the server
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/",
+		instance.Username,
+		password,
+		instance.Host,
+		instance.Port,
+	)
+
+	// Add SSL parameter if required
+	if instance.RequireSSL {
+		dsn += "?tls=true"
+	} else {
+		dsn += "?tls=false"
+	}
+
+	// Connect to MySQL server
+	db, err := sqlx.ConnectContext(ctx, "mysql", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to MySQL instance: %w", err)
+	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			cm.logger.Error("Failed to close MySQL connection", zap.Error(closeErr))
+		}
+	}()
+
+	// Query for all databases excluding system databases
+	query := `
+		SELECT SCHEMA_NAME
+		FROM information_schema.SCHEMATA
+		WHERE SCHEMA_NAME NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')
+		ORDER BY SCHEMA_NAME
+	`
+
+	var databases []string
+	err = db.SelectContext(ctx, &databases, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list databases: %w", err)
+	}
+
+	return databases, nil
+}
+
+// listPostgreSQLDatabases lists all databases on a PostgreSQL instance, excluding system databases
+func (cm *ConnectionManager) listPostgreSQLDatabases(
+	ctx context.Context,
+	instance *models.DatabaseInstance,
+) ([]string, error) {
+	// Decrypt password
+	password, err := utils.DecryptPassword(instance.ConnectionDetailsEncrypted, cm.encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt password: %w", err)
+	}
+
+	// Determine SSL mode
+	sslMode := "disable"
+	if instance.RequireSSL {
+		sslMode = "require"
+	}
+
+	// Build PostgreSQL DSN connecting to postgres database (default)
+	var dsn string
+	if password != "" {
+		dsn = fmt.Sprintf(
+			"postgres://%s:%s@%s:%d/postgres?sslmode=%s",
+			instance.Username,
+			password,
+			instance.Host,
+			instance.Port,
+			sslMode,
+		)
+	} else {
+		dsn = fmt.Sprintf(
+			"postgres://%s@%s:%d/postgres?sslmode=%s",
+			instance.Username,
+			instance.Host,
+			instance.Port,
+			sslMode,
+		)
+	}
+
+	// Connect to PostgreSQL server
+	db, err := sqlx.ConnectContext(ctx, "postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to PostgreSQL instance: %w", err)
+	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			cm.logger.Error("Failed to close PostgreSQL connection", zap.Error(closeErr))
+		}
+	}()
+
+	// Query for all databases excluding system databases
+	query := `
+		SELECT datname
+		FROM pg_database
+		WHERE datname NOT IN ('postgres', 'template0', 'template1')
+		AND datistemplate = false
+		ORDER BY datname
+	`
+
+	var databases []string
+	err = db.SelectContext(ctx, &databases, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list databases: %w", err)
+	}
+
+	return databases, nil
+}

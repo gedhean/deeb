@@ -33,8 +33,8 @@ export interface DatabasesColumnsProps {
   onDelete: (database: Database) => void;
   canUpdate: boolean;
   canDelete: boolean;
-  getProjectName: (projectId: string) => string;
-  getEnvironmentName: (environmentId: string) => string;
+  getProjectName: (projectId: string | null | undefined) => string;
+  getEnvironmentName: (environmentId: string | null | undefined) => string;
   getInstanceName: (instanceId: string) => string;
 }
 
@@ -83,7 +83,8 @@ export const getDatabasesColumns = ({
       displayName: 'Project',
     } as ColumnMeta,
     filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id));
+      const projectId = row.getValue(id);
+      return projectId ? value.includes(projectId) : false;
     },
   },
   {
@@ -106,7 +107,8 @@ export const getDatabasesColumns = ({
       displayName: 'Environment',
     } as ColumnMeta,
     filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id));
+      const environmentId = row.getValue(id);
+      return environmentId ? value.includes(environmentId) : false;
     },
   },
   {

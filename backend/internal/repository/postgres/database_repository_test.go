@@ -40,8 +40,8 @@ func TestDatabaseRepository_Create(t *testing.T) {
 		database := &models.Database{
 			DatabaseName:       "test_database",
 			DatabaseInstanceID: dbInstanceID,
-			ProjectID:          projectID,
-			EnvironmentID:      envID,
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Description:        &description,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        createdByID,
@@ -70,8 +70,8 @@ func TestDatabaseRepository_Create(t *testing.T) {
 		database := &models.Database{
 			DatabaseName:       "test_database",
 			DatabaseInstanceID: dbInstanceID,
-			ProjectID:          projectID,
-			EnvironmentID:      envID,
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Description:        nil,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        createdByID,
@@ -102,8 +102,8 @@ func TestDatabaseRepository_Create(t *testing.T) {
 			ID:                 existingID,
 			DatabaseName:       "test_database",
 			DatabaseInstanceID: dbInstanceID,
-			ProjectID:          projectID,
-			EnvironmentID:      envID,
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Description:        &description,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        createdByID,
@@ -123,11 +123,13 @@ func TestDatabaseRepository_Create(t *testing.T) {
 	})
 
 	t.Run("validation error - empty name", func(t *testing.T) {
+		projectID := uuid.New()
+		envID := uuid.New()
 		database := &models.Database{
 			DatabaseName:       "",
 			DatabaseInstanceID: uuid.New(),
-			ProjectID:          uuid.New(),
-			EnvironmentID:      uuid.New(),
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        uuid.New(),
 		}
@@ -137,45 +139,19 @@ func TestDatabaseRepository_Create(t *testing.T) {
 	})
 
 	t.Run("validation error - nil database instance ID", func(t *testing.T) {
+		projectID := uuid.New()
+		envID := uuid.New()
 		database := &models.Database{
 			DatabaseName:       "test_database",
 			DatabaseInstanceID: uuid.Nil,
-			ProjectID:          uuid.New(),
-			EnvironmentID:      uuid.New(),
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        uuid.New(),
 		}
 
 		err := repo.Create(ctx, database)
 		assert.Equal(t, models.ErrDatabaseInstanceIDRequired, err)
-	})
-
-	t.Run("validation error - nil project ID", func(t *testing.T) {
-		database := &models.Database{
-			DatabaseName:       "test_database",
-			DatabaseInstanceID: uuid.New(),
-			ProjectID:          uuid.Nil,
-			EnvironmentID:      uuid.New(),
-			Status:             models.DatabaseStatusActive,
-			CreatedByID:        uuid.New(),
-		}
-
-		err := repo.Create(ctx, database)
-		assert.Equal(t, models.ErrDatabaseProjectIDRequired, err)
-	})
-
-	t.Run("validation error - nil environment ID", func(t *testing.T) {
-		database := &models.Database{
-			DatabaseName:       "test_database",
-			DatabaseInstanceID: uuid.New(),
-			ProjectID:          uuid.New(),
-			EnvironmentID:      uuid.Nil,
-			Status:             models.DatabaseStatusActive,
-			CreatedByID:        uuid.New(),
-		}
-
-		err := repo.Create(ctx, database)
-		assert.Equal(t, models.ErrDatabaseEnvironmentIDRequired, err)
 	})
 
 	t.Run("database error", func(t *testing.T) {
@@ -187,8 +163,8 @@ func TestDatabaseRepository_Create(t *testing.T) {
 		database := &models.Database{
 			DatabaseName:       "test_database",
 			DatabaseInstanceID: dbInstanceID,
-			ProjectID:          projectID,
-			EnvironmentID:      envID,
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Description:        &description,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        createdByID,
@@ -240,9 +216,11 @@ func TestDatabaseRepository_GetByID(t *testing.T) {
 		assert.Equal(t, databaseID, database.ID)
 		assert.Equal(t, "test_database", database.DatabaseName)
 		assert.Equal(t, &description, database.Description)
-		assert.Equal(t, projectID, database.ProjectID)
+		assert.NotNil(t, database.ProjectID)
+		assert.Equal(t, projectID, *database.ProjectID)
 		assert.Equal(t, dbInstanceID, database.DatabaseInstanceID)
-		assert.Equal(t, envID, database.EnvironmentID)
+		assert.NotNil(t, database.EnvironmentID)
+		assert.Equal(t, envID, *database.EnvironmentID)
 		assert.Equal(t, models.DatabaseStatusActive, database.Status)
 		assert.Equal(t, createdByID, database.CreatedByID)
 
@@ -483,8 +461,10 @@ func TestDatabaseRepository_ListByProject(t *testing.T) {
 		assert.Len(t, databases, 2)
 		assert.Equal(t, databaseID1, databases[0].ID)
 		assert.Equal(t, databaseID2, databases[1].ID)
-		assert.Equal(t, projectID, databases[0].ProjectID)
-		assert.Equal(t, projectID, databases[1].ProjectID)
+		assert.NotNil(t, databases[0].ProjectID)
+		assert.Equal(t, projectID, *databases[0].ProjectID)
+		assert.NotNil(t, databases[1].ProjectID)
+		assert.Equal(t, projectID, *databases[1].ProjectID)
 
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -689,8 +669,10 @@ func TestDatabaseRepository_ListByEnvironmentID(t *testing.T) {
 		assert.Len(t, databases, 2)
 		assert.Equal(t, databaseID1, databases[0].ID)
 		assert.Equal(t, databaseID2, databases[1].ID)
-		assert.Equal(t, envID, databases[0].EnvironmentID)
-		assert.Equal(t, envID, databases[1].EnvironmentID)
+		assert.NotNil(t, databases[0].EnvironmentID)
+		assert.Equal(t, envID, *databases[0].EnvironmentID)
+		assert.NotNil(t, databases[1].EnvironmentID)
+		assert.Equal(t, envID, *databases[1].EnvironmentID)
 
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -747,8 +729,8 @@ func TestDatabaseRepository_Update(t *testing.T) {
 			ID:                 databaseID,
 			DatabaseName:       "updated_database",
 			DatabaseInstanceID: dbInstanceID,
-			ProjectID:          projectID,
-			EnvironmentID:      envID,
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Description:        &description,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        uuid.New(),
@@ -774,8 +756,8 @@ func TestDatabaseRepository_Update(t *testing.T) {
 			ID:                 databaseID,
 			DatabaseName:       "updated_database",
 			DatabaseInstanceID: dbInstanceID,
-			ProjectID:          projectID,
-			EnvironmentID:      envID,
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Description:        nil,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        uuid.New(),
@@ -794,12 +776,14 @@ func TestDatabaseRepository_Update(t *testing.T) {
 
 	t.Run("database not found", func(t *testing.T) {
 		databaseID := uuid.New()
+		projectID := uuid.New()
+		envID := uuid.New()
 		database := &models.Database{
 			ID:                 databaseID,
 			DatabaseName:       "updated_database",
 			DatabaseInstanceID: uuid.New(),
-			ProjectID:          uuid.New(),
-			EnvironmentID:      uuid.New(),
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        uuid.New(),
 		}
@@ -815,12 +799,14 @@ func TestDatabaseRepository_Update(t *testing.T) {
 	})
 
 	t.Run("validation error - empty name", func(t *testing.T) {
+		projectID := uuid.New()
+		envID := uuid.New()
 		database := &models.Database{
 			ID:                 uuid.New(),
 			DatabaseName:       "",
 			DatabaseInstanceID: uuid.New(),
-			ProjectID:          uuid.New(),
-			EnvironmentID:      uuid.New(),
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        uuid.New(),
 		}
@@ -829,44 +815,16 @@ func TestDatabaseRepository_Update(t *testing.T) {
 		assert.Equal(t, models.ErrDatabaseNameRequired, err)
 	})
 
-	t.Run("validation error - nil project ID", func(t *testing.T) {
-		database := &models.Database{
-			ID:                 uuid.New(),
-			DatabaseName:       "updated_database",
-			DatabaseInstanceID: uuid.New(),
-			ProjectID:          uuid.Nil,
-			EnvironmentID:      uuid.New(),
-			Status:             models.DatabaseStatusActive,
-			CreatedByID:        uuid.New(),
-		}
-
-		err := repo.Update(ctx, database)
-		assert.Equal(t, models.ErrDatabaseProjectIDRequired, err)
-	})
-
-	t.Run("validation error - nil environment ID", func(t *testing.T) {
-		database := &models.Database{
-			ID:                 uuid.New(),
-			DatabaseName:       "updated_database",
-			DatabaseInstanceID: uuid.New(),
-			ProjectID:          uuid.New(),
-			EnvironmentID:      uuid.Nil,
-			Status:             models.DatabaseStatusActive,
-			CreatedByID:        uuid.New(),
-		}
-
-		err := repo.Update(ctx, database)
-		assert.Equal(t, models.ErrDatabaseEnvironmentIDRequired, err)
-	})
-
 	t.Run("database error", func(t *testing.T) {
 		databaseID := uuid.New()
+		projectID := uuid.New()
+		envID := uuid.New()
 		database := &models.Database{
 			ID:                 databaseID,
 			DatabaseName:       "updated_database",
 			DatabaseInstanceID: uuid.New(),
-			ProjectID:          uuid.New(),
-			EnvironmentID:      uuid.New(),
+			ProjectID:          &projectID,
+			EnvironmentID:      &envID,
 			Status:             models.DatabaseStatusActive,
 			CreatedByID:        uuid.New(),
 		}

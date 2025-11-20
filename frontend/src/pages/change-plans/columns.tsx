@@ -38,7 +38,7 @@ const formatDate = (dateString: string) => {
 
 export interface ChangePlansColumnsProps {
   onView: (changePlan: ChangePlan) => void;
-  getProjectName: (projectId: string) => string;
+  getProjectName: (projectId: string | null | undefined) => string;
   getDatabaseName: (databaseId: string) => string;
   getAuthorName: (authorId: string) => string;
 }

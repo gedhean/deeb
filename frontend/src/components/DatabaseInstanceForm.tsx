@@ -23,6 +23,7 @@ export interface DatabaseInstanceFormData {
   use_rds_iam_auth: boolean;
   require_ssl: boolean;
   environment_id?: string;
+  sync_all_databases?: boolean;
 }
 
 export interface DatabaseInstanceFormErrors {
@@ -241,6 +242,27 @@ export const DatabaseInstanceForm: React.FC<DatabaseInstanceFormProps> = ({
           <span className="text-sm font-medium">Require SSL</span>
         </label>
       </div>
+
+      {/* Sync All Databases Checkbox - only show in create mode */}
+      {mode === 'create' && (
+        <div className="space-y-2">
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={formData.sync_all_databases || false}
+              onChange={(e) => handleFieldChange('sync_all_databases', e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 mt-0.5"
+            />
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">Sync all databases</span>
+              <span className="text-xs text-muted-foreground">
+                Automatically import all existing databases from this instance (excludes system
+                databases)
+              </span>
+            </div>
+          </label>
+        </div>
+      )}
     </div>
   );
 };
