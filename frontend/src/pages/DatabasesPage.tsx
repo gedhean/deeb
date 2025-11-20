@@ -448,6 +448,11 @@ export const DatabasesPage: React.FC = () => {
     [projectOptions, environmentOptions, instanceOptions],
   );
 
+  // Check if any filters are active
+  const hasActiveFilters = useMemo(() => {
+    return !!(projectFilter || environmentFilter || instanceFilter);
+  }, [projectFilter, environmentFilter, instanceFilter]);
+
   // Render access denied
   if (!canReadDatabases) {
     return (
@@ -514,7 +519,7 @@ export const DatabasesPage: React.FC = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!isLoading && databases.length === 0 ? (
+            {!isLoading && databases.length === 0 && !hasActiveFilters ? (
               <Empty>
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
