@@ -89,7 +89,7 @@ backend:
   # Liveness probe configuration
   livenessProbe:
     httpGet:
-      path: /health
+      path: /api/v1/health
       port: 8080
     initialDelaySeconds: 30
     periodSeconds: 10
@@ -99,7 +99,7 @@ backend:
   # Readiness probe configuration
   readinessProbe:
     httpGet:
-      path: /health
+      path: /api/v1/health
       port: 8080
     initialDelaySeconds: 10
     periodSeconds: 5
