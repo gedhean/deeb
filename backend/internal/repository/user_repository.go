@@ -29,6 +29,9 @@ type UserRepository interface {
 	// List retrieves all users with pagination
 	List(ctx context.Context, limit, offset int) ([]*models.User, error)
 
+	// Count returns the total number of users
+	Count(ctx context.Context) (int64, error)
+
 	// UpdateLastLogin updates the user's last login timestamp
 	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
 }

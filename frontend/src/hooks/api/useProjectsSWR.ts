@@ -14,11 +14,19 @@ import {
 } from '@/store';
 
 /**
+ * Parameters for projects list fetching
+ */
+export interface UseProjectsParams {
+  limit?: number;
+  offset?: number;
+}
+
+/**
  * SWR fetcher function for projects list
  */
-const fetchProjects = async () => {
-  const response = await projectsService.listProjects({ limit: 100 });
-  return response.items;
+const fetchProjects = async (params?: UseProjectsParams) => {
+  const response = await projectsService.listProjects(params || { limit: 100 });
+  return { items: response.items, total: response.total };
 };
 
 /**
@@ -43,20 +51,24 @@ interface UseProjectsResult {
  * This hook combines SWR for automatic request deduplication and background revalidation
  * with Zustand store for immediate cache availability across components.
  */
-export function useProjectsSWR(): UseProjectsResult {
+export function useProjectsSWR(params?: UseProjectsParams): UseProjectsResult {
   const storeProjects = useProjectsStore();
   const storeLoading = useProjectsLoading();
   const storeError = useProjectsError();
   const getProjectByIdFromStore = useGetProjectByIdStore();
 
+  // Create cache key that includes pagination params
+  const cacheKey = params ? ['/api/projects', params] : '/api/projects';
+
   // SWR hook for automatic caching and revalidation
   const {
-    data: swrProjects,
+    data: swrData,
     error: swrError,
     isLoading: swrLoading,
     mutate,
-  } = useSWR<Project[]>('/api/projects', fetchProjects, {
-    fallbackData: storeProjects.length > 0 ? storeProjects : undefined,
+  } = useSWR<{ items: Project[]; total: number }>(cacheKey, () => fetchProjects(params), {
+    fallbackData:
+      storeProjects.length > 0 ? { items: storeProjects, total: storeProjects.length } : undefined,
     revalidateIfStale: true,
     keepPreviousData: true,
   });
@@ -69,15 +81,16 @@ export function useProjectsSWR(): UseProjectsResult {
   // Helper to get project by ID
   const getProjectById = useCallback(
     (projectId: string) => {
-      const projects = swrProjects || storeProjects;
+      const projects = swrData?.items || storeProjects;
       return (
         projects.find((project) => project.id === projectId) || getProjectByIdFromStore(projectId)
       );
     },
-    [swrProjects, storeProjects, getProjectByIdFromStore],
+    [swrData, storeProjects, getProjectByIdFromStore],
   );
 
-  const projects = swrProjects || storeProjects;
+  const projects = swrData?.items || storeProjects;
+  const total = swrData?.total || storeProjects.length;
   const isLoading = swrLoading || storeLoading;
   const error = swrError
     ? swrError instanceof Error
@@ -87,7 +100,7 @@ export function useProjectsSWR(): UseProjectsResult {
 
   return {
     projects,
-    total: projects.length,
+    total,
     isLoading,
     error,
     refetch,

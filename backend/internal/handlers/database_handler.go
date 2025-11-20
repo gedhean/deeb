@@ -196,6 +196,7 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 	databaseInstanceIDStr := c.QueryParam("database_instance_id")
 
 	var databases []*models.Database
+	var totalCount int
 	var err error
 
 	// Filter by both project_id and environment_id
@@ -232,6 +233,21 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 		if len(databases) > limit {
 			databases = databases[:limit]
 		}
+		// For project+environment filter, count all matching databases
+		// This is inefficient but matches the filtering logic above
+		allProjectDatabases, err := h.databaseRepo.ListByProject(ctx, projectID, 10000, 0)
+		if err != nil {
+			h.logger.Error("Failed to count databases", zap.Error(err))
+			totalCount = len(databases)
+		} else {
+			count := 0
+			for _, db := range allProjectDatabases {
+				if db.EnvironmentID != nil && *db.EnvironmentID == environmentID {
+					count++
+				}
+			}
+			totalCount = count
+		}
 	} else if projectIDStr != "" {
 		projectID, parseErr := uuid.Parse(projectIDStr)
 		if parseErr != nil {
@@ -240,6 +256,9 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 			})
 		}
 		databases, err = h.databaseRepo.ListByProject(ctx, projectID, limit, offset)
+		if err == nil {
+			totalCount, err = h.databaseRepo.CountByProject(ctx, projectID)
+		}
 	} else if environmentIDStr != "" {
 		environmentID, parseErr := uuid.Parse(environmentIDStr)
 		if parseErr != nil {
@@ -248,6 +267,9 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 			})
 		}
 		databases, err = h.databaseRepo.ListByEnvironmentID(ctx, environmentID, limit, offset)
+		if err == nil {
+			totalCount, err = h.databaseRepo.CountByEnvironmentID(ctx, environmentID)
+		}
 	} else if databaseInstanceIDStr != "" {
 		databaseInstanceID, parseErr := uuid.Parse(databaseInstanceIDStr)
 		if parseErr != nil {
@@ -256,8 +278,14 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 			})
 		}
 		databases, err = h.databaseRepo.ListByInstanceID(ctx, databaseInstanceID, limit, offset)
+		if err == nil {
+			totalCount, err = h.databaseRepo.CountByInstanceID(ctx, databaseInstanceID)
+		}
 	} else {
 		databases, err = h.databaseRepo.List(ctx, limit, offset)
+		if err == nil {
+			totalCount, err = h.databaseRepo.Count(ctx)
+		}
 	}
 
 	if err != nil {
@@ -277,7 +305,7 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 		"databases": responses,
 		"limit":     limit,
 		"offset":    offset,
-		"count":     len(responses),
+		"total":     totalCount,
 	})
 }
 
@@ -366,6 +394,15 @@ func (h *DatabaseHandler) ListProjectDatabases(c echo.Context) error {
 		})
 	}
 
+	// Get total count
+	totalCount, err := h.databaseRepo.CountByProject(ctx, projectID)
+	if err != nil {
+		h.logger.Error("Failed to count project databases", zap.Error(err), zap.String("project_id", projectID.String()))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to count project databases",
+		})
+	}
+
 	// Convert to response format with related entities
 	responses := make([]*models.DatabaseResponse, len(databases))
 	for i, database := range databases {
@@ -377,7 +414,7 @@ func (h *DatabaseHandler) ListProjectDatabases(c echo.Context) error {
 		"project_id": projectID,
 		"limit":      limit,
 		"offset":     offset,
-		"count":      len(responses),
+		"total":      totalCount,
 	})
 }
 

@@ -1,0 +1,27 @@
+# Configuration files with sensitive data
+config.yaml
+
+# Generated files
+rds-discovered.yaml
+rds-no-secrets-manager.log
+rds-onboarding-success.log
+rds-onboarding-failed.log
+
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+

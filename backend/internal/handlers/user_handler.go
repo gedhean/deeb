@@ -136,6 +136,15 @@ func (h *UserHandler) ListUsers(c echo.Context) error {
 		})
 	}
 
+	// Get total count
+	totalCount, err := h.userRepo.Count(ctx)
+	if err != nil {
+		h.logger.Error("Failed to count users", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to count users",
+		})
+	}
+
 	// Convert to response format
 	responses := make([]*models.UserResponse, len(users))
 	for i, user := range users {
@@ -146,7 +155,7 @@ func (h *UserHandler) ListUsers(c echo.Context) error {
 		"users":  responses,
 		"limit":  limit,
 		"offset": offset,
-		"count":  len(responses),
+		"total":  totalCount,
 	})
 }
 

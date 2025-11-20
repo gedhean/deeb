@@ -75,12 +75,26 @@ export const ProjectsPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Create pagination params with useMemo
+  const paginationParams = useMemo(
+    () => ({
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+    }),
+    [pageIndex, pageSize],
+  );
+
   // Use cached projects from SWR hook
   const {
     projects: cachedProjects,
+    total,
     isLoading: projectsLoading,
     error: projectsError,
-  } = useProjectsSWR();
+  } = useProjectsSWR(paginationParams);
 
   // Use mutation hooks for create/update/delete
   const { createProject, isLoading: isCreating, error: createError } = useCreateProjectSWR();
@@ -138,10 +152,6 @@ export const ProjectsPage: React.FC = () => {
   // Admins see all projects, non-admins see projects from the hook (which may be filtered by backend)
   const projects = cachedProjects;
   const isLoading = projectsLoading;
-
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
 
   // Set error from SWR hook or mutation hooks if any
   useEffect(() => {
@@ -507,7 +517,7 @@ export const ProjectsPage: React.FC = () => {
                 pagination={{
                   pageIndex,
                   pageSize,
-                  totalCount: projects.length,
+                  totalCount: total,
                   onPageChange: setPageIndex,
                   onPageSizeChange: (newSize) => {
                     setPageSize(newSize);

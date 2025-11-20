@@ -54,6 +54,10 @@ export const DatabaseDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Pagination state for changelog table
+  const [changelogPageIndex, setChangelogPageIndex] = useState(0);
+  const [changelogPageSize, setChangelogPageSize] = useState(10);
+
   // Use cached data from SWR hooks
   const { getUserById } = useUsers();
   const { getProjectById } = useProjectsSWR();
@@ -531,6 +535,17 @@ export const DatabaseDetailPage: React.FC = () => {
                     columns={changelogColumns}
                     data={changelogs}
                     onRowClick={(row) => navigate(`/changelog/${row.id}`)}
+                    pagination={{
+                      pageIndex: changelogPageIndex,
+                      pageSize: changelogPageSize,
+                      totalCount: changelogs.length,
+                      onPageChange: setChangelogPageIndex,
+                      onPageSizeChange: (newSize) => {
+                        setChangelogPageSize(newSize);
+                        setChangelogPageIndex(0);
+                      },
+                      pageSizeOptions: [10, 20, 30, 50],
+                    }}
                   />
                 )}
               </CardContent>

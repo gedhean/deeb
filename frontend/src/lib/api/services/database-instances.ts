@@ -33,14 +33,14 @@ export const databaseInstancesService = {
 
     const response = await apiClient.get<{
       database_instances: DatabaseInstance[];
-      count: number;
+      total: number;
       limit: number;
       offset: number;
     }>(url);
 
     return {
       items: response.database_instances,
-      total: response.count,
+      total: response.total,
       page: Math.floor((response.offset || 0) / (response.limit || 100)) + 1,
       page_size: response.limit || 100,
     };

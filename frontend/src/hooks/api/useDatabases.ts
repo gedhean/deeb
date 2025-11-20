@@ -17,16 +17,18 @@ const fetchDatabases = async (filters?: {
   environment_id?: string;
   database_instance_id?: string;
   limit?: number;
+  offset?: number;
 }) => {
   const response = await databasesService.listDatabases({
     limit: filters?.limit || 1000,
     ...filters,
   });
-  return response.items;
+  return { items: response.items, total: response.total };
 };
 
 interface UseDatabasesResult {
   databases: Database[];
+  total: number;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -39,6 +41,7 @@ interface UseDatabasesOptions {
   environment_id?: string;
   database_instance_id?: string;
   limit?: number;
+  offset?: number;
 }
 
 /**
@@ -59,7 +62,13 @@ export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesRes
   const stableOptions = useMemo(
     () => options,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [options.project_id, options.environment_id, options.database_instance_id, options.limit],
+    [
+      options.project_id,
+      options.environment_id,
+      options.database_instance_id,
+      options.limit,
+      options.offset,
+    ],
   );
 
   // Create a unique SWR key based on filters
@@ -68,7 +77,8 @@ export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesRes
       stableOptions.project_id ||
       stableOptions.environment_id ||
       stableOptions.database_instance_id ||
-      stableOptions.limit
+      stableOptions.limit ||
+      stableOptions.offset
     ) {
       const params: Record<string, string> = {};
       if (stableOptions.project_id) params.project_id = stableOptions.project_id;
@@ -76,6 +86,7 @@ export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesRes
       if (stableOptions.database_instance_id)
         params.database_instance_id = stableOptions.database_instance_id;
       if (stableOptions.limit) params.limit = stableOptions.limit.toString();
+      if (stableOptions.offset) params.offset = stableOptions.offset.toString();
       return `/api/databases?${new URLSearchParams(params).toString()}`;
     }
     return '/api/databases';
@@ -83,12 +94,15 @@ export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesRes
 
   // SWR hook for automatic caching and revalidation
   const {
-    data: swrDatabases,
+    data: swrData,
     error: swrError,
     isLoading: swrLoading,
     mutate,
-  } = useSWR<Database[]>(swrKey, () => fetchDatabases(stableOptions), {
-    fallbackData: storeDatabases.length > 0 ? storeDatabases : undefined,
+  } = useSWR<{ items: Database[]; total: number }>(swrKey, () => fetchDatabases(stableOptions), {
+    fallbackData:
+      storeDatabases.length > 0
+        ? { items: storeDatabases, total: storeDatabases.length }
+        : undefined,
     revalidateIfStale: true,
     keepPreviousData: true,
   });
@@ -101,27 +115,28 @@ export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesRes
   // Helper to get database by ID
   const getDatabaseById = useCallback(
     (databaseId: string) => {
-      const databases = swrDatabases || storeDatabases;
+      const databases = swrData?.items || storeDatabases;
       return (
         databases.find((database) => database.id === databaseId) ||
         getDatabaseByIdFromStore(databaseId)
       );
     },
-    [swrDatabases, storeDatabases, getDatabaseByIdFromStore],
+    [swrData, storeDatabases, getDatabaseByIdFromStore],
   );
 
   // Helper to get databases by project ID
   const getDatabasesByProjectId = useCallback(
     (projectId: string) => {
-      const databases = swrDatabases || storeDatabases;
+      const databases = swrData?.items || storeDatabases;
       return databases.filter(
         (database) => database.project_id && database.project_id === projectId,
       );
     },
-    [swrDatabases, storeDatabases],
+    [swrData, storeDatabases],
   );
 
-  const databases = swrDatabases || storeDatabases;
+  const databases = swrData?.items || storeDatabases;
+  const total = swrData?.total || storeDatabases.length;
   const isLoading = swrLoading || storeLoading;
   const error = swrError
     ? swrError instanceof Error
@@ -131,6 +146,7 @@ export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesRes
 
   return {
     databases,
+    total,
     isLoading,
     error,
     refetch,

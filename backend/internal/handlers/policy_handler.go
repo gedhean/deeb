@@ -106,6 +106,7 @@ func (h *PolicyHandler) ListPolicies(c echo.Context) error {
 	// Parse type filter if provided
 	typeParam := c.QueryParam("type")
 	var policies []*models.Policy
+	var totalCount int64
 	var err error
 
 	if typeParam != "" {
@@ -117,8 +118,14 @@ func (h *PolicyHandler) ListPolicies(c echo.Context) error {
 			})
 		}
 		policies, err = h.policyRepo.GetByType(ctx, policyType, limit, offset)
+		if err == nil {
+			totalCount, err = h.policyRepo.CountByType(ctx, policyType)
+		}
 	} else {
 		policies, err = h.policyRepo.List(ctx, limit, offset)
+		if err == nil {
+			totalCount, err = h.policyRepo.Count(ctx)
+		}
 	}
 
 	if err != nil {
@@ -138,7 +145,7 @@ func (h *PolicyHandler) ListPolicies(c echo.Context) error {
 		"policies": responses,
 		"limit":    limit,
 		"offset":   offset,
-		"count":    len(responses),
+		"total":    totalCount,
 	})
 }
 

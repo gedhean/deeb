@@ -39,6 +39,21 @@ func (m *MockDatabaseRepository) Count(ctx context.Context) (int, error) {
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockDatabaseRepository) CountByProject(ctx context.Context, projectID uuid.UUID) (int, error) {
+	args := m.Called(ctx, projectID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockDatabaseRepository) CountByInstanceID(ctx context.Context, instanceID uuid.UUID) (int, error) {
+	args := m.Called(ctx, instanceID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockDatabaseRepository) CountByEnvironmentID(ctx context.Context, environmentID uuid.UUID) (int, error) {
+	args := m.Called(ctx, environmentID)
+	return args.Int(0), args.Error(1)
+}
+
 func (m *MockDatabaseRepository) GetByProjectID(
 	ctx context.Context,
 	projectID uuid.UUID,

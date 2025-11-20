@@ -54,9 +54,10 @@ import {
   useReactTable,
   type Table as TableType,
 } from '@tanstack/react-table';
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { DataTablePagination } from './data-table-pagination';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -87,6 +88,8 @@ export interface DataTablePaginationOptions {
   onPageSizeChange?: (pageSize: number) => void;
   /** Available page size options */
   pageSizeOptions?: number[];
+  /** Enable manual filtering (disable client-side filtering for server-side filtering) */
+  manualFiltering?: boolean;
 }
 
 export interface DataTableProps<TData, TValue> {
@@ -139,6 +142,8 @@ export interface DataTableProps<TData, TValue> {
   onRowSelectionChange?: (selectedRows: TData[]) => void;
   /** Callback when a row is clicked */
   onRowClick?: (row: TData) => void;
+  /** Callback when column filters change (for server-side filtering) */
+  onFiltersChange?: (filters: ColumnFiltersState) => void;
 }
 
 export function DataTable<TData, TValue>({
@@ -157,6 +162,7 @@ export function DataTable<TData, TValue>({
   enableRowSelection = false,
   onRowSelectionChange,
   onRowClick,
+  onFiltersChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -177,7 +183,7 @@ export function DataTable<TData, TValue>({
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: pagination ? undefined : getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
+    getFilteredRowModel: pagination?.manualFiltering ? undefined : getFilteredRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
     getFacetedMinMaxValues: getFacetedMinMaxValues(),
@@ -201,6 +207,9 @@ export function DataTable<TData, TValue>({
       manualPagination: true,
       pageCount,
     }),
+    ...(pagination?.manualFiltering && {
+      manualFiltering: true,
+    }),
     ...(enableRowSelection && {
       enableRowSelection: true,
     }),
@@ -213,6 +222,13 @@ export function DataTable<TData, TValue>({
       onRowSelectionChange(selectedRows);
     }
   }, [rowSelection, enableRowSelection, onRowSelectionChange, table]);
+
+  // Notify parent of filter changes
+  React.useEffect(() => {
+    if (onFiltersChange) {
+      onFiltersChange(columnFilters);
+    }
+  }, [columnFilters, onFiltersChange]);
 
   // Deprecation warnings for old toolbar props
   React.useEffect(() => {
@@ -349,60 +365,14 @@ export function DataTable<TData, TValue>({
 
       {/* Pagination */}
       {pagination && (
-        <div className="flex items-center justify-between px-2">
-          <div className="flex-1 text-sm text-muted-foreground">
-            {enableRowSelection && (
-              <span>
-                {table.getFilteredSelectedRowModel().rows.length} of{' '}
-                {table.getFilteredRowModel().rows.length} row(s) selected.
-              </span>
-            )}
-          </div>
-          <div className="flex items-center space-x-6 lg:space-x-8">
-            <div className="flex items-center space-x-2 text-muted-foreground">
-              <p className="text-sm font-medium text-muted-foreground">Rows per page</p>
-              <select
-                className="h-8 w-[70px] rounded-md border border-input bg-transparent px-2 py-1 text-sm"
-                value={pagination.pageSize}
-                onChange={(e) => {
-                  const newSize = Number(e.target.value);
-                  pagination.onPageSizeChange?.(newSize);
-                }}
-              >
-                {(pagination.pageSizeOptions ?? [10, 20, 30, 40, 50]).map((pageSize) => (
-                  <option key={pageSize} value={pageSize} className="text-muted-foreground">
-                    {pageSize}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex w-[100px] items-center justify-center text-sm font-medium text-muted-foreground">
-              Page {pagination.pageIndex + 1} of {pageCount ?? 1}
-            </div>
-            <div className="flex items-center space-x-2 text-muted-foreground">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => pagination.onPageChange?.(pagination.pageIndex - 1)}
-                disabled={pagination.pageIndex === 0}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => pagination.onPageChange?.(pagination.pageIndex + 1)}
-                disabled={
-                  pageCount ? pagination.pageIndex >= pageCount - 1 : !table.getCanNextPage()
-                }
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
+        <DataTablePagination
+          table={table}
+          pageSizeOptions={pagination.pageSizeOptions}
+          totalCount={pagination.totalCount}
+          pageIndex={pagination.pageIndex}
+          onPageChange={pagination.onPageChange}
+          onPageSizeChange={pagination.onPageSizeChange}
+        />
       )}
     </div>
   );

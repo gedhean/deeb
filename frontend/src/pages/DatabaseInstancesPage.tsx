@@ -60,12 +60,26 @@ export const DatabaseInstancesPage: React.FC = () => {
     skipped_databases?: string[];
   } | null>(null);
 
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Create pagination params with useMemo
+  const paginationParams = useMemo(
+    () => ({
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+    }),
+    [pageIndex, pageSize],
+  );
+
   // Use SWR hooks for data fetching
   const {
     databaseInstances: instances,
+    total,
     isLoading,
     error: instancesError,
-  } = useDatabaseInstancesSWR();
+  } = useDatabaseInstancesSWR(paginationParams);
   const { environments } = useEnvironmentsSWR();
 
   // Use mutation hooks
@@ -73,10 +87,6 @@ export const DatabaseInstancesPage: React.FC = () => {
   const { updateDatabaseInstance, isLoading: isUpdating } = useUpdateDatabaseInstance();
   const { deleteDatabaseInstance, isLoading: isDeleting } = useDeleteDatabaseInstance();
   const { testConnection, isLoading: isTestingConnection } = useTestConnection();
-
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
 
   // Form state
   const [formData, setFormData] = useState<DatabaseInstanceFormData>({
@@ -583,7 +593,7 @@ export const DatabaseInstancesPage: React.FC = () => {
               pagination={{
                 pageIndex,
                 pageSize,
-                totalCount: instances.length,
+                totalCount: total,
                 onPageChange: setPageIndex,
                 onPageSizeChange: (newSize) => {
                   setPageSize(newSize);

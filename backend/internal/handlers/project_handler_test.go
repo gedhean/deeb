@@ -205,6 +205,24 @@ func (m *mockDatabaseRepositoryForProject) Count(ctx context.Context) (int, erro
 	return len(m.databases), nil
 }
 
+func (m *mockDatabaseRepositoryForProject) CountByProject(ctx context.Context, projectID uuid.UUID) (int, error) {
+	count := 0
+	for _, db := range m.databases {
+		if db.ProjectID != nil && *db.ProjectID == projectID {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (m *mockDatabaseRepositoryForProject) CountByInstanceID(ctx context.Context, instanceID uuid.UUID) (int, error) {
+	return 0, nil
+}
+
+func (m *mockDatabaseRepositoryForProject) CountByEnvironmentID(ctx context.Context, environmentID uuid.UUID) (int, error) {
+	return 0, nil
+}
+
 func (m *mockDatabaseRepositoryForProject) GetByProjectID(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -339,6 +357,10 @@ func (m *mockUserRepositoryForProject) Update(ctx context.Context, user *models.
 func (m *mockUserRepositoryForProject) Delete(ctx context.Context, id uuid.UUID) error { return nil }
 func (m *mockUserRepositoryForProject) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
 	return nil, nil
+}
+
+func (m *mockUserRepositoryForProject) Count(ctx context.Context) (int64, error) {
+	return 0, nil
 }
 
 func (m *mockUserRepositoryForProject) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {

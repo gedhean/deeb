@@ -1,0 +1,18 @@
+# Deeb API Configuration
+# Copy this file to config.yaml and fill in your values
+
+# Deeb API URL (without trailing slash)
+deeb_api_url: "https://deeb.example.com"
+
+# Deeb API authentication token
+# You can obtain this from your Deeb account settings
+deeb_api_token: "your-api-token-here"
+
+# Deeb Project ID (UUID)
+# The project where database instances will be created
+deeb_project_id: "00000000-0000-0000-0000-000000000000"
+
+# AWS Region
+# The AWS region where your RDS instances are located
+aws_region: "us-east-1"
+

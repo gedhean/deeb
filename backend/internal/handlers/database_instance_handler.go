@@ -214,6 +214,7 @@ func (h *DatabaseInstanceHandler) ListDatabaseInstances(c echo.Context) error {
 
 	// Check for environment filter
 	var instances []*models.DatabaseInstance
+	var totalCount int64
 	var err error
 
 	environmentIDStr := c.QueryParam("environment_id")
@@ -226,16 +227,37 @@ func (h *DatabaseInstanceHandler) ListDatabaseInstances(c echo.Context) error {
 			})
 		}
 		instances, err = h.dbInstanceRepo.ListByEnvironment(ctx, environmentID, limit, offset)
+		if err != nil {
+			h.logger.Error("Failed to list database instances by environment", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to list database instances",
+			})
+		}
+		// Get total count for this environment
+		totalCount, err = h.dbInstanceRepo.CountByEnvironment(ctx, environmentID)
+		if err != nil {
+			h.logger.Error("Failed to count database instances by environment", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to count database instances",
+			})
+		}
 	} else {
 		// No filter, list all
 		instances, err = h.dbInstanceRepo.List(ctx, limit, offset)
-	}
-
-	if err != nil {
-		h.logger.Error("Failed to list database instances", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": "Failed to list database instances",
-		})
+		if err != nil {
+			h.logger.Error("Failed to list database instances", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to list database instances",
+			})
+		}
+		// Get total count
+		totalCount, err = h.dbInstanceRepo.Count(ctx)
+		if err != nil {
+			h.logger.Error("Failed to count database instances", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to count database instances",
+			})
+		}
 	}
 
 	// Convert to response format
@@ -248,7 +270,7 @@ func (h *DatabaseInstanceHandler) ListDatabaseInstances(c echo.Context) error {
 		"database_instances": responses,
 		"limit":              limit,
 		"offset":             offset,
-		"count":              len(responses),
+		"total":              totalCount,
 	})
 }
 

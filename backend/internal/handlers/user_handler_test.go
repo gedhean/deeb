@@ -92,6 +92,10 @@ func (m *mockUserRepository) List(ctx context.Context, limit, offset int) ([]*mo
 	return m.users[start:end], nil
 }
 
+func (m *mockUserRepository) Count(ctx context.Context) (int64, error) {
+	return int64(len(m.users)), nil
+}
+
 func (m *mockUserRepository) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
 	return nil
 }

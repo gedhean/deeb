@@ -201,6 +201,19 @@ func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*models
 	return users, nil
 }
 
+// Count returns the total number of users
+func (r *userRepository) Count(ctx context.Context) (int64, error) {
+	query := `SELECT COUNT(*) FROM users`
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count users: %w", err)
+	}
+
+	return count, nil
+}
+
 // UpdateLastLogin updates the user's last login timestamp
 func (r *userRepository) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
 	now := time.Now()

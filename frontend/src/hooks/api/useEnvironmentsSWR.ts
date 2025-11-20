@@ -9,15 +9,24 @@ import type {
 import { APIError } from '@/lib/api/types';
 
 /**
+ * Parameters for environments list fetching
+ */
+export interface UseEnvironmentsParams {
+  limit?: number;
+  offset?: number;
+}
+
+/**
  * SWR fetcher function for environments list
  */
-const fetchEnvironments = async () => {
-  const response = await environmentsService.listEnvironments({ limit: 100 });
-  return response.items;
+const fetchEnvironments = async (params?: UseEnvironmentsParams) => {
+  const response = await environmentsService.listEnvironments(params || { limit: 100 });
+  return { items: response.items, total: response.total };
 };
 
 interface UseEnvironmentsResult {
   environments: Environment[];
+  total: number;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -28,13 +37,16 @@ interface UseEnvironmentsResult {
  *
  * This hook uses SWR for automatic request deduplication and background revalidation.
  */
-export function useEnvironmentsSWR(): UseEnvironmentsResult {
+export function useEnvironmentsSWR(params?: UseEnvironmentsParams): UseEnvironmentsResult {
+  // Create cache key that includes pagination params
+  const cacheKey = params ? ['/api/environments', params] : '/api/environments';
+
   const {
-    data: environments,
+    data: swrData,
     error: swrError,
     isLoading,
     mutate,
-  } = useSWR<Environment[]>('/api/environments', fetchEnvironments, {
+  } = useSWR<{ items: Environment[]; total: number }>(cacheKey, () => fetchEnvironments(params), {
     revalidateIfStale: true,
     keepPreviousData: true,
   });
@@ -50,7 +62,8 @@ export function useEnvironmentsSWR(): UseEnvironmentsResult {
     : null;
 
   return {
-    environments: environments || [],
+    environments: swrData?.items || [],
+    total: swrData?.total || 0,
     isLoading,
     error,
     refetch,

@@ -10,15 +10,24 @@ import { APIError } from '@/lib/api/types';
 import { showSuccessToast } from '@/lib/errorHandling';
 
 /**
+ * Parameters for database instances list fetching
+ */
+export interface UseDatabaseInstancesParams {
+  limit?: number;
+  offset?: number;
+}
+
+/**
  * SWR fetcher function for database instances list
  */
-const fetchDatabaseInstances = async () => {
-  const response = await databaseInstancesService.listDatabaseInstances({ limit: 100 });
-  return response.items;
+const fetchDatabaseInstances = async (params?: UseDatabaseInstancesParams) => {
+  const response = await databaseInstancesService.listDatabaseInstances(params || { limit: 100 });
+  return { items: response.items, total: response.total };
 };
 
 interface UseDatabaseInstancesResult {
   databaseInstances: DatabaseInstance[];
+  total: number;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -29,16 +38,25 @@ interface UseDatabaseInstancesResult {
  *
  * This hook uses SWR for automatic request deduplication and background revalidation.
  */
-export function useDatabaseInstancesSWR(): UseDatabaseInstancesResult {
+export function useDatabaseInstancesSWR(
+  params?: UseDatabaseInstancesParams,
+): UseDatabaseInstancesResult {
+  // Create cache key that includes pagination params
+  const cacheKey = params ? ['/api/database-instances', params] : '/api/database-instances';
+
   const {
-    data: databaseInstances,
+    data: swrData,
     error: swrError,
     isLoading,
     mutate,
-  } = useSWR<DatabaseInstance[]>('/api/database-instances', fetchDatabaseInstances, {
-    revalidateIfStale: true,
-    keepPreviousData: true,
-  });
+  } = useSWR<{ items: DatabaseInstance[]; total: number }>(
+    cacheKey,
+    () => fetchDatabaseInstances(params),
+    {
+      revalidateIfStale: true,
+      keepPreviousData: true,
+    },
+  );
 
   const refetch = useCallback(async () => {
     await mutate();
@@ -51,7 +69,8 @@ export function useDatabaseInstancesSWR(): UseDatabaseInstancesResult {
     : null;
 
   return {
-    databaseInstances: databaseInstances || [],
+    databaseInstances: swrData?.items || [],
+    total: swrData?.total || 0,
     isLoading,
     error,
     refetch,

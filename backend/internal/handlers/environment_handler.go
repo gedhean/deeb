@@ -153,6 +153,15 @@ func (h *EnvironmentHandler) ListEnvironments(c echo.Context) error {
 		})
 	}
 
+	// Get total count
+	totalCount, err := h.envRepo.Count(ctx)
+	if err != nil {
+		h.logger.Error("Failed to count environments", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to count environments",
+		})
+	}
+
 	// Convert to response format
 	responses := make([]*models.EnvironmentResponse, len(environments))
 	for i, env := range environments {
@@ -163,7 +172,7 @@ func (h *EnvironmentHandler) ListEnvironments(c echo.Context) error {
 		"environments": responses,
 		"limit":        limit,
 		"offset":       offset,
-		"count":        len(responses),
+		"total":        totalCount,
 	})
 }
 

@@ -11,15 +11,24 @@ import {
 } from '@/store';
 
 /**
+ * Parameters for users list fetching
+ */
+export interface UseUsersParams {
+  limit?: number;
+  offset?: number;
+}
+
+/**
  * SWR fetcher function for users list
  */
-const fetchUsers = async () => {
-  const response = await usersService.listUsers({ limit: 100 });
-  return response.items;
+const fetchUsers = async (params?: UseUsersParams) => {
+  const response = await usersService.listUsers(params || { limit: 100 });
+  return { items: response.items, total: response.total };
 };
 
 interface UseUsersResult {
   users: User[];
+  total: number;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -38,21 +47,25 @@ interface UseUsersResult {
  * - Fallback to Zustand store while SWR is fetching
  * - Persistent cache across page reloads via Zustand persist middleware
  */
-export function useUsers(): UseUsersResult {
+export function useUsers(params?: UseUsersParams): UseUsersResult {
   const storeUsers = useUsersStore();
   const storeLoading = useUsersLoading();
   const storeError = useUsersError();
   const getUserByIdFromStore = useGetUserByIdStore();
 
+  // Create cache key that includes pagination params
+  const cacheKey = params ? ['/api/users', params] : '/api/users';
+
   // SWR hook for automatic caching and revalidation
   const {
-    data: swrUsers,
+    data: swrData,
     error: swrError,
     isLoading: swrLoading,
     mutate,
-  } = useSWR<User[]>('/api/users', fetchUsers, {
+  } = useSWR<{ items: User[]; total: number }>(cacheKey, () => fetchUsers(params), {
     // Use store data as fallback while fetching
-    fallbackData: storeUsers.length > 0 ? storeUsers : undefined,
+    fallbackData:
+      storeUsers.length > 0 ? { items: storeUsers, total: storeUsers.length } : undefined,
     // Revalidate on mount if data is older than 5 minutes
     revalidateIfStale: true,
     // Keep previous data while revalidating
@@ -68,14 +81,15 @@ export function useUsers(): UseUsersResult {
   const getUserById = useCallback(
     (userId: string) => {
       // Try SWR data first, fall back to store
-      const users = swrUsers || storeUsers;
+      const users = swrData?.items || storeUsers;
       return users.find((user) => user.id === userId) || getUserByIdFromStore(userId);
     },
-    [swrUsers, storeUsers, getUserByIdFromStore],
+    [swrData, storeUsers, getUserByIdFromStore],
   );
 
   // Use SWR data if available, otherwise fall back to store
-  const users = swrUsers || storeUsers;
+  const users = swrData?.items || storeUsers;
+  const total = swrData?.total || storeUsers.length;
   const isLoading = swrLoading || storeLoading;
   const error = swrError
     ? swrError instanceof Error
@@ -85,6 +99,7 @@ export function useUsers(): UseUsersResult {
 
   return {
     users,
+    total,
     isLoading,
     error,
     refetch,

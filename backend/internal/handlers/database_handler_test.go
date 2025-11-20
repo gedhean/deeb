@@ -56,6 +56,40 @@ func (m *mockDatabaseRepository) List(ctx context.Context, limit, offset int) ([
 	return m.databases, nil
 }
 
+func (m *mockDatabaseRepository) Count(ctx context.Context) (int, error) {
+	return len(m.databases), nil
+}
+
+func (m *mockDatabaseRepository) CountByProject(ctx context.Context, projectID uuid.UUID) (int, error) {
+	count := 0
+	for _, db := range m.databases {
+		if db.ProjectID != nil && *db.ProjectID == projectID {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (m *mockDatabaseRepository) CountByInstanceID(ctx context.Context, instanceID uuid.UUID) (int, error) {
+	count := 0
+	for _, db := range m.databases {
+		if db.DatabaseInstanceID == instanceID {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (m *mockDatabaseRepository) CountByEnvironmentID(ctx context.Context, environmentID uuid.UUID) (int, error) {
+	count := 0
+	for _, db := range m.databases {
+		if db.EnvironmentID != nil && *db.EnvironmentID == environmentID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (m *mockDatabaseRepository) ListByProject(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -126,10 +160,6 @@ func (m *mockDatabaseRepository) GetByInstanceAndName(
 		}
 	}
 	return nil, repository.ErrNotFound
-}
-
-func (m *mockDatabaseRepository) Count(ctx context.Context) (int, error) {
-	return len(m.databases), nil
 }
 
 func (m *mockDatabaseRepository) GetByProjectID(

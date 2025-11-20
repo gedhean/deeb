@@ -130,6 +130,18 @@ func (m *mockDatabaseRepositoryForInstance) List(ctx context.Context, limit, off
 }
 func (m *mockDatabaseRepositoryForInstance) Count(ctx context.Context) (int, error) { return 0, nil }
 
+func (m *mockDatabaseRepositoryForInstance) CountByProject(ctx context.Context, projectID uuid.UUID) (int, error) {
+	return 0, nil
+}
+
+func (m *mockDatabaseRepositoryForInstance) CountByInstanceID(ctx context.Context, instanceID uuid.UUID) (int, error) {
+	return 0, nil
+}
+
+func (m *mockDatabaseRepositoryForInstance) CountByEnvironmentID(ctx context.Context, environmentID uuid.UUID) (int, error) {
+	return 0, nil
+}
+
 func (m *mockDatabaseRepositoryForInstance) GetByProjectID(
 	ctx context.Context,
 	projectID uuid.UUID,

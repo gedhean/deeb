@@ -48,10 +48,6 @@ export const EnvironmentsPage: React.FC = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedEnvironment, setSelectedEnvironment] = useState<Environment | null>(null);
 
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-
   // Form state
   const [formData, setFormData] = useState<CreateEnvironmentRequest>({
     name: '',
@@ -83,8 +79,21 @@ export const EnvironmentsPage: React.FC = () => {
     OrganizationPermission.EnvironmentsDelete,
   );
 
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Create pagination params with useMemo
+  const paginationParams = useMemo(
+    () => ({
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+    }),
+    [pageIndex, pageSize],
+  );
+
   // Use SWR hooks for data fetching
-  const { environments, isLoading, error } = useEnvironmentsSWR();
+  const { environments, total, isLoading, error } = useEnvironmentsSWR(paginationParams);
   const { policies, isLoading: isLoadingPolicies } = usePolicies({
     type: 'SQL_REVIEW',
     limit: 100,
@@ -365,7 +374,7 @@ export const EnvironmentsPage: React.FC = () => {
                 pagination={{
                   pageIndex,
                   pageSize,
-                  totalCount: environments.length,
+                  totalCount: total,
                   onPageChange: setPageIndex,
                   onPageSizeChange: (newSize) => {
                     setPageSize(newSize);

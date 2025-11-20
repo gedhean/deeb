@@ -48,17 +48,41 @@ export const DatabasesPage: React.FC = () => {
   const [selectedDatabase, setSelectedDatabase] = useState<Database | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Filter state for server-side filtering
+  const [projectFilter, setProjectFilter] = useState<string | undefined>(
+    currentProject?.id || undefined,
+  );
+  const [environmentFilter, setEnvironmentFilter] = useState<string | undefined>(undefined);
+  const [instanceFilter, setInstanceFilter] = useState<string | undefined>(undefined);
+
+  // Create pagination params with useMemo including filters
+  const databasesParams = useMemo(
+    () => ({
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+      project_id: projectFilter,
+      environment_id: environmentFilter,
+      database_instance_id: instanceFilter,
+    }),
+    [pageIndex, pageSize, projectFilter, environmentFilter, instanceFilter],
+  );
+
   // Use cached data from SWR hooks
   const { projects, isLoading: projectsLoading } = useProjectsSWR();
-  const { databases, isLoading: databasesLoading, refetch: refetchDatabases } = useDatabases({});
+  const {
+    databases,
+    total,
+    isLoading: databasesLoading,
+    refetch: refetchDatabases,
+  } = useDatabases(databasesParams);
   const { environments } = useEnvironmentsSWR();
   const { databaseInstances } = useDatabaseInstancesSWR();
 
   const isLoading = projectsLoading || databasesLoading;
-
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
 
   // Form state
   const [formData, setFormData] = useState<CreateDatabaseRequest>({
@@ -314,17 +338,53 @@ export const DatabasesPage: React.FC = () => {
     ],
   );
 
-  // Calculate initial column filters
+  // Calculate initial column filters based on filter state
   const initialColumnFilters = useMemo(() => {
     const columnFilters: { id: string; value: unknown }[] = [];
 
-    // Set default project if currentProject exists
-    if (currentProject?.id) {
-      columnFilters.push({ id: 'project', value: [currentProject.id] });
+    // Set project filter
+    if (projectFilter) {
+      columnFilters.push({ id: 'project', value: [projectFilter] });
+    }
+
+    // Set environment filter
+    if (environmentFilter) {
+      columnFilters.push({ id: 'environment', value: [environmentFilter] });
+    }
+
+    // Set instance filter
+    if (instanceFilter) {
+      columnFilters.push({ id: 'database_instance', value: [instanceFilter] });
     }
 
     return columnFilters;
-  }, [currentProject]);
+  }, [projectFilter, environmentFilter, instanceFilter]);
+
+  // Handle filter changes from DataTable
+  const handleFiltersChange = useCallback((filters: { id: string; value: unknown }[]) => {
+    // Extract filter values
+    const projectFilterObj = filters.find((f) => f.id === 'project');
+    const envFilterObj = filters.find((f) => f.id === 'environment');
+    const instFilterObj = filters.find((f) => f.id === 'database_instance');
+
+    // Update filter state (take first value from array, or undefined if filter not present or empty)
+    const projectVal = projectFilterObj?.value as string[] | undefined;
+    const envVal = envFilterObj?.value as string[] | undefined;
+    const instVal = instFilterObj?.value as string[] | undefined;
+
+    setProjectFilter(
+      projectVal && Array.isArray(projectVal) && projectVal.length > 0 ? projectVal[0] : undefined,
+    );
+    setEnvironmentFilter(
+      envVal && Array.isArray(envVal) && envVal.length > 0 ? envVal[0] : undefined,
+    );
+    setInstanceFilter(
+      instVal && Array.isArray(instVal) && instVal.length > 0 ? instVal[0] : undefined,
+    );
+
+    // Reset to first page when filters change
+    setPageIndex(0);
+  }, []);
 
   // Define filter definitions for the toolbar
   const filterDefinitions: FilterDefinition[] = useMemo(
@@ -485,15 +545,17 @@ export const DatabasesPage: React.FC = () => {
                 pagination={{
                   pageIndex,
                   pageSize,
-                  totalCount: databases.length,
+                  totalCount: total,
                   onPageChange: setPageIndex,
                   onPageSizeChange: (newSize) => {
                     setPageSize(newSize);
                     setPageIndex(0);
                   },
                   pageSizeOptions: [10, 20, 30, 50],
+                  manualFiltering: true,
                 }}
                 onRowClick={(database) => navigate(`/databases/${database.id}`)}
+                onFiltersChange={handleFiltersChange}
               >
                 {(table) => (
                   <DataTableToolbar table={table} filters={filterDefinitions}>

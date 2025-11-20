@@ -21,6 +21,15 @@ type DatabaseRepository interface {
 	// Count returns the total number of databases
 	Count(ctx context.Context) (int, error)
 
+	// CountByProject returns the total number of databases for a specific project
+	CountByProject(ctx context.Context, projectID uuid.UUID) (int, error)
+
+	// CountByInstanceID returns the total number of databases for a specific database instance
+	CountByInstanceID(ctx context.Context, instanceID uuid.UUID) (int, error)
+
+	// CountByEnvironmentID returns the total number of databases for a specific environment
+	CountByEnvironmentID(ctx context.Context, environmentID uuid.UUID) (int, error)
+
 	// GetByProjectID retrieves databases for a specific project (with pagination)
 	GetByProjectID(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]*models.Database, error)
 

@@ -72,15 +72,16 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
     error: instanceError,
   } = useDatabaseInstanceById(id);
 
-  // Fetch databases filtered by instance ID
+  // Fetch databases filtered by instance ID with pagination
   const databasesParams = useMemo(
     () => ({
       database_instance_id: id,
-      limit: 100,
+      limit: pageSize,
+      offset: pageIndex * pageSize,
     }),
-    [id],
+    [id, pageSize, pageIndex],
   );
-  const { databases, isLoading: isLoadingDatabases } = useDatabases(databasesParams);
+  const { databases, total, isLoading: isLoadingDatabases } = useDatabases(databasesParams);
 
   // Fetch projects and environments for display
   const { projects } = useProjectsSWR();
@@ -474,7 +475,7 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
                 pagination={{
                   pageIndex,
                   pageSize,
-                  totalCount: databases.length,
+                  totalCount: total,
                   onPageChange: setPageIndex,
                   onPageSizeChange: (newSize) => {
                     setPageSize(newSize);

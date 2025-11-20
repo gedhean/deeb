@@ -125,6 +125,45 @@ func (r *DatabaseRepository) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// CountByProject returns the total number of databases for a specific project
+func (r *DatabaseRepository) CountByProject(ctx context.Context, projectID uuid.UUID) (int, error) {
+	query := `SELECT COUNT(*) FROM databases WHERE project_id = $1`
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, projectID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
+// CountByInstanceID returns the total number of databases for a specific database instance
+func (r *DatabaseRepository) CountByInstanceID(ctx context.Context, instanceID uuid.UUID) (int, error) {
+	query := `SELECT COUNT(*) FROM databases WHERE database_instance_id = $1`
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, instanceID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
+// CountByEnvironmentID returns the total number of databases for a specific environment
+func (r *DatabaseRepository) CountByEnvironmentID(ctx context.Context, environmentID uuid.UUID) (int, error) {
+	query := `SELECT COUNT(*) FROM databases WHERE environment_id = $1`
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, environmentID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
 // GetByProjectID retrieves databases for a specific project (with pagination)
 func (r *DatabaseRepository) GetByProjectID(
 	ctx context.Context,

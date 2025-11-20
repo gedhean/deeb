@@ -31,3 +31,7 @@ frontend/.claude/
 backend/.cursor/
 backend/.claude/
 .playwright-mcp/
+
+# Python
+.venv/
+**/.venv/

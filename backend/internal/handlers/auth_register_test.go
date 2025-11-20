@@ -67,6 +67,11 @@ func (m *MockUserRepository) List(ctx context.Context, limit, offset int) ([]*mo
 	return args.Get(0).([]*models.User), args.Error(1)
 }
 
+func (m *MockUserRepository) Count(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return int64(args.Int(0)), args.Error(1)
+}
+
 func (m *MockUserRepository) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)

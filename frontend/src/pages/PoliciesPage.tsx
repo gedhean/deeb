@@ -83,13 +83,14 @@ export const PoliciesPage: React.FC = () => {
   const policiesParams = useMemo(
     () => ({
       type: filterType === 'SQL_REVIEW' ? ('SQL_REVIEW' as const) : undefined,
-      limit: 100,
+      limit: pageSize,
+      offset: pageIndex * pageSize,
       enabled: canReadPolicies,
     }),
-    [filterType, canReadPolicies],
+    [filterType, pageSize, pageIndex, canReadPolicies],
   );
 
-  const { policies, isLoading, error } = usePolicies(policiesParams);
+  const { policies, total, isLoading, error } = usePolicies(policiesParams);
   const { environments } = useEnvironmentsSWR();
 
   // Use mutation hooks
@@ -400,7 +401,7 @@ export const PoliciesPage: React.FC = () => {
                 pagination={{
                   pageIndex,
                   pageSize,
-                  totalCount: policies.length,
+                  totalCount: total,
                   onPageChange: setPageIndex,
                   onPageSizeChange: (newSize) => {
                     setPageSize(newSize);

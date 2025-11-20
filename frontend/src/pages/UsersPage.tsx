@@ -38,7 +38,6 @@ import {
 export const UsersPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { users, isLoading, error: usersError } = useUsers();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -47,6 +46,17 @@ export const UsersPage: React.FC = () => {
   // Pagination state
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+
+  // Create pagination params with useMemo
+  const paginationParams = useMemo(
+    () => ({
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+    }),
+    [pageIndex, pageSize],
+  );
+
+  const { users, total, isLoading, error: usersError } = useUsers(paginationParams);
 
   // Use mutation hooks
   const { createUser, isLoading: isCreating } = useCreateUser();
@@ -377,7 +387,7 @@ export const UsersPage: React.FC = () => {
                 pagination={{
                   pageIndex,
                   pageSize,
-                  totalCount: users.length,
+                  totalCount: total,
                   onPageChange: setPageIndex,
                   onPageSizeChange: (newSize) => {
                     setPageSize(newSize);
