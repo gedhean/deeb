@@ -211,14 +211,13 @@ export const DatabaseInstanceForm: React.FC<DatabaseInstanceFormProps> = ({
               ? 'Enter database password'
               : 'Enter new password (leave blank to keep current)'
           }
-          disabled={formData.use_rds_iam_auth}
           aria-invalid={!!formErrors.password}
         />
         {formErrors.password && <p className="text-sm text-destructive">{formErrors.password}</p>}
       </div>
 
-      {/* RDS IAM Authentication Checkbox */}
-      <div className="space-y-2">
+      {/* RDS IAM Authentication Checkbox - Hidden until feature is completed */}
+      {/* <div className="space-y-2">
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -228,7 +227,7 @@ export const DatabaseInstanceForm: React.FC<DatabaseInstanceFormProps> = ({
           />
           <span className="text-sm font-medium">Use RDS IAM Authentication</span>
         </label>
-      </div>
+      </div> */}
 
       {/* Require SSL Checkbox */}
       <div className="space-y-2">
