@@ -81,7 +81,12 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
     }),
     [id, pageSize, pageIndex],
   );
-  const { databases, total, isLoading: isLoadingDatabases } = useDatabases(databasesParams);
+  const {
+    databases,
+    total,
+    isLoading: isLoadingDatabases,
+    refetch: refetchDatabases,
+  } = useDatabases(databasesParams);
 
   // Fetch projects and environments for display
   const { projects } = useProjectsSWR();
@@ -162,6 +167,9 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
     try {
       const result = await databaseInstancesService.syncDatabases(id);
       setSyncResult(result);
+
+      // Refetch databases to update the list
+      await refetchDatabases();
 
       // Show toast notification
       if (result.synced > 0) {
