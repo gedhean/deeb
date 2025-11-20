@@ -90,7 +90,7 @@ export const DatabaseInstancesPage: React.FC = () => {
     use_rds_iam_auth: false,
     require_ssl: false,
     environment_id: undefined,
-    sync_all_databases: false,
+    sync_all_databases: true,
   });
   const [formErrors, setFormErrors] = useState<DatabaseInstanceFormErrors>({});
 
@@ -317,6 +317,7 @@ export const DatabaseInstancesPage: React.FC = () => {
       password: '',
       use_rds_iam_auth: false,
       require_ssl: false,
+      sync_all_databases: true,
     });
     setFormErrors({});
     setConnectionTestResult(null);
