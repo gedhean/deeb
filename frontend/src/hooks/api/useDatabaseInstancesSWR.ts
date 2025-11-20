@@ -170,36 +170,32 @@ export function useDeleteDatabaseInstance(): UseDeleteDatabaseInstanceResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const deleteDatabaseInstance = useCallback(
-    async (id: string): Promise<boolean> => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        await databaseInstancesService.deleteDatabaseInstance(id);
+  const deleteDatabaseInstance = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      await databaseInstancesService.deleteDatabaseInstance(id);
 
-        // Invalidate database instances cache using global mutate
-        await globalMutate('/api/database-instances', undefined, { revalidate: true });
+      // Invalidate database instances cache using global mutate
+      await globalMutate('/api/database-instances', undefined, { revalidate: true });
 
-        // Invalidate the specific instance cache
-        await globalMutate(`/api/database-instances/${id}`);
+      // Invalidate the specific instance cache
+      await globalMutate(`/api/database-instances/${id}`);
 
-        // Invalidate related caches that may reference this instance
-        // This includes databases that belong to this instance
-        await globalMutate((key) => typeof key === 'string' && key.startsWith('/api/databases'));
+      // Invalidate related caches that may reference this instance
+      // This includes databases that belong to this instance
+      await globalMutate((key) => typeof key === 'string' && key.startsWith('/api/databases'));
 
-        showSuccessToast('Database instance deleted successfully');
-        return true;
-      } catch (err) {
-        const errorMsg =
-          err instanceof APIError ? err.message : 'Failed to delete database instance';
-        setError(errorMsg);
-        return false;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [],
-  );
+      showSuccessToast('Database instance deleted successfully');
+      return true;
+    } catch (err) {
+      const errorMsg = err instanceof APIError ? err.message : 'Failed to delete database instance';
+      setError(errorMsg);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   return { deleteDatabaseInstance, isLoading, error };
 }

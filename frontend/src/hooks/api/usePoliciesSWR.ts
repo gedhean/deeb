@@ -162,32 +162,29 @@ export function useCreatePolicy(): UseCreatePolicyResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const createPolicy = useCallback(
-    async (data: CreatePolicyRequest): Promise<Policy | null> => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const result = await policiesService.createPolicy(data);
+  const createPolicy = useCallback(async (data: CreatePolicyRequest): Promise<Policy | null> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const result = await policiesService.createPolicy(data);
 
-        // Invalidate all policies caches using global mutate with filter function
-        await mutate(
-          (key) => typeof key === 'string' && key.startsWith('/api/policies?'),
-          undefined,
-          { revalidate: true }
-        );
+      // Invalidate all policies caches using global mutate with filter function
+      await mutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/policies?'),
+        undefined,
+        { revalidate: true },
+      );
 
-        return result;
-      } catch (err) {
-        const errorMsg = err instanceof APIError ? err.message : 'Failed to create policy';
-        setError(errorMsg);
-        console.error('Failed to create policy:', err);
-        return null;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [],
-  );
+      return result;
+    } catch (err) {
+      const errorMsg = err instanceof APIError ? err.message : 'Failed to create policy';
+      setError(errorMsg);
+      console.error('Failed to create policy:', err);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   return {
     createPolicy,
@@ -220,7 +217,7 @@ export function useUpdatePolicy(): UseUpdatePolicyResult {
         await mutate(
           (key) => typeof key === 'string' && key.startsWith('/api/policies?'),
           undefined,
-          { revalidate: true }
+          { revalidate: true },
         );
 
         return result;
@@ -256,32 +253,29 @@ export function useDeletePolicy(): UseDeletePolicyResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const deletePolicy = useCallback(
-    async (id: string): Promise<boolean> => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        await policiesService.deletePolicy(id);
+  const deletePolicy = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      await policiesService.deletePolicy(id);
 
-        // Invalidate all policies caches using global mutate with filter function
-        await mutate(
-          (key) => typeof key === 'string' && key.startsWith('/api/policies?'),
-          undefined,
-          { revalidate: true }
-        );
+      // Invalidate all policies caches using global mutate with filter function
+      await mutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/policies?'),
+        undefined,
+        { revalidate: true },
+      );
 
-        return true;
-      } catch (err) {
-        const errorMsg = err instanceof APIError ? err.message : 'Failed to delete policy';
-        setError(errorMsg);
-        console.error('Failed to delete policy:', err);
-        return false;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [],
-  );
+      return true;
+    } catch (err) {
+      const errorMsg = err instanceof APIError ? err.message : 'Failed to delete policy';
+      setError(errorMsg);
+      console.error('Failed to delete policy:', err);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   return {
     deletePolicy,

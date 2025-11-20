@@ -126,28 +126,25 @@ export function useCreateUser(): UseCreateUserResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const createUser = useCallback(
-    async (data: CreateUserRequest): Promise<User | null> => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const result = await usersService.createUser(data);
+  const createUser = useCallback(async (data: CreateUserRequest): Promise<User | null> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const result = await usersService.createUser(data);
 
-        // Invalidate users cache using global mutate
-        await mutate('/api/users', undefined, { revalidate: true });
+      // Invalidate users cache using global mutate
+      await mutate('/api/users', undefined, { revalidate: true });
 
-        return result;
-      } catch (err) {
-        const errorMsg = err instanceof APIError ? err.message : 'Failed to create user';
-        setError(errorMsg);
-        console.error('Failed to create user:', err);
-        return null;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [],
-  );
+      return result;
+    } catch (err) {
+      const errorMsg = err instanceof APIError ? err.message : 'Failed to create user';
+      setError(errorMsg);
+      console.error('Failed to create user:', err);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   return {
     createUser,
@@ -212,28 +209,25 @@ export function useDeleteUser(): UseDeleteUserResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const deleteUser = useCallback(
-    async (id: string): Promise<boolean> => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        await usersService.deleteUser(id);
+  const deleteUser = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      await usersService.deleteUser(id);
 
-        // Invalidate users cache using global mutate
-        await mutate('/api/users', undefined, { revalidate: true });
+      // Invalidate users cache using global mutate
+      await mutate('/api/users', undefined, { revalidate: true });
 
-        return true;
-      } catch (err) {
-        const errorMsg = err instanceof APIError ? err.message : 'Failed to delete user';
-        setError(errorMsg);
-        console.error('Failed to delete user:', err);
-        return false;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [],
-  );
+      return true;
+    } catch (err) {
+      const errorMsg = err instanceof APIError ? err.message : 'Failed to delete user';
+      setError(errorMsg);
+      console.error('Failed to delete user:', err);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   return {
     deleteUser,
