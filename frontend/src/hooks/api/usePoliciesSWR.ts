@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { policiesService } from '@/lib/api/services/policies';
 import type {
@@ -161,7 +161,6 @@ interface UseCreatePolicyResult {
 export function useCreatePolicy(): UseCreatePolicyResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate } = useSWR(/^\/api\/policies\?/);
 
   const createPolicy = useCallback(
     async (data: CreatePolicyRequest): Promise<Policy | null> => {
@@ -170,8 +169,12 @@ export function useCreatePolicy(): UseCreatePolicyResult {
         setError(null);
         const result = await policiesService.createPolicy(data);
 
-        // Invalidate all policies caches
-        await mutate();
+        // Invalidate all policies caches using global mutate with filter function
+        await mutate(
+          (key) => typeof key === 'string' && key.startsWith('/api/policies?'),
+          undefined,
+          { revalidate: true }
+        );
 
         return result;
       } catch (err) {
@@ -183,7 +186,7 @@ export function useCreatePolicy(): UseCreatePolicyResult {
         setIsLoading(false);
       }
     },
-    [mutate],
+    [],
   );
 
   return {
@@ -205,7 +208,6 @@ interface UseUpdatePolicyResult {
 export function useUpdatePolicy(): UseUpdatePolicyResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate } = useSWR(/^\/api\/policies\?/);
 
   const updatePolicy = useCallback(
     async (id: string, data: UpdatePolicyRequest): Promise<Policy | null> => {
@@ -214,8 +216,12 @@ export function useUpdatePolicy(): UseUpdatePolicyResult {
         setError(null);
         const result = await policiesService.updatePolicy(id, data);
 
-        // Invalidate all policies caches
-        await mutate();
+        // Invalidate all policies caches using global mutate with filter function
+        await mutate(
+          (key) => typeof key === 'string' && key.startsWith('/api/policies?'),
+          undefined,
+          { revalidate: true }
+        );
 
         return result;
       } catch (err) {
@@ -227,7 +233,7 @@ export function useUpdatePolicy(): UseUpdatePolicyResult {
         setIsLoading(false);
       }
     },
-    [mutate],
+    [],
   );
 
   return {
@@ -249,7 +255,6 @@ interface UseDeletePolicyResult {
 export function useDeletePolicy(): UseDeletePolicyResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate } = useSWR(/^\/api\/policies\?/);
 
   const deletePolicy = useCallback(
     async (id: string): Promise<boolean> => {
@@ -258,8 +263,12 @@ export function useDeletePolicy(): UseDeletePolicyResult {
         setError(null);
         await policiesService.deletePolicy(id);
 
-        // Invalidate all policies caches
-        await mutate();
+        // Invalidate all policies caches using global mutate with filter function
+        await mutate(
+          (key) => typeof key === 'string' && key.startsWith('/api/policies?'),
+          undefined,
+          { revalidate: true }
+        );
 
         return true;
       } catch (err) {
@@ -271,7 +280,7 @@ export function useDeletePolicy(): UseDeletePolicyResult {
         setIsLoading(false);
       }
     },
-    [mutate],
+    [],
   );
 
   return {
