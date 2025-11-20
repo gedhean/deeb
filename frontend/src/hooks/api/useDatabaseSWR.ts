@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+import useSWR, { mutate as globalMutate } from 'swr';
 import { useCallback, useState } from 'react';
 import { databasesService } from '@/lib/api/services/databases';
 import type { Database, ChangePlan, CreateDatabaseRequest } from '@/lib/api/types';
@@ -94,9 +94,12 @@ export function useCreateDatabase(): UseCreateDatabaseResult {
         setError(null);
         const result = await databasesService.createDatabaseForInstance(instanceId, data);
 
-        // Invalidate databases cache
-        const { mutate: mutateGlobal } = await import('swr');
-        mutateGlobal((key: string) => typeof key === 'string' && key.startsWith('/api/databases'));
+        // Invalidate all databases caches using global mutate with filter function
+        await globalMutate(
+          (key) => typeof key === 'string' && key.startsWith('/api/databases'),
+          undefined,
+          { revalidate: true },
+        );
 
         return result;
       } catch (err) {

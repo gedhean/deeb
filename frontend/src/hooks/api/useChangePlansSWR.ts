@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+import useSWR, { mutate as globalMutate } from 'swr';
 import { useCallback, useState } from 'react';
 import { changePlanService } from '@/lib/api/services/changePlans';
 import type {
@@ -152,7 +152,6 @@ interface UseCreateChangePlanResult {
 export function useCreateChangePlanSWR(): UseCreateChangePlanResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate: mutateChangePlans } = useSWR('/api/change-plans');
 
   const createChangePlan = useCallback(
     async (data: CreateChangePlanRequest): Promise<ChangePlan | null> => {
@@ -161,8 +160,12 @@ export function useCreateChangePlanSWR(): UseCreateChangePlanResult {
         setError(null);
         const result = await changePlanService.createChangePlan(data);
 
-        // Update cache immediately
-        await mutateChangePlans();
+        // Invalidate all change plans caches using global mutate with filter function
+        await globalMutate(
+          (key) => typeof key === 'string' && key.startsWith('/api/change-plans'),
+          undefined,
+          { revalidate: true },
+        );
 
         return result;
       } catch (err) {
@@ -174,7 +177,7 @@ export function useCreateChangePlanSWR(): UseCreateChangePlanResult {
         setIsLoading(false);
       }
     },
-    [mutateChangePlans],
+    [],
   );
 
   return {
@@ -204,11 +207,11 @@ export function useUpdateChangePlanSWR(): UseUpdateChangePlanResult {
         setError(null);
         const result = await changePlanService.updateChangePlan(id, data);
 
-        // Update both the list and individual change plan caches
-        const { mutate: mutateGlobal } = await import('swr');
-        mutateGlobal(`/api/change-plans/${id}`);
-        mutateGlobal(
-          (key: string) => typeof key === 'string' && key.startsWith('/api/change-plans?'),
+        // Invalidate all change plans caches using global mutate with filter function
+        await globalMutate(
+          (key) => typeof key === 'string' && key.startsWith('/api/change-plans'),
+          undefined,
+          { revalidate: true },
         );
 
         return result;
@@ -250,11 +253,11 @@ export function useTriggerSQLReview(): UseTriggerSQLReviewResult {
       setError(null);
       await changePlanService.triggerSQLReview(id);
 
-      // Update both the individual change plan and list caches
-      const { mutate: mutateGlobal } = await import('swr');
-      mutateGlobal(`/api/change-plans/${id}`);
-      mutateGlobal(
-        (key: string) => typeof key === 'string' && key.startsWith('/api/change-plans?'),
+      // Invalidate all change plans caches using global mutate with filter function
+      await globalMutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/change-plans'),
+        undefined,
+        { revalidate: true },
       );
 
       showSuccessToast('SQL review triggered successfully');
@@ -296,11 +299,11 @@ export function useApproveChangePlan(): UseApproveChangePlanResult {
         setError(null);
         await changePlanService.approveChangePlan(id, data);
 
-        // Update both the individual change plan and list caches
-        const { mutate: mutateGlobal } = await import('swr');
-        mutateGlobal(`/api/change-plans/${id}`);
-        mutateGlobal(
-          (key: string) => typeof key === 'string' && key.startsWith('/api/change-plans?'),
+        // Invalidate all change plans caches using global mutate with filter function
+        await globalMutate(
+          (key) => typeof key === 'string' && key.startsWith('/api/change-plans'),
+          undefined,
+          { revalidate: true },
         );
 
         showSuccessToast('Change plan approved successfully');
@@ -344,11 +347,11 @@ export function useCloseChangePlan(): UseCloseChangePlanResult {
         setError(null);
         await changePlanService.closeChangePlan(id, data);
 
-        // Update both the individual change plan and list caches
-        const { mutate: mutateGlobal } = await import('swr');
-        mutateGlobal(`/api/change-plans/${id}`);
-        mutateGlobal(
-          (key: string) => typeof key === 'string' && key.startsWith('/api/change-plans?'),
+        // Invalidate all change plans caches using global mutate with filter function
+        await globalMutate(
+          (key) => typeof key === 'string' && key.startsWith('/api/change-plans'),
+          undefined,
+          { revalidate: true },
         );
 
         showSuccessToast('Change plan closed successfully');
@@ -391,11 +394,11 @@ export function useExecuteChangePlan(): UseExecuteChangePlanResult {
       setError(null);
       await changePlanService.executeChangePlan(id);
 
-      // Update both the individual change plan and list caches
-      const { mutate: mutateGlobal } = await import('swr');
-      mutateGlobal(`/api/change-plans/${id}`);
-      mutateGlobal(
-        (key: string) => typeof key === 'string' && key.startsWith('/api/change-plans?'),
+      // Invalidate all change plans caches using global mutate with filter function
+      await globalMutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/change-plans'),
+        undefined,
+        { revalidate: true },
       );
 
       showSuccessToast('Change plan executed successfully');

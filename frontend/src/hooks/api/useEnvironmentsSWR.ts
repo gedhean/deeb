@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 import { useCallback, useState } from 'react';
 import { environmentsService } from '@/lib/api/services/environments';
 import type {
@@ -69,7 +69,6 @@ interface UseCreateEnvironmentResult {
 export function useCreateEnvironmentSWR(): UseCreateEnvironmentResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate: mutateEnvironments } = useSWR('/api/environments');
 
   const createEnvironment = useCallback(
     async (data: CreateEnvironmentRequest): Promise<Environment | null> => {
@@ -78,8 +77,8 @@ export function useCreateEnvironmentSWR(): UseCreateEnvironmentResult {
         setError(null);
         const result = await environmentsService.createEnvironment(data);
 
-        // Update cache immediately
-        await mutateEnvironments();
+        // Invalidate environments cache using global mutate
+        await mutate('/api/environments', undefined, { revalidate: true });
 
         return result;
       } catch (err) {
@@ -91,7 +90,7 @@ export function useCreateEnvironmentSWR(): UseCreateEnvironmentResult {
         setIsLoading(false);
       }
     },
-    [mutateEnvironments],
+    [],
   );
 
   return {
@@ -113,7 +112,6 @@ interface UseUpdateEnvironmentResult {
 export function useUpdateEnvironmentSWR(): UseUpdateEnvironmentResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate: mutateEnvironments } = useSWR('/api/environments');
 
   const updateEnvironment = useCallback(
     async (id: string, data: UpdateEnvironmentRequest): Promise<Environment | null> => {
@@ -122,8 +120,8 @@ export function useUpdateEnvironmentSWR(): UseUpdateEnvironmentResult {
         setError(null);
         const result = await environmentsService.updateEnvironment(id, data);
 
-        // Update cache immediately
-        await mutateEnvironments();
+        // Invalidate environments cache using global mutate
+        await mutate('/api/environments', undefined, { revalidate: true });
 
         return result;
       } catch (err) {
@@ -135,7 +133,7 @@ export function useUpdateEnvironmentSWR(): UseUpdateEnvironmentResult {
         setIsLoading(false);
       }
     },
-    [mutateEnvironments],
+    [],
   );
 
   return {
@@ -157,30 +155,26 @@ interface UseDeleteEnvironmentResult {
 export function useDeleteEnvironmentSWR(): UseDeleteEnvironmentResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { mutate: mutateEnvironments } = useSWR('/api/environments');
 
-  const deleteEnvironment = useCallback(
-    async (id: string): Promise<boolean> => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        await environmentsService.deleteEnvironment(id);
+  const deleteEnvironment = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      await environmentsService.deleteEnvironment(id);
 
-        // Update cache immediately
-        await mutateEnvironments();
+      // Invalidate environments cache using global mutate
+      await mutate('/api/environments', undefined, { revalidate: true });
 
-        return true;
-      } catch (err) {
-        const errorMsg = err instanceof APIError ? err.message : 'Failed to delete environment';
-        setError(errorMsg);
-        console.error('Failed to delete environment:', err);
-        return false;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [mutateEnvironments],
-  );
+      return true;
+    } catch (err) {
+      const errorMsg = err instanceof APIError ? err.message : 'Failed to delete environment';
+      setError(errorMsg);
+      console.error('Failed to delete environment:', err);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   return {
     deleteEnvironment,

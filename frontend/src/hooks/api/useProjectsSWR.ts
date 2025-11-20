@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 import { useCallback, useState } from 'react';
 import { projectsService } from '@/lib/api/services/projects';
 import type { Project, CreateProjectRequest, UpdateProjectRequest } from '@/lib/api/types';
@@ -161,7 +161,6 @@ export function useCreateProjectSWR(): UseCreateProjectResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const addProjectToStore = useAddProjectStore();
-  const { mutate: mutateProjects } = useSWR('/api/projects');
 
   const createProject = useCallback(
     async (data: CreateProjectRequest): Promise<Project | null> => {
@@ -172,7 +171,9 @@ export function useCreateProjectSWR(): UseCreateProjectResult {
 
         // Update cache immediately
         addProjectToStore(result);
-        await mutateProjects();
+
+        // Invalidate projects cache using global mutate
+        await mutate('/api/projects', undefined, { revalidate: true });
 
         return result;
       } catch (err) {
@@ -184,7 +185,7 @@ export function useCreateProjectSWR(): UseCreateProjectResult {
         setIsLoading(false);
       }
     },
-    [addProjectToStore, mutateProjects],
+    [addProjectToStore],
   );
 
   return {
@@ -207,7 +208,6 @@ export function useUpdateProjectSWR(): UseUpdateProjectResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const updateProjectInStore = useUpdateProjectStore();
-  const { mutate: mutateProjects } = useSWR('/api/projects');
 
   const updateProject = useCallback(
     async (id: string, data: UpdateProjectRequest): Promise<Project | null> => {
@@ -218,7 +218,9 @@ export function useUpdateProjectSWR(): UseUpdateProjectResult {
 
         // Update cache immediately
         updateProjectInStore(id, result);
-        await mutateProjects();
+
+        // Invalidate projects cache using global mutate
+        await mutate('/api/projects', undefined, { revalidate: true });
 
         return result;
       } catch (err) {
@@ -230,7 +232,7 @@ export function useUpdateProjectSWR(): UseUpdateProjectResult {
         setIsLoading(false);
       }
     },
-    [updateProjectInStore, mutateProjects],
+    [updateProjectInStore],
   );
 
   return {
@@ -253,7 +255,6 @@ export function useDeleteProjectSWR(): UseDeleteProjectResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const removeProjectFromStore = useRemoveProjectStore();
-  const { mutate: mutateProjects } = useSWR('/api/projects');
 
   const deleteProject = useCallback(
     async (id: string): Promise<boolean> => {
@@ -264,7 +265,9 @@ export function useDeleteProjectSWR(): UseDeleteProjectResult {
 
         // Update cache immediately
         removeProjectFromStore(id);
-        await mutateProjects();
+
+        // Invalidate projects cache using global mutate
+        await mutate('/api/projects', undefined, { revalidate: true });
 
         return true;
       } catch (err) {
@@ -276,7 +279,7 @@ export function useDeleteProjectSWR(): UseDeleteProjectResult {
         setIsLoading(false);
       }
     },
-    [removeProjectFromStore, mutateProjects],
+    [removeProjectFromStore],
   );
 
   return {
