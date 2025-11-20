@@ -72,7 +72,7 @@ export const DatabaseInfoCard: React.FC<DatabaseInfoCardProps> = ({
                   className="h-auto p-0 text-sm"
                   onClick={() => onNavigate(`/projects/${database.project_id}`)}
                 >
-                  {project?.name || database.project_id}
+                  {project?.name || 'Unknown'}
                 </Button>
               ) : (
                 <span className="text-sm text-muted-foreground">Unassigned</span>
@@ -84,7 +84,7 @@ export const DatabaseInfoCard: React.FC<DatabaseInfoCardProps> = ({
             <div className="flex items-center gap-2">
               <Globe className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">
-                {environment?.name || database.environment_id || 'Unassigned'}
+                {database.environment_id ? environment?.name || 'Unknown' : 'Unassigned'}
               </span>
             </div>
           </div>
