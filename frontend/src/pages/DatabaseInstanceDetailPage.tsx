@@ -294,18 +294,11 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
               <CardDescription>Details about this database instance connection</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-3">
+                {/* Column 1 */}
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Name</p>
                   <p className="text-sm">{instance.name}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Status</p>
-                  <DatabaseStatusBadge status={instance.status} variant="instance" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Database Engine</p>
-                  <p className="text-sm font-mono">{instance.database_engine}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Host</p>
@@ -314,8 +307,30 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
                   </p>
                 </div>
                 <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">Status</p>
+                  <DatabaseStatusBadge status={instance.status} variant="instance" />
+                </div>
+
+                {/* Column 2 */}
+                {instance.description && (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Description</p>
+                    <p className="text-sm">{instance.description}</p>
+                  </div>
+                )}
+                <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Username</p>
                   <p className="text-sm font-mono">{instance.username}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">SSL Required</p>
+                  <p className="text-sm">{instance.require_ssl ? 'Yes' : 'No'}</p>
+                </div>
+
+                {/* Column 3 */}
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">Database Engine</p>
+                  <p className="text-sm font-mono">{instance.database_engine}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Authentication</p>
@@ -324,22 +339,12 @@ export const DatabaseInstanceDetailPage: React.FC = () => {
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">SSL Required</p>
-                  <p className="text-sm">{instance.require_ssl ? 'Yes' : 'No'}</p>
-                </div>
-                <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Created</p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar className="h-4 w-4" />
                     <span>{formatDate(instance.created_at)}</span>
                   </div>
                 </div>
-                {instance.description && (
-                  <div className="space-y-1 md:col-span-2">
-                    <p className="text-sm font-medium text-muted-foreground">Description</p>
-                    <p className="text-sm">{instance.description}</p>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
