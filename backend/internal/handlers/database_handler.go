@@ -193,6 +193,7 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 	// Parse filters
 	projectIDStr := c.QueryParam("project_id")
 	environmentIDStr := c.QueryParam("environment_id")
+	databaseInstanceIDStr := c.QueryParam("database_instance_id")
 
 	var databases []*models.Database
 	var err error
@@ -247,6 +248,14 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 			})
 		}
 		databases, err = h.databaseRepo.ListByEnvironmentID(ctx, environmentID, limit, offset)
+	} else if databaseInstanceIDStr != "" {
+		databaseInstanceID, parseErr := uuid.Parse(databaseInstanceIDStr)
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid database instance ID",
+			})
+		}
+		databases, err = h.databaseRepo.ListByInstanceID(ctx, databaseInstanceID, limit, offset)
 	} else {
 		databases, err = h.databaseRepo.List(ctx, limit, offset)
 	}

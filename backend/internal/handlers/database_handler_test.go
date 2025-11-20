@@ -603,6 +603,117 @@ func TestListDatabases(t *testing.T) {
 			t.Errorf("Expected status 400, got %d", rec.Code)
 		}
 	})
+
+	t.Run("list databases with database_instance_id filter", func(t *testing.T) {
+		instanceID := uuid.New()
+		otherInstanceID := uuid.New()
+		projectID := uuid.New()
+		envID := uuid.New()
+		repo := &mockDatabaseRepository{
+			databases: []*models.Database{
+				{
+					ID:                 uuid.New(),
+					DatabaseName:       "database1",
+					DatabaseInstanceID: instanceID,
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
+				},
+				{
+					ID:                 uuid.New(),
+					DatabaseName:       "database2",
+					DatabaseInstanceID: instanceID,
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
+				},
+				{
+					ID:                 uuid.New(),
+					DatabaseName:       "database3",
+					DatabaseInstanceID: otherInstanceID,
+					ProjectID:          &projectID,
+					EnvironmentID:      &envID,
+				},
+			},
+		}
+		handler := NewDatabaseHandler(
+			repo,
+			&mockProjectRepositoryForDB{},
+			&mockEnvironmentRepositoryForDB{},
+			&mockDatabaseInstanceRepositoryForDB{},
+			&mockChangePlanRepositoryForDB{},
+			nil,
+			logger,
+		)
+
+		e := echo.New()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/databases?database_instance_id="+instanceID.String(), nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(rbac.OrganizationAdmin),
+		})
+
+		if err := handler.ListDatabases(c); err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rec.Code)
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+
+		databases, ok := response["databases"].([]interface{})
+		if !ok {
+			t.Fatalf("Expected databases array, got %v", response)
+		}
+		if len(databases) != 2 {
+			t.Errorf("Expected 2 databases, got %d", len(databases))
+		}
+	})
+
+	t.Run("list databases with invalid database_instance_id filter", func(t *testing.T) {
+		repo := &mockDatabaseRepository{}
+		handler := NewDatabaseHandler(
+			repo,
+			&mockProjectRepositoryForDB{},
+			&mockEnvironmentRepositoryForDB{},
+			&mockDatabaseInstanceRepositoryForDB{},
+			&mockChangePlanRepositoryForDB{},
+			nil,
+			logger,
+		)
+
+		e := echo.New()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/databases?database_instance_id=invalid", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		// Set authenticated user context
+		userID := uuid.New()
+		c.Set("user", &auth.Claims{
+			UserID:           userID,
+			Email:            "admin@example.com",
+			OrganizationRole: string(rbac.OrganizationAdmin),
+		})
+
+		if err := handler.ListDatabases(c); err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", rec.Code)
+		}
+	})
 }
 
 func TestGetDatabase(t *testing.T) {
