@@ -737,7 +737,7 @@ func TestDatabaseRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE databases").
-			WithArgs(databaseID, database.DatabaseName, database.Description, database.Status, sqlmock.AnyArg()).
+			WithArgs(databaseID, database.ProjectID, database.EnvironmentID, database.DatabaseName, database.Description, database.Status, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, database)
@@ -764,7 +764,7 @@ func TestDatabaseRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE databases").
-			WithArgs(databaseID, database.DatabaseName, nil, database.Status, sqlmock.AnyArg()).
+			WithArgs(databaseID, database.ProjectID, database.EnvironmentID, database.DatabaseName, nil, database.Status, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, database)
@@ -789,7 +789,7 @@ func TestDatabaseRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE databases").
-			WithArgs(databaseID, database.DatabaseName, database.Description, database.Status, sqlmock.AnyArg()).
+			WithArgs(databaseID, database.ProjectID, database.EnvironmentID, database.DatabaseName, database.Description, database.Status, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Update(ctx, database)
@@ -830,7 +830,7 @@ func TestDatabaseRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE databases").
-			WithArgs(databaseID, database.DatabaseName, database.Description, database.Status, sqlmock.AnyArg()).
+			WithArgs(databaseID, database.ProjectID, database.EnvironmentID, database.DatabaseName, database.Description, database.Status, sqlmock.AnyArg()).
 			WillReturnError(errors.New("database error"))
 
 		err := repo.Update(ctx, database)

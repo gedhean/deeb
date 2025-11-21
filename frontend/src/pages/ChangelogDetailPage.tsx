@@ -7,8 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { MonacoSQLEditor } from '@/components/editors/MonacoSQLEditor';
 import { changelogService } from '@/lib/api/services/changelog';
+import { SNAPSHOT_STATUS } from '@/lib/api/types';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -262,17 +264,35 @@ export const ChangelogDetailPage: React.FC = () => {
             <CardHeader>
               <CardTitle>Schema Snapshot</CardTitle>
               <CardDescription>
-                No schema snapshot available for this changelog entry
+                {changelog.metadata?.snapshot_status === SNAPSHOT_STATUS.FAILED
+                  ? 'Schema snapshot capture failed'
+                  : 'No schema snapshot available'}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-center py-8 text-muted-foreground">
-                <p className="text-sm">
-                  {changelog.status === 'pending'
-                    ? 'Schema snapshot will be captured after execution'
-                    : 'No schema snapshot was captured for this entry'}
-                </p>
-              </div>
+              {changelog.metadata?.snapshot_status === SNAPSHOT_STATUS.FAILED ? (
+                <Alert
+                  variant="destructive"
+                  className="bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800"
+                >
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <AlertTitle className="text-amber-900 dark:text-amber-100">
+                    Snapshot Capture Failed
+                  </AlertTitle>
+                  <AlertDescription className="text-amber-800 dark:text-amber-200">
+                    {changelog.metadata?.snapshot_error ||
+                      'Unknown error occurred during snapshot capture'}
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <p className="text-sm">
+                    {changelog.status === 'pending'
+                      ? 'Schema snapshot will be captured after execution'
+                      : 'No schema snapshot was captured for this entry'}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

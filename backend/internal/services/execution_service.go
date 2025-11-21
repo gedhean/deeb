@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -485,39 +486,44 @@ func (s *ExecutionService) Execute(
 		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 	)
 
+	// Build changelog metadata
+	changelogMeta := models.ChangelogMetadata{}
+	var schemaVersionDuration time.Duration
+
 	schemaHistory, err := s.schemaVersionService.CaptureSchemaVersion(ctx, db.ID)
 	if err != nil {
-		s.logger.Error("Failed to capture schema version",
+		s.logger.Warn("Failed to capture schema snapshot - execution will continue",
 			zap.String("change_plan_id", changePlanID.String()),
 			zap.Error(err),
 		)
-		// Update status to Failed even though SQL executed successfully
-		// This is a safety measure - we want to know if schema capture failed
-		changePlan.Status = models.ChangePlanStatusFailed
-		errorMsg := fmt.Sprintf("SQL executed successfully but failed to capture schema version: %v", err)
-		changePlan.ErrorMessage = &errorMsg
-		changePlan.UpdatedAt = time.Now()
-		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
-			s.logger.Error("Failed to update change plan status to Failed", zap.Error(updateErr))
-		}
-		// Also update changelog to failed
-		changelog.Status = models.ChangelogStatusFailed
-		if updateErr := s.changelogRepo.Update(ctx, changelog); updateErr != nil {
-			s.logger.Error("Failed to update changelog status to failed", zap.Error(updateErr))
-		}
-		return nil, fmt.Errorf("failed to capture schema version: %w", err)
+		// Record snapshot failure in metadata
+		failedStatus := models.SnapshotStatusFailed
+		errorMsg := err.Error()
+		changelogMeta.SnapshotStatus = &failedStatus
+		changelogMeta.SnapshotError = &errorMsg
+		schemaVersionDuration = time.Since(schemaVersionStartTime)
+	} else {
+		schemaVersionDuration = time.Since(schemaVersionStartTime)
+		s.logger.Info("Schema snapshot captured successfully",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("schema_history_id", schemaHistory.ID.String()),
+			zap.Duration("schema_capture_duration", schemaVersionDuration),
+		)
+		// Record snapshot success in metadata
+		successStatus := models.SnapshotStatusSuccess
+		changelogMeta.SnapshotStatus = &successStatus
+		changelog.SchemaHistoryID = &schemaHistory.ID
 	}
 
-	schemaVersionDuration := time.Since(schemaVersionStartTime)
-	s.logger.Info("Schema version captured successfully",
-		zap.String("change_plan_id", changePlanID.String()),
-		zap.String("schema_history_id", schemaHistory.ID.String()),
-		zap.Duration("schema_capture_duration", schemaVersionDuration),
-	)
+	// Serialize metadata to JSON
+	metadataJSON, err := json.Marshal(changelogMeta)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize changelog metadata: %w", err)
+	}
+	changelog.Metadata = metadataJSON
 
-	// Update changelog status to "done" and link to schema_history
+	// Update changelog status to "done" and metadata
 	changelog.Status = models.ChangelogStatusDone
-	changelog.SchemaHistoryID = &schemaHistory.ID
 	if updateErr := s.changelogRepo.Update(ctx, changelog); updateErr != nil {
 		s.logger.Error("Failed to update changelog status to done",
 			zap.String("changelog_id", changelog.ID.String()),

@@ -14,6 +14,13 @@ import type { CreateDatabaseRequest, Database, UpdateDatabaseRequest } from '@/l
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Empty,
@@ -143,16 +150,28 @@ export const DatabasesPage: React.FC = () => {
       database_name?: string;
     } = {};
 
-    if (!formData.project_id) {
-      errors.project_id = 'Project is required';
+    // For edit mode, project_id and environment_id are only required if they are currently unassigned
+    if (isEditOpen && selectedDatabase) {
+      // Only validate project_id if it's currently unassigned
+      if (!selectedDatabase.project_id && !formData.project_id) {
+        errors.project_id = 'Project is required';
+      }
+      // Only validate environment_id if it's currently unassigned
+      if (!selectedDatabase.environment_id && !formData.environment_id) {
+        errors.environment_id = 'Environment is required';
+      }
+    } else {
+      // For create mode, both are required
+      if (!formData.project_id) {
+        errors.project_id = 'Project is required';
+      }
+      if (!formData.environment_id) {
+        errors.environment_id = 'Environment is required';
+      }
     }
 
     if (!formData.database_instance_id) {
       errors.database_instance_id = 'Database instance is required';
-    }
-
-    if (!formData.environment_id) {
-      errors.environment_id = 'Environment is required';
     }
 
     if (!formData.database_name.trim()) {
@@ -176,9 +195,26 @@ export const DatabasesPage: React.FC = () => {
     try {
       setIsSubmitting(true);
       const updateData: UpdateDatabaseRequest = {};
-      if (formData.database_name !== selectedDatabase.database_name) {
-        updateData.database_name = formData.database_name.trim();
+
+      // Only allow updating project_id if it's currently unassigned (null/undefined)
+      if (
+        !selectedDatabase.project_id &&
+        formData.project_id &&
+        formData.project_id !== selectedDatabase.project_id
+      ) {
+        updateData.project_id = formData.project_id;
       }
+
+      // Only allow updating environment_id if it's currently unassigned (null/undefined)
+      if (
+        !selectedDatabase.environment_id &&
+        formData.environment_id &&
+        formData.environment_id !== selectedDatabase.environment_id
+      ) {
+        updateData.environment_id = formData.environment_id;
+      }
+
+      // Description can always be updated
       if (formData.description !== selectedDatabase.description) {
         updateData.description = formData.description?.trim() || undefined;
       }
@@ -581,33 +617,84 @@ export const DatabasesPage: React.FC = () => {
             <SheetHeader>
               <SheetTitle>Edit Database</SheetTitle>
               <SheetDescription>
-                Update database information. Project, environment, and instance cannot be changed.
+                Update database project, environment, and description. Instance and name cannot be
+                changed.
               </SheetDescription>
             </SheetHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <label htmlFor="edit-project" className="text-sm font-medium">
-                  Project
+                  Project *
                 </label>
-                <Input
-                  id="edit-project"
-                  value={selectedDatabase ? getProjectName(selectedDatabase.project_id) : ''}
-                  disabled
-                  className="opacity-50"
-                />
+                <Select
+                  value={formData.project_id}
+                  onValueChange={(value) => setFormData({ ...formData, project_id: value })}
+                  disabled={
+                    isSubmitting ||
+                    (selectedDatabase?.project_id !== null &&
+                      selectedDatabase?.project_id !== undefined)
+                  }
+                >
+                  <SelectTrigger id="edit-project">
+                    <SelectValue placeholder="Select a project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {formErrors.project_id && (
+                  <p className="text-sm text-destructive">{formErrors.project_id}</p>
+                )}
+                {selectedDatabase?.project_id ? (
+                  <p className="text-xs text-muted-foreground">
+                    Project cannot be changed after it has been assigned
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Project can only be set once. Once assigned, it cannot be changed.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <label htmlFor="edit-environment" className="text-sm font-medium">
-                  Environment
+                  Environment *
                 </label>
-                <Input
-                  id="edit-environment"
-                  value={
-                    selectedDatabase ? getEnvironmentName(selectedDatabase.environment_id) : ''
+                <Select
+                  value={formData.environment_id}
+                  onValueChange={(value) => setFormData({ ...formData, environment_id: value })}
+                  disabled={
+                    isSubmitting ||
+                    (selectedDatabase?.environment_id !== null &&
+                      selectedDatabase?.environment_id !== undefined)
                   }
-                  disabled
-                  className="opacity-50"
-                />
+                >
+                  <SelectTrigger id="edit-environment">
+                    <SelectValue placeholder="Select an environment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {environments.map((env) => (
+                      <SelectItem key={env.id} value={env.id}>
+                        {env.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {formErrors.environment_id && (
+                  <p className="text-sm text-destructive">{formErrors.environment_id}</p>
+                )}
+                {selectedDatabase?.environment_id ? (
+                  <p className="text-xs text-muted-foreground">
+                    Environment cannot be changed after it has been assigned
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Environment can only be set once. Once assigned, it cannot be changed.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <label htmlFor="edit-instance" className="text-sm font-medium">
@@ -619,23 +706,25 @@ export const DatabasesPage: React.FC = () => {
                     selectedDatabase ? getInstanceName(selectedDatabase.database_instance_id) : ''
                   }
                   disabled
-                  className="opacity-50"
+                  className="bg-muted"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Database instance cannot be changed after creation
+                </p>
               </div>
               <div className="space-y-2">
                 <label htmlFor="edit-name" className="text-sm font-medium">
-                  Database Name *
+                  Database Name
                 </label>
                 <Input
                   id="edit-name"
                   value={formData.database_name}
-                  onChange={(e) => setFormData({ ...formData, database_name: e.target.value })}
-                  placeholder="Enter database name"
-                  aria-invalid={!!formErrors.database_name}
+                  disabled
+                  className="bg-muted"
                 />
-                {formErrors.database_name && (
-                  <p className="text-sm text-destructive">{formErrors.database_name}</p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  Database name cannot be changed after creation
+                </p>
               </div>
               <div className="space-y-2">
                 <label htmlFor="edit-description" className="text-sm font-medium">
@@ -647,11 +736,16 @@ export const DatabasesPage: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Enter database description"
                   className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
             <SheetFooter>
-              <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditOpen(false)}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
               <Button onClick={handleEdit} disabled={isSubmitting}>

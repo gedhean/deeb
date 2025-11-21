@@ -34,10 +34,19 @@ func (r *ChangelogRepository) Create(ctx context.Context, changelog *models.Chan
 	query := `
 		INSERT INTO changelog (
 			id, database_instance_id, database_id, change_plan_id, status,
-			prev_schema_history_id, schema_history_id, created_at
+			prev_schema_history_id, schema_history_id, metadata, created_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
+
+	// Handle metadata: if nil or empty, pass nil to database (NULL)
+	// Otherwise pass the json.RawMessage as-is
+	var metadataParam interface{}
+	if len(changelog.Metadata) == 0 {
+		metadataParam = nil
+	} else {
+		metadataParam = changelog.Metadata
+	}
 
 	_, err := r.db.ExecContext(ctx, query,
 		changelog.ID,
@@ -47,6 +56,7 @@ func (r *ChangelogRepository) Create(ctx context.Context, changelog *models.Chan
 		changelog.Status,
 		changelog.PrevSchemaHistoryID,
 		changelog.SchemaHistoryID,
+		metadataParam,
 		changelog.CreatedAt,
 	)
 	if err != nil {
@@ -60,7 +70,9 @@ func (r *ChangelogRepository) Create(ctx context.Context, changelog *models.Chan
 func (r *ChangelogRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Changelog, error) {
 	query := `
 		SELECT id, database_instance_id, database_id, change_plan_id, status,
-			prev_schema_history_id, schema_history_id, created_at
+			prev_schema_history_id, schema_history_id,
+			COALESCE(metadata, 'null'::jsonb) as metadata,
+			created_at
 		FROM changelog
 		WHERE id = $1
 	`
@@ -81,7 +93,9 @@ func (r *ChangelogRepository) GetByID(ctx context.Context, id uuid.UUID) (*model
 func (r *ChangelogRepository) GetByChangePlanID(ctx context.Context, changePlanID uuid.UUID) ([]*models.Changelog, error) {
 	query := `
 		SELECT id, database_instance_id, database_id, change_plan_id, status,
-			prev_schema_history_id, schema_history_id, created_at
+			prev_schema_history_id, schema_history_id,
+			COALESCE(metadata, 'null'::jsonb) as metadata,
+			created_at
 		FROM changelog
 		WHERE change_plan_id = $1
 		ORDER BY created_at DESC
@@ -100,7 +114,9 @@ func (r *ChangelogRepository) GetByChangePlanID(ctx context.Context, changePlanI
 func (r *ChangelogRepository) GetByDatabaseID(ctx context.Context, databaseID uuid.UUID) ([]*models.Changelog, error) {
 	query := `
 		SELECT id, database_instance_id, database_id, change_plan_id, status,
-			prev_schema_history_id, schema_history_id, created_at
+			prev_schema_history_id, schema_history_id,
+			COALESCE(metadata, 'null'::jsonb) as metadata,
+			created_at
 		FROM changelog
 		WHERE database_id = $1
 		ORDER BY created_at DESC
@@ -121,15 +137,26 @@ func (r *ChangelogRepository) Update(ctx context.Context, changelog *models.Chan
 		UPDATE changelog
 		SET status = $2,
 			prev_schema_history_id = $3,
-			schema_history_id = $4
+			schema_history_id = $4,
+			metadata = $5
 		WHERE id = $1
 	`
+
+	// Handle metadata: if nil or empty, pass nil to database (NULL)
+	// Otherwise pass the json.RawMessage as-is
+	var metadataParam interface{}
+	if len(changelog.Metadata) == 0 {
+		metadataParam = nil
+	} else {
+		metadataParam = changelog.Metadata
+	}
 
 	result, err := r.db.ExecContext(ctx, query,
 		changelog.ID,
 		changelog.Status,
 		changelog.PrevSchemaHistoryID,
 		changelog.SchemaHistoryID,
+		metadataParam,
 	)
 	if err != nil {
 		return err

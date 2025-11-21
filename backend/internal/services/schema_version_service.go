@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/database"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/repository"
-	"github.com/nsxbet/deeb/internal/utils"
+	"github.com/nsxbet/sql-schema/comparer/engine"
+	"github.com/nsxbet/sql-schema/exporter"
+	"github.com/nsxbet/sql-schema/snapshot"
 	"go.uber.org/zap"
 )
 
@@ -45,7 +45,8 @@ func NewSchemaVersionService(
 	}
 }
 
-// CaptureSchemaVersion captures the current schema state for a database and stores it in schema_history
+// CaptureSchemaVersion captures the current schema state for a database using sql-schema snapshot.TakeSnapshot
+// and stores it in schema_history
 func (s *SchemaVersionService) CaptureSchemaVersion(ctx context.Context, databaseID uuid.UUID) (*models.SchemaHistory, error) {
 	// Get database and database instance
 	db, err := s.databaseRepo.GetByID(ctx, databaseID)
@@ -64,35 +65,77 @@ func (s *SchemaVersionService) CaptureSchemaVersion(ctx context.Context, databas
 		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	s.logger.Info("Capturing schema version",
+	s.logger.Info("Capturing schema snapshot using snapshot.TakeSnapshot",
 		zap.String("database_id", databaseID.String()),
 		zap.String("database_instance_id", dbInstance.ID.String()),
 		zap.String("database_name", db.DatabaseName),
 		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 	)
 
-	// Capture schema based on database engine
-	var rawDump string
+	// Get database connection from connection manager
+	sqlDB, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer func() {
+		if closeErr := sqlDB.Close(); closeErr != nil {
+			s.logger.Error("Failed to close database connection", zap.Error(closeErr))
+		}
+	}()
+
+	// Determine engine type
+	var eng engine.Engine
 	switch dbInstance.DatabaseEngine {
 	case models.DatabaseEnginePostgreSQL:
-		rawDump, err = s.capturePostgreSQLSchema(ctx, db, dbInstance)
+		eng = engine.PostgreSQL
 	case models.DatabaseEngineMySQL:
-		rawDump, err = s.captureMySQLSchema(ctx, db, dbInstance)
+		eng = engine.MySQL
 	default:
 		return nil, fmt.Errorf("unsupported database engine: %s", dbInstance.DatabaseEngine)
 	}
 
+	// Take snapshot using snapshot.TakeSnapshot (use sqlDB.DB to get underlying *sql.DB)
+	snap, err := snapshot.TakeSnapshot(sqlDB.DB, db.DatabaseName, eng, &snapshot.SnapshotOptions{
+		Version:     "1.0",
+		Description: fmt.Sprintf("Schema snapshot for change plan execution on %s", db.DatabaseName),
+		Tags: map[string]string{
+			"database_id":          databaseID.String(),
+			"database_instance_id": dbInstance.ID.String(),
+		},
+		HostInfo:    fmt.Sprintf("%s:%d", dbInstance.Host, dbInstance.Port),
+		ComputeHash: true, // Compute checksums for integrity verification
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to capture schema: %w", err)
+		return nil, fmt.Errorf("failed to take snapshot: %w", err)
 	}
 
-	// Create metadata JSON
+	// Determine SQL dialect for DDL generation
+	var dialect exporter.SQLDialect
+	if eng == engine.PostgreSQL {
+		dialect = exporter.DialectPostgreSQL
+	} else {
+		dialect = exporter.DialectMySQL
+	}
+
+	// Generate SQL DDL from the snapshot
+	sqlDDL, err := exporter.GenerateDDL(snap.Schema, dialect)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate SQL DDL: %w", err)
+	}
+
+	// Create metadata JSON for schema_history (includes snapshot metadata)
 	metadata := map[string]interface{}{
 		"database_name":   db.DatabaseName,
 		"database_engine": string(dbInstance.DatabaseEngine),
 		"host":            dbInstance.Host,
 		"port":            dbInstance.Port,
-		"captured_at":     time.Now().Format(time.RFC3339),
+		"captured_at":     snap.Metadata.Timestamp.Format(time.RFC3339),
+		"version":         snap.Metadata.Version,
+		"checksum_md5":    snap.Metadata.ChecksumMD5,
+		"checksum_sha256": snap.Metadata.ChecksumSHA256,
 	}
 
 	metadataJSON, err := json.Marshal(metadata)
@@ -106,7 +149,7 @@ func (s *SchemaVersionService) CaptureSchemaVersion(ctx context.Context, databas
 		DatabaseInstanceID: dbInstance.ID,
 		DatabaseID:         databaseID,
 		Metadata:           metadataJSON,
-		RawDump:            rawDump,
+		RawDump:            sqlDDL, // Store SQL DDL generated from snapshot
 		CreatedAt:          time.Now(),
 	}
 
@@ -115,122 +158,22 @@ func (s *SchemaVersionService) CaptureSchemaVersion(ctx context.Context, databas
 		return nil, fmt.Errorf("failed to store schema history: %w", err)
 	}
 
-	s.logger.Info("Schema version captured successfully",
+	// Count tables for logging
+	tableCount := 0
+	for _, schema := range snap.Schema.Schemas {
+		tableCount += len(schema.Tables)
+	}
+
+	s.logger.Info("Schema snapshot captured and DDL generated successfully",
 		zap.String("schema_history_id", schemaHistory.ID.String()),
 		zap.String("database_id", databaseID.String()),
-		zap.Int("raw_dump_size_bytes", len(rawDump)),
+		zap.Int("sql_ddl_size_bytes", len(sqlDDL)),
+		zap.Int("table_count", tableCount),
+		zap.String("checksum_md5", snap.Metadata.ChecksumMD5),
+		zap.String("checksum_sha256", snap.Metadata.ChecksumSHA256),
 	)
 
 	return schemaHistory, nil
-}
-
-// capturePostgreSQLSchema captures a PostgreSQL schema using pg_dump
-func (s *SchemaVersionService) capturePostgreSQLSchema(
-	ctx context.Context,
-	db *models.Database,
-	dbInstance *models.DatabaseInstance,
-) (string, error) {
-	// Decrypt password
-	password, err := s.getDecryptedPassword(dbInstance)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt password: %w", err)
-	}
-
-	// Build pg_dump command
-	cmd := exec.CommandContext(ctx, "pg_dump",
-		"--schema-only",
-		"--no-owner",
-		"--no-privileges",
-		"--host", dbInstance.Host,
-		"--port", fmt.Sprintf("%d", dbInstance.Port),
-		"--username", dbInstance.Username,
-		"--dbname", db.DatabaseName,
-		"--format", "plain",
-	)
-
-	// Set password via PGPASSWORD environment variable
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSWORD=%s", password))
-
-	// Set SSL mode if required
-	if dbInstance.RequireSSL {
-		cmd.Env = append(cmd.Env, "PGSSLMODE=require")
-	} else {
-		cmd.Env = append(cmd.Env, "PGSSLMODE=disable")
-	}
-
-	s.logger.Debug("Executing pg_dump",
-		zap.String("host", dbInstance.Host),
-		zap.Int("port", dbInstance.Port),
-		zap.String("database", db.DatabaseName),
-	)
-
-	// Execute pg_dump
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		s.logger.Error("Failed to execute pg_dump",
-			zap.Error(err),
-			zap.String("output", string(output)),
-		)
-		return "", fmt.Errorf("failed to execute pg_dump: %w", err)
-	}
-
-	return string(output), nil
-}
-
-// captureMySQLSchema captures a MySQL schema using mysqldump
-func (s *SchemaVersionService) captureMySQLSchema(
-	ctx context.Context,
-	db *models.Database,
-	dbInstance *models.DatabaseInstance,
-) (string, error) {
-	// Decrypt password
-	password, err := s.getDecryptedPassword(dbInstance)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt password: %w", err)
-	}
-
-	// Build mysqldump command
-	cmd := exec.CommandContext(ctx, "mysqldump",
-		"--no-data",
-		"--host", dbInstance.Host,
-		"--port", fmt.Sprintf("%d", dbInstance.Port),
-		"--user", dbInstance.Username,
-		fmt.Sprintf("--password=%s", password),
-		"--skip-comments",
-		"--skip-add-drop-table",
-		"--single-transaction",
-		"--quick",
-		"--compress",
-		db.DatabaseName,
-	)
-
-	// Set SSL mode if required
-	if dbInstance.RequireSSL {
-		cmd.Args = append(cmd.Args, "--ssl-mode=REQUIRED")
-	} else {
-		cmd.Args = append(cmd.Args, "--ssl-mode=DISABLED")
-	}
-
-	cmd.Env = os.Environ()
-
-	s.logger.Debug("Executing mysqldump",
-		zap.String("host", dbInstance.Host),
-		zap.Int("port", dbInstance.Port),
-		zap.String("database", db.DatabaseName),
-	)
-
-	// Execute mysqldump
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		s.logger.Error("Failed to execute mysqldump",
-			zap.Error(err),
-			zap.String("output", string(output)),
-		)
-		return "", fmt.Errorf("failed to execute mysqldump: %w", err)
-	}
-
-	return string(output), nil
 }
 
 // GetLatestSchemaVersion retrieves the most recent schema version for a database
@@ -244,13 +187,4 @@ func (s *SchemaVersionService) GetLatestSchemaVersion(ctx context.Context, datab
 	}
 
 	return schemaHistory, nil
-}
-
-// getDecryptedPassword decrypts the database instance password
-func (s *SchemaVersionService) getDecryptedPassword(dbInstance *models.DatabaseInstance) (string, error) {
-	password, err := utils.DecryptPassword(dbInstance.ConnectionDetailsEncrypted, s.encryptionKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt password: %w", err)
-	}
-	return password, nil
 }

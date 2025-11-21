@@ -204,7 +204,8 @@ export interface CreateDatabaseRequest {
 }
 
 export interface UpdateDatabaseRequest {
-  database_name?: string;
+  project_id?: string;
+  environment_id?: string;
   description?: string;
   status?: DatabaseStatus;
 }
@@ -458,6 +459,20 @@ export interface ExecutionLogHistoryResponse {
 }
 
 // Changelog Types
+
+// Snapshot status constants
+export const SNAPSHOT_STATUS = {
+  SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
+} as const;
+
+export type SnapshotStatus = (typeof SNAPSHOT_STATUS)[keyof typeof SNAPSHOT_STATUS];
+
+export interface ChangelogMetadata {
+  snapshot_status?: SnapshotStatus;
+  snapshot_error?: string;
+}
+
 export interface Changelog {
   id: string;
   database_instance_id: string;
@@ -467,6 +482,7 @@ export interface Changelog {
   status: 'pending' | 'done' | 'failed';
   prev_schema_history_id: string | null;
   schema_history_id: string | null;
+  metadata?: ChangelogMetadata | null;
   created_at: string;
 }
 

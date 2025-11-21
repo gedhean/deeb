@@ -48,7 +48,7 @@ func TestChangelogRepository_Create(t *testing.T) {
 		mock.ExpectExec("INSERT INTO changelog").
 			WithArgs(sqlmock.AnyArg(), changelog.DatabaseInstanceID, changelog.DatabaseID,
 				changelog.ChangePlanID, changelog.Status, changelog.PrevSchemaHistoryID,
-				nil, sqlmock.AnyArg()).
+				nil, nil, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, changelog)
@@ -74,7 +74,7 @@ func TestChangelogRepository_Create(t *testing.T) {
 
 		mock.ExpectExec("INSERT INTO changelog").
 			WithArgs(sqlmock.AnyArg(), changelog.DatabaseInstanceID, changelog.DatabaseID,
-				changelog.ChangePlanID, changelog.Status, nil, nil, sqlmock.AnyArg()).
+				changelog.ChangePlanID, changelog.Status, nil, nil, nil, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, changelog)
@@ -294,8 +294,8 @@ func TestChangelogRepository_Update(t *testing.T) {
 			SchemaHistoryID: &schemaHistoryID,
 		}
 
-		mock.ExpectExec("UPDATE changelog SET status = \\$2, prev_schema_history_id = \\$3, schema_history_id = \\$4 WHERE id = \\$1").
-			WithArgs(changelog.ID, changelog.Status, changelog.PrevSchemaHistoryID, changelog.SchemaHistoryID).
+		mock.ExpectExec("UPDATE changelog SET status = \\$2, prev_schema_history_id = \\$3, schema_history_id = \\$4, metadata = \\$5 WHERE id = \\$1").
+			WithArgs(changelog.ID, changelog.Status, changelog.PrevSchemaHistoryID, changelog.SchemaHistoryID, nil).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, changelog)
@@ -312,8 +312,8 @@ func TestChangelogRepository_Update(t *testing.T) {
 			Status: models.ChangelogStatusDone,
 		}
 
-		mock.ExpectExec("UPDATE changelog SET status = \\$2, prev_schema_history_id = \\$3, schema_history_id = \\$4 WHERE id = \\$1").
-			WithArgs(changelog.ID, changelog.Status, changelog.PrevSchemaHistoryID, changelog.SchemaHistoryID).
+		mock.ExpectExec("UPDATE changelog SET status = \\$2, prev_schema_history_id = \\$3, schema_history_id = \\$4, metadata = \\$5 WHERE id = \\$1").
+			WithArgs(changelog.ID, changelog.Status, changelog.PrevSchemaHistoryID, changelog.SchemaHistoryID, nil).
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Update(ctx, changelog)
@@ -331,8 +331,8 @@ func TestChangelogRepository_Update(t *testing.T) {
 			Status: models.ChangelogStatusDone,
 		}
 
-		mock.ExpectExec("UPDATE changelog SET status = \\$2, prev_schema_history_id = \\$3, schema_history_id = \\$4 WHERE id = \\$1").
-			WithArgs(changelog.ID, changelog.Status, changelog.PrevSchemaHistoryID, changelog.SchemaHistoryID).
+		mock.ExpectExec("UPDATE changelog SET status = \\$2, prev_schema_history_id = \\$3, schema_history_id = \\$4, metadata = \\$5 WHERE id = \\$1").
+			WithArgs(changelog.ID, changelog.Status, changelog.PrevSchemaHistoryID, changelog.SchemaHistoryID, nil).
 			WillReturnError(errors.New("database error"))
 
 		err := repo.Update(ctx, changelog)

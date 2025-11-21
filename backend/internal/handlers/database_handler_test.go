@@ -992,7 +992,7 @@ func TestUpdateDatabase(t *testing.T) {
 		e.Validator = &noOpValidator{}
 
 		reqBody := `{
-			"database_name": "updated_name"
+			"description": "updated description"
 		}`
 
 		req := httptest.NewRequest(http.MethodPut, "/api/v1/databases/"+databaseID.String(), strings.NewReader(reqBody))
@@ -1023,8 +1023,13 @@ func TestUpdateDatabase(t *testing.T) {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
 
-		if response.DatabaseName != "updated_name" {
-			t.Errorf("Expected name 'updated_name', got %s", response.DatabaseName)
+		if response.Description == nil || *response.Description != "updated description" {
+			t.Errorf("Expected description 'updated description', got %v", response.Description)
+		}
+
+		// Database name should remain unchanged
+		if response.DatabaseName != "original_name" {
+			t.Errorf("Expected name to remain 'original_name', got %s", response.DatabaseName)
 		}
 	})
 

@@ -275,12 +275,14 @@ func (r *DatabaseRepository) Update(ctx context.Context, database *models.Databa
 
 	query := `
 		UPDATE databases
-		SET database_name = $2, description = $3, status = $4, updated_at = $5
+		SET project_id = $2, environment_id = $3, database_name = $4, description = $5, status = $6, updated_at = $7
 		WHERE id = $1
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
 		database.ID,
+		database.ProjectID,
+		database.EnvironmentID,
 		database.DatabaseName,
 		database.Description,
 		database.Status,

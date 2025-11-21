@@ -754,32 +754,18 @@ func TestValidateUpdateDatabaseRequest(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "valid request with name",
+			name: "valid request with description",
 			req: &UpdateDatabaseRequest{
-				DatabaseName: stringPtr("updated_db"),
+				Description: stringPtr("updated description"),
 			},
 			wantErr: nil,
 		},
 		{
 			name: "valid request with nil fields",
 			req: &UpdateDatabaseRequest{
-				DatabaseName: nil,
+				Description: nil,
 			},
 			wantErr: nil,
-		},
-		{
-			name: "empty database name",
-			req: &UpdateDatabaseRequest{
-				DatabaseName: stringPtr(""),
-			},
-			wantErr: ErrDatabaseNameRequired,
-		},
-		{
-			name: "database name too long",
-			req: &UpdateDatabaseRequest{
-				DatabaseName: stringPtr(string(make([]byte, 256))),
-			},
-			wantErr: ErrDatabaseNameTooLong,
 		},
 	}
 

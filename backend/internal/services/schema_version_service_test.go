@@ -219,7 +219,7 @@ func TestSchemaVersionService_CaptureSchemaVersion_UnsupportedEngine(t *testing.
 
 	result, err := service.CaptureSchemaVersion(ctx, databaseID)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported database engine")
+	assert.Contains(t, err.Error(), "unsupported database type")
 	assert.Nil(t, result)
 
 	mockDatabaseRepo.AssertExpectations(t)

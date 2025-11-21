@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,14 @@ const (
 	ChangelogStatusFailed ChangelogStatus = "failed"
 )
 
+// SnapshotStatus represents the status of database snapshot capture
+const (
+	// SnapshotStatusSuccess indicates snapshot capture succeeded
+	SnapshotStatusSuccess = "SUCCESS"
+	// SnapshotStatusFailed indicates snapshot capture failed
+	SnapshotStatusFailed = "FAILED"
+)
+
 // String returns the string representation of ChangelogStatus
 func (s ChangelogStatus) String() string {
 	return string(s)
@@ -32,6 +41,12 @@ func (s ChangelogStatus) IsValid() bool {
 	return false
 }
 
+// ChangelogMetadata contains metadata stored in the changelog metadata JSONB field
+type ChangelogMetadata struct {
+	SnapshotStatus *string `json:"snapshot_status,omitempty"` // SnapshotStatusSuccess | SnapshotStatusFailed
+	SnapshotError  *string `json:"snapshot_error,omitempty"`  // Error message if snapshot failed
+}
+
 // Changelog represents a record of a change plan execution
 // It tracks the execution status and links to schema versions before and after the change
 type Changelog struct {
@@ -42,7 +57,34 @@ type Changelog struct {
 	Status              ChangelogStatus `json:"status"                 db:"status"`
 	PrevSchemaHistoryID *uuid.UUID      `json:"prev_schema_history_id" db:"prev_schema_history_id"`
 	SchemaHistoryID     *uuid.UUID      `json:"schema_history_id"      db:"schema_history_id"`
+	Metadata            json.RawMessage `json:"metadata,omitempty"     db:"metadata"`
 	CreatedAt           time.Time       `json:"created_at"             db:"created_at"`
+}
+
+// GetMetadata deserializes the metadata field into ChangelogMetadata
+func (c *Changelog) GetMetadata() (*ChangelogMetadata, error) {
+	if len(c.Metadata) == 0 {
+		return nil, nil
+	}
+	var meta ChangelogMetadata
+	if err := json.Unmarshal(c.Metadata, &meta); err != nil {
+		return nil, err
+	}
+	return &meta, nil
+}
+
+// SetMetadata serializes ChangelogMetadata and stores it in the metadata field
+func (c *Changelog) SetMetadata(meta *ChangelogMetadata) error {
+	if meta == nil {
+		c.Metadata = nil
+		return nil
+	}
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	c.Metadata = data
+	return nil
 }
 
 // CreateChangelogRequest represents the request to create a new changelog entry
@@ -63,6 +105,7 @@ type ChangelogResponse struct {
 	Status              ChangelogStatus `json:"status"`
 	PrevSchemaHistoryID *uuid.UUID      `json:"prev_schema_history_id,omitempty"`
 	SchemaHistoryID     *uuid.UUID      `json:"schema_history_id,omitempty"`
+	Metadata            json.RawMessage `json:"metadata,omitempty"`
 	CreatedAt           time.Time       `json:"created_at"`
 }
 
@@ -76,6 +119,7 @@ func (c *Changelog) ToResponse() *ChangelogResponse {
 		Status:              c.Status,
 		PrevSchemaHistoryID: c.PrevSchemaHistoryID,
 		SchemaHistoryID:     c.SchemaHistoryID,
+		Metadata:            c.Metadata,
 		CreatedAt:           c.CreatedAt,
 	}
 }

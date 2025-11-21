@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -34,12 +35,13 @@ func NewChangelogHandler(
 
 // ChangelogListItem represents a changelog entry in the list view
 type ChangelogListItem struct {
-	ID              string `json:"id"`
-	DatabaseID      string `json:"database_id"`
-	ChangePlanID    string `json:"change_plan_id"`
-	ChangePlanTitle string `json:"change_plan_title"`
-	Status          string `json:"status"`
-	CreatedAt       string `json:"created_at"`
+	ID              string          `json:"id"`
+	DatabaseID      string          `json:"database_id"`
+	ChangePlanID    string          `json:"change_plan_id"`
+	ChangePlanTitle string          `json:"change_plan_title"`
+	Status          string          `json:"status"`
+	Metadata        json.RawMessage `json:"metadata,omitempty"`
+	CreatedAt       string          `json:"created_at"`
 }
 
 // ChangePlanSummary represents a summary of a change plan
@@ -97,6 +99,7 @@ func (h *ChangelogHandler) ListDatabaseChangelog(c echo.Context) error {
 			ChangePlanID:    changelog.ChangePlanID.String(),
 			ChangePlanTitle: changePlanTitle,
 			Status:          string(changelog.Status),
+			Metadata:        changelog.Metadata,
 			CreatedAt:       changelog.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}

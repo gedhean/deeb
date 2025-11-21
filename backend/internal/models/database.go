@@ -47,9 +47,10 @@ type CreateDatabaseRequest struct {
 
 // UpdateDatabaseRequest represents a request to update a database
 type UpdateDatabaseRequest struct {
-	DatabaseName *string         `json:"database_name,omitempty" validate:"omitempty,max=255"`
-	Description  *string         `json:"description,omitempty"`
-	Status       *DatabaseStatus `json:"status,omitempty"        validate:"omitempty,oneof=Active Inactive Pending"`
+	ProjectID     *uuid.UUID      `json:"project_id,omitempty"`
+	EnvironmentID *uuid.UUID      `json:"environment_id,omitempty"`
+	Description   *string         `json:"description,omitempty"`
+	Status        *DatabaseStatus `json:"status,omitempty"         validate:"omitempty,oneof=Active Inactive Pending"`
 }
 
 // DatabaseResponse represents a database response
@@ -126,14 +127,6 @@ func ValidateCreateDatabaseRequest(req *CreateDatabaseRequest) error {
 
 // ValidateUpdateDatabaseRequest validates an update database request
 func ValidateUpdateDatabaseRequest(req *UpdateDatabaseRequest) error {
-	if req.DatabaseName != nil {
-		if strings.TrimSpace(*req.DatabaseName) == "" {
-			return ErrDatabaseNameRequired
-		}
-		if len(*req.DatabaseName) > 255 {
-			return ErrDatabaseNameTooLong
-		}
-	}
 	if req.Status != nil {
 		if *req.Status != DatabaseStatusActive && *req.Status != DatabaseStatusInactive && *req.Status != DatabaseStatusPending {
 			return errors.New("status must be Active, Inactive, or Pending")

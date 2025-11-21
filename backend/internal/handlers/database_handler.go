@@ -468,14 +468,20 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 		})
 	}
 
-	// Validate that project/environment constraints are maintained
-	// (The database must belong to exactly one project and one environment if assigned)
-	// This is enforced by the schema, but we verify the related entities exist
-	if database.ProjectID != nil {
-		if _, err := h.projectRepo.GetByID(ctx, *database.ProjectID); err != nil {
+	// Validate and apply project updates
+	// Project can only be set if currently nil (unassigned)
+	if req.ProjectID != nil {
+		// Check if project is already set
+		if database.ProjectID != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Cannot update project_id: project is already assigned. Project can only be set once when it is unassigned.",
+			})
+		}
+		// Validate new project exists
+		if _, err := h.projectRepo.GetByID(ctx, *req.ProjectID); err != nil {
 			if err == repository.ErrNotFound {
 				return c.JSON(http.StatusBadRequest, map[string]interface{}{
-					"error": "Database project not found",
+					"error": "Project not found",
 				})
 			}
 			h.logger.Error("Failed to validate project", zap.Error(err))
@@ -483,13 +489,24 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 				"error": "Failed to validate project",
 			})
 		}
+		// Set project (only allowed when nil)
+		database.ProjectID = req.ProjectID
 	}
 
-	if database.EnvironmentID != nil {
-		if _, err := h.environmentRepo.GetByID(ctx, *database.EnvironmentID); err != nil {
+	// Validate and apply environment updates
+	// Environment can only be set if currently nil (unassigned)
+	if req.EnvironmentID != nil {
+		// Check if environment is already set
+		if database.EnvironmentID != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Cannot update environment_id: environment is already assigned. Environment can only be set once when it is unassigned.",
+			})
+		}
+		// Validate new environment exists
+		if _, err := h.environmentRepo.GetByID(ctx, *req.EnvironmentID); err != nil {
 			if err == repository.ErrNotFound {
 				return c.JSON(http.StatusBadRequest, map[string]interface{}{
-					"error": "Database environment not found",
+					"error": "Environment not found",
 				})
 			}
 			h.logger.Error("Failed to validate environment", zap.Error(err))
@@ -497,11 +514,8 @@ func (h *DatabaseHandler) UpdateDatabase(c echo.Context) error {
 				"error": "Failed to validate environment",
 			})
 		}
-	}
-
-	// Apply updates
-	if req.DatabaseName != nil {
-		database.DatabaseName = *req.DatabaseName
+		// Set environment (only allowed when nil)
+		database.EnvironmentID = req.EnvironmentID
 	}
 	if req.Description != nil {
 		database.Description = req.Description

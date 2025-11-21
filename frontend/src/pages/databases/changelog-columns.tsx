@@ -1,8 +1,11 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Changelog } from '@/lib/api/types';
+import { SNAPSHOT_STATUS } from '@/lib/api/types';
 
 export const changelogColumns: ColumnDef<Changelog>[] = [
   {
@@ -10,6 +13,9 @@ export const changelogColumns: ColumnDef<Changelog>[] = [
     header: 'Status',
     cell: ({ row }) => {
       const status = row.getValue('status') as string;
+      const metadata = row.original.metadata;
+      const hasSnapshotFailure = metadata?.snapshot_status === SNAPSHOT_STATUS.FAILED;
+
       let variant: 'default' | 'secondary' | 'destructive' | 'outline' = 'default';
       let colorClass = '';
 
@@ -25,9 +31,25 @@ export const changelogColumns: ColumnDef<Changelog>[] = [
       }
 
       return (
-        <Badge variant={variant} className={`capitalize ${colorClass}`}>
-          {status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={variant} className={`capitalize ${colorClass}`}>
+            {status}
+          </Badge>
+          {hasSnapshotFailure && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-sm">
+                    Schema snapshot failed: {metadata.snapshot_error || 'Unknown error'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
       );
     },
   },
