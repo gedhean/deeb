@@ -1,108 +1,84 @@
 # Docker Development Environment
 
-This guide covers setting up and using the Docker development environment for Deeb.
+Quick guide for using Docker in Deeb development.
 
 ## Prerequisites
 
-- Docker Desktop 20.10+ (includes Docker Compose v2)
-- Docker Compose v2 (uses `docker compose` command)
+- Docker Desktop 20.10+
+- Docker Compose v2
 
 ## Quick Start
 
-**1. Copy environment configuration**
-
 ```bash
+# 1. Copy environment configuration
 cp .env.example .env
-```
 
-Edit `.env` with your configuration if needed (the defaults work for local development).
-
-**2. Start services**
-
-```bash
-# Start PostgreSQL database
+# 2. Start PostgreSQL
 docker compose up -d
 
-# Verify services are running
-docker compose ps
-
-# View logs
-docker compose logs -f postgres
-```
-
-**3. Run database migrations**
-
-```bash
+# 3. Run migrations
 cd backend
 export DATABASE_URL="postgresql://deeb:deeb_dev_password@localhost:5432/deeb?sslmode=disable"
 go run ./cmd/migrate/
-```
 
-**4. Start the backend server**
-
-```bash
-# Start the server (from backend directory)
+# 4. Start the backend
 go run ./cmd/server/
-```
 
-**5. Verify the setup**
-
-```bash
-# Check health endpoint
+# 5. Verify
 curl http://localhost:8080/health
-
-# Expected response:
-# {"status":"healthy","version":"0.1.0","timestamp":"...","database":"ok"}
 ```
 
-## Docker Compose Services
+**Expected response:**
+```json
+{
+  "status": "healthy",
+  "version": "0.1.0",
+  "timestamp": "...",
+  "database": "ok"
+}
+```
+
+## Services
 
 ### PostgreSQL Database
 
-- **Image**: `postgres:16-alpine`
-- **Port**: `5432` (mapped to host)
-- **Database**: `deeb`
-- **Username**: `deeb`
-- **Password**: `deeb_dev_password` (for development only!)
-- **Volume**: `postgres_data` (persistent storage)
+- **Port**: 5432
+- **Database**: deeb
+- **Username**: deeb
+- **Password**: deeb_dev_password (dev only!)
+- **Volume**: postgres_data (persistent)
 
 ## Common Commands
 
 ### Service Management
 
 ```bash
-# Start all services
+# Start services
 docker compose up -d
 
-# Start services with logs visible
+# Start with logs
 docker compose up
 
 # Stop services
 docker compose down
 
-# Stop and remove volumes (cleans database)
+# Stop and remove data
 docker compose down -v
 
-# Restart services
+# Restart
 docker compose restart
-
-# Restart specific service
-docker compose restart postgres
 ```
 
-### Viewing Logs
+### Logs
 
 ```bash
 # View all logs
-docker compose logs
-
-# Follow logs
 docker compose logs -f
 
-# View logs for specific service
-docker compose logs postgres
+# PostgreSQL logs
+docker compose logs -f postgres
 
-# Follow logs for specific service with tail
+# Tail last 100 lines
 docker compose logs -f --tail=100 postgres
 ```
 
@@ -112,26 +88,28 @@ docker compose logs -f --tail=100 postgres
 # Access PostgreSQL CLI
 docker compose exec postgres psql -U deeb -d deeb
 
+# Example queries
+SELECT * FROM users LIMIT 5;
+\dt  # List tables
+\q   # Quit
+
 # Run SQL file
 docker compose exec -T postgres psql -U deeb -d deeb < script.sql
 
-# Dump database
+# Backup
 docker compose exec postgres pg_dump -U deeb deeb > backup.sql
 
-# Restore database
+# Restore
 docker compose exec -T postgres psql -U deeb -d deeb < backup.sql
 ```
 
 ### Service Status
 
 ```bash
-# Check service status
+# Check status
 docker compose ps
 
-# Check service health
-docker compose ps postgres
-
-# View service configuration
+# View configuration
 docker compose config
 ```
 
@@ -139,65 +117,66 @@ docker compose config
 
 ### Daily Development
 
-1. **Start services**:
-   ```bash
-   docker compose up -d
-   ```
+```bash
+# 1. Start services
+docker compose up -d
 
-2. **Run migrations** (if schema changed):
-   ```bash
-   cd backend
-   go run ./cmd/migrate/
-   ```
+# 2. Run migrations (if needed)
+cd backend && go run ./cmd/migrate/
 
-3. **Start backend server**:
-   ```bash
-   go run ./cmd/server/
-   ```
+# 3. Start backend
+go run ./cmd/server/
 
-4. **When done, stop services**:
-   ```bash
-   docker compose stop
-   ```
+# 4. Start frontend (new terminal)
+cd frontend && pnpm run dev
+
+# 5. When done
+docker compose stop
+```
 
 ### Clean Restart
 
-To start fresh with a clean database:
-
 ```bash
-# Stop and remove everything including volumes
+# Remove everything
 docker compose down -v
 
-# Start services again
+# Start fresh
 docker compose up -d
 
-# Run migrations
-cd backend
-go run ./cmd/migrate/
+# Re-run migrations
+cd backend && go run ./cmd/migrate/
 ```
 
 ## Troubleshooting
 
 ### Port 5432 Already in Use
 
-If you have PostgreSQL running locally:
-
+**Option 1: Stop local PostgreSQL**
 ```bash
-# Stop local PostgreSQL (macOS)
+# macOS
 brew services stop postgresql
 
-# Or change the port in docker-compose.yml
-# Change "5432:5432" to "5433:5432"
-# Then update DATABASE_URL to use port 5433
+# Linux
+sudo systemctl stop postgresql
+```
+
+**Option 2: Change port**
+```yaml
+# In docker-compose.yml
+ports:
+  - "5433:5432"  # Use 5433 instead
+
+# Update DATABASE_URL
+postgresql://deeb:deeb_dev_password@localhost:5433/deeb?sslmode=disable
 ```
 
 ### Database Connection Issues
 
 ```bash
-# Check if PostgreSQL is healthy
+# Check health
 docker compose ps postgres
 
-# View PostgreSQL logs
+# View logs
 docker compose logs postgres
 
 # Test connection
@@ -207,58 +186,61 @@ docker compose exec postgres pg_isready -U deeb -d deeb
 ### Reset Database
 
 ```bash
-# Remove and recreate database
 docker compose down -v
 docker compose up -d
-
-# Wait for database to be ready
 sleep 5
-
-# Run migrations
-cd backend
-go run ./cmd/migrate/
+cd backend && go run ./cmd/migrate/
 ```
 
 ## Environment Variables
 
-The following environment variables can be customized in `.env`:
+Key variables in `.env`:
 
-- `DATABASE_URL`: PostgreSQL connection string
-- `SERVER_PORT`: Backend server port (default: 8080)
-- `LOG_LEVEL`: Logging level (debug, info, warn, error)
-- `LOG_FORMAT`: Log format (json, console)
+```bash
+# Database
+DATABASE_URL=postgresql://deeb:deeb_dev_password@localhost:5432/deeb?sslmode=disable
 
-See `.env.example` for the complete list of configuration options.
+# Server
+SERVER_PORT=8080
 
-## Production Considerations
+# Logging
+LOG_LEVEL=debug
+LOG_FORMAT=console
 
-**⚠️ Important**: The default credentials in `docker-compose.yml` are for development only!
+# Security (generate with: openssl rand -base64 32)
+JWT_SECRET=your-secret-here
+ENCRYPTION_KEY=your-32-byte-key-here
+```
 
-For production deployments:
+See `.env.example` for complete list.
 
-1. Use strong, randomly generated passwords
-2. Store credentials in a secrets manager
-3. Use SSL/TLS for database connections
-4. Configure proper backup and monitoring
+## Production Notes
+
+**WARNING**: Default credentials are for development only!
+
+For production:
+1. Use strong, random passwords
+2. Store credentials in secrets manager
+3. Enable SSL/TLS for database connections
+4. Configure backups and monitoring
 5. Use external volumes or managed databases
-6. Review and harden security settings
+6. Review security settings
 
 ## Networking
 
-All services are connected via the `deeb-network` bridge network:
-
-- Services can communicate using service names (e.g., `postgres:5432`)
-- Host machine can access services via `localhost:<port>`
+- Services use `deeb-network` bridge network
+- Services communicate via service names (e.g., `postgres:5432`)
+- Host accesses via `localhost:<port>`
 
 ## Volumes
 
-- **postgres_data**: Persistent storage for PostgreSQL data
-  - Location: Docker managed volume
+- **postgres_data**: Persistent PostgreSQL storage
+  - Docker managed volume
   - Survives container restarts
   - Removed with `docker compose down -v`
 
 ## Next Steps
 
-- [Backend Development Guide](backend/README.md)
-- [Database Migrations](backend/cmd/migrate/README.md)
-- [Configuration Guide](CONFIGURATION.md)
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guide
+- [SETUP.md](SETUP.md) - Complete setup guide
+- [Backend Development](../backend/README.md) - Backend docs

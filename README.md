@@ -1,32 +1,31 @@
-# Deeb: Secure Database Change Management System
+# Deeb: Secure Database Change Management
 
 [![CI](https://github.com/NSXBet/deeb/actions/workflows/ci.yml/badge.svg)](https://github.com/NSXBet/deeb/actions/workflows/ci.yml)
 
-Deeb is a secure database change management tool that enables developers to manage database changes without requiring direct database access. The system provides an issue-based workflow with multi-approval processes, automated policy validation, and comprehensive audit logging.
+Deeb enables developers to manage database changes securely without direct database access. A change plan-based workflow with multi-approval processes, automated policy validation, and comprehensive audit logging.
 
-## Features
+## Key Features
 
-- **Issue-based change workflow**: Database changes are created as issues with multi-approval and review processes
-- **Automated policy validation**: Built-in rules for SQL syntax, security, performance, backwards compatibility, and best practices
-- **Multi-environment support**: Changes can be applied across Dev → Staging → Production environments
-- **Full audit logging**: Complete tracking of all database operations for compliance
-- **AWS RDS Integration**: Native support for MySQL and PostgreSQL with RDS IAM authentication
-- **Self-hosted deployment**: Containerized deployment with Docker and Kubernetes
+- **Change plan management** - Changes managed as change plans with multi-approval and review
+- **Automated validation** - SQL review engine with multiple validators
+- **Multi-environment** - Dev → Staging → Production deployment support (Phase 2+)
+- **Full audit trail** - Complete tracking of change plan operations
+- **Project & Environment isolation** - Each database belongs to one project and environment
+- **Self-hosted** - Docker and Kubernetes deployment
 
 ## Supported Databases
 
 - MySQL 8.0+
 - PostgreSQL 16+
 
-## Security Features
+## Security
 
-- OAuth 2.0 SSO (Google)
-- Email/password authentication with bcrypt
-- RBAC with users, groups, and permissions
-- RDS IAM authentication for database connections
-- SSL-enforced database connections
+- OAuth 2.0 SSO (Google, GitHub)
+- Two-factor authentication (2FA)
+- RBAC with organization and project-level roles
+- RDS IAM authentication
+- SSL-enforced connections
 - Data encryption at rest and in transit
-- Comprehensive audit logging
 
 ## Project Structure
 
@@ -56,108 +55,84 @@ deeb/
   - Shared utilities, helpers, common types
 - **api/**: API specifications (OpenAPI/Swagger)
 
-## Getting Started
-
-### Quick Start
-
-Get up and running in 5 minutes:
+## Quick Start
 
 ```bash
-# 1. Clone and navigate to backend
+# Clone the repository
 git clone https://github.com/nsxbet/deeb.git
-cd deeb/backend
+cd deeb
 
-# 2. Configure environment
-cp .env.example .env
-# Edit .env and set JWT_SECRET and ENCRYPTION_KEY
+# Start development server (includes PostgreSQL + live reload)
+make dev
 
-# 3. Start development environment with live reload
-make run-air
-
-# 4. Access the application
-# Backend API: http://localhost:8080
-# API Documentation: http://localhost:8080/api/docs
+# Access
+# - Backend API: http://localhost:8080
+# - API Docs: http://localhost:8080/api/docs
+# - Frontend: http://localhost:3000
 ```
 
-### Full Setup Guide
+**See [Getting Started](#getting-started-guide) below for detailed setup.**
 
-For comprehensive setup instructions including:
-- Detailed prerequisites and installation steps
-- Environment variable configuration
-- Database setup and migrations
-- Frontend setup
-- Docker development workflow
-- Troubleshooting common issues
+## Prerequisites
 
-**See [docs/SETUP.md](docs/SETUP.md) for complete setup documentation.**
+- Go 1.25.3+
+- Node.js 20+ with pnpm
+- PostgreSQL 16+
+- Docker & Docker Compose (recommended)
 
-### Prerequisites
-
-- **Go 1.25.3+** - Backend development
-- **Node.js 20+ with pnpm** - Frontend development
-- **PostgreSQL 16+** - Metadata database
-- **Docker & Docker Compose** - Containerized development (recommended)
-
-### Development Workflow
-
-**Development mode with live reload:**
-```bash
-cd backend
-make run-air
-```
-
-**Run tests:**
-```bash
-make test              # Unit tests
-make test-integration  # Integration tests
-make test-coverage     # Coverage report
-```
-
-**Code quality:**
-```bash
-make lint              # Run linters
-make lint-fix          # Auto-fix issues
-make format            # Format code
-```
-
-**Other commands:**
-```bash
-make help              # Show all available commands
-```
-
-## Documentation
+## Getting Started Guide
 
 ### Setup & Configuration
-- **[Setup Guide](docs/SETUP.md)** - Complete setup and configuration guide
-- [Environment Variables](backend/.env.example) - All configuration options
-
-### Development
+- **[Setup Guide](docs/setup.md)** - Complete installation and configuration
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines and workflow
 - [Development Guide](docs/dev-guide.md) - Docker development environment
+- [Environment Variables](backend/.env.example) - Configuration options
+
+### API & Frontend
 - [API Documentation](http://localhost:8080/api/docs) - OpenAPI/Swagger (when running)
+- [Frontend Conventions](docs/frontend-conventions.md) - React & TypeScript patterns
+- [shadcn/ui Reference](docs/shadcn-ui-reference.md) - UI component library
 
 ### Architecture & Design
 - [Architecture Overview](docs/architecture.png) - System architecture diagram
 - [Project Documentation](docs/project.md) - Technical design and decisions
 - [Database Schema](backend/docs/schema-erd.md) - Database structure and ERD
+- [Technologies](docs/technologies.md) - Tech stack overview
 
-### Planning & Implementation
+### Planning & Roadmap
+- [MVP Roadmap](docs/mvp.md) - Phased development approach
 - [PRD - Product Requirements](/.wiz/deeb-mvp/prd.md) - Product requirements document
-- [Implementation Guide](/.wiz/deeb-mvp/IMPLEMENTATION_GUIDE.md) - Phase and milestone breakdown
 
-## Development Status
+## Development Workflow
 
-This project is under active development following the Wiz Planner methodology:
+**Backend:**
+```bash
+make -C backend test              # Run tests
+make -C backend lint-fix          # Check code quality and fix issues
+make -C backend format            # Format code
+make -C backend run-air           # Start with live reload
+```
 
-- **Current Phase**: Phase 1 - Foundation & Project Setup
-- **Total Phases**: 6 phases
-- **Total Milestones**: 210 milestones (~22 days of work)
+**Frontend:**
+```bash
+pnpm --dir frontend run test       # Run tests
+pnpm --dir frontend run lint-fix   # Check code quality and fix issues
+pnpm --dir frontend run format     # Format code
+pnpm --dir frontend run dev        # Start dev server
+```
 
-See [IMPLEMENTATION_GUIDE.md](/.wiz/deeb-mvp/IMPLEMENTATION_GUIDE.md) for detailed phase and milestone breakdown.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development workflow.
+
+## Contributing
+
+We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) to get started.
+
+**Quick links:**
+- [Development Workflow](CONTRIBUTING.md#development-workflow)
+- [Code Standards](CONTRIBUTING.md#code-standards)
+- [Testing](CONTRIBUTING.md#testing)
+- [Common Tasks](CONTRIBUTING.md#common-tasks)
 
 ## License
 
 (To be determined)
-
-## Contributing
-
-(Coming soon)
