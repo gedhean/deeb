@@ -98,8 +98,15 @@ jobs:
         run: go mod download
 
       # Phase 6: Run tests with parallel execution
-      - name: Run tests
+      - name: Run unit tests
         run: make test
+
+      # Run integration tests with testcontainers
+      - name: Run integration tests
+        run: make test-integration
+        env:
+          # Testcontainers needs Docker
+          TESTCONTAINERS_RYUK_DISABLED: false
 
       - name: Run linting
         run: make lint

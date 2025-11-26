@@ -2,10 +2,9 @@
 config.yaml
 
 # Generated files
-rds-discovered.yaml
-rds-no-secrets-manager.log
-rds-onboarding-success.log
-rds-onboarding-failed.log
+*.log
+*.yaml
+!config.yaml.example
 
 # Python virtual environment
 .venv/

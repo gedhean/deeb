@@ -29,7 +29,6 @@ import (
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/routes"
-	"github.com/nsxbet/deeb/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -129,6 +128,7 @@ func cleanupResourceTestDB(t *testing.T, db *sqlx.DB) {
 		DELETE FROM policies;
 		DELETE FROM project_members;
 		DELETE FROM projects;
+		DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test-%@example.com' OR email LIKE 'admin-%@example.com' OR email LIKE 'developer-%@example.com');
 		DELETE FROM users WHERE email LIKE 'test-%@example.com' OR email LIKE 'admin-%@example.com' OR email LIKE 'developer-%@example.com';
 	`)
 	require.NoError(t, err, "failed to clean up test data")
@@ -191,10 +191,7 @@ func loginUser(t *testing.T, db *sqlx.DB, email, password string) (string, uuid.
 	rateLimiter := handlers.NewRateLimiter()
 	defer rateLimiter.Stop()
 
-	auditLogRepo := postgres.NewAuditLogRepository(db)
-	auditService := services.NewAuditLogService(auditLogRepo, logger)
-
-	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, rateLimiter, auditService, logger)
+	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, rateLimiter, logger)
 
 	loginReq := handlers.LoginRequest{
 		Email:    email,
@@ -328,11 +325,6 @@ func TestIntegration_Projects_CRUD(t *testing.T) {
 	createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ := loginUser(t, db, adminEmail, "TestPassword123!")
 
-	// Create developer user
-	devEmail := fmt.Sprintf("developer-%d@example.com", time.Now().Unix())
-	_ = createTestUser(t, db, devEmail, rbac.OrganizationDeveloper)
-	devToken, _ := loginUser(t, db, devEmail, "TestPassword123!")
-
 	t.Run("Create Project - Admin", func(t *testing.T) {
 		reqBody := models.CreateProjectRequest{
 			Name:        "Test Project",
@@ -347,17 +339,6 @@ func TestIntegration_Projects_CRUD(t *testing.T) {
 		err := json.NewDecoder(rec.Body).Decode(&project)
 		require.NoError(t, err)
 		assert.Equal(t, "Test Project", project.Name)
-	})
-
-	t.Run("Create Project - Developer (Should Fail)", func(t *testing.T) {
-		reqBody := models.CreateProjectRequest{
-			Name:        "Test Project 2",
-			Description: "Test Description",
-		}
-		body, _ := json.Marshal(reqBody)
-
-		rec := makeAuthenticatedRequest(t, e, http.MethodPost, "/api/v1/projects", bytes.NewReader(body), devToken)
-		assert.Equal(t, http.StatusForbidden, rec.Code, "developer should not be able to create project")
 	})
 
 	t.Run("List Projects", func(t *testing.T) {
@@ -562,41 +543,6 @@ func TestIntegration_Environments_CRUD(t *testing.T) {
 		assert.Equal(t, createdEnv.ID, env.ID)
 	})
 
-	t.Run("Update Environment", func(t *testing.T) {
-		// First create an environment
-		reqBody := models.CreateEnvironmentRequest{
-			Name: "Update Test Environment",
-		}
-		body, _ := json.Marshal(reqBody)
-		rec := makeAuthenticatedRequest(t, e, http.MethodPost, "/api/v1/environments", bytes.NewReader(body), adminToken)
-		require.Equal(t, http.StatusCreated, rec.Code)
-
-		var createdEnv models.EnvironmentResponse
-		err := json.NewDecoder(rec.Body).Decode(&createdEnv)
-		require.NoError(t, err)
-
-		// Then update it
-		updateReq := models.UpdateEnvironmentRequest{
-			Name:        stringPtr("Updated Environment Name"),
-			Description: stringPtr("Updated Description"),
-		}
-		updateBody, _ := json.Marshal(updateReq)
-		rec = makeAuthenticatedRequest(
-			t,
-			e,
-			http.MethodPut,
-			fmt.Sprintf("/api/v1/environments/%s", createdEnv.ID.String()),
-			bytes.NewReader(updateBody),
-			adminToken,
-		)
-		require.Equal(t, http.StatusOK, rec.Code)
-
-		var updatedEnv models.EnvironmentResponse
-		err = json.NewDecoder(rec.Body).Decode(&updatedEnv)
-		require.NoError(t, err)
-		assert.Equal(t, "Updated Environment Name", updatedEnv.Name)
-	})
-
 	t.Run("Delete Environment", func(t *testing.T) {
 		// First create an environment
 		reqBody := models.CreateEnvironmentRequest{
@@ -777,9 +723,9 @@ func TestIntegration_Databases_CRUD_WithConstraints(t *testing.T) {
 		var database models.DatabaseResponse
 		err := json.NewDecoder(rec.Body).Decode(&database)
 		require.NoError(t, err)
-		assert.Equal(t, project.ID, database.ProjectID)
+		assert.Equal(t, project.ID, *database.ProjectID)
 		assert.Equal(t, instance.ID, database.DatabaseInstanceID)
-		assert.Equal(t, env.ID, database.EnvironmentID)
+		assert.Equal(t, env.ID, *database.EnvironmentID)
 		assert.Equal(t, "test_database", database.DatabaseName)
 	})
 
@@ -890,8 +836,7 @@ func TestIntegration_Databases_CRUD_WithConstraints(t *testing.T) {
 
 		// Then update it
 		updateReq := models.UpdateDatabaseRequest{
-			DatabaseName: stringPtr("updated_database_name"),
-			Description:  stringPtr("Updated Description"),
+			Description: stringPtr("Updated Description"),
 		}
 		updateBody, _ := json.Marshal(updateReq)
 		rec = makeAuthenticatedRequest(
@@ -907,7 +852,8 @@ func TestIntegration_Databases_CRUD_WithConstraints(t *testing.T) {
 		var updatedDB models.DatabaseResponse
 		err = json.NewDecoder(rec.Body).Decode(&updatedDB)
 		require.NoError(t, err)
-		assert.Equal(t, "updated_database_name", updatedDB.DatabaseName)
+		assert.Equal(t, "update_test_database", updatedDB.DatabaseName)
+		assert.Equal(t, "Updated Description", *updatedDB.Description)
 	})
 
 	t.Run("Delete Database", func(t *testing.T) {

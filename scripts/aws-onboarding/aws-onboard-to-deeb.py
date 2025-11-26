@@ -352,7 +352,8 @@ class DeebOnboarder:
                 "password": deeb_password,
                 "use_rds_iam_auth": False,
                 "require_ssl": False,
-                "environment_id": environment_id
+                "environment_id": environment_id,
+                "sync_all_databases": True
             }
             
             # Create database instance

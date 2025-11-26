@@ -17,3 +17,7 @@
 - https://better-upload.com/
 - https://shadcn-ui-multi-form.vercel.app/build (Change Plan create form)
 - https://dtstack.github.io/monaco-sql-languages/ (Monaco SQL Editor with syntax highlighting for MySQL and PostgreSQL)
+
+## New Features
+
+- https://docs.bytebase.com/gitops/state-based-workflow/sql-review-ci#ai-powered-validation-with-your-standards

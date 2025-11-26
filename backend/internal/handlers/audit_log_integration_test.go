@@ -47,10 +47,11 @@ func TestIntegration_AuditLogs_ListAuditLogs(t *testing.T) {
 	testResourceID := uuid.New()
 	auditLog1 := &models.AuditLog{
 		ID:           uuid.New(),
-		UserID:       adminID,
+		UserID:       &adminID,
 		Action:       "create",
 		ResourceType: "project",
 		ResourceID:   testResourceID,
+		Details:      json.RawMessage(`{}`),
 		Timestamp:    time.Now().Add(-2 * time.Hour),
 	}
 	err := auditLogRepo.Create(ctx, auditLog1)
@@ -58,10 +59,11 @@ func TestIntegration_AuditLogs_ListAuditLogs(t *testing.T) {
 
 	auditLog2 := &models.AuditLog{
 		ID:           uuid.New(),
-		UserID:       devID,
+		UserID:       &devID,
 		Action:       "update",
 		ResourceType: "change_plan",
 		ResourceID:   uuid.New(),
+		Details:      json.RawMessage(`{}`),
 		Timestamp:    time.Now().Add(-1 * time.Hour),
 	}
 	err = auditLogRepo.Create(ctx, auditLog2)
@@ -69,10 +71,11 @@ func TestIntegration_AuditLogs_ListAuditLogs(t *testing.T) {
 
 	auditLog3 := &models.AuditLog{
 		ID:           uuid.New(),
-		UserID:       adminID,
+		UserID:       &adminID,
 		Action:       "delete",
 		ResourceType: "project",
 		ResourceID:   testResourceID,
+		Details:      json.RawMessage(`{}`),
 		Timestamp:    time.Now(),
 	}
 	err = auditLogRepo.Create(ctx, auditLog3)
@@ -103,7 +106,7 @@ func TestIntegration_AuditLogs_ListAuditLogs(t *testing.T) {
 		var response map[string]interface{}
 		err := json.NewDecoder(rec.Body).Decode(&response)
 		require.NoError(t, err)
-		assert.Contains(t, response["error"], "Admin access required")
+		assert.Contains(t, response["error"], "Insufficient permissions")
 	})
 
 	t.Run("List Audit Logs - Filter by User ID", func(t *testing.T) {
