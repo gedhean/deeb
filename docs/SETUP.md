@@ -25,7 +25,7 @@ Before you begin, ensure you have the following installed:
   - Download from [golang.org](https://golang.org/dl/)
   - Verify installation: `go version`
 
-- **Node.js 20+ with pnpm**
+- **Node.js 24 or higher with pnpm**
   - Download from [nodejs.org](https://nodejs.org/)
   - Install pnpm: `npm install -g pnpm`
   - Verify installation: `node --version && pnpm --version`
