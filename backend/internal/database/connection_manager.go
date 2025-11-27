@@ -658,11 +658,11 @@ func (cm *ConnectionManager) listPostgreSQLDatabases(
 		}
 	}()
 
-	// Query for all databases excluding system databases
+	// Query for all databases excluding system databases and RDS admin database
 	query := `
 		SELECT datname
 		FROM pg_database
-		WHERE datname NOT IN ('postgres', 'template0', 'template1')
+		WHERE datname NOT IN ('postgres', 'template0', 'template1', 'rdsadmin')
 		AND datistemplate = false
 		ORDER BY datname
 	`
