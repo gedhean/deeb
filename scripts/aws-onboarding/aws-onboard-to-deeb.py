@@ -193,8 +193,7 @@ class DeebOnboarder:
             # Grant privileges (production-safe version without DROP, DELETE)
             grant_sql = """
             GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, 
-            EVENT, EXECUTE, INDEX, INSERT, PROCESS, REFERENCES, 
-            SELECT, SHOW DATABASES, SHOW VIEW, TRIGGER, UPDATE, USAGE, 
+            EVENT, EXECUTE, INDEX, PROCESS, REFERENCES, SHOW DATABASES, SHOW VIEW, TRIGGER, USAGE, 
             RELOAD, LOCK TABLES, REPLICATION CLIENT, REPLICATION SLAVE 
             ON *.* TO 'deeb'@'%'
             """
@@ -271,12 +270,6 @@ class DeebOnboarder:
             safe_password = deeb_password.replace("'", "''")
             cursor.execute(f"CREATE USER deeb WITH PASSWORD '{safe_password}'")
             
-            # Grant RDS IAM privileges
-            try:
-                cursor.execute("GRANT rds_iam TO deeb")
-            except Exception as e:
-                logger.warning(f"Could not grant rds_iam (may not exist): {e}")
-            
             # Grant CREATEDB privilege
             cursor.execute("ALTER USER deeb WITH CREATEDB")
             
@@ -351,7 +344,7 @@ class DeebOnboarder:
                 "username": "deeb",
                 "password": deeb_password,
                 "use_rds_iam_auth": False,
-                "require_ssl": False,
+                "require_ssl": instance['engine'] == 'postgresql',
                 "environment_id": environment_id,
                 "sync_all_databases": True
             }
