@@ -10,7 +10,7 @@ server:
   frontend_url: http://localhost:3000  # Frontend URL for OAuth redirects
 auth:
   jwt_expiration: 24h  # JWT token expiration
-  callback_url: http://localhost:8080/api/v1/auth/callback  # OAuth callback URL
+  callback_url: http://localhost:8080/api/v1/auth/google/callback # OAuth callback URL
   require_2fa: false  # Require 2FA for all users
 security:
   bcrypt_cost: 12  # Bcrypt hashing cost (10-31, higher is more secure but slower)
