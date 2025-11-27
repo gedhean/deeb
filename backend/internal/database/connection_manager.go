@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -84,6 +85,7 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 		zap.Int("port", params.DatabaseInstance.Port),
 		zap.String("database", params.Database.DatabaseName),
 		zap.String("username", params.DatabaseInstance.Username),
+		zap.String("ssl_mode", strconv.FormatBool(params.DatabaseInstance.RequireSSL)),
 	)
 
 	// Connect to database
@@ -260,6 +262,7 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context, params Conne
 		zap.Int("port", params.DatabaseInstance.Port),
 		zap.String("database", params.Database.DatabaseName),
 		zap.String("username", params.DatabaseInstance.Username),
+		zap.String("ssl_mode", sslMode),
 	)
 
 	// Connect to database
