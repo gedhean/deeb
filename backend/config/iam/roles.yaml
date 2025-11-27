@@ -48,7 +48,7 @@ roles:
       - databases.create
       - databases.update
       # Project management (create and read)
-      - projects.create
+      - projects.create  # TODO: Remove this permission
       - projects.read
       # Environment management (read-only)
       - environments.read
