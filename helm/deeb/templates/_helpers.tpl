@@ -171,7 +171,7 @@ API URL for frontend
 Callback URL for OAuth
 */}}
 {{- define "deeb.callbackUrl" -}}
-{{- printf "https://%s/api/v1/auth/callback" .Values.global.domain }}
+{{- printf "https://%s/api/v1/auth/google/callback" .Values.global.domain }}
 {{- end }}
 
 {{/*
