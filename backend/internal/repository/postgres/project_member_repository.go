@@ -59,6 +59,66 @@ func (r *ProjectMemberRepository) AddMember(ctx context.Context, member *models.
 	return nil
 }
 
+// AddMembersBatch adds multiple members in a single transaction (atomic - all or nothing)
+func (r *ProjectMemberRepository) AddMembersBatch(ctx context.Context, members []*models.ProjectMember) error {
+	if len(members) == 0 {
+		return nil
+	}
+
+	// Start transaction
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	query := `
+		INSERT INTO project_members (id, project_id, user_id, project_role, added_by_id, added_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	now := time.Now()
+	for _, member := range members {
+		// Validate member
+		if validationErr := member.Validate(); validationErr != nil {
+			err = validationErr
+			return err
+		}
+
+		// Set timestamps and ID
+		if member.ID == uuid.Nil {
+			member.ID = uuid.New()
+		}
+		if member.AddedAt.IsZero() {
+			member.AddedAt = now
+		}
+
+		_, execErr := tx.ExecContext(ctx, query,
+			member.ID,
+			member.ProjectID,
+			member.UserID,
+			member.Role,
+			member.AddedByID,
+			member.AddedAt,
+		)
+		if execErr != nil {
+			err = execErr
+			return err
+		}
+	}
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // RemoveMember removes a member from a project
 func (r *ProjectMemberRepository) RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error {
 	query := `

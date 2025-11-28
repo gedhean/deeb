@@ -85,14 +85,34 @@ func Setup(
 	ctx := context.Background()
 	schemaSyncJob.Start(ctx)
 
+	// Initialize project assignment service (used by auth and user handlers)
+	projectAssignmentService := services.NewProjectAssignmentService(
+		projectRepo,
+		projectMemberRepo,
+		userRepo,
+		cfg.Features.AutoAssignProjectsEnabled,
+		logger.Get(),
+	)
+
 	// Setup API routes
 	// Public routes (no authentication required)
 	setupSetupRoutes(e, userRepo)
-	setupAuthRoutes(e, authenticated, cfg, userRepo, tokenManager, loginRateLimiter, auditLogMiddleware)
+	setupAuthRoutes(
+		e,
+		authenticated,
+		cfg,
+		userRepo,
+		projectRepo,
+		projectMemberRepo,
+		projectAssignmentService,
+		tokenManager,
+		loginRateLimiter,
+		auditLogMiddleware,
+	)
 	setupHealthRoute(e, db, version)
 
 	// Protected routes (authentication required via authenticated group)
-	setupUserRoutes(authenticated, userRepo)
+	setupUserRoutes(authenticated, userRepo, projectAssignmentService)
 	setupProjectRoutes(authenticated, projectRepo, dbRepo, projectMemberRepo, userRepo)
 	setupEnvironmentRoutes(authenticated, envRepo, db)
 	setupPolicyRoutes(authenticated, policyRepo, envRepo)
@@ -162,17 +182,21 @@ func setupAuthRoutes(
 	authenticated *echo.Group,
 	cfg *config.Config,
 	userRepo repository.UserRepository,
+	projectRepo repository.ProjectRepository,
+	projectMemberRepo repository.ProjectMemberRepository,
+	projectAssignmentService *services.ProjectAssignmentService,
 	tokenManager *auth.TokenManager,
 	loginRateLimiter *handlers.RateLimiter,
 	auditLogMiddleware *middleware.AuditLogMiddleware,
 ) {
 	// Initialize handlers
-	registerHandler := handlers.NewRegisterHandler(userRepo, logger.Get())
+	registerHandler := handlers.NewRegisterHandler(userRepo, projectAssignmentService, logger.Get())
 	loginHandler := handlers.NewLoginHandler(userRepo, tokenManager, loginRateLimiter, logger.Get())
 	logoutHandler := handlers.NewLogoutHandler(logger.Get())
 	meHandler := handlers.NewMeHandler(userRepo, logger.Get())
 	googleHandler := handlers.NewGoogleOAuthHandler(
 		userRepo,
+		projectAssignmentService,
 		tokenManager,
 		cfg.Auth.GoogleClientID,
 		cfg.Auth.GoogleClientSecret,
@@ -196,8 +220,12 @@ func setupAuthRoutes(
 }
 
 // setupUserRoutes registers user management routes
-func setupUserRoutes(authenticated *echo.Group, userRepo repository.UserRepository) {
-	userHandler := handlers.NewUserHandler(userRepo, logger.Get())
+func setupUserRoutes(
+	authenticated *echo.Group,
+	userRepo repository.UserRepository,
+	projectAssignmentService *services.ProjectAssignmentService,
+) {
+	userHandler := handlers.NewUserHandler(userRepo, projectAssignmentService, logger.Get())
 	usersGroup := authenticated.Group("/users")
 
 	// Authorization middleware

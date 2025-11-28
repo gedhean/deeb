@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/middleware"
@@ -21,18 +23,26 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-
 
 // RegisterHandler handles user registration requests
 type RegisterHandler struct {
-	userRepo repository.UserRepository
-	logger   *zap.Logger
+	userRepo                 repository.UserRepository
+	projectAssignmentService ProjectAssignmentService
+	logger                   *zap.Logger
+}
+
+// ProjectAssignmentService defines the interface for project assignment operations
+type ProjectAssignmentService interface {
+	AssignUserToExistingProjects(ctx context.Context, userID uuid.UUID) (int, error)
 }
 
 // NewRegisterHandler creates a new RegisterHandler
 func NewRegisterHandler(
 	userRepo repository.UserRepository,
+	projectAssignmentService ProjectAssignmentService,
 	logger *zap.Logger,
 ) *RegisterHandler {
 	return &RegisterHandler{
-		userRepo: userRepo,
-		logger:   logger,
+		userRepo:                 userRepo,
+		projectAssignmentService: projectAssignmentService,
+		logger:                   logger,
 	}
 }
 
@@ -150,6 +160,20 @@ func (h *RegisterHandler) Register(c echo.Context) error {
 	if err != nil {
 		h.logger.Error("Failed to create user", zap.Error(err), zap.String("email", req.Email))
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "failed to create user"})
+	}
+
+	// Auto-assign user to existing projects (skip for first user/OrganizationAdmin)
+	if orgRole != "OrganizationAdmin" {
+		if count, err := h.projectAssignmentService.AssignUserToExistingProjects(ctx, user.ID); err != nil {
+			h.logger.Error("Failed to assign user to projects",
+				zap.Error(err),
+				zap.String("user_id", user.ID.String()))
+			// Log error but don't fail signup
+		} else if count > 0 {
+			h.logger.Info("Auto-assigned user to projects",
+				zap.String("user_id", user.ID.String()),
+				zap.Int("project_count", count))
+		}
 	}
 
 	h.logger.Info("User registered successfully",

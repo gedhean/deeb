@@ -289,6 +289,15 @@ func (m *mockProjectMemberRepositoryForProject) AddMember(ctx context.Context, m
 	return nil
 }
 
+func (m *mockProjectMemberRepositoryForProject) AddMembersBatch(ctx context.Context, members []*models.ProjectMember) error {
+	for _, member := range members {
+		if err := m.AddMember(ctx, member); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *mockProjectMemberRepositoryForProject) RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error {
 	return nil
 }

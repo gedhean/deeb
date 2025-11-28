@@ -10,7 +10,7 @@ server:
   frontend_url: https://deeb.nsx.services  # Frontend URL for OAuth redirects
 auth:
   jwt_expiration: 24h  # JWT token expiration
-  callback_url: https://deeb.nsx.services/api/v1/auth/google/callback # OAuth callback URL
+  callback_url: https://deeb.nsx.services/api/v1/auth/google/callback  # OAuth callback URL
   require_2fa: false  # Require 2FA for all users
 security:
   bcrypt_cost: 12  # Bcrypt hashing cost (10-31, higher is more secure but slower)

@@ -24,6 +24,7 @@ import (
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -122,7 +123,9 @@ func TestIntegration_RegisterAndLogin_Success(t *testing.T) {
 	require.NoError(t, err, "failed to create dummy user")
 
 	// Test Registration
-	registerHandler := handlers.NewRegisterHandler(userRepo, logger)
+	mockProjectAssignmentService := new(handlers.MockProjectAssignmentService)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
+	registerHandler := handlers.NewRegisterHandler(userRepo, mockProjectAssignmentService, logger)
 
 	email := fmt.Sprintf("test-%d@example.com", time.Now().Unix())
 	password := "TestPassword123!"
@@ -205,7 +208,9 @@ func TestIntegration_Register_DuplicateEmail(t *testing.T) {
 	userRepo := postgres.NewUserRepository(db)
 	logger := zap.NewNop()
 
-	registerHandler := handlers.NewRegisterHandler(userRepo, logger)
+	mockProjectAssignmentService := new(handlers.MockProjectAssignmentService)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
+	registerHandler := handlers.NewRegisterHandler(userRepo, mockProjectAssignmentService, logger)
 
 	email := fmt.Sprintf("test-%d@example.com", time.Now().Unix())
 	password := "TestPassword123!"
@@ -256,7 +261,9 @@ func TestIntegration_Login_InvalidPassword(t *testing.T) {
 	logger := zap.NewNop()
 
 	// Create user first
-	registerHandler := handlers.NewRegisterHandler(userRepo, logger)
+	mockProjectAssignmentService := new(handlers.MockProjectAssignmentService)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
+	registerHandler := handlers.NewRegisterHandler(userRepo, mockProjectAssignmentService, logger)
 
 	email := fmt.Sprintf("test-%d@example.com", time.Now().Unix())
 	correctPassword := "TestPassword123!"
@@ -360,7 +367,9 @@ func TestIntegration_Login_InactiveUser(t *testing.T) {
 	logger := zap.NewNop()
 
 	// Create user first
-	registerHandler := handlers.NewRegisterHandler(userRepo, logger)
+	mockProjectAssignmentService := new(handlers.MockProjectAssignmentService)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
+	registerHandler := handlers.NewRegisterHandler(userRepo, mockProjectAssignmentService, logger)
 
 	email := fmt.Sprintf("test-%d@example.com", time.Now().Unix())
 	password := "TestPassword123!"

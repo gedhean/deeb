@@ -24,17 +24,19 @@ import (
 
 // GoogleOAuthHandler handles Google OAuth authentication
 type GoogleOAuthHandler struct {
-	userRepo     repository.UserRepository
-	tokenManager *auth.TokenManager
-	oauthConfig  *oauth2.Config
-	logger       *zap.Logger
-	states       map[string]time.Time // In-memory state tracking for CSRF protection
-	redirectURL  string               // Frontend URL for OAuth redirects
+	userRepo                 repository.UserRepository
+	projectAssignmentService ProjectAssignmentService
+	tokenManager             *auth.TokenManager
+	oauthConfig              *oauth2.Config
+	logger                   *zap.Logger
+	states                   map[string]time.Time // In-memory state tracking for CSRF protection
+	redirectURL              string               // Frontend URL for OAuth redirects
 }
 
 // NewGoogleOAuthHandler creates a new Google OAuth handler
 func NewGoogleOAuthHandler(
 	userRepo repository.UserRepository,
+	projectAssignmentService ProjectAssignmentService,
 	tokenManager *auth.TokenManager,
 	clientID string,
 	clientSecret string,
@@ -43,8 +45,9 @@ func NewGoogleOAuthHandler(
 	logger *zap.Logger,
 ) *GoogleOAuthHandler {
 	return &GoogleOAuthHandler{
-		userRepo:     userRepo,
-		tokenManager: tokenManager,
+		userRepo:                 userRepo,
+		projectAssignmentService: projectAssignmentService,
+		tokenManager:             tokenManager,
 		oauthConfig: &oauth2.Config{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
@@ -211,6 +214,20 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 		h.logger.Info("Created new user from Google OAuth",
 			zap.String("user_id", user.ID.String()),
 			zap.String("email", email))
+
+		// Auto-assign user to existing projects (skip for first user/OrganizationAdmin)
+		if orgRole != "OrganizationAdmin" {
+			if count, err := h.projectAssignmentService.AssignUserToExistingProjects(ctx, user.ID); err != nil {
+				h.logger.Error("Failed to assign user to projects",
+					zap.Error(err),
+					zap.String("user_id", user.ID.String()))
+				// Log error but don't fail OAuth flow
+			} else if count > 0 {
+				h.logger.Info("Auto-assigned user to projects",
+					zap.String("user_id", user.ID.String()),
+					zap.Int("project_count", count))
+			}
+		}
 	} else {
 		h.logger.Info("Existing user logged in via Google OAuth",
 			zap.String("user_id", user.ID.String()),

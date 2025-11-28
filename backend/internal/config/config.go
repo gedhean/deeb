@@ -24,6 +24,7 @@ type Config struct {
 	Logging        LoggingConfig        `yaml:"logging"`
 	BackgroundJobs BackgroundJobsConfig `yaml:"background_jobs"`
 	AuditLogging   AuditLoggingConfig   `yaml:"audit_logging"`
+	Features       FeaturesConfig       `yaml:"features"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -102,6 +103,11 @@ type ResourceRule struct {
 	Actions []string `yaml:"actions"` // List of action names to log (e.g., ["create", "update", "delete"])
 }
 
+// FeaturesConfig holds feature flags configuration
+type FeaturesConfig struct {
+	AutoAssignProjectsEnabled bool `yaml:"auto_assign_projects_enabled"` // Enable automatic project assignment for new users
+}
+
 // Load loads configuration from environment variables and optionally a YAML file
 func Load(configPath string) (*Config, error) {
 	cfg := &Config{}
@@ -176,6 +182,9 @@ func (c *Config) setDefaults() {
 	c.AuditLogging.SkipPaths = []string{}
 	c.AuditLogging.Resources = make(map[string]ResourceRule)
 	c.AuditLogging.RedactionEnabled = true
+
+	// Features defaults
+	c.Features.AutoAssignProjectsEnabled = true // Enable auto-assignment by default
 }
 
 // loadFromFile loads configuration from a YAML file
@@ -282,6 +291,11 @@ func (c *Config) loadFromEnv() {
 	}
 	if v := os.Getenv("LOG_FORMAT"); v != "" {
 		c.Logging.Format = v
+	}
+
+	// Features
+	if v := os.Getenv("FEATURE_AUTO_ASSIGN_PROJECTS"); v != "" {
+		c.Features.AutoAssignProjectsEnabled = v == "true"
 	}
 }
 

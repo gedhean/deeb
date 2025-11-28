@@ -80,8 +80,10 @@ func (m *MockUserRepository) UpdateLastLogin(ctx context.Context, id uuid.UUID) 
 func TestRegisterHandler_ServeHTTP_Success(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
@@ -92,6 +94,7 @@ func TestRegisterHandler_ServeHTTP_Success(t *testing.T) {
 			u.OrganizationRole == "OrganizationDeveloper" &&
 			u.IsActive == true
 	})).Return(nil)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Create request
 	reqBody := RegisterRequest{
@@ -125,8 +128,10 @@ func TestRegisterHandler_ServeHTTP_Success(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_CustomOrganizationRole(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	customRole := "OrganizationAdmin"
 
@@ -137,6 +142,7 @@ func TestRegisterHandler_ServeHTTP_CustomOrganizationRole(t *testing.T) {
 		return u.Email == "admin@example.com" &&
 			u.OrganizationRole == "OrganizationAdmin"
 	})).Return(nil)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Create request with custom role
 	reqBody := RegisterRequest{
@@ -182,8 +188,10 @@ func TestRegisterHandler_ServeHTTP_InvalidEmailFormat(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
 			mockRepo := new(MockUserRepository)
+			mockProjectAssignmentService := new(MockProjectAssignmentService)
 			logger := zap.NewNop()
-			handler := NewRegisterHandler(mockRepo, logger)
+			handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+			mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 			// Create request
 			reqBody := RegisterRequest{
@@ -214,8 +222,10 @@ func TestRegisterHandler_ServeHTTP_InvalidEmailFormat(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_PasswordTooShort(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Create request with short password
 	reqBody := RegisterRequest{
@@ -244,8 +254,10 @@ func TestRegisterHandler_ServeHTTP_PasswordTooShort(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_PasswordTooLong(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Create request with password > 72 characters
 	longPassword := make([]byte, 73)
@@ -279,8 +291,10 @@ func TestRegisterHandler_ServeHTTP_PasswordTooLong(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_EmptyPassword(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Create request with empty password
 	reqBody := RegisterRequest{
@@ -309,8 +323,10 @@ func TestRegisterHandler_ServeHTTP_EmptyPassword(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_DuplicateEmail(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Mock existing user
 	existingUser := &models.User{
@@ -352,8 +368,10 @@ func TestRegisterHandler_ServeHTTP_DuplicateEmail(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_MalformedJSON(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Create request with malformed JSON
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader([]byte("{invalid json")))
@@ -377,8 +395,10 @@ func TestRegisterHandler_ServeHTTP_MalformedJSON(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_DatabaseErrorOnGetByEmail(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Mock database error
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, errors.New("database connection failed"))
@@ -412,8 +432,10 @@ func TestRegisterHandler_ServeHTTP_DatabaseErrorOnGetByEmail(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_DatabaseErrorOnCreate(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
@@ -449,8 +471,10 @@ func TestRegisterHandler_ServeHTTP_DatabaseErrorOnCreate(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_MethodNotAllowed(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Create GET request (should only accept POST)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/register", nil)
@@ -473,8 +497,10 @@ func TestRegisterHandler_ServeHTTP_MethodNotAllowed(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_EmailNormalization(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Mock expectations - email should be lowercased and trimmed
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
@@ -506,8 +532,10 @@ func TestRegisterHandler_ServeHTTP_EmailNormalization(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_FirstUserBecomesAdmin(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Mock expectations for first user (no existing users)
 	mockRepo.On("GetByEmail", mock.Anything, "first@example.com").Return(nil, sql.ErrNoRows)
@@ -550,8 +578,10 @@ func TestRegisterHandler_ServeHTTP_FirstUserBecomesAdmin(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_SecondUserGetsDeveloperRole(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Mock expectations for second user (one user already exists)
 	existingUser := &models.User{
@@ -601,8 +631,10 @@ func TestRegisterHandler_ServeHTTP_SecondUserGetsDeveloperRole(t *testing.T) {
 func TestRegisterHandler_ServeHTTP_FirstUserSetup_DatabaseError(t *testing.T) {
 	// Setup
 	mockRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
-	handler := NewRegisterHandler(mockRepo, logger)
+	handler := NewRegisterHandler(mockRepo, mockProjectAssignmentService, logger)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
 
 	// Mock expectations - List() returns an error
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)

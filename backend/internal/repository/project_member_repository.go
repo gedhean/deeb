@@ -13,6 +13,9 @@ type ProjectMemberRepository interface {
 	// AddMember adds a new member to a project
 	AddMember(ctx context.Context, member *models.ProjectMember) error
 
+	// AddMembersBatch adds multiple members in a single transaction (atomic - all or nothing)
+	AddMembersBatch(ctx context.Context, members []*models.ProjectMember) error
+
 	// RemoveMember removes a member from a project
 	RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error
 

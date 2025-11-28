@@ -199,57 +199,6 @@ func (m *MockPolicyFindingRepository) CountBySeverity(ctx context.Context, chang
 	return args.Get(0).(map[string]int), args.Error(1)
 }
 
-// MockProjectMemberRepository is a mock implementation of ProjectMemberRepository
-type MockProjectMemberRepository struct {
-	mock.Mock
-}
-
-func (m *MockProjectMemberRepository) AddMember(ctx context.Context, member *models.ProjectMember) error {
-	args := m.Called(ctx, member)
-	return args.Error(0)
-}
-
-func (m *MockProjectMemberRepository) RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error {
-	args := m.Called(ctx, projectID, userID)
-	return args.Error(0)
-}
-
-func (m *MockProjectMemberRepository) GetMembers(ctx context.Context, projectID uuid.UUID) ([]*models.ProjectMember, error) {
-	args := m.Called(ctx, projectID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.ProjectMember), args.Error(1)
-}
-
-func (m *MockProjectMemberRepository) GetMemberRole(
-	ctx context.Context,
-	projectID, userID uuid.UUID,
-) (*models.ProjectMember, error) {
-	args := m.Called(ctx, projectID, userID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.ProjectMember), args.Error(1)
-}
-
-func (m *MockProjectMemberRepository) UpdateRole(
-	ctx context.Context,
-	projectID, userID uuid.UUID,
-	role rbac.ProjectRole,
-) error {
-	args := m.Called(ctx, projectID, userID, role)
-	return args.Error(0)
-}
-
-func (m *MockProjectMemberRepository) GetUserProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	args := m.Called(ctx, userID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]uuid.UUID), args.Error(1)
-}
-
 // Helper function to create a context with user info
 func createContextWithUser(userID uuid.UUID, orgRole rbac.OrganizationRole) context.Context {
 	ctx := context.Background()

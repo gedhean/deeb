@@ -166,7 +166,8 @@ func TestListUsers(t *testing.T) {
 				users:   tt.mockUsers,
 				listErr: tt.mockErr,
 			}
-			handler := NewUserHandler(mockRepo, logger)
+			mockProjectAssignmentService := new(MockProjectAssignmentService)
+			handler := NewUserHandler(mockRepo, mockProjectAssignmentService, logger)
 
 			// Create request
 			e := echo.New()
@@ -260,7 +261,8 @@ func TestGetUser(t *testing.T) {
 				users:  tt.mockUsers,
 				getErr: tt.mockErr,
 			}
-			handler := NewUserHandler(mockRepo, logger)
+			mockProjectAssignmentService := new(MockProjectAssignmentService)
+			handler := NewUserHandler(mockRepo, mockProjectAssignmentService, logger)
 
 			// Create request
 			e := echo.New()
@@ -369,7 +371,8 @@ func TestUpdateUser(t *testing.T) {
 				users:  tt.mockUsers,
 				updErr: tt.mockErr,
 			}
-			handler := NewUserHandler(mockRepo, logger)
+			mockProjectAssignmentService := new(MockProjectAssignmentService)
+			handler := NewUserHandler(mockRepo, mockProjectAssignmentService, logger)
 
 			// Create request
 			e := echo.New()
@@ -450,7 +453,8 @@ func TestDeleteUser(t *testing.T) {
 				users:  tt.mockUsers,
 				updErr: tt.mockErr,
 			}
-			handler := NewUserHandler(mockRepo, logger)
+			mockProjectAssignmentService := new(MockProjectAssignmentService)
+			handler := NewUserHandler(mockRepo, mockProjectAssignmentService, logger)
 
 			// Create request
 			e := echo.New()

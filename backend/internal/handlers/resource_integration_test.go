@@ -30,6 +30,7 @@ import (
 	"github.com/nsxbet/deeb/internal/repository/postgres"
 	"github.com/nsxbet/deeb/internal/routes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -141,7 +142,9 @@ func createTestUser(t *testing.T, db *sqlx.DB, email string, orgRole rbac.Organi
 	userRepo := postgres.NewUserRepository(db)
 	logger := zap.NewNop()
 
-	registerHandler := handlers.NewRegisterHandler(userRepo, logger)
+	mockProjectAssignmentService := new(handlers.MockProjectAssignmentService)
+	mockProjectAssignmentService.On("AssignUserToExistingProjects", mock.Anything, mock.Anything).Return(0, nil)
+	registerHandler := handlers.NewRegisterHandler(userRepo, mockProjectAssignmentService, logger)
 
 	registerReq := handlers.RegisterRequest{
 		Email:    email,

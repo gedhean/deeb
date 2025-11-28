@@ -12,21 +12,28 @@ import (
 	"github.com/nsxbet/deeb/internal/auth"
 	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
 )
 
 // UserHandler handles user management endpoints
 type UserHandler struct {
-	userRepo repository.UserRepository
-	logger   *zap.Logger
+	userRepo                 repository.UserRepository
+	projectAssignmentService ProjectAssignmentService
+	logger                   *zap.Logger
 }
 
 // NewUserHandler creates a new user handler
-func NewUserHandler(userRepo repository.UserRepository, logger *zap.Logger) *UserHandler {
+func NewUserHandler(
+	userRepo repository.UserRepository,
+	projectAssignmentService ProjectAssignmentService,
+	logger *zap.Logger,
+) *UserHandler {
 	return &UserHandler{
-		userRepo: userRepo,
-		logger:   logger,
+		userRepo:                 userRepo,
+		projectAssignmentService: projectAssignmentService,
+		logger:                   logger,
 	}
 }
 
@@ -102,6 +109,20 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 		zap.String("email", user.Email),
 		zap.String("user_id", user.ID.String()),
 		zap.String("organization_role", string(user.OrganizationRole)))
+
+	// Auto-assign user to existing projects (skip OrganizationAdmin)
+	if user.OrganizationRole != rbac.OrganizationAdmin {
+		if count, err := h.projectAssignmentService.AssignUserToExistingProjects(ctx, user.ID); err != nil {
+			h.logger.Error("Failed to assign user to projects",
+				zap.Error(err),
+				zap.String("user_id", user.ID.String()))
+			// Log error but don't fail user creation
+		} else if count > 0 {
+			h.logger.Info("Auto-assigned user to projects",
+				zap.String("user_id", user.ID.String()),
+				zap.Int("project_count", count))
+		}
+	}
 
 	return c.JSON(http.StatusCreated, user.ToResponse())
 }

@@ -18,12 +18,14 @@ import (
 // TestGoogleOAuthRedirect tests the initial redirect to Google
 func TestGoogleOAuthRedirect(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -62,12 +64,14 @@ func TestGoogleOAuthRedirect(t *testing.T) {
 // TestGoogleOAuthRedirect_WrongMethod tests non-GET request
 func TestGoogleOAuthRedirect_WrongMethod(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -89,12 +93,14 @@ func TestGoogleOAuthRedirect_WrongMethod(t *testing.T) {
 // TestGoogleOAuthCallback_MissingState tests callback without state
 func TestGoogleOAuthCallback_MissingState(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -121,12 +127,14 @@ func TestGoogleOAuthCallback_MissingState(t *testing.T) {
 // TestGoogleOAuthCallback_InvalidState tests callback with invalid state
 func TestGoogleOAuthCallback_InvalidState(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -153,12 +161,14 @@ func TestGoogleOAuthCallback_InvalidState(t *testing.T) {
 // TestGoogleOAuthCallback_ExpiredState tests callback with expired state
 func TestGoogleOAuthCallback_ExpiredState(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -193,12 +203,14 @@ func TestGoogleOAuthCallback_ExpiredState(t *testing.T) {
 // TestGoogleOAuthCallback_ErrorFromGoogle tests callback with error from Google
 func TestGoogleOAuthCallback_ErrorFromGoogle(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -229,12 +241,14 @@ func TestGoogleOAuthCallback_ErrorFromGoogle(t *testing.T) {
 // TestGoogleOAuthCallback_MissingCode tests callback without authorization code
 func TestGoogleOAuthCallback_MissingCode(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -265,12 +279,14 @@ func TestGoogleOAuthCallback_MissingCode(t *testing.T) {
 // TestGoogleOAuthCallback_WrongMethod tests callback with wrong HTTP method
 func TestGoogleOAuthCallback_WrongMethod(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -306,12 +322,14 @@ func TestGoogleOAuthCallback_InactiveUser(t *testing.T) {
 // TestGenerateStateToken tests state token generation
 func TestGenerateStateToken(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -339,12 +357,14 @@ func TestGenerateStateToken(t *testing.T) {
 // TestStateCleanup tests that used states are removed
 func TestStateCleanup(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",
@@ -377,12 +397,14 @@ func TestStateCleanup(t *testing.T) {
 // TestOAuthConfig tests that OAuth config is properly initialized
 func TestOAuthConfig(t *testing.T) {
 	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
 	logger := zap.NewNop()
 	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
 	assert.NoError(t, err)
 
 	handler := NewGoogleOAuthHandler(
 		mockUserRepo,
+		mockProjectAssignmentService,
 		tokenManager,
 		"test-client-id",
 		"test-client-secret",

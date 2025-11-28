@@ -43,6 +43,15 @@ func (m *mockProjectMemberRepository) AddMember(ctx context.Context, member *mod
 	return nil
 }
 
+func (m *mockProjectMemberRepository) AddMembersBatch(ctx context.Context, members []*models.ProjectMember) error {
+	for _, member := range members {
+		if err := m.AddMember(ctx, member); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *mockProjectMemberRepository) RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error {
 	key := projectID.String() + "-" + userID.String()
 	delete(m.members, key)
