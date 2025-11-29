@@ -213,11 +213,15 @@ export const PoliciesPage: React.FC = () => {
   const openEditForm = useCallback((policy: Policy) => {
     setSelectedPolicy(policy);
     const config = policy.policy_config as SQLReviewPolicyConfig;
+    // Deep clone the config to avoid mutating the original policy object
+    const clonedConfig = config.rules
+      ? (JSON.parse(JSON.stringify(config)) as SQLReviewPolicyConfig)
+      : { rules: {} };
     setFormData({
       name: policy.name,
       description: policy.description || '',
       type: policy.type,
-      policy_config: config.rules ? config : { rules: {} },
+      policy_config: clonedConfig,
     });
     setFormErrors({});
     setUseJsonEditor(false);

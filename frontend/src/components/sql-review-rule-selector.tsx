@@ -64,42 +64,43 @@ export const SQLReviewRuleSelector: React.FC<SQLReviewRuleSelectorProps> = ({
   };
 
   const handleRuleToggle = (ruleKey: string, ruleMetadata: RuleMetadata, enabled: boolean) => {
-    const newConfig = { ...config };
-    if (!newConfig.rules) {
-      newConfig.rules = {};
-    }
+    // Deep clone rules to avoid mutating the original config
+    const newRules = config.rules ? { ...config.rules } : {};
 
     if (enabled) {
-      newConfig.rules[ruleKey] = {
+      newRules[ruleKey] = {
         type: ruleMetadata.type,
         level: 'warning',
         engine: ruleMetadata.engine,
         payload: convertParametersToPayload(ruleMetadata.parameters),
       };
     } else {
-      delete newConfig.rules[ruleKey];
+      delete newRules[ruleKey];
     }
 
-    onChange(newConfig);
+    onChange({ ...config, rules: newRules });
   };
 
   const handleLevelChange = (ruleKey: string, level: SQLReviewRuleLevel) => {
-    const newConfig = { ...config };
-    if (newConfig.rules[ruleKey]) {
-      newConfig.rules[ruleKey].level = level;
-      onChange(newConfig);
-    }
+    if (!config.rules?.[ruleKey]) return;
+
+    const newRules = {
+      ...config.rules,
+      [ruleKey]: { ...config.rules[ruleKey], level },
+    };
+    onChange({ ...config, rules: newRules });
   };
 
   const handleParameterChange = (ruleKey: string, paramName: string, value: string | number) => {
-    const newConfig = { ...config };
-    if (newConfig.rules[ruleKey]) {
-      if (!newConfig.rules[ruleKey].payload) {
-        newConfig.rules[ruleKey].payload = {};
-      }
-      newConfig.rules[ruleKey].payload![paramName] = value;
-      onChange(newConfig);
-    }
+    if (!config.rules?.[ruleKey]) return;
+
+    const existingRule = config.rules[ruleKey];
+    const newPayload = { ...existingRule.payload, [paramName]: value };
+    const newRules = {
+      ...config.rules,
+      [ruleKey]: { ...existingRule, payload: newPayload },
+    };
+    onChange({ ...config, rules: newRules });
   };
 
   const isRuleEnabled = (ruleKey: string): boolean => {
