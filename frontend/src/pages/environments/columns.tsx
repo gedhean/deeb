@@ -67,7 +67,7 @@ export const getEnvironmentsColumns = ({
     id: 'policy',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Policy" />,
     cell: ({ row }) => {
-      const policyId = row.getValue('policy_id') as string | undefined;
+      const policyId = row.original.policy_id;
       return getPolicyName(policyId);
     },
     enableSorting: false,
