@@ -21,7 +21,7 @@ type ProjectRole string
 const (
 	// ProjectOwner - Full control over the project. Can manage all aspects including settings, members, change plans, and policy rules.
 	ProjectOwner ProjectRole = "ProjectOwner"
-	// ProjectDeveloper - Can create and manage their own change plans, and execute approved changes. Cannot approve changes or manage members.
+	// ProjectDeveloper - Can create and manage their own change plans, approve and reject changes, and execute approved changes. Cannot manage members or policy rules.
 	ProjectDeveloper ProjectRole = "ProjectDeveloper"
 	// ProjectApprover - Can review and approve/reject change plans but cannot create or execute them. Useful for review-only roles.
 	ProjectApprover ProjectRole = "ProjectApprover"
@@ -79,12 +79,15 @@ var projectRolePermissions = map[ProjectRole][]Permission{
 		PermissionChangesApprove,
 		PermissionChangesReject,
 		PermissionChangesExecute,
+		PermissionPolicyRulesRead,
 	},
 	ProjectDeveloper: {
 		PermissionProjectMembersRead,
 		PermissionChangesCreate,
 		PermissionChangesRead,
 		PermissionChangesUpdate,
+		PermissionChangesApprove,
+		PermissionChangesReject,
 		PermissionChangesExecute,
 		PermissionPolicyRulesRead,
 	},

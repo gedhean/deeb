@@ -76,9 +76,11 @@ roles:
       - changes.approve
       - changes.reject
       - changes.execute
+      # Policy rule management (read-only)
+      - policy_rules.read
   - name: ProjectDeveloper
     title: Project Developer
-    description: Can create and manage their own change plans, and execute approved changes. Cannot approve changes or manage members.
+    description: Can create and manage their own change plans, approve and reject changes, and execute approved changes. Cannot manage members or policy rules.
     permissions:
       # Project member management (read-only)
       - project.members.read
@@ -86,6 +88,8 @@ roles:
       - changes.create
       - changes.read
       - changes.update
+      - changes.approve
+      - changes.reject
       - changes.execute
       # Policy rule management (read-only)
       - policy_rules.read

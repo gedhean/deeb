@@ -55,10 +55,15 @@ run: dev
 .PHONY: generate
 generate:
 	echo "Generating $(FRONTEND_DIR)..."
-	pnpm --dir $(FRONTEND_DIR) run generate:rbac
+	pnpm --dir $(FRONTEND_DIR) run generate
+	
 
 	echo "Generating $(BACKEND_DIR)..."
 	make -C $(BACKEND_DIR) generate
+
+	echo "Linting and formatting generated files..."
+	pnpm --dir $(FRONTEND_DIR) run lint-fix
+	make -C $(BACKEND_DIR) format
 
 ensure-concurrently:
 	@which concurrently > /dev/null || (echo "Installing concurrently..." && pnpm install -g concurrently)
