@@ -58,12 +58,34 @@ func ConvertRuleMetadataToStoreRule(
 		engine = types.Engine_ENGINE_UNSPECIFIED
 	}
 
+	// Merge default parameter values from metadata with user-provided payload
+	// This ensures required fields like 'format' have values even if not provided
+	mergedPayload := mergePayloadWithDefaults(payload, metadata.Parameters)
+
 	return &types.SQLReviewRule{
 		Type:    metadata.Type,
 		Level:   ruleLevel,
-		Payload: payload, // sql-reviewer uses map[string]interface{} directly
+		Payload: mergedPayload,
 		Engine:  engine,
 	}
+}
+
+// mergePayloadWithDefaults merges user-provided payload with default values from parameters
+func mergePayloadWithDefaults(payload map[string]interface{}, parameters []RuleParameter) map[string]interface{} {
+	// Start with defaults from metadata
+	merged := make(map[string]interface{})
+	for _, param := range parameters {
+		if param.Default != nil {
+			merged[param.Name] = param.Default
+		}
+	}
+
+	// Override with user-provided values
+	for key, value := range payload {
+		merged[key] = value
+	}
+
+	return merged
 }
 
 // GetAllRulesForEngine returns a flat list of all rules for an engine

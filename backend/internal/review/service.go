@@ -203,6 +203,18 @@ func (s *ReviewService) Review(ctx context.Context, opts ReviewOptions) (*Review
 			zap.String("sql_content", opts.SQLContent),
 			zap.String("database_engine", string(opts.DatabaseEngine)),
 			zap.Int("review_options", len(reviewOpts)))
+		// DEBUG: print each rule being sent to the reviewer and its payload
+		for _, rule := range rules {
+			s.logger.Debug("Rule being sent to the reviewer",
+				zap.String("rule_type", rule.Type),
+				zap.String("rule_level", string(rule.Level)),
+				zap.String("rule_engine", string(rule.Engine)),
+				zap.Any("rule_payload", rule.Payload))
+		}
+		for _, reviewOpt := range reviewOpts {
+			s.logger.Debug("Review option being sent to the reviewer",
+				zap.Any("review_opt", reviewOpt))
+		}
 		result, err = rev.Review(ctx, opts.SQLContent, reviewOpts...)
 	}
 
