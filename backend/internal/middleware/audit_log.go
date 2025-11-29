@@ -143,12 +143,12 @@ func (m *AuditLogMiddleware) AuditLog(next echo.HandlerFunc) echo.HandlerFunc {
 
 		// Determine action and resource type from request
 		action, resourceType, resourceID := m.determineActionAndResource(method, path)
-		m.logger.Debug(
-			"Action and resource type",
-			zap.String("action", action),
-			zap.String("resource_type", resourceType),
-			zap.String("resource_id", resourceID.String()),
-		)
+		// m.logger.Debug(
+		// 	"Action and resource type",
+		// 	zap.String("action", action),
+		// 	zap.String("resource_type", resourceType),
+		// 	zap.String("resource_id", resourceID.String()),
+		// )
 
 		// Check if this resource/action should be logged based on configuration
 		shouldLogResource := m.shouldLogResource(resourceType, action)
