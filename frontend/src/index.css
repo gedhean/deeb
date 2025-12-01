@@ -113,6 +113,13 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  
+  /* Black Hole Colors */
+  --color-void: #000000;
+  --color-magma: #240502;
+  --color-crimson: #780F05;
+  --color-accretion: #D13908;
+  --color-photon: #FFC87E;
 }
 
 :root {

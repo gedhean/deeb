@@ -56,6 +56,17 @@ export default {
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
       },
+      backgroundImage: {
+        blackhole: `radial-gradient(
+          circle, 
+          #000000 2%, 
+          #240502 8%, 
+          #780F05 32%, 
+          #D13908 48%, 
+          #D13908 64%, 
+          #FFC87E 100%
+        )`,
+      },
     },
   },
   plugins: [],
