@@ -216,7 +216,11 @@ export function useUpdateChangePlanSWR(): UseUpdateChangePlanResult {
 
         return result;
       } catch (err) {
-        const errorMsg = err instanceof APIError ? err.message : 'Failed to update change plan';
+        let errorMsg = 'Failed to update change plan';
+        if (err instanceof APIError) {
+          // Use details.message if available, otherwise fall back to error message
+          errorMsg = err.response?.details?.message || err.response?.error || err.message;
+        }
         setError(errorMsg);
         console.error('Failed to update change plan:', err);
         return null;

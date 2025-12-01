@@ -16,6 +16,9 @@ export interface HealthCheckResponse {
 // Error Response
 export interface ErrorResponse {
   error: string;
+  details?: {
+    message?: string;
+  };
 }
 
 // User Types

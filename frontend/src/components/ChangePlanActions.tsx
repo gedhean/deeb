@@ -51,7 +51,7 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   canExecute,
 }) => {
   // Use SWR mutation hooks for consistent cache management
-  const { updateChangePlan, isLoading: isUpdating } = useUpdateChangePlanSWR();
+  const { updateChangePlan, isLoading: isUpdating, error: updateError } = useUpdateChangePlanSWR();
   const { approveChangePlan, isLoading: isApproving } = useApproveChangePlan();
   const { closeChangePlan, isLoading: isClosing } = useCloseChangePlan();
   const { executeChangePlan, isLoading: isExecuting } = useExecuteChangePlan();
@@ -129,7 +129,7 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
         onSuccess();
       }
     } else {
-      setError('Failed to submit change plan for review');
+      setError(`Failed to submit change plan for review: ${updateError || 'Unknown error'}`);
     }
   };
 
