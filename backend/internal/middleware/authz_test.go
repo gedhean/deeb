@@ -400,7 +400,7 @@ func TestRequireProjectPermission(t *testing.T) {
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:       "project developer does not have approve permission",
+			name:       "project developer has approve permission",
 			permission: rbac.PermissionChangesApprove,
 			userRole:   rbac.OrganizationDeveloper,
 			projectID:  projectID.String(),
@@ -412,7 +412,7 @@ func TestRequireProjectPermission(t *testing.T) {
 				UserID:    userID,
 				Role:      rbac.ProjectDeveloper,
 			},
-			expectedStatus: http.StatusForbidden,
+			expectedStatus: http.StatusOK,
 		},
 		{
 			name:       "project viewer does not have approve permission",

@@ -149,9 +149,27 @@ func TestHasProjectPermission(t *testing.T) {
 			expected:   true,
 		},
 		{
-			name:       "developer does not have changes.approve",
+			name:       "developer has changes.approve",
 			role:       ProjectDeveloper,
 			permission: PermissionChangesApprove,
+			expected:   true,
+		},
+		{
+			name:       "developer has changes.reject",
+			role:       ProjectDeveloper,
+			permission: PermissionChangesReject,
+			expected:   true,
+		},
+		{
+			name:       "developer has changes.execute",
+			role:       ProjectDeveloper,
+			permission: PermissionChangesExecute,
+			expected:   true,
+		},
+		{
+			name:       "developer does not have changes.delete",
+			role:       ProjectDeveloper,
+			permission: PermissionChangesDelete,
 			expected:   false,
 		},
 		{
@@ -428,12 +446,12 @@ func TestGetProjectPermissions(t *testing.T) {
 		{
 			name:     "owner has full permissions",
 			role:     ProjectOwner,
-			expected: 12, // Full access to project settings, members, and changes (policy rules are org-level)
+			expected: 13, // Full access to project settings, members, changes, and policy rules read
 		},
 		{
 			name:     "developer has create permissions",
 			role:     ProjectDeveloper,
-			expected: 6, // Can create and manage own changes
+			expected: 8, // Can create, update, approve, reject, execute changes + read members + read policy rules
 		},
 		{
 			name:     "approver has review permissions",
