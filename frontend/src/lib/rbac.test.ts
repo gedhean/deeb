@@ -95,13 +95,11 @@ describe('RBAC Utilities', () => {
     });
 
     it('should return false for ProjectDeveloper without permission', () => {
-      expect(hasProjectPermission('ProjectDeveloper', ProjectPermission.ChangesApprove)).toBe(
-        false,
-      );
-      // Note: ProjectDeveloper now has changes.execute permission per YAML config
+      // Note: ProjectDeveloper now has changes.approve, changes.reject, and changes.execute per YAML config
       expect(
         hasProjectPermission('ProjectDeveloper', ProjectPermission.ProjectSettingsUpdate),
       ).toBe(false);
+      expect(hasProjectPermission('ProjectDeveloper', ProjectPermission.ChangesDelete)).toBe(false);
     });
 
     it('should return true for ProjectApprover with approval permissions', () => {
@@ -308,7 +306,12 @@ describe('RBAC Utilities', () => {
       const permissions = getProjectPermissions('ProjectDeveloper');
       expect(permissions).toContain(ProjectPermission.ChangesCreate);
       expect(permissions).toContain(ProjectPermission.ChangesRead);
-      expect(permissions).not.toContain(ProjectPermission.ChangesApprove);
+      // Note: ProjectDeveloper now has approve/reject/execute permissions per YAML config
+      expect(permissions).toContain(ProjectPermission.ChangesApprove);
+      expect(permissions).toContain(ProjectPermission.ChangesReject);
+      expect(permissions).toContain(ProjectPermission.ChangesExecute);
+      expect(permissions).not.toContain(ProjectPermission.ChangesDelete);
+      expect(permissions).not.toContain(ProjectPermission.ProjectSettingsUpdate);
     });
 
     it('should return correct permissions for ProjectApprover', () => {

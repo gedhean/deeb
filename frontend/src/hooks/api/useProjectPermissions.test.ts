@@ -103,19 +103,19 @@ describe('useProjectPermissions', () => {
 
       const { result } = renderHook(() => useProjectPermissions(projectMembers));
 
-      // ProjectDeveloper can create, update, and execute changes (per YAML config)
+      // ProjectDeveloper can create, update, approve, reject, and execute changes (per YAML config)
       expect(result.current.canCreateChanges).toBe(true);
       expect(result.current.canUpdateChanges).toBe(true);
+      expect(result.current.canApproveChanges).toBe(true);
+      expect(result.current.canRejectChanges).toBe(true);
       expect(result.current.canExecuteChanges).toBe(true);
 
       // ProjectDeveloper cannot delete changes (not in YAML config)
       expect(result.current.canDeleteChanges).toBe(false);
 
-      // ProjectDeveloper cannot manage members, settings, approve/reject, or manage policy rules
+      // ProjectDeveloper cannot manage members, settings, or manage policy rules
       expect(result.current.canManageMembers).toBe(false);
       expect(result.current.canManageSettings).toBe(false);
-      expect(result.current.canApproveChanges).toBe(false);
-      expect(result.current.canRejectChanges).toBe(false);
       expect(result.current.canManagePolicyRules).toBe(false);
 
       expect(result.current.isProjectOwner).toBe(false);
