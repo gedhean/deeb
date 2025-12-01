@@ -18,8 +18,8 @@
 - [ ] Fix: failing to parse constraints (https://github.com/nsxbet/sql-schema)
 
 ### RBAC & Permissions
-- [ ] Fix: project roles permissions
-- [ ] Fix: Approve button not showing for developers role in projects
+- [x] Fix: project roles permissions (ProjectDeveloper now has approve/reject/execute)
+- [x] Fix: Approve button not showing for developers role in projects
 
 ### UI & Data Refresh
 - [ ] Fix: refresh databases list on current project change
@@ -43,3 +43,6 @@
 ### UX 
 
 - [ ] Feat: add copy-button component to copy text to clipboard (`pnpm dlx shadcn@latest add https://www.shadcn.io/registry/copy-button.json`) and create a component for copyable text fields.
+
+### Integrations
+- [ ] Feat: integrate Catalog with SQL Reviewer to provide schema analysis for SQL Reviewer
