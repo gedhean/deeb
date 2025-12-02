@@ -62,6 +62,14 @@ deeb/
 git clone https://github.com/nsxbet/deeb.git
 cd deeb
 
+# Setup pnpm global bin directory (first time only)
+pnpm setup
+source ~/.zshrc  # or restart your terminal
+
+# Copy environment file and configure (first time only)
+cp .env.example .env
+cp backend/.env.example backend/.env
+
 # Start development server (includes PostgreSQL + live reload)
 make dev
 
@@ -76,7 +84,7 @@ make dev
 ## Prerequisites
 
 - Go 1.25.3+
-- Node.js 20+ with pnpm
+- Node.js 20+ with pnpm (run `pnpm setup` after installing)
 - PostgreSQL 16+
 - Docker & Docker Compose (recommended)
 
