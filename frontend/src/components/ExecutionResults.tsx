@@ -11,6 +11,7 @@ import { useExecutionLogsSWR } from '@/hooks/api/useChangePlansSWR';
 import type { ChangePlan, ChangePlanStatus } from '@/lib/api/types';
 import { useUsers } from '@/hooks/api/useUsersSWR';
 import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
+import { StatementResults } from '@/components/StatementResults';
 import {
   CheckCircle2,
   XCircle,
@@ -296,6 +297,9 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ changePlan }
                             </pre>
                           </details>
                         )}
+
+                        {/* Statement Execution Results */}
+                        <StatementResults changePlanId={changePlan.id} executionLogId={log.id} />
                       </div>
                     );
                   })}

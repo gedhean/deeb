@@ -205,6 +205,11 @@ func (m *MockExecutionLogRepository) Create(ctx context.Context, log *models.Exe
 	return args.Error(0)
 }
 
+func (m *MockExecutionLogRepository) Update(ctx context.Context, log *models.ExecutionLog) error {
+	args := m.Called(ctx, log)
+	return args.Error(0)
+}
+
 func (m *MockExecutionLogRepository) GetByChangePlanID(
 	ctx context.Context,
 	changePlanID uuid.UUID,
@@ -262,6 +267,7 @@ func TestNewExecutionService(t *testing.T) {
 		&MockExecutionLockManager{},
 		nil, // queueService - nil for this test
 		nil, // executionLogRepo - nil for this test
+		nil, // statementResultRepo - nil for this test
 		connectionMgr,
 		"test-encryption-key-min-32-chars",
 		logger,
@@ -314,6 +320,7 @@ func TestExecutionService_Execute_ChangePlanNotFound(t *testing.T) {
 		lockManager,
 		nil, // queueService - nil for this test
 		nil, // executionLogRepo - nil for this test
+		nil, // statementResultRepo - nil for this test
 		connectionMgr,
 		encryptionKey,
 		logger,
@@ -343,8 +350,9 @@ func TestExecutionService_executeInTransaction_Success(t *testing.T) {
 	connectionMgr.On("Connect", mock.Anything, mock.Anything).Return(db, nil)
 
 	service := &ExecutionService{
-		connectionMgr: connectionMgr,
-		logger:        logger,
+		connectionMgr:     connectionMgr,
+		maxStatementCount: 1000,
+		logger:            logger,
 	}
 
 	ctx := context.Background()
@@ -374,7 +382,8 @@ func TestExecutionService_executeInTransaction_Success(t *testing.T) {
 	sqlMock.ExpectCommit()
 
 	changePlanID := uuid.New()
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
+	executionLogID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID, executionLogID)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.True(t, result.Success)
@@ -401,8 +410,9 @@ func TestExecutionService_executeInTransaction_WithRowsAffected(t *testing.T) {
 	connectionMgr.On("Connect", mock.Anything, mock.Anything).Return(db, nil)
 
 	service := &ExecutionService{
-		connectionMgr: connectionMgr,
-		logger:        logger,
+		connectionMgr:     connectionMgr,
+		maxStatementCount: 1000,
+		logger:            logger,
 	}
 
 	ctx := context.Background()
@@ -432,7 +442,8 @@ func TestExecutionService_executeInTransaction_WithRowsAffected(t *testing.T) {
 	sqlMock.ExpectCommit()
 
 	changePlanID := uuid.New()
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
+	executionLogID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID, executionLogID)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.True(t, result.Success)
@@ -459,8 +470,9 @@ func TestExecutionService_executeInTransaction_ExecutionError(t *testing.T) {
 	connectionMgr.On("Connect", mock.Anything, mock.Anything).Return(db, nil)
 
 	service := &ExecutionService{
-		connectionMgr: connectionMgr,
-		logger:        logger,
+		connectionMgr:     connectionMgr,
+		maxStatementCount: 1000,
+		logger:            logger,
 	}
 
 	ctx := context.Background()
@@ -490,7 +502,8 @@ func TestExecutionService_executeInTransaction_ExecutionError(t *testing.T) {
 	sqlMock.ExpectRollback()
 
 	changePlanID := uuid.New()
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
+	executionLogID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID, executionLogID)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "execution failed")
@@ -515,8 +528,9 @@ func TestExecutionService_executeInTransaction_CommitError(t *testing.T) {
 	connectionMgr.On("Connect", mock.Anything, mock.Anything).Return(db, nil)
 
 	service := &ExecutionService{
-		connectionMgr: connectionMgr,
-		logger:        logger,
+		connectionMgr:     connectionMgr,
+		maxStatementCount: 1000,
+		logger:            logger,
 	}
 
 	ctx := context.Background()
@@ -547,7 +561,8 @@ func TestExecutionService_executeInTransaction_CommitError(t *testing.T) {
 		WillReturnError(sql.ErrConnDone)
 
 	changePlanID := uuid.New()
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
+	executionLogID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID, executionLogID)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "failed to commit transaction")
@@ -574,8 +589,9 @@ func TestExecutionService_executeInTransaction_BeginError(t *testing.T) {
 	connectionMgr.On("Connect", mock.Anything, mock.Anything).Return(db, nil)
 
 	service := &ExecutionService{
-		connectionMgr: connectionMgr,
-		logger:        logger,
+		connectionMgr:     connectionMgr,
+		maxStatementCount: 1000,
+		logger:            logger,
 	}
 
 	ctx := context.Background()
@@ -599,7 +615,8 @@ func TestExecutionService_executeInTransaction_BeginError(t *testing.T) {
 		WillReturnError(sql.ErrConnDone)
 
 	changePlanID := uuid.New()
-	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID)
+	executionLogID := uuid.New()
+	result, err := service.executeInTransaction(ctx, dbInstance, dbModel, sqlContent, changePlanID, executionLogID)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "failed to begin transaction")
@@ -659,6 +676,7 @@ func TestExecutionService_Execute_InvalidStatus(t *testing.T) {
 		lockManager,
 		queueService,
 		executionLogRepo,
+		nil, // statementResultRepo - nil for this test
 		connectionMgr,
 		encryptionKey,
 		logger,
@@ -722,6 +740,7 @@ func TestExecutionService_Execute_DatabaseNotFound(t *testing.T) {
 		lockManager,
 		queueService,
 		executionLogRepo,
+		nil, // statementResultRepo - nil for this test
 		connectionMgr,
 		encryptionKey,
 		logger,
@@ -793,6 +812,7 @@ func TestExecutionService_Execute_DatabaseInstanceNotFound(t *testing.T) {
 		lockManager,
 		queueService,
 		executionLogRepo,
+		nil, // statementResultRepo - nil for this test
 		connectionMgr,
 		encryptionKey,
 		logger,
@@ -887,6 +907,7 @@ func TestExecutionService_Execute_DatabaseLocked_WithQueue(t *testing.T) {
 		lockManager,
 		queueService,
 		executionLogRepo,
+		nil, // statementResultRepo - nil for this test
 		connectionMgr,
 		encryptionKey,
 		logger,
@@ -965,6 +986,7 @@ func TestExecutionService_Execute_DatabaseLocked_WithoutQueue(t *testing.T) {
 		lockManager,
 		nil, // No queue service
 		executionLogRepo,
+		nil, // statementResultRepo - nil for this test
 		connectionMgr,
 		encryptionKey,
 		logger,

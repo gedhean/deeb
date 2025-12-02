@@ -661,6 +661,9 @@ func setupChangePlanRoutes(
 	// Initialize execution log repository
 	executionLogRepo := postgres.NewExecutionLogRepository(db)
 
+	// Initialize statement execution result repository
+	statementResultRepo := postgres.NewStatementExecutionResultRepository(db)
+
 	// Initialize execution service
 	executionService := services.NewExecutionService(
 		changePlanRepo,
@@ -672,6 +675,7 @@ func setupChangePlanRoutes(
 		lockManager,
 		queueService,
 		executionLogRepo,
+		statementResultRepo,
 		connectionMgr,
 		encryptionKey,
 		logger.Get(),
@@ -693,6 +697,7 @@ func setupChangePlanRoutes(
 		policyFindingRepo,
 		approvalRepo,
 		environmentRepo,
+		statementResultRepo,
 		riskAssessmentSvc,
 		reviewService,
 		approvalService,
@@ -804,6 +809,13 @@ func setupChangePlanRoutes(
 	// GET execution logs - requires changes.read permission
 	changePlansGroup.GET("/:id/execution-logs",
 		changePlanHandler.GetExecutionLogHistory,
+		changePlanExtractor.Extract(),
+		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
+	)
+
+	// GET statement execution results - requires changes.read permission
+	changePlansGroup.GET("/:id/execution-logs/:logId/statements",
+		changePlanHandler.GetStatementResults,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
 	)

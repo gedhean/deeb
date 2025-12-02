@@ -434,7 +434,15 @@ export const ChangePlanDetailPage: React.FC = () => {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>SQL Content</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle>SQL Content</CardTitle>
+                  {changePlan.statement_count !== undefined && changePlan.statement_count > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {changePlan.statement_count} statement
+                      {changePlan.statement_count !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </div>
                 <CardDescription>SQL statements to be executed</CardDescription>
               </div>
               {permissions.canUpdateChanges && canEditSQLContent(changePlan.status) && (

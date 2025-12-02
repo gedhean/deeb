@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -17,8 +18,12 @@ import (
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository/postgres"
+	"github.com/nsxbet/deeb/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 // setupChangePlanTestData sets up the required data for change plan tests
@@ -367,3 +372,451 @@ func TestIntegration_ChangePlan_Authorization(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
 }
+
+// setupExecutionTestData sets up test data for execution tests including a target database container
+// Returns adminToken, adminID, projectID, databaseID, databaseInstanceID, and cleanup function
+func setupExecutionTestData(
+	t *testing.T,
+	db *sqlx.DB,
+) (adminToken string, adminID, projectID, databaseID, databaseInstanceID uuid.UUID, targetDBCleanup func()) {
+	t.Helper()
+	ctx := context.Background()
+
+	// Create admin user
+	adminEmail := fmt.Sprintf("admin-%d@example.com", time.Now().UnixNano())
+	adminID = createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
+	adminToken, _ = loginUser(t, db, adminEmail, "TestPassword123!")
+
+	// Create a separate target database container for execution
+	targetContainer, err := postgrescontainer.Run(ctx,
+		"postgres:16-alpine",
+		postgrescontainer.WithDatabase("target_db"),
+		postgrescontainer.WithUsername("target_user"),
+		postgrescontainer.WithPassword("target_pass"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(60*time.Second)),
+	)
+	require.NoError(t, err, "failed to start target postgres container")
+
+	// Get target container host and port
+	targetHost, err := targetContainer.Host(ctx)
+	require.NoError(t, err)
+	targetPort, err := targetContainer.MappedPort(ctx, "5432")
+	require.NoError(t, err)
+
+	targetDBCleanup = func() {
+		if err := targetContainer.Terminate(ctx); err != nil {
+			t.Logf("failed to terminate target postgres container: %v", err)
+		}
+	}
+
+	// Create project
+	projectRepo := postgres.NewProjectRepository(db)
+	desc := "Test project for execution"
+	project := &models.Project{
+		Name:        fmt.Sprintf("exec-test-project-%d", time.Now().UnixNano()),
+		Description: &desc,
+		CreatedByID: adminID,
+	}
+	err = projectRepo.Create(ctx, project)
+	require.NoError(t, err)
+	projectID = project.ID
+
+	// Add admin as project member
+	projectMemberRepo := postgres.NewProjectMemberRepository(db)
+	member := &models.ProjectMember{
+		ProjectID: projectID,
+		UserID:    adminID,
+		Role:      rbac.ProjectOwner,
+		AddedByID: adminID,
+	}
+	err = projectMemberRepo.AddMember(ctx, member)
+	require.NoError(t, err)
+
+	// Create environment
+	envRepo := postgres.NewEnvironmentRepository(db)
+	envDesc := "Test environment"
+	env := &models.Environment{
+		Name:        fmt.Sprintf("exec-test-env-%d", time.Now().UnixNano()),
+		Description: &envDesc,
+		CreatedByID: adminID,
+	}
+	err = envRepo.Create(ctx, env)
+	require.NoError(t, err)
+
+	// Create database instance pointing to target container
+	encryptionKey := "12345678901234567890123456789012" // 32 bytes
+	dbInstanceRepo := postgres.NewDatabaseInstanceRepository(db, encryptionKey)
+	instanceDesc := "Target database instance for execution"
+
+	// Encrypt password in the required JSON format {"password": "..."}
+	passwordJSON := `{"password":"target_pass"}`
+	encryptedPassword, err := utils.Encrypt(passwordJSON, encryptionKey)
+	require.NoError(t, err, "failed to encrypt password")
+
+	instance := &models.DatabaseInstance{
+		Name:                       fmt.Sprintf("exec-test-instance-%d", time.Now().UnixNano()),
+		Description:                &instanceDesc,
+		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
+		Host:                       targetHost,
+		Port:                       targetPort.Int(),
+		Username:                   "target_user",
+		ConnectionDetailsEncrypted: &encryptedPassword,
+		UseRDSIAMAuth:              false,
+		RequireSSL:                 false,
+		Status:                     models.DatabaseInstanceStatusActive,
+		CreatedByID:                adminID,
+	}
+	err = dbInstanceRepo.Create(ctx, instance)
+	require.NoError(t, err)
+	databaseInstanceID = instance.ID
+
+	// Create database entry pointing to target_db
+	dbRepo := postgres.NewDatabaseRepository(db)
+	dbDesc := "Target database for execution tests"
+	database := &models.Database{
+		ProjectID:          &projectID,
+		DatabaseInstanceID: instance.ID,
+		EnvironmentID:      &env.ID,
+		DatabaseName:       "target_db",
+		Description:        &dbDesc,
+		Status:             models.DatabaseStatusActive,
+		CreatedByID:        adminID,
+	}
+	err = dbRepo.Create(ctx, database)
+	require.NoError(t, err)
+	databaseID = database.ID
+
+	return adminToken, adminID, projectID, databaseID, databaseInstanceID, targetDBCleanup
+}
+
+// approveChangePlan directly updates the change plan status to Approved in the database
+func approveChangePlan(t *testing.T, db *sqlx.DB, changePlanID uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	changePlanRepo := postgres.NewChangePlanRepository(db)
+
+	changePlan, err := changePlanRepo.GetByID(ctx, changePlanID)
+	require.NoError(t, err)
+
+	changePlan.Status = models.ChangePlanStatusApproved
+	err = changePlanRepo.Update(ctx, changePlan)
+	require.NoError(t, err)
+}
+
+// TestIntegration_ChangePlan_MultiStatementExecution_Success tests executing a change plan
+// with multiple SQL statements and verifies execution logs for each statement are saved
+func TestIntegration_ChangePlan_MultiStatementExecution_Success(t *testing.T) {
+	db, cleanup := setupResourceTestDB(t)
+	defer cleanup()
+	defer cleanupResourceTestDB(t, db)
+
+	e, _ := createEchoServer(t, db)
+
+	// Setup test data with target database container
+	adminToken, _, projectID, databaseID, _, targetDBCleanup := setupExecutionTestData(t, db)
+	defer targetDBCleanup()
+
+	ctx := context.Background()
+
+	// Create change plan with multiple statements
+	multiStatementSQL := `CREATE TABLE test_users (id SERIAL PRIMARY KEY, name VARCHAR(100));
+INSERT INTO test_users (name) VALUES ('Alice');
+INSERT INTO test_users (name) VALUES ('Bob');`
+
+	reqBody := models.CreateChangePlanRequest{
+		ProjectID:        projectID,
+		TargetDatabaseID: databaseID,
+		Title:            "Multi-statement test",
+		Description:      "Test multi-statement execution",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       multiStatementSQL,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	rec := makeAuthenticatedRequest(t, e, http.MethodPost, "/api/v1/change-plans", bytes.NewReader(body), adminToken)
+	require.Equal(t, http.StatusCreated, rec.Code, "should create change plan successfully")
+
+	var changePlanResponse models.ChangePlanResponse
+	err := json.NewDecoder(rec.Body).Decode(&changePlanResponse)
+	require.NoError(t, err)
+	changePlanID := changePlanResponse.ID
+
+	// Verify statement count is set correctly
+	assert.NotNil(t, changePlanResponse.StatementCount)
+	assert.Equal(t, 3, *changePlanResponse.StatementCount, "should have 3 statements")
+
+	// Approve the change plan
+	approveChangePlan(t, db, changePlanID)
+
+	// Execute the change plan
+	rec = makeAuthenticatedRequest(
+		t,
+		e,
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlanID.String()),
+		nil,
+		adminToken,
+	)
+	require.Equal(t, http.StatusOK, rec.Code, "execution should succeed")
+
+	var execResponse map[string]interface{}
+	err = json.NewDecoder(rec.Body).Decode(&execResponse)
+	require.NoError(t, err)
+
+	// Verify execution was successful
+	execution := execResponse["execution"].(map[string]interface{})
+	assert.True(t, execution["success"].(bool), "execution should be successful")
+	assert.Equal(t, float64(2), execution["rows_affected"].(float64), "should have 2 rows affected (2 inserts)")
+
+	// Get execution logs
+	rec = makeAuthenticatedRequest(
+		t,
+		e,
+		http.MethodGet,
+		fmt.Sprintf("/api/v1/change-plans/%s/execution-logs", changePlanID.String()),
+		nil,
+		adminToken,
+	)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var logsResponse struct {
+		Logs []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"logs"`
+	}
+	err = json.NewDecoder(rec.Body).Decode(&logsResponse)
+	require.NoError(t, err)
+	require.Len(t, logsResponse.Logs, 1, "should have 1 execution log")
+
+	executionLogID := logsResponse.Logs[0].ID
+	assert.Equal(t, "Completed", logsResponse.Logs[0].Status)
+
+	// Get statement execution results
+	rec = makeAuthenticatedRequest(
+		t,
+		e,
+		http.MethodGet,
+		fmt.Sprintf("/api/v1/change-plans/%s/execution-logs/%s/statements", changePlanID.String(), executionLogID),
+		nil,
+		adminToken,
+	)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var stmtResponse struct {
+		StatementResults []struct {
+			StatementIndex int     `json:"statement_index"`
+			Status         string  `json:"status"`
+			RowsAffected   *int    `json:"rows_affected"`
+			StatementSQL   string  `json:"statement_sql"`
+			StartLine      *int    `json:"start_line"`
+			StartColumn    *int    `json:"start_column"`
+			ErrorMessage   *string `json:"error_message"`
+		} `json:"statement_results"`
+	}
+	err = json.NewDecoder(rec.Body).Decode(&stmtResponse)
+	require.NoError(t, err)
+
+	// Verify statement results
+	require.Len(t, stmtResponse.StatementResults, 3, "should have 3 statement results")
+
+	// Verify first statement (CREATE TABLE)
+	assert.Equal(t, 0, stmtResponse.StatementResults[0].StatementIndex)
+	assert.Equal(t, "Completed", stmtResponse.StatementResults[0].Status)
+	assert.Contains(t, stmtResponse.StatementResults[0].StatementSQL, "CREATE TABLE")
+	assert.NotNil(t, stmtResponse.StatementResults[0].StartLine)
+	assert.Equal(t, 1, *stmtResponse.StatementResults[0].StartLine)
+
+	// Verify second statement (INSERT Alice)
+	assert.Equal(t, 1, stmtResponse.StatementResults[1].StatementIndex)
+	assert.Equal(t, "Completed", stmtResponse.StatementResults[1].Status)
+	assert.NotNil(t, stmtResponse.StatementResults[1].RowsAffected)
+	assert.Equal(t, 1, *stmtResponse.StatementResults[1].RowsAffected)
+	assert.Contains(t, stmtResponse.StatementResults[1].StatementSQL, "Alice")
+
+	// Verify third statement (INSERT Bob)
+	assert.Equal(t, 2, stmtResponse.StatementResults[2].StatementIndex)
+	assert.Equal(t, "Completed", stmtResponse.StatementResults[2].Status)
+	assert.NotNil(t, stmtResponse.StatementResults[2].RowsAffected)
+	assert.Equal(t, 1, *stmtResponse.StatementResults[2].RowsAffected)
+	assert.Contains(t, stmtResponse.StatementResults[2].StatementSQL, "Bob")
+
+	// Also verify by querying the database directly
+	statementResultRepo := postgres.NewStatementExecutionResultRepository(db)
+	executionLogUUID, err := uuid.Parse(executionLogID)
+	require.NoError(t, err)
+
+	dbResults, err := statementResultRepo.GetByExecutionLogID(ctx, executionLogUUID)
+	require.NoError(t, err)
+	assert.Len(t, dbResults, 3, "should have 3 statement results in database")
+}
+
+// TestIntegration_ChangePlan_MultiStatementExecution_Error tests executing a change plan
+// with multiple SQL statements where one fails, verifying positional error information
+func TestIntegration_ChangePlan_MultiStatementExecution_Error(t *testing.T) {
+	db, cleanup := setupResourceTestDB(t)
+	defer cleanup()
+	defer cleanupResourceTestDB(t, db)
+
+	e, _ := createEchoServer(t, db)
+
+	// Setup test data with target database container
+	adminToken, _, projectID, databaseID, _, targetDBCleanup := setupExecutionTestData(t, db)
+	defer targetDBCleanup()
+
+	ctx := context.Background()
+
+	// Create change plan with multiple statements where second fails
+	// First statement succeeds, second fails (table doesn't exist)
+	multiStatementSQL := `CREATE TABLE error_test (id SERIAL PRIMARY KEY);
+INSERT INTO nonexistent_table (id) VALUES (1);
+INSERT INTO error_test (id) VALUES (1);`
+
+	reqBody := models.CreateChangePlanRequest{
+		ProjectID:        projectID,
+		TargetDatabaseID: databaseID,
+		Title:            "Multi-statement error test",
+		Description:      "Test multi-statement execution with error",
+		ChangeType:       models.ChangeTypeDDL,
+		SQLContent:       multiStatementSQL,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	rec := makeAuthenticatedRequest(t, e, http.MethodPost, "/api/v1/change-plans", bytes.NewReader(body), adminToken)
+	require.Equal(t, http.StatusCreated, rec.Code, "should create change plan successfully")
+
+	var changePlanResponse models.ChangePlanResponse
+	err := json.NewDecoder(rec.Body).Decode(&changePlanResponse)
+	require.NoError(t, err)
+	changePlanID := changePlanResponse.ID
+
+	// Approve the change plan
+	approveChangePlan(t, db, changePlanID)
+
+	// Execute the change plan - should complete but with failure status
+	rec = makeAuthenticatedRequest(
+		t,
+		e,
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/change-plans/%s/execute", changePlanID.String()),
+		nil,
+		adminToken,
+	)
+	require.Equal(t, http.StatusOK, rec.Code, "execution endpoint should return 200 even on SQL error")
+
+	var execResponse map[string]interface{}
+	err = json.NewDecoder(rec.Body).Decode(&execResponse)
+	require.NoError(t, err)
+
+	// Verify execution failed
+	execution := execResponse["execution"].(map[string]interface{})
+	assert.False(t, execution["success"].(bool), "execution should have failed")
+	assert.NotNil(t, execution["error_message"], "should have error message")
+	errorMsg := execution["error_message"].(string)
+	assert.Contains(t, errorMsg, "statement 2", "error should reference statement 2")
+	assert.Contains(t, errorMsg, "line 2", "error should reference line 2")
+
+	// Verify change plan status is Failed
+	changePlanData := execResponse["change_plan"].(map[string]interface{})
+	assert.Equal(t, "Failed", changePlanData["status"].(string))
+
+	// Get execution logs
+	rec = makeAuthenticatedRequest(
+		t,
+		e,
+		http.MethodGet,
+		fmt.Sprintf("/api/v1/change-plans/%s/execution-logs", changePlanID.String()),
+		nil,
+		adminToken,
+	)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var logsResponse struct {
+		Logs []struct {
+			ID           string  `json:"id"`
+			Status       string  `json:"status"`
+			ErrorMessage *string `json:"error_message"`
+		} `json:"logs"`
+	}
+	err = json.NewDecoder(rec.Body).Decode(&logsResponse)
+	require.NoError(t, err)
+	require.Len(t, logsResponse.Logs, 1, "should have 1 execution log")
+
+	executionLogID := logsResponse.Logs[0].ID
+	assert.Equal(t, "Failed", logsResponse.Logs[0].Status)
+	require.NotNil(t, logsResponse.Logs[0].ErrorMessage)
+	assert.Contains(t, *logsResponse.Logs[0].ErrorMessage, "statement 2")
+
+	// Get statement execution results
+	rec = makeAuthenticatedRequest(
+		t,
+		e,
+		http.MethodGet,
+		fmt.Sprintf("/api/v1/change-plans/%s/execution-logs/%s/statements", changePlanID.String(), executionLogID),
+		nil,
+		adminToken,
+	)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var stmtResponse struct {
+		StatementResults []struct {
+			StatementIndex int     `json:"statement_index"`
+			Status         string  `json:"status"`
+			RowsAffected   *int    `json:"rows_affected"`
+			StatementSQL   string  `json:"statement_sql"`
+			StartLine      *int    `json:"start_line"`
+			StartColumn    *int    `json:"start_column"`
+			ErrorMessage   *string `json:"error_message"`
+		} `json:"statement_results"`
+	}
+	err = json.NewDecoder(rec.Body).Decode(&stmtResponse)
+	require.NoError(t, err)
+
+	// Should have 2 statement results (first completed, second failed, third never executed)
+	require.Len(t, stmtResponse.StatementResults, 2, "should have 2 statement results")
+
+	// Verify first statement (CREATE TABLE) - succeeded
+	assert.Equal(t, 0, stmtResponse.StatementResults[0].StatementIndex)
+	assert.Equal(t, "Completed", stmtResponse.StatementResults[0].Status)
+	assert.Contains(t, stmtResponse.StatementResults[0].StatementSQL, "CREATE TABLE")
+	assert.Nil(t, stmtResponse.StatementResults[0].ErrorMessage)
+
+	// Verify second statement (INSERT into nonexistent) - failed with error
+	assert.Equal(t, 1, stmtResponse.StatementResults[1].StatementIndex)
+	assert.Equal(t, "Failed", stmtResponse.StatementResults[1].Status)
+	assert.Contains(t, stmtResponse.StatementResults[1].StatementSQL, "nonexistent_table")
+	assert.NotNil(t, stmtResponse.StatementResults[1].ErrorMessage)
+	assert.Contains(t, *stmtResponse.StatementResults[1].ErrorMessage, "nonexistent_table")
+	// Verify position info
+	assert.NotNil(t, stmtResponse.StatementResults[1].StartLine)
+	assert.Equal(t, 2, *stmtResponse.StatementResults[1].StartLine)
+
+	// Also verify by querying the database directly
+	statementResultRepo := postgres.NewStatementExecutionResultRepository(db)
+	executionLogUUID, err := uuid.Parse(executionLogID)
+	require.NoError(t, err)
+
+	dbResults, err := statementResultRepo.GetByExecutionLogID(ctx, executionLogUUID)
+	require.NoError(t, err)
+	assert.Len(t, dbResults, 2, "should have 2 statement results in database")
+
+	// Verify the failed statement has correct position info in DB
+	var failedResult *models.StatementExecutionResult
+	for _, r := range dbResults {
+		if r.StatementIndex == 1 {
+			failedResult = r
+			break
+		}
+	}
+	require.NotNil(t, failedResult)
+	assert.Equal(t, models.StatementStatusFailed, failedResult.Status)
+	assert.NotNil(t, failedResult.StartLine)
+	assert.Equal(t, 2, *failedResult.StartLine)
+	assert.NotNil(t, failedResult.ErrorMessage)
+}
+
+// Ensure url package is used (for parsing connection strings if needed)
+var _ = url.Parse

@@ -116,6 +116,44 @@ func (r *executionLogRepository) GetByID(ctx context.Context, id uuid.UUID) (*mo
 	return &log, nil
 }
 
+// Update updates an existing execution log entry
+func (r *executionLogRepository) Update(ctx context.Context, log *models.ExecutionLog) error {
+	query := `
+		UPDATE execution_logs
+		SET status = $2,
+		    execution_duration_ms = $3,
+		    rows_affected = $4,
+		    error_message = $5,
+		    completed_at = $6
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(
+		ctx,
+		query,
+		log.ID,
+		log.Status,
+		log.ExecutionDurationMs,
+		log.RowsAffected,
+		log.ErrorMessage,
+		log.CompletedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update execution log: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return repository.ErrNotFound
+	}
+
+	return nil
+}
+
 // GetLatestByChangePlanID retrieves the most recent execution log for a change plan
 func (r *executionLogRepository) GetLatestByChangePlanID(
 	ctx context.Context,

@@ -9,6 +9,7 @@ import type {
   CloseChangePlanRequest,
   ApprovalHistoryResponse,
   ExecutionLogHistoryResponse,
+  StatementExecutionResultsResponse,
 } from '../types';
 
 export const changePlanService = {
@@ -113,6 +114,19 @@ export const changePlanService = {
    */
   async updateChangePlan(id: string, data: UpdateChangePlanRequest): Promise<ChangePlan> {
     const response = await apiClient.put<ChangePlan>(`/api/v1/change-plans/${id}`, data);
+    return response;
+  },
+
+  /**
+   * Get statement execution results for an execution log
+   */
+  async getStatementResults(
+    changePlanId: string,
+    executionLogId: string,
+  ): Promise<StatementExecutionResultsResponse> {
+    const response = await apiClient.get<StatementExecutionResultsResponse>(
+      `/api/v1/change-plans/${changePlanId}/execution-logs/${executionLogId}/statements`,
+    );
     return response;
   },
 };

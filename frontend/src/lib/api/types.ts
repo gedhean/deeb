@@ -373,6 +373,7 @@ export interface ChangePlan {
   execution_duration_ms?: number;
   affected_rows?: number;
   error_message?: string;
+  statement_count?: number;
   created_at: string;
   updated_at: string;
   policy_findings?: PolicyFindingsSummary;
@@ -459,6 +460,37 @@ export interface ExecutionLogHistoryResponse {
   change_plan_id: string;
   total: number;
   logs: ExecutionLog[];
+}
+
+// Statement Execution Result Types
+export type StatementExecutionStatus = 'Completed' | 'Failed' | 'Skipped';
+
+export interface StatementExecutionResult {
+  id: string;
+  execution_log_id: string;
+  statement_index: number;
+  statement_sql: string;
+  status: StatementExecutionStatus;
+  rows_affected?: number;
+  execution_duration_ms: number;
+  error_message?: string;
+  start_line?: number;
+  start_column?: number;
+  end_line?: number;
+  end_column?: number;
+  created_at: string;
+}
+
+export interface StatementExecutionResultsResponse {
+  change_plan_id: string;
+  execution_log_id: string;
+  statement_results: StatementExecutionResult[];
+  total: number;
+}
+
+export interface ExecutionLogDetail {
+  execution_log: ExecutionLog;
+  statement_results: StatementExecutionResult[];
 }
 
 // Changelog Types

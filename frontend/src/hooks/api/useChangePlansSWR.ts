@@ -10,6 +10,7 @@ import type {
   ApproveChangePlanRequest,
   CloseChangePlanRequest,
   ExecutionLogHistoryResponse,
+  StatementExecutionResultsResponse,
 } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { showSuccessToast } from '@/lib/errorHandling';
@@ -478,6 +479,71 @@ export function useExecutionLogsSWR(
 
   return {
     executionLogs: executionLogs || null,
+    isLoading,
+    error,
+    refetch,
+  };
+}
+
+/**
+ * SWR fetcher function for statement execution results
+ */
+const fetchStatementResults = async (changePlanId: string, executionLogId: string) => {
+  return await changePlanService.getStatementResults(changePlanId, executionLogId);
+};
+
+interface UseStatementResultsSWROptions {
+  enabled?: boolean;
+}
+
+interface UseStatementResultsSWRResult {
+  statementResults: StatementExecutionResultsResponse | null;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * Hook for fetching statement execution results for an execution log with SWR
+ */
+export function useStatementResultsSWR(
+  changePlanId: string | undefined,
+  executionLogId: string | undefined,
+  options: UseStatementResultsSWROptions = {},
+): UseStatementResultsSWRResult {
+  const { enabled = true } = options;
+
+  const shouldFetch = enabled && changePlanId && executionLogId;
+  const {
+    data: statementResults,
+    error: swrError,
+    isLoading,
+    mutate,
+  } = useSWR<StatementExecutionResultsResponse>(
+    shouldFetch
+      ? `/api/change-plans/${changePlanId}/execution-logs/${executionLogId}/statements`
+      : null,
+    shouldFetch && changePlanId && executionLogId
+      ? () => fetchStatementResults(changePlanId, executionLogId)
+      : null,
+    {
+      revalidateIfStale: true,
+      keepPreviousData: true,
+    },
+  );
+
+  const refetch = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
+  const error = swrError
+    ? swrError instanceof Error
+      ? swrError.message
+      : 'Failed to load statement results'
+    : null;
+
+  return {
+    statementResults: statementResults || null,
     isLoading,
     error,
     refetch,

@@ -59,6 +59,7 @@ func TestChangePlanRepository_Create(t *testing.T) {
 				changePlan.AuthorID,
 				nil,
 				nil,
+				nil, // statement_count
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 			).
@@ -103,6 +104,7 @@ func TestChangePlanRepository_Create(t *testing.T) {
 				changePlan.AuthorID,
 				nil,
 				nil,
+				nil, // statement_count
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 			).
@@ -149,6 +151,7 @@ func TestChangePlanRepository_Create(t *testing.T) {
 				changePlan.AuthorID,
 				reviewerID,
 				sqlmock.AnyArg(),
+				nil, // statement_count
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
 			).
@@ -199,11 +202,11 @@ func TestChangePlanRepository_GetByID(t *testing.T) {
 			"id", "project_id", "target_database_id", "title", "description",
 			"change_type", "sql_content", "rollback_sql", "status", "risk_level",
 			"author_id", "assigned_reviewer_id", "scheduled_for", "executed_at",
-			"execution_duration_ms", "affected_rows", "error_message", "created_at", "updated_at",
+			"execution_duration_ms", "affected_rows", "error_message", "statement_count", "created_at", "updated_at",
 		}).AddRow(
 			changePlanID, projectID, databaseID, "Test Change Plan", "Test Description",
 			"DDL", "CREATE TABLE test (id UUID);", nil, "Draft", "Medium",
-			authorID, nil, nil, nil, nil, nil, nil,
+			authorID, nil, nil, nil, nil, nil, nil, nil,
 			time.Now(), time.Now(),
 		)
 
@@ -288,7 +291,8 @@ func TestChangePlanRepository_Update(t *testing.T) {
 				changePlan.ExecutionDurationMs,
 				changePlan.AffectedRows,
 				changePlan.ErrorMessage,
-				sqlmock.AnyArg(), // updated_at
+				changePlan.StatementCount, // statement_count
+				sqlmock.AnyArg(),          // updated_at
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -326,6 +330,7 @@ func TestChangePlanRepository_Update(t *testing.T) {
 				changePlan.ExecutionDurationMs,
 				changePlan.AffectedRows,
 				changePlan.ErrorMessage,
+				changePlan.StatementCount, // statement_count
 				sqlmock.AnyArg(),
 			).
 			WillReturnResult(sqlmock.NewResult(0, 0))
@@ -365,6 +370,7 @@ func TestChangePlanRepository_Update(t *testing.T) {
 				changePlan.ExecutionDurationMs,
 				changePlan.AffectedRows,
 				changePlan.ErrorMessage,
+				changePlan.StatementCount, // statement_count
 				sqlmock.AnyArg(),
 			).
 			WillReturnError(errors.New("database error"))

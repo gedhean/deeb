@@ -19,11 +19,13 @@ import (
 func BenchmarkExecutionService_ExecuteInTransaction(b *testing.B) {
 	logger := zap.NewNop()
 	service := &ExecutionService{
-		logger: logger,
+		maxStatementCount: 1000,
+		logger:            logger,
 	}
 
 	ctx := context.Background()
 	changePlanID := uuid.New()
+	executionLogID := uuid.New()
 
 	dbInstance := &models.DatabaseInstance{
 		ID:             uuid.New(),
@@ -47,7 +49,7 @@ func BenchmarkExecutionService_ExecuteInTransaction(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Note: This will fail without a real database, but measures the overhead
 		// Actual execution requires integration test environment
-		_, _ = service.executeInTransaction(ctx, dbInstance, db, sqlContent, changePlanID)
+		_, _ = service.executeInTransaction(ctx, dbInstance, db, sqlContent, changePlanID, executionLogID)
 	}
 }
 
@@ -118,8 +120,9 @@ func TestExecutionService_PerformanceAnalysis(t *testing.T) {
 	// Test execution timeout handling
 	t.Run("ExecutionTimeoutHandling", func(t *testing.T) {
 		service := &ExecutionService{
-			executionTimeout: 5 * time.Minute,
-			logger:           logger,
+			executionTimeout:  5 * time.Minute,
+			maxStatementCount: 1000,
+			logger:            logger,
 		}
 
 		require.Equal(t, 5*time.Minute, service.executionTimeout, "default timeout should be 5 minutes")

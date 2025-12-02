@@ -9,8 +9,8 @@
 - [x] Fix: Test connection for Postgres with SSL enabled is not working
 
 ### Change Plans
+- [x] Feat: Allow run more than one statement per Change Plan
 - [ ] Fix: when creating Change Plan with invalid SQL, it shows the creation failed, but actually created it. Improve to show better error feedback.
-- [ ] Fix: Allow run more than one statement per Change Plan
 - [ ] Fix: Do not create a changelog entry for every run of the same Change Plan. Keep only one for each Change Plan and just update the status.
 
 ### Schema Analysis (External: nsxbet/sql-schema)

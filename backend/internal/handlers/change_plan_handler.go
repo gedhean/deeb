@@ -14,6 +14,7 @@ import (
 	"github.com/nsxbet/deeb/internal/database"
 	"github.com/nsxbet/deeb/internal/middleware"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/parser"
 	"github.com/nsxbet/deeb/internal/rbac"
 	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/nsxbet/deeb/internal/review"
@@ -34,6 +35,7 @@ type ChangePlanHandler struct {
 	policyFindingRepo    repository.PolicyFindingRepository
 	approvalRepo         repository.ApprovalRepository
 	environmentRepo      repository.EnvironmentRepository
+	statementResultRepo  repository.StatementExecutionResultRepository
 	riskAssessmentSvc    *services.RiskAssessmentService
 	reviewService        *review.ReviewService
 	approvalService      *services.ApprovalService
@@ -53,6 +55,7 @@ func NewChangePlanHandler(
 	policyFindingRepo repository.PolicyFindingRepository,
 	approvalRepo repository.ApprovalRepository,
 	environmentRepo repository.EnvironmentRepository,
+	statementResultRepo repository.StatementExecutionResultRepository,
 	riskAssessmentSvc *services.RiskAssessmentService,
 	reviewService *review.ReviewService,
 	approvalService *services.ApprovalService,
@@ -70,6 +73,7 @@ func NewChangePlanHandler(
 		policyFindingRepo:    policyFindingRepo,
 		approvalRepo:         approvalRepo,
 		environmentRepo:      environmentRepo,
+		statementResultRepo:  statementResultRepo,
 		riskAssessmentSvc:    riskAssessmentSvc,
 		reviewService:        reviewService,
 		approvalService:      approvalService,
@@ -139,9 +143,38 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		})
 	}
 
+	// Get database instance to determine dialect
+	databaseInstance, err := h.databaseInstanceRepo.GetByID(ctx, database.DatabaseInstanceID)
+	if err != nil {
+		h.logger.Error("Failed to get database instance", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to get database instance",
+		})
+	}
+
+	// Parse SQL to count statements and validate
+	dialect := h.getParserDialect(databaseInstance.DatabaseEngine)
+	parseResult, err := parser.SplitSQL(req.SQLContent, dialect)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": fmt.Sprintf("Invalid SQL: %s", err.Error()),
+		})
+	}
+
+	if parseResult.TotalCount > 1000 {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Too many statements (max 1000)",
+			"details": map[string]interface{}{
+				"statement_count": parseResult.TotalCount,
+				"max_statements":  1000,
+			},
+		})
+	}
+
 	// RBAC check is done in middleware (RequireProjectPermission)
 
 	// Create change plan with Draft status
+	statementCount := parseResult.TotalCount
 	changePlan := &models.ChangePlan{
 		ProjectID:        req.ProjectID,
 		TargetDatabaseID: req.TargetDatabaseID,
@@ -153,6 +186,7 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		Status:           models.ChangePlanStatusDraft,
 		RiskLevel:        models.RiskLevelMedium, // Default, will be calculated
 		AuthorID:         claims.UserID,
+		StatementCount:   &statementCount,
 	}
 
 	// Assess risk level based on SQL content, environment, and database type
@@ -627,6 +661,41 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 
 	if req.SQLContent != nil {
 		changePlan.SQLContent = *req.SQLContent
+
+		// Re-parse SQL to update statement count
+		db, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+		if err != nil {
+			h.logger.Warn("Failed to get database for statement count update", zap.Error(err))
+			// Continue without updating statement count
+		} else {
+			databaseInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+			if err != nil {
+				h.logger.Warn("Failed to get database instance for statement count update", zap.Error(err))
+				// Continue without updating statement count
+			} else {
+				dialect := h.getParserDialect(databaseInstance.DatabaseEngine)
+				parseResult, err := parser.SplitSQL(*req.SQLContent, dialect)
+				if err != nil {
+					// Return error for invalid SQL
+					return c.JSON(http.StatusBadRequest, map[string]interface{}{
+						"error": fmt.Sprintf("Invalid SQL: %s", err.Error()),
+					})
+				}
+
+				if parseResult.TotalCount > 1000 {
+					return c.JSON(http.StatusBadRequest, map[string]interface{}{
+						"error": "Too many statements (max 1000)",
+						"details": map[string]interface{}{
+							"statement_count": parseResult.TotalCount,
+							"max_statements":  1000,
+						},
+					})
+				}
+
+				statementCount := parseResult.TotalCount
+				changePlan.StatementCount = &statementCount
+			}
+		}
 
 		// Re-assess risk level when SQL content changes
 		if h.riskAssessmentSvc != nil {
@@ -2386,4 +2455,87 @@ func (h *ChangePlanHandler) trackChangeHistory(
 			// Continue tracking other fields even if one fails
 		}
 	}
+}
+
+// getParserDialect returns the parser dialect for a given database engine
+func (h *ChangePlanHandler) getParserDialect(engine models.DatabaseEngine) parser.Dialect {
+	switch engine {
+	case models.DatabaseEngineMySQL:
+		return parser.DialectMySQL
+	case models.DatabaseEnginePostgreSQL:
+		return parser.DialectPostgres
+	default:
+		// Default to PostgreSQL for unknown engines
+		return parser.DialectPostgres
+	}
+}
+
+// GetStatementResults handles GET /api/v1/change-plans/:id/execution-logs/:logId/statements
+// Retrieves per-statement execution results for an execution log
+func (h *ChangePlanHandler) GetStatementResults(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get authenticated user from context
+	claims, ok := auth.GetUserFromEchoContext(c)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": "Authentication required",
+		})
+	}
+
+	// Parse change plan ID
+	changePlanIDStr := c.Param("id")
+	changePlanID, err := uuid.Parse(changePlanIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	// Parse execution log ID
+	executionLogIDStr := c.Param("logId")
+	executionLogID, err := uuid.Parse(executionLogIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid execution log ID format",
+		})
+	}
+
+	// Verify change plan exists
+	_, err = h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		h.logger.Error("Failed to get change plan", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	// RBAC check is done in middleware (RequireProjectPermission)
+
+	// Get statement execution results
+	results, err := h.statementResultRepo.GetByExecutionLogID(ctx, executionLogID)
+	if err != nil {
+		h.logger.Error("Failed to get statement execution results", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve statement execution results",
+		})
+	}
+
+	// Convert to response format
+	resultResponses := make([]*models.StatementExecutionResultResponse, len(results))
+	for i, result := range results {
+		resultResponses[i] = result.ToResponse()
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"change_plan_id":    changePlanID.String(),
+		"execution_log_id":  executionLogID.String(),
+		"statement_results": resultResponses,
+		"total":             len(resultResponses),
+	})
 }

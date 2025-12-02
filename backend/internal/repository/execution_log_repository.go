@@ -12,6 +12,9 @@ type ExecutionLogRepository interface {
 	// Create creates a new execution log entry
 	Create(ctx context.Context, log *models.ExecutionLog) error
 
+	// Update updates an existing execution log entry
+	Update(ctx context.Context, log *models.ExecutionLog) error
+
 	// GetByChangePlanID retrieves all execution logs for a specific change plan
 	// Returns logs ordered by started_at DESC (most recent first)
 	GetByChangePlanID(ctx context.Context, changePlanID uuid.UUID) ([]*models.ExecutionLog, error)

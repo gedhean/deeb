@@ -12,6 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/nsxbet/deeb/internal/database"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/parser"
 	"github.com/nsxbet/deeb/internal/repository"
 	"go.uber.org/zap"
 )
@@ -32,9 +33,11 @@ type ExecutionService struct {
 	lockManager          ExecutionLockManager
 	queueService         *ExecutionQueueService
 	executionLogRepo     repository.ExecutionLogRepository
+	statementResultRepo  repository.StatementExecutionResultRepository
 	connectionMgr        ConnectionManagerInterface
 	encryptionKey        string
 	executionTimeout     time.Duration // Timeout for SQL execution (default: 5 minutes)
+	maxStatementCount    int           // Maximum number of statements allowed (default: 1000)
 	logger               *zap.Logger
 }
 
@@ -57,11 +60,13 @@ func NewExecutionService(
 	lockManager ExecutionLockManager,
 	queueService *ExecutionQueueService,
 	executionLogRepo repository.ExecutionLogRepository,
+	statementResultRepo repository.StatementExecutionResultRepository,
 	connectionMgr ConnectionManagerInterface,
 	encryptionKey string,
 	logger *zap.Logger,
 ) *ExecutionService {
 	executionTimeout := 5 * time.Minute // Default: 5 minutes
+	maxStatementCount := 1000           // Default: 1000 statements max
 
 	return &ExecutionService{
 		changePlanRepo:       changePlanRepo,
@@ -73,9 +78,11 @@ func NewExecutionService(
 		lockManager:          lockManager,
 		queueService:         queueService,
 		executionLogRepo:     executionLogRepo,
+		statementResultRepo:  statementResultRepo,
 		connectionMgr:        connectionMgr,
 		encryptionKey:        encryptionKey,
 		executionTimeout:     executionTimeout,
+		maxStatementCount:    maxStatementCount,
 		logger:               logger,
 	}
 }
@@ -91,11 +98,14 @@ func NewExecutionServiceWithTimeout(
 	lockManager ExecutionLockManager,
 	queueService *ExecutionQueueService,
 	executionLogRepo repository.ExecutionLogRepository,
+	statementResultRepo repository.StatementExecutionResultRepository,
 	connectionMgr ConnectionManagerInterface,
 	encryptionKey string,
 	executionTimeout time.Duration,
 	logger *zap.Logger,
 ) *ExecutionService {
+	maxStatementCount := 1000 // Default: 1000 statements max
+
 	return &ExecutionService{
 		changePlanRepo:       changePlanRepo,
 		dbInstanceRepo:       dbInstanceRepo,
@@ -106,9 +116,11 @@ func NewExecutionServiceWithTimeout(
 		lockManager:          lockManager,
 		queueService:         queueService,
 		executionLogRepo:     executionLogRepo,
+		statementResultRepo:  statementResultRepo,
 		connectionMgr:        connectionMgr,
 		encryptionKey:        encryptionKey,
 		executionTimeout:     executionTimeout,
+		maxStatementCount:    maxStatementCount,
 		logger:               logger,
 	}
 }
@@ -336,10 +348,38 @@ func (s *ExecutionService) Execute(
 		zap.String("status", string(changelog.Status)),
 	)
 
-	// Step 3: Execute SQL in transaction with timeout
+	// Step 3: Create execution log entry (pre-execution)
+	// We create this before execution so statement results can reference it via foreign key
+	executionLogID := uuid.New()
+	dbType := string(dbInstance.DatabaseEngine)
+	sqlContent := changePlan.SQLContent
+	executionLog := &models.ExecutionLog{
+		ID:                   executionLogID,
+		ChangePlanID:         changePlanID,
+		ExecutorID:           executorID,
+		Status:               models.ExecutionLogStatusFailed, // Will be updated to Completed on success
+		SQLContent:           &sqlContent,
+		DatabaseID:           &db.ID,
+		DatabaseName:         &db.DatabaseName,
+		DatabaseInstanceName: &dbInstance.Name,
+		DatabaseEngine:       &dbType,
+		StartedAt:            time.Now(),
+	}
+
+	// Persist execution log to database so statement results can reference it via foreign key
+	if err := s.executionLogRepo.Create(ctx, executionLog); err != nil {
+		s.logger.Error("Failed to create execution log entry",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to create execution log: %w", err)
+	}
+
+	// Step 4: Execute SQL in transaction with timeout
 	executionStartTime := time.Now()
 	s.logger.Info("Starting SQL execution",
 		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("execution_log_id", executionLogID.String()),
 		zap.String("database_id", db.ID.String()),
 		zap.String("database_engine", string(dbInstance.DatabaseEngine)),
 		zap.Int("sql_content_length", sqlContentLength),
@@ -350,7 +390,7 @@ func (s *ExecutionService) Execute(
 	execCtx, cancel := context.WithTimeout(ctx, s.executionTimeout)
 	defer cancel()
 
-	result, err := s.executeInTransaction(execCtx, dbInstance, db, changePlan.SQLContent, changePlanID)
+	result, err := s.executeInTransaction(execCtx, dbInstance, db, changePlan.SQLContent, changePlanID, executionLogID)
 	duration := time.Since(executionStartTime)
 
 	// Check if timeout occurred
@@ -371,12 +411,26 @@ func (s *ExecutionService) Execute(
 	changePlan.UpdatedAt = time.Now()
 
 	if err != nil {
-		// Step 4: Execution failed - update status to Failed
+		// Step 5: Execution failed - update status to Failed
 		var errorMsg string
 		var userFriendlyMsg string
 
-		// Check if it's a SQLExecutionError for enhanced handling
-		if sqlErr, ok := err.(*SQLExecutionError); ok {
+		// Check if it's a PositionedError (from multi-statement execution)
+		if posErr, ok := err.(*PositionedError); ok {
+			userFriendlyMsg = posErr.Error()
+			errorMsg = userFriendlyMsg
+
+			s.logger.Error("SQL execution failed (positioned)",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("database_id", db.ID.String()),
+				zap.Int("statement_index", posErr.StatementIndex),
+				zap.Int("line", posErr.Line),
+				zap.Int("column", posErr.Column),
+				zap.String("user_message", userFriendlyMsg),
+				zap.Duration("execution_duration", duration),
+			)
+		} else if sqlErr, ok := err.(*SQLExecutionError); ok {
+			// Check if it's a SQLExecutionError for enhanced handling
 			// Use the user-friendly message from SQLExecutionError
 			userFriendlyMsg = sqlErr.Message
 			errorMsg = userFriendlyMsg
@@ -439,27 +493,15 @@ func (s *ExecutionService) Execute(
 			)
 		}
 
-		// Create execution log entry for failed execution with full context
+		// Update execution log entry for failed execution
 		if s.executionLogRepo != nil {
-			dbType := string(dbInstance.DatabaseEngine)
-			sqlContent := changePlan.SQLContent
-			executionLog := &models.ExecutionLog{
-				ChangePlanID:         changePlanID,
-				ExecutorID:           executorID,
-				Status:               models.ExecutionLogStatusFailed,
-				ExecutionDurationMs:  int(duration.Milliseconds()),
-				RowsAffected:         nil,
-				ErrorMessage:         &errorMsg,
-				SQLContent:           &sqlContent,
-				DatabaseID:           &db.ID,
-				DatabaseName:         &db.DatabaseName,
-				DatabaseInstanceName: &dbInstance.Name,
-				DatabaseEngine:       &dbType,
-				StartedAt:            executionStartTime,
-				CompletedAt:          time.Now(),
-			}
-			if logErr := s.executionLogRepo.Create(ctx, executionLog); logErr != nil {
-				s.logger.Warn("Failed to create execution log entry", zap.Error(logErr))
+			executionLog.Status = models.ExecutionLogStatusFailed
+			executionLog.ExecutionDurationMs = int(duration.Milliseconds())
+			executionLog.ErrorMessage = &errorMsg
+			executionLog.CompletedAt = time.Now()
+
+			if logErr := s.executionLogRepo.Update(ctx, executionLog); logErr != nil {
+				s.logger.Warn("Failed to update execution log entry", zap.Error(logErr))
 			}
 		}
 
@@ -584,28 +626,16 @@ func (s *ExecutionService) Execute(
 		zap.Duration("total_execution_duration", overallDuration),
 	)
 
-	// Create execution log entry for successful execution with full context
+	// Update execution log entry for successful execution
 	if s.executionLogRepo != nil {
-		dbType := string(dbInstance.DatabaseEngine)
-		sqlContent := changePlan.SQLContent
 		rowsAffected := result.RowsAffected
-		executionLog := &models.ExecutionLog{
-			ChangePlanID:         changePlanID,
-			ExecutorID:           executorID,
-			Status:               models.ExecutionLogStatusCompleted,
-			ExecutionDurationMs:  int(duration.Milliseconds()),
-			RowsAffected:         &rowsAffected,
-			ErrorMessage:         nil,
-			SQLContent:           &sqlContent,
-			DatabaseID:           &db.ID,
-			DatabaseName:         &db.DatabaseName,
-			DatabaseInstanceName: &dbInstance.Name,
-			DatabaseEngine:       &dbType,
-			StartedAt:            executionStartTime,
-			CompletedAt:          time.Now(),
-		}
-		if logErr := s.executionLogRepo.Create(ctx, executionLog); logErr != nil {
-			s.logger.Warn("Failed to create execution log entry", zap.Error(logErr))
+		executionLog.Status = models.ExecutionLogStatusCompleted
+		executionLog.ExecutionDurationMs = int(duration.Milliseconds())
+		executionLog.RowsAffected = &rowsAffected
+		executionLog.CompletedAt = time.Now()
+
+		if logErr := s.executionLogRepo.Update(ctx, executionLog); logErr != nil {
+			s.logger.Warn("Failed to update execution log entry", zap.Error(logErr))
 		}
 	}
 
@@ -628,19 +658,66 @@ func (s *ExecutionService) GetExecutionLogHistory(ctx context.Context, changePla
 	return s.executionLogRepo.GetByChangePlanID(ctx, changePlanID)
 }
 
+// PositionedError wraps an error with position information for multi-statement execution
+type PositionedError struct {
+	Message        string
+	Line           int
+	Column         int
+	StatementIndex int
+	OriginalError  error
+}
+
+func (e *PositionedError) Error() string {
+	return fmt.Sprintf("statement %d (line %d, column %d): %s",
+		e.StatementIndex+1, e.Line, e.Column, e.Message)
+}
+
+func (e *PositionedError) Unwrap() error {
+	return e.OriginalError
+}
+
 // executeInTransaction executes SQL statements within a SERIALIZABLE transaction
+// Now supports multi-statement execution with per-statement tracking
 func (s *ExecutionService) executeInTransaction(
 	ctx context.Context,
 	dbInstance *models.DatabaseInstance,
 	db *models.Database,
 	sqlContent string,
 	changePlanID uuid.UUID,
+	executionLogID uuid.UUID,
 ) (*ExecutionResult, error) {
+	// Determine dialect for SQL parsing
+	var dialect parser.Dialect
+	switch dbInstance.DatabaseEngine {
+	case models.DatabaseEnginePostgreSQL:
+		dialect = parser.DialectPostgres
+	case models.DatabaseEngineMySQL:
+		dialect = parser.DialectMySQL
+	default:
+		return nil, fmt.Errorf("unsupported database engine: %s", dbInstance.DatabaseEngine)
+	}
+
+	// Parse SQL into individual statements
+	parseResult, err := parser.SplitSQL(sqlContent, dialect)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse SQL: %w", err)
+	}
+
+	// Validate statement count
+	if parseResult.TotalCount > s.maxStatementCount {
+		return nil, fmt.Errorf("too many statements: %d (max %d)", parseResult.TotalCount, s.maxStatementCount)
+	}
+
+	s.logger.Info("Parsed SQL statements",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.Int("statement_count", parseResult.TotalCount),
+		zap.String("dialect", string(dialect)),
+	)
+
 	// Get database connection
 	// For CREATE DATABASE operations (Pending status), connect to system database
 	connectStartTime := time.Now()
 	var dbConn *sqlx.DB
-	var err error
 
 	if db.Status == models.DatabaseStatusPending {
 		// Create a temporary database object for system database connection
@@ -661,8 +738,6 @@ func (s *ExecutionService) executeInTransaction(
 			systemDB.DatabaseName = "postgres" // Default PostgreSQL system database
 		case models.DatabaseEngineMySQL:
 			systemDB.DatabaseName = "" // MySQL can execute CREATE DATABASE without specifying a database
-		default:
-			return nil, fmt.Errorf("unsupported database engine: %s", dbInstance.DatabaseEngine)
 		}
 
 		s.logger.Info("Connecting to system database for CREATE DATABASE operation",
@@ -785,77 +860,90 @@ func (s *ExecutionService) executeInTransaction(
 		}
 	}()
 
-	// Execute SQL statements
+	// Execute SQL statements sequentially
 	execStartTime := time.Now()
+	var totalRowsAffected int64
+	var statementResults []models.StatementExecutionResult
+
 	s.logger.Debug("Executing SQL statements",
 		zap.String("change_plan_id", changePlanID.String()),
-		zap.Int("sql_content_length", len(sqlContent)),
+		zap.Int("statement_count", parseResult.TotalCount),
 	)
-	result, err := tx.ExecContext(ctx, sqlContent)
-	execDuration := time.Since(execStartTime)
-	if err != nil {
-		// Create structured SQL execution error
-		sqlErr := NewSQLExecutionError(
-			string(dbInstance.DatabaseEngine),
-			db.DatabaseName,
-			db.ID.String(),
-			dbInstance.Name,
-			sqlContent,
-			err,
-		)
 
-		// Mask SQL content for logging
-		maskedSQL := MaskSQLContent(sqlContent)
-		sqlErr.SQLContentMasked = true
+	for _, stmt := range parseResult.Statements {
+		if stmt.Empty {
+			continue // Skip empty/comment-only statements
+		}
 
-		// Log comprehensive error details
-		logFields := []zap.Field{
+		stmtStart := time.Now()
+		result, err := tx.ExecContext(ctx, stmt.Text)
+		stmtDuration := time.Since(stmtStart)
+
+		stmtResult := models.StatementExecutionResult{
+			ID:                  uuid.New(),
+			ExecutionLogID:      executionLogID,
+			StatementIndex:      stmt.Index,
+			StatementSQL:        stmt.Text,
+			ExecutionDurationMs: int(stmtDuration.Milliseconds()),
+			StartLine:           &stmt.StartLine,
+			StartColumn:         &stmt.StartColumn,
+			EndLine:             &stmt.EndLine,
+			EndColumn:           &stmt.EndColumn,
+		}
+
+		if err != nil {
+			// Execution failed - record error
+			errMsg := err.Error()
+			stmtResult.Status = models.StatementStatusFailed
+			stmtResult.ErrorMessage = &errMsg
+			statementResults = append(statementResults, stmtResult)
+
+			// Save statement results before returning
+			s.saveStatementResults(ctx, statementResults)
+
+			s.logger.Error("Statement execution failed",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.Int("statement_index", stmt.Index),
+				zap.Int("start_line", stmt.StartLine),
+				zap.Int("start_column", stmt.StartColumn),
+				zap.Duration("statement_duration", stmtDuration),
+				zap.Error(err),
+			)
+
+			// Create structured SQL execution error with position info
+			sqlErr := NewSQLExecutionError(
+				string(dbInstance.DatabaseEngine),
+				db.DatabaseName,
+				db.ID.String(),
+				dbInstance.Name,
+				stmt.Text,
+				err,
+			)
+
+			// Return positioned error
+			return nil, &PositionedError{
+				Message:        sqlErr.Message,
+				Line:           stmt.StartLine,
+				Column:         stmt.StartColumn,
+				StatementIndex: stmt.Index,
+				OriginalError:  sqlErr,
+			}
+		}
+
+		// Success - record result
+		rowsAffected, _ := result.RowsAffected()
+		rows := int(rowsAffected)
+		totalRowsAffected += rowsAffected
+		stmtResult.Status = models.StatementStatusCompleted
+		stmtResult.RowsAffected = &rows
+		statementResults = append(statementResults, stmtResult)
+
+		s.logger.Debug("Statement executed successfully",
 			zap.String("change_plan_id", changePlanID.String()),
-			zap.String("database_id", db.ID.String()),
-			zap.String("database_name", db.DatabaseName),
-			zap.String("database_instance_name", dbInstance.Name),
-			zap.String("database_engine", string(dbInstance.DatabaseEngine)),
-			zap.Duration("execution_duration", execDuration),
-			zap.Int("sql_content_length", len(sqlContent)),
-			zap.String("sql_content_masked", maskedSQL),
-			zap.Error(err),
-		}
-
-		// Add database-specific error details
-		if sqlErr.DatabaseErrorCode != "" {
-			logFields = append(logFields, zap.String("database_error_code", sqlErr.DatabaseErrorCode))
-		}
-		if sqlErr.DatabaseMessage != "" {
-			logFields = append(logFields, zap.String("database_message", sqlErr.DatabaseMessage))
-		}
-		if sqlErr.DatabaseDetail != "" {
-			logFields = append(logFields, zap.String("database_detail", sqlErr.DatabaseDetail))
-		}
-		if sqlErr.DatabaseHint != "" {
-			logFields = append(logFields, zap.String("database_hint", sqlErr.DatabaseHint))
-		}
-		if sqlErr.DatabasePosition != "" {
-			logFields = append(logFields, zap.String("database_position", sqlErr.DatabasePosition))
-		}
-
-		// Add stack trace (only in debug mode or for internal errors)
-		if sqlErr.StackTrace != "" {
-			logFields = append(logFields, zap.String("stack_trace", sqlErr.StackTrace))
-		}
-
-		s.logger.Error("SQL execution failed", logFields...)
-
-		return nil, sqlErr
-	}
-
-	// Get rows affected
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		s.logger.Error("Failed to get rows affected",
-			zap.String("change_plan_id", changePlanID.String()),
-			zap.Error(err),
+			zap.Int("statement_index", stmt.Index),
+			zap.Int64("rows_affected", rowsAffected),
+			zap.Duration("statement_duration", stmtDuration),
 		)
-		return nil, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
 	// Commit transaction
@@ -863,7 +951,7 @@ func (s *ExecutionService) executeInTransaction(
 	if err := tx.Commit(); err != nil {
 		s.logger.Error("Failed to commit transaction",
 			zap.String("change_plan_id", changePlanID.String()),
-			zap.Int64("rows_affected", rowsAffected),
+			zap.Int64("total_rows_affected", totalRowsAffected),
 			zap.Error(err),
 		)
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
@@ -871,18 +959,35 @@ func (s *ExecutionService) executeInTransaction(
 	commitDuration := time.Since(commitStartTime)
 	s.logger.Debug("Transaction committed successfully",
 		zap.String("change_plan_id", changePlanID.String()),
-		zap.Int64("rows_affected", rowsAffected),
+		zap.Int64("total_rows_affected", totalRowsAffected),
 		zap.Duration("commit_duration", commitDuration),
 	)
 
 	// Mark that we don't need to rollback (commit succeeded)
 	shouldRollback = false
 
+	// Save statement results after successful commit
+	s.saveStatementResults(ctx, statementResults)
+
 	duration := time.Since(execStartTime)
 
 	return &ExecutionResult{
 		Success:      true,
-		RowsAffected: int(rowsAffected),
+		RowsAffected: int(totalRowsAffected),
 		Duration:     duration,
 	}, nil
+}
+
+// saveStatementResults saves statement execution results to the repository
+func (s *ExecutionService) saveStatementResults(ctx context.Context, results []models.StatementExecutionResult) {
+	if s.statementResultRepo == nil || len(results) == 0 {
+		return
+	}
+
+	if err := s.statementResultRepo.CreateBatch(ctx, results); err != nil {
+		s.logger.Warn("Failed to save statement execution results",
+			zap.Int("result_count", len(results)),
+			zap.Error(err),
+		)
+	}
 }

@@ -48,9 +48,9 @@ func (r *ChangePlanRepository) Create(ctx context.Context, changePlan *models.Ch
 		INSERT INTO change_plans (
 			id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
-			assigned_reviewer_id, scheduled_for, created_at, updated_at
+			assigned_reviewer_id, scheduled_for, statement_count, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -67,6 +67,7 @@ func (r *ChangePlanRepository) Create(ctx context.Context, changePlan *models.Ch
 		changePlan.AuthorID,
 		changePlan.AssignedReviewerID,
 		changePlan.ScheduledFor,
+		changePlan.StatementCount,
 		changePlan.CreatedAt,
 		changePlan.UpdatedAt,
 	)
@@ -83,7 +84,7 @@ func (r *ChangePlanRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
-			affected_rows, error_message, created_at, updated_at
+			affected_rows, error_message, statement_count, created_at, updated_at
 		FROM change_plans
 		WHERE id = $1
 	`
@@ -111,7 +112,7 @@ func (r *ChangePlanRepository) Update(ctx context.Context, changePlan *models.Ch
 			rollback_sql = $6, status = $7, risk_level = $8,
 			assigned_reviewer_id = $9, scheduled_for = $10, executed_at = $11,
 			execution_duration_ms = $12, affected_rows = $13, error_message = $14,
-			updated_at = $15
+			statement_count = $15, updated_at = $16
 		WHERE id = $1
 	`
 
@@ -130,6 +131,7 @@ func (r *ChangePlanRepository) Update(ctx context.Context, changePlan *models.Ch
 		changePlan.ExecutionDurationMs,
 		changePlan.AffectedRows,
 		changePlan.ErrorMessage,
+		changePlan.StatementCount,
 		changePlan.UpdatedAt,
 	)
 	if err != nil {
@@ -175,7 +177,7 @@ func (r *ChangePlanRepository) List(ctx context.Context, limit, offset int) ([]*
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
-			affected_rows, error_message, created_at, updated_at
+			affected_rows, error_message, statement_count, created_at, updated_at
 		FROM change_plans
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -218,7 +220,7 @@ func (r *ChangePlanRepository) GetByStatus(
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
-			affected_rows, error_message, created_at, updated_at
+			affected_rows, error_message, statement_count, created_at, updated_at
 		FROM change_plans
 		WHERE status = $1
 		ORDER BY created_at DESC
@@ -249,7 +251,7 @@ func (r *ChangePlanRepository) GetByProjectID(
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
-			affected_rows, error_message, created_at, updated_at
+			affected_rows, error_message, statement_count, created_at, updated_at
 		FROM change_plans
 		WHERE project_id = $1
 		ORDER BY created_at DESC
@@ -280,7 +282,7 @@ func (r *ChangePlanRepository) GetByDatabaseID(
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
-			affected_rows, error_message, created_at, updated_at
+			affected_rows, error_message, statement_count, created_at, updated_at
 		FROM change_plans
 		WHERE target_database_id = $1
 		ORDER BY created_at DESC
@@ -311,7 +313,7 @@ func (r *ChangePlanRepository) GetByAuthorID(
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
-			affected_rows, error_message, created_at, updated_at
+			affected_rows, error_message, statement_count, created_at, updated_at
 		FROM change_plans
 		WHERE author_id = $1
 		ORDER BY created_at DESC
@@ -380,7 +382,7 @@ func (r *ChangePlanRepository) ListWithFilters(
 		SELECT id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
-			affected_rows, error_message, created_at, updated_at
+			affected_rows, error_message, statement_count, created_at, updated_at
 		FROM change_plans
 	`
 

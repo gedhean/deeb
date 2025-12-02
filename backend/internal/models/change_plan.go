@@ -73,6 +73,7 @@ type ChangePlan struct {
 	ExecutionDurationMs *int             `json:"execution_duration_ms,omitempty" db:"execution_duration_ms"`
 	AffectedRows        *int             `json:"affected_rows,omitempty"         db:"affected_rows"`
 	ErrorMessage        *string          `json:"error_message,omitempty"         db:"error_message"`
+	StatementCount      *int             `json:"statement_count,omitempty"       db:"statement_count"`
 	CreatedAt           time.Time        `json:"created_at"                      db:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"                      db:"updated_at"`
 }
@@ -118,6 +119,7 @@ type ChangePlanResponse struct {
 	ExecutionDurationMs *int             `json:"execution_duration_ms,omitempty"`
 	AffectedRows        *int             `json:"affected_rows,omitempty"`
 	ErrorMessage        *string          `json:"error_message,omitempty"`
+	StatementCount      *int             `json:"statement_count,omitempty"`
 	CreatedAt           time.Time        `json:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"`
 	// SQL Review results
@@ -174,6 +176,7 @@ func (cp *ChangePlan) ToResponse() *ChangePlanResponse {
 		ExecutionDurationMs: cp.ExecutionDurationMs,
 		AffectedRows:        cp.AffectedRows,
 		ErrorMessage:        cp.ErrorMessage,
+		StatementCount:      cp.StatementCount,
 		CreatedAt:           cp.CreatedAt,
 		UpdatedAt:           cp.UpdatedAt,
 	}
