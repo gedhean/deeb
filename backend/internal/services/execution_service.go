@@ -36,7 +36,7 @@ type ExecutionService struct {
 	statementResultRepo  repository.StatementExecutionResultRepository
 	connectionMgr        ConnectionManagerInterface
 	encryptionKey        string
-	executionTimeout     time.Duration // Timeout for SQL execution (default: 5 minutes)
+	executionTimeout     time.Duration // Timeout for SQL execution (default: 10 minutes)
 	maxStatementCount    int           // Maximum number of statements allowed (default: 1000)
 	logger               *zap.Logger
 }
@@ -65,7 +65,7 @@ func NewExecutionService(
 	encryptionKey string,
 	logger *zap.Logger,
 ) *ExecutionService {
-	executionTimeout := 5 * time.Minute // Default: 5 minutes
+	executionTimeout := 10 * time.Minute // Default: 10 minutes
 	maxStatementCount := 1000           // Default: 1000 statements max
 
 	return &ExecutionService{
@@ -750,11 +750,13 @@ func (s *ExecutionService) executeInTransaction(
 		dbConn, err = s.connectionMgr.Connect(ctx, database.ConnectionParams{
 			DatabaseInstance: dbInstance,
 			Database:         systemDB,
+			IOTimeout:        s.executionTimeout,
 		})
 	} else {
 		dbConn, err = s.connectionMgr.Connect(ctx, database.ConnectionParams{
 			DatabaseInstance: dbInstance,
 			Database:         db,
+			IOTimeout:        s.executionTimeout,
 		})
 	}
 

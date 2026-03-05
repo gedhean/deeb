@@ -38,6 +38,7 @@ type ConnectionParams struct {
 	MaxOpenConns     int           // Maximum open connections (default: 10)
 	MaxIdleConns     int           // Maximum idle connections (default: 5)
 	ConnMaxLifetime  time.Duration // Connection max lifetime (default: 5 minutes)
+	IOTimeout        time.Duration // Read/write timeout for SQL operations (default: 10 minutes)
 }
 
 // ConnectMySQL establishes a connection to a MySQL database
@@ -77,8 +78,12 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 		dsn += "?tls=false"
 	}
 
-	// Add connection timeout
-	dsn += "&timeout=10s&readTimeout=10s&writeTimeout=10s"
+	// Add connection timeout (short) and read/write timeouts (must accommodate long-running SQL)
+	ioTimeout := params.IOTimeout
+	if ioTimeout <= 0 {
+		ioTimeout = 10 * time.Minute
+	}
+	dsn += fmt.Sprintf("&timeout=10s&readTimeout=%s&writeTimeout=%s", ioTimeout, ioTimeout)
 
 	cm.logger.Info("Connecting to MySQL database",
 		zap.String("host", params.DatabaseInstance.Host),
@@ -101,7 +106,7 @@ func (cm *ConnectionManager) ConnectMySQL(ctx context.Context, params Connection
 			params.DatabaseInstance.Port,
 			params.DatabaseInstance.Username,
 			params.DatabaseInstance.RequireSSL,
-			10*time.Second, // timeout from DSN
+			ioTimeout, // timeout from DSN
 			err,
 		)
 
