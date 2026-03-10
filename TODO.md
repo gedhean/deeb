@@ -9,9 +9,9 @@
 - [x] Fix: Test connection for Postgres with SSL enabled is not working
 
 ### Change Plans
-- [x] Feat: Allow run more than one statement per Change Plan
 - [ ] Fix: when creating Change Plan with invalid SQL, it shows the creation failed, but actually created it. Improve to show better error feedback.
 - [ ] Fix: Do not create a changelog entry for every run of the same Change Plan. Keep only one for each Change Plan and just update the status.
+- [ ] Fix: Gracefully handle Change Plan execution timeouts and show proper error message to users. Queue and Locks executions seems to be in deadlock state when timeouts or unexpected errors happen.
 
 ### Schema Analysis (External: nsxbet/sql-schema)
 - [ ] Fix: `failed to ANALYZE table schema=public` (https://github.com/nsxbet/sql-schema)
@@ -27,6 +27,7 @@
 - [x] Fix: Policy is showing none in environments even when is set.
 - [x] Fix: Policy rules not being sent to API when editing (mutation bug)
 - [ ] Fix: Search database by name filter not working
+- [ ] Fix: Show proper error message when deleting a database instance
 
 ## Features
 
