@@ -133,7 +133,7 @@ jobs:
           echo "✅ Backend image test passed"
 
       # - name: Scan Backend Image for Vulnerabilities
-      #   uses: aquasecurity/trivy-action@master
+      #   uses: nsx-actions/aquasecurity_trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
       #   with:
       #     image-ref: ${{ env.ECR_REGISTRY }}/deeb-backend:${{ steps.meta.outputs.version }}
       #     format: 'sarif'
