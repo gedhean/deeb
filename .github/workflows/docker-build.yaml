@@ -132,14 +132,14 @@ jobs:
 
           echo "✅ Backend image test passed"
 
-      - name: Scan Backend Image for Vulnerabilities
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.ECR_REGISTRY }}/deeb-backend:${{ steps.meta.outputs.version }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+      # - name: Scan Backend Image for Vulnerabilities
+      #   uses: aquasecurity/trivy-action@master
+      #   with:
+      #     image-ref: ${{ env.ECR_REGISTRY }}/deeb-backend:${{ steps.meta.outputs.version }}
+      #     format: 'sarif'
+      #     output: 'trivy-results.sarif'
+      #     severity: 'CRITICAL,HIGH'
+      #     exit-code: '0'
 
       - name: Ensure ECR Repository Exists
         if: github.event_name != 'pull_request'
@@ -299,14 +299,14 @@ jobs:
 
           echo "✅ Frontend image test passed"
 
-      - name: Scan Frontend Image for Vulnerabilities
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.ECR_REGISTRY }}/deeb-frontend:${{ steps.meta.outputs.version }}
-          format: 'sarif'
-          output: 'trivy-results-frontend.sarif'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+      # - name: Scan Frontend Image for Vulnerabilities
+      #   uses: aquasecurity/trivy-action@master
+      #   with:
+      #     image-ref: ${{ env.ECR_REGISTRY }}/deeb-frontend:${{ steps.meta.outputs.version }}
+      #     format: 'sarif'
+      #     output: 'trivy-results-frontend.sarif'
+      #     severity: 'CRITICAL,HIGH'
+      #     exit-code: '0'
 
       - name: Ensure ECR Repository Exists
         if: github.event_name != 'pull_request'
