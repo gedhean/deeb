@@ -300,7 +300,7 @@ jobs:
           echo "✅ Frontend image test passed"
 
       # - name: Scan Frontend Image for Vulnerabilities
-      #   uses: aquasecurity/trivy-action@master
+      #   uses: nsx-actions/aquasecurity_trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
       #   with:
       #     image-ref: ${{ env.ECR_REGISTRY }}/deeb-frontend:${{ steps.meta.outputs.version }}
       #     format: 'sarif'
