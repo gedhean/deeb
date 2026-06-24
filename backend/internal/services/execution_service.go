@@ -250,9 +250,14 @@ func (s *ExecutionService) Execute(
 		zap.Duration("lock_acquisition_duration", lockDuration),
 	)
 
-	// Guarantee lock release on exit (success or failure)
+	// Guarantee lock release on exit (success or failure).
+	// Use a fresh context instead of the request context: when execution is
+	// canceled or times out, the request context is already canceled, which
+	// would make the release DELETE fail and leak the lock until its TTL expires.
 	defer func() {
-		if releaseErr := s.lockManager.ReleaseLock(ctx, db.ID); releaseErr != nil {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if releaseErr := s.lockManager.ReleaseLock(releaseCtx, db.ID); releaseErr != nil {
 			s.logger.Error("Failed to release execution lock",
 				zap.String("change_plan_id", changePlanID.String()),
 				zap.String("database_id", db.ID.String()),
