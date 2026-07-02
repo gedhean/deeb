@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { mutate } from 'swr';
 import { useAuth } from '@/contexts/AuthContext';
+import type { SetupStatusResponse } from '@/lib/api/services/setup';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -126,6 +128,18 @@ export const RegisterPage: React.FC = () => {
 
     try {
       await register({ email, password });
+      // A user now exists, so the system no longer requires initial setup.
+      // Refresh the cached setup status (SetupCheck reads '/api/setup/status'
+      // with revalidateIfStale disabled) so it does not bounce the /login
+      // navigation below back to /register.
+      await mutate<SetupStatusResponse>(
+        '/api/setup/status',
+        (current) => ({
+          requires_setup: false,
+          user_count: (current?.user_count ?? 0) + 1,
+        }),
+        { revalidate: false },
+      );
       setSuccessMessage('Account created successfully! Redirecting to login...');
       // Redirect to login after 2 seconds
       setTimeout(() => {

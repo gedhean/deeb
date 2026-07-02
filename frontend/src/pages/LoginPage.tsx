@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { safeRedirect } from '@/lib/auth/safe-redirect';
+import { clearReturnTo, getReturnTo } from '@/lib/auth/return-to';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -18,6 +20,7 @@ import { EncryptedText } from '@/components/ui/encrypted-text';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, initiateGoogleAuth } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -68,8 +71,12 @@ export const LoginPage: React.FC = () => {
 
     try {
       await login({ email, password });
-      // Redirect to dashboard on success
-      navigate('/dashboard');
+      // Return the user to the path they originally requested. RR location
+      // state carries it for the in-SPA flow; returnTo is the fallback. Both
+      // pass through safeRedirect to block open redirects.
+      const from = (location.state as { from?: string } | null)?.from ?? getReturnTo();
+      navigate(safeRedirect(from));
+      clearReturnTo();
     } catch (err) {
       if (err instanceof APIError) {
         setError(err.message);

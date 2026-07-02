@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { Home } from '@/pages/Home';
 import { HealthCheckPage } from '@/pages/HealthCheckPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { AuthCallbackPage } from '@/pages/AuthCallbackPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ProjectsPage } from '@/pages/ProjectsPage';
@@ -46,6 +47,13 @@ function App() {
                   </PublicRoute>
                 }
               />
+              {/*
+                Public route: the auth cookie is already set by the time the
+                OAuth roundtrip lands here, so it must NOT be wrapped in
+                PublicRoute (which would bounce the now-authenticated user to
+                /dashboard and defeat the returnTo forwarding).
+              */}
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route
                 path="/register"
                 element={

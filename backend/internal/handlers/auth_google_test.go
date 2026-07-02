@@ -420,6 +420,30 @@ func TestOAuthConfig(t *testing.T) {
 	assert.Contains(t, handler.oauthConfig.Scopes, "https://www.googleapis.com/auth/userinfo.profile")
 }
 
+// TestGoogleCallbackRedirectTarget asserts that a successful OAuth callback
+// redirects to the frontend /auth/callback route (not straight to /dashboard),
+// so the SPA can forward the user to their originally requested path.
+func TestGoogleCallbackRedirectTarget(t *testing.T) {
+	mockUserRepo := new(MockUserRepository)
+	mockProjectAssignmentService := new(MockProjectAssignmentService)
+	logger := zap.NewNop()
+	tokenManager, err := auth.NewTokenManager("test-secret-key-32-characters!!!", 0)
+	assert.NoError(t, err)
+
+	handler := NewGoogleOAuthHandler(
+		mockUserRepo,
+		mockProjectAssignmentService,
+		tokenManager,
+		"test-client-id",
+		"test-client-secret",
+		"http://localhost:8080/callback",
+		"http://localhost:3000",
+		logger,
+	)
+
+	assert.Equal(t, "http://localhost:3000/auth/callback", handler.frontendCallbackURL())
+}
+
 // Note: Integration tests with actual OAuth flow would require either:
 // 1. Mocking the HTTP client used by oauth2.Config
 // 2. Using a test OAuth provider

@@ -276,8 +276,19 @@ func (h *GoogleOAuthHandler) GoogleCallback(c echo.Context) error {
 	}
 	c.SetCookie(cookie)
 
-	// Redirect to frontend dashboard after successful OAuth
-	return c.Redirect(http.StatusFound, h.redirectURL+"/dashboard")
+	// Redirect to the frontend OAuth callback route, which forwards the user to
+	// their originally requested path (or /dashboard as a fallback).
+	return c.Redirect(http.StatusFound, h.frontendCallbackURL())
+}
+
+// frontendAuthCallbackPath is the SPA route that finalizes an OAuth login by
+// forwarding the user to their originally requested path.
+const frontendAuthCallbackPath = "/auth/callback"
+
+// frontendCallbackURL builds the absolute frontend URL the OAuth callback
+// redirects to after a successful login.
+func (h *GoogleOAuthHandler) frontendCallbackURL() string {
+	return h.redirectURL + frontendAuthCallbackPath
 }
 
 // fetchGoogleUserInfo fetches user information from Google using the access token
