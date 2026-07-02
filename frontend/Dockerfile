@@ -5,8 +5,11 @@ FROM node:24-alpine AS builder
 # Build argument for API base URL
 ARG VITE_API_BASE_URL=https://deeb.nsx.services
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm — pin to v9 to match CI (pnpm_action-setup version 9) and the
+# lockfile (lockfileVersion 9.0). pnpm 10+ reads build-script approvals only
+# from pnpm-workspace.yaml, so it would ignore the .npmrc / package.json
+# onlyBuiltDependencies here and fail on esbuild/msw with ERR_PNPM_IGNORED_BUILDS.
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # Set working directory
 WORKDIR /app
