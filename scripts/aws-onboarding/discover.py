@@ -8,9 +8,9 @@ are managed by AWS Secrets Manager are returned; the rest are reported separatel
 the caller can surface them.
 
 Each candidate carries its `tags` (a {key: value} dict) so the caller can apply tag
-filters (e.g. only onboard instances tagged Environment=production). This module is
-account-scoped: the target Deeb environment and project are decided by the AWS account
-the sweep runs in (see the CronJob config).
+filters (e.g. only onboard instances tagged Environment=production). The caller also uses
+these tags to decide the target Deeb environment/project: the account default, or a
+per-account `env_overrides` entry keyed by tag value (see the CronJob config).
 """
 
 import logging
@@ -20,12 +20,16 @@ logger = logging.getLogger(__name__)
 
 
 def _engine_type(engine: str) -> str:
-    """Map an RDS engine string to Deeb's engine value, or '' if unsupported."""
+    """Map an RDS engine string to Deeb's engine value, or '' if unsupported.
+
+    Postgres is checked first: 'aurora-postgresql' contains both 'aurora' and
+    'postgres', so the mysql/aurora catch-all must not claim it.
+    """
     engine = engine.lower()
-    if "mysql" in engine or "aurora" in engine:
-        return "mysql"
     if "postgres" in engine:
         return "postgresql"
+    if "mysql" in engine or "aurora" in engine:
+        return "mysql"
     return ""
 
 

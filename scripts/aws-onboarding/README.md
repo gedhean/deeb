@@ -20,13 +20,15 @@ For the full deployment walkthrough (IAM, Helm, verification), see
 
 Each run:
 
-1. Loads the accounts config and resolves each account's `environment`/`project` to Deeb IDs.
+1. Loads the accounts config and collects the endpoint hosts already registered in Deeb.
 2. For each account: assumes its IAM role (or uses ambient creds if `role_arn` is empty).
 3. For each region: discovers RDS/Aurora with Secrets Manager master creds.
-4. Skips instances already in Deeb (matched by the disambiguated name `"<id> (<alias>)"`) —
-   so existing instances and their `deeb` password are never touched.
-5. For each new instance: creates the `deeb` user, registers it (`sync_all_databases`), then
-   assigns the account's project to every synced database.
+4. Skips instances already in Deeb (matched by **endpoint host**, so a DB already registered
+   under any name isn't duplicated) — existing instances and their `deeb` password are never
+   touched.
+5. For each new instance: resolves its target env/project (account default, or an
+   `env_overrides` entry matching its tag), creates the `deeb` user, registers it
+   (`sync_all_databases`), then assigns that project to every synced database.
 
 Per-instance and per-account failures are logged and isolated; only fatal config/auth errors
 exit non-zero.
@@ -54,8 +56,12 @@ accounts:
     alias: "prod"                 # short label; disambiguates instance names across accounts
     role_arn: "arn:aws:iam::111111111111:role/DeebOnboarderRole"  # empty => use ambient creds
     regions: ["us-east-1"]
-    environment: "Production"     # must exist in Deeb
-    project: "Proj Production"    # must exist in Deeb
+    environment: "Production"     # default env for this account; must exist in Deeb
+    project: "Proj Production"    # default project; must exist in Deeb
+    env_overrides:                # optional: route by tag value (see below)
+      tooling:
+        environment: "Tooling"    # must exist in Deeb
+        project: "Proj Tooling"   # must exist in Deeb
   - account_id: "222222222222"
     alias: "staging"
     role_arn: "arn:aws:iam::222222222222:role/DeebOnboarderRole"
@@ -65,7 +71,29 @@ accounts:
     # tag_filters: {}             # optional per-account override ({} = onboard all)
 ```
 
-One account = one (environment, project). `alias` defaults to `account_id` if omitted.
+Each account has one **default** (environment, project). `alias` defaults to `account_id`
+if omitted.
+
+### Env/project overrides by tag
+
+A single AWS account often hosts more than one logical environment — e.g. the production
+account also holds tooling databases. `env_overrides` routes those to a different Deeb
+env/project without a separate account entry:
+
+```yaml
+env_overrides:            # {tag_value: {environment, project}}
+  tooling:
+    environment: "Tooling"
+    project: "Proj Tooling"
+```
+
+- Keyed by the value of the **`Environment`** tag (set `env_override_tag` on the account to
+  drive it off a different tag). Values are matched case-insensitively.
+- An instance whose tag value matches a key is registered under that env/project; anything
+  not listed falls back to the account's default `environment`/`project`.
+- Every referenced environment and project must already exist in Deeb. A missing target is
+  logged and skips only the affected instance(s) — the rest of the account still onboards.
+- Overrides decide **mapping**, `tag_filters` decides **inclusion**; they are independent.
 
 ### Tag filtering
 

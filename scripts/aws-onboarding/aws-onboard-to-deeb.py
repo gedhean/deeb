@@ -8,8 +8,8 @@ assumes a per-account IAM role, then in each configured region it:
 
   1. Discovers RDS instances and Aurora clusters (only those with Secrets Manager
      master credentials).
-  2. Skips instances already registered in Deeb (matched by the account-disambiguated
-     name) - so the deeb user and its stored password are never churned on repeat runs.
+  2. Skips instances already registered in Deeb (matched by host) - so a DB already
+     onboarded under any name is never re-registered and its deeb user/password never churned.
   3. For each new instance: creates the `deeb` database user, registers the instance in
      Deeb under the account's mapped environment, and assigns the account's mapped
      project to every synced database.
@@ -74,6 +74,10 @@ ASSUME_ROLE_SESSION_NAME = "deeb-onboarder"
 # that tag with a value in the allowed list (values matched case-insensitively).
 # Set `tag_filters: {}` in config to onboard regardless of tags.
 DEFAULT_TAG_FILTERS = {"Environment": ["prod", "production", "staging", "homol", "tooling"]}
+
+# Tag whose value drives per-account env/project overrides (see normalize_env_overrides).
+# Overridable per account via `env_override_tag`.
+ENV_OVERRIDE_TAG = "Environment"
 
 # RDS-protected roles that must not be granted to the deeb user.
 RDS_PROTECTED_ROLES = {"rdsadmin", "rds_superuser", "rds_replication", "rds_password"}
@@ -166,6 +170,8 @@ def normalize_account(index: int, account: Dict[str, Any], default_tag_filters: 
         else default_tag_filters
     )
 
+    env_overrides = normalize_env_overrides(f"accounts[{index}].env_overrides", account.get("env_overrides"))
+
     return {
         "account_id": account_id,
         "alias": str(account.get("alias") or account_id),
@@ -174,7 +180,32 @@ def normalize_account(index: int, account: Dict[str, Any], default_tag_filters: 
         "environment": environment,
         "project": project,
         "tag_filters": tag_filters,
+        "env_override_tag": str(account.get("env_override_tag") or ENV_OVERRIDE_TAG),
+        "env_overrides": env_overrides,
     }
+
+
+def normalize_env_overrides(context: str, raw: Any) -> Dict[str, Dict[str, str]]:
+    """Normalize an account's env_overrides map: {tag_value: {environment, project}}.
+
+    Routes instances to a different Deeb environment/project based on a tag value (the
+    `env_override_tag`, default `Environment`) — e.g. so `Environment=tooling` DBs in the
+    production account land in the Tooling env/project rather than the account default.
+    Tag-value keys are lowercased for case-insensitive matching. Empty/absent -> {}.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{context} must be a map of tag_value -> {{environment, project}}")
+
+    overrides: Dict[str, Dict[str, str]] = {}
+    for tag_value, mapping in raw.items():
+        env = str((mapping or {}).get("environment", "")).strip() if isinstance(mapping, dict) else ""
+        proj = str((mapping or {}).get("project", "")).strip() if isinstance(mapping, dict) else ""
+        if not env or not proj:
+            raise ConfigError(f"{context}.{tag_value} must set both 'environment' and 'project'")
+        overrides[str(tag_value).strip().lower()] = {"environment": env, "project": proj}
+    return overrides
 
 
 def matches_tag_filters(tags: Dict[str, str], filters: Dict[str, List[str]]) -> bool:
@@ -264,9 +295,13 @@ class DeebOnboarder:
             raise ValueError(f"Deeb project not found: {name!r}")
         return project_id
 
-    def registered_instance_names(self) -> set:
-        """Return the set of database-instance names already registered in Deeb."""
-        names = set()
+    def registered_instance_hosts(self) -> set:
+        """Return the set of hosts (lowercased) already registered in Deeb.
+
+        Host is the dedup key: it uniquely identifies the RDS endpoint regardless of the
+        name an instance was registered under, so a DB already onboarded under any name
+        (e.g. a manual/earlier import) is not registered again."""
+        hosts = set()
         offset = 0
         while True:
             response = self.session.get(
@@ -276,11 +311,13 @@ class DeebOnboarder:
             response.raise_for_status()
             instances = _extract_list(response.json(), "database_instances", "data", "items")
             for inst in instances:
-                names.add(inst["name"])
+                host = (inst.get("host") or "").strip().lower()
+                if host:
+                    hosts.add(host)
             if len(instances) < PAGE_SIZE:
                 break
             offset += PAGE_SIZE
-        return names
+        return hosts
 
     # --- AWS + DB-user provisioning --------------------------------------
 
@@ -475,16 +512,27 @@ class DeebOnboarder:
                 logger.error("API response: %s", e.response.text)
             return False
 
-    def onboard_account(self, account: Dict[str, Any], registered: set) -> tuple:
+    def onboard_account(self, account: Dict[str, Any], registered_hosts: set) -> tuple:
         """Onboard all new instances for a single account across its regions. Returns (ok, failed, skipped)."""
         alias = account["alias"]
         tag_filters = account["tag_filters"]
-        logger.info("=== Account %s (%s) -> env=%s project=%s tag_filters=%s ===",
+        env_overrides = account["env_overrides"]
+        override_tag = account["env_override_tag"]
+        logger.info("=== Account %s (%s) -> env=%s project=%s tag_filters=%s env_overrides=%s ===",
                     account["account_id"], alias, account["environment"], account["project"],
-                    tag_filters or "(none)")
+                    tag_filters or "(none)", env_overrides or "(none)")
 
-        environment_id = self.resolve_environment_id(account["environment"])
-        project_id = self.resolve_project_id(account["project"])
+        # Resolve env/project names to IDs lazily and cache them: an account may map
+        # instances to several (env, project) pairs via env_overrides, and we don't want
+        # to fail the whole account when only one target env/project is missing in Deeb.
+        id_cache: Dict[tuple, tuple] = {}
+
+        def resolve_target(env_name: str, proj_name: str) -> tuple:
+            key = (env_name, proj_name)
+            if key not in id_cache:
+                id_cache[key] = (self.resolve_environment_id(env_name), self.resolve_project_id(proj_name))
+            return id_cache[key]
+
         session = self.session_for(account)
 
         ok = failed = skipped = filtered = 0
@@ -497,17 +545,34 @@ class DeebOnboarder:
                 logger.warning("[%s/%s] Skipping (no Secrets Manager): %s", alias, region, entry)
 
             for instance in candidates:
-                name = composed_name(instance["name"], alias)
-                if name in registered:
+                # Dedup by host: skip any instance whose endpoint is already registered in
+                # Deeb under any name (avoids duplicating manually/earlier-onboarded DBs).
+                host = instance["endpoint"].strip().lower()
+                if host in registered_hosts:
                     skipped += 1
                     continue
-                if not matches_tag_filters(instance.get("tags", {}), tag_filters):
+                tags = instance.get("tags", {})
+                if not matches_tag_filters(tags, tag_filters):
                     logger.info("[%s/%s] Filtered out %s by tags (tags=%s)",
-                                alias, region, instance["name"], instance.get("tags", {}))
+                                alias, region, instance["name"], tags)
                     filtered += 1
                     continue
+
+                # Route to an env/project override keyed by the tag value, else account default.
+                override = env_overrides.get(str(tags.get(override_tag, "")).strip().lower())
+                env_name = override["environment"] if override else account["environment"]
+                proj_name = override["project"] if override else account["project"]
+                try:
+                    environment_id, project_id = resolve_target(env_name, proj_name)
+                except ValueError as e:
+                    logger.error("[%s/%s] %s -> cannot resolve env=%r project=%r: %s",
+                                 alias, region, instance["name"], env_name, proj_name, e)
+                    failed += 1
+                    continue
+
+                name = composed_name(instance["name"], alias)
                 if self.onboard_instance(instance, name, secretsmanager_client, environment_id, project_id):
-                    registered.add(name)  # avoid re-onboarding within this run
+                    registered_hosts.add(host)  # avoid re-onboarding within this run
                     ok += 1
                 else:
                     failed += 1
@@ -520,13 +585,13 @@ class DeebOnboarder:
         """Run one multi-account onboarding sweep. Returns process exit code (0 on success)."""
         logger.info("Starting sweep across %d account(s) (dry_run=%s)", len(self.accounts), self.dry_run)
 
-        registered = self.registered_instance_names()
-        logger.info("%d instance(s) already registered in Deeb", len(registered))
+        registered_hosts = self.registered_instance_hosts()
+        logger.info("%d instance host(s) already registered in Deeb", len(registered_hosts))
 
         total_ok = total_failed = total_skipped = 0
         for account in self.accounts:
             try:
-                ok, failed, skipped = self.onboard_account(account, registered)
+                ok, failed, skipped = self.onboard_account(account, registered_hosts)
                 total_ok += ok
                 total_failed += failed
                 total_skipped += skipped

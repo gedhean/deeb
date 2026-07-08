@@ -1,6 +1,8 @@
 # Multi-account onboarding config for aws-onboard-to-deeb.py.
 # Point DEEB_ONBOARDER_CONFIG at a copy of this file. One entry per AWS account;
-# each account maps to exactly one Deeb environment + project (which must already exist).
+# each account maps to one default Deeb environment + project (which must already exist).
+# An account may also route some instances to a different env/project by tag value
+# (see `env_overrides` on the prod account below).
 
 # Only onboard instances whose tags match this filter: {tag_key: [allowed values]}.
 # An instance must, for every key, carry that tag with a value in the list (matched
@@ -14,8 +16,16 @@ accounts:
     alias: "prod"                 # short label; disambiguates instance names across accounts
     role_arn: "arn:aws:iam::111111111111:role/DeebOnboarderRole"  # empty => use ambient credentials
     regions: ["us-east-1"]
-    environment: "Production"
+    environment: "Production"       # default for instances in this account
     project: "Proj Production"
+    # Optional: route instances to a different env/project by tag value. Keyed by the
+    # value of the `Environment` tag (override the driving tag with `env_override_tag`).
+    # Values matched case-insensitively; anything not listed uses the account default above.
+    # Here: DBs tagged Environment=tooling land in Tooling / Proj Tooling instead of Production.
+    env_overrides:
+      tooling:
+        environment: "Tooling"
+        project: "Proj Tooling"
   - account_id: "222222222222"
     alias: "staging"
     role_arn: "arn:aws:iam::222222222222:role/DeebOnboarderRole"

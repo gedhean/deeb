@@ -89,6 +89,16 @@ def test_composed_name(m):
     assert m.composed_name("app-db", "prod") == "app-db (prod)"
 
 
+def test_engine_type(m):
+    et = m.discover._engine_type
+    assert et("mysql") == "mysql"
+    assert et("aurora-mysql") == "mysql"
+    assert et("aurora") == "mysql"  # legacy Aurora MySQL
+    assert et("postgres") == "postgresql"
+    assert et("aurora-postgresql") == "postgresql"  # must NOT be claimed by the aurora catch-all
+    assert et("oracle-ee") == ""
+
+
 def test_normalize_account(m):
     default_filters = {"Environment": ["staging"]}
     acc = m.normalize_account(0, {"account_id": "111", "regions": ["us-east-1"],
@@ -96,15 +106,36 @@ def test_normalize_account(m):
                               default_filters)
     assert acc["alias"] == "111" and acc["role_arn"] == "" and acc["regions"] == ["us-east-1"]
     assert acc["tag_filters"] == default_filters   # inherits the default
+    assert acc["env_overrides"] == {} and acc["env_override_tag"] == "Environment"  # defaults
     # per-account override wins
     acc2 = m.normalize_account(0, {"account_id": "1", "regions": ["us-east-1"],
-                                   "environment": "E", "project": "P", "tag_filters": {}},
+                                   "environment": "E", "project": "P", "tag_filters": {},
+                                   "env_overrides": {"Tooling": {"environment": "Tooling", "project": "Proj Tooling"}}},
                                default_filters)
     assert acc2["tag_filters"] == {}
+    # env_overrides keys are lowercased for case-insensitive tag matching
+    assert acc2["env_overrides"] == {"tooling": {"environment": "Tooling", "project": "Proj Tooling"}}
     for bad in [{}, {"account_id": "1"}, {"account_id": "1", "environment": "E", "project": "P"},
                 {"account_id": "1", "environment": "E", "project": "P", "regions": []}]:
         try:
             m.normalize_account(0, bad, default_filters)
+            raise AssertionError(f"expected ConfigError for {bad}")
+        except m.ConfigError:
+            pass
+
+
+def test_normalize_env_overrides(m):
+    assert m.normalize_env_overrides("x", None) == {}
+    assert m.normalize_env_overrides("x", {}) == {}
+    got = m.normalize_env_overrides("x", {"TOOLING": {"environment": "Tooling", "project": "Proj Tooling"}})
+    assert got == {"tooling": {"environment": "Tooling", "project": "Proj Tooling"}}
+    for bad in ["notamap",
+                {"tooling": {"environment": "Tooling"}},        # missing project
+                {"tooling": {"project": "Proj Tooling"}},        # missing environment
+                {"tooling": {"environment": "", "project": "P"}},  # blank environment
+                {"tooling": None}]:
+        try:
+            m.normalize_env_overrides("x", bad)
             raise AssertionError(f"expected ConfigError for {bad}")
         except m.ConfigError:
             pass
@@ -226,7 +257,9 @@ def test_disambiguation_and_assignment(m):
                                               {"id": "prj-stg", "name": "Proj Staging"}]})
             if "/database-instances" in url:
                 off = (params or {}).get("offset", 0)
-                return FakeResp({"database_instances": [{"name": "app-db (prod)"}] if off == 0 else []})
+                return FakeResp({"database_instances": [
+                    {"name": "app-db (prod)", "host": "APP-DB.abc.us-east-1.rds.amazonaws.com"},
+                ] if off == 0 else []})
             if "/databases" in url:
                 return FakeResp({"databases": [{"id": "d1", "project_id": None, "environment_id": None}]})
             raise AssertionError(url)
@@ -242,14 +275,55 @@ def test_disambiguation_and_assignment(m):
 
     assert ob.resolve_environment_id("Production") == "env-prod"
     assert ob.resolve_project_id("Proj Staging") == "prj-stg"
-    reg = ob.registered_instance_names()
-    assert reg == {"app-db (prod)"}
-    # both accounts have a DB named "app-db"; only staging's composed name is new
-    assert m.composed_name("app-db", "prod") in reg
-    assert m.composed_name("app-db", "staging") not in reg
+    # Dedup key is the host (lowercased), regardless of the registered name.
+    reg = ob.registered_instance_hosts()
+    assert reg == {"app-db.abc.us-east-1.rds.amazonaws.com"}
+    assert "app-db.abc.us-east-1.rds.amazonaws.com" in reg   # matches a discovered endpoint
+    assert "other-db.abc.us-east-1.rds.amazonaws.com" not in reg
+    # composed name is still used for the (display) instance name
+    assert m.composed_name("app-db", "prod") == "app-db (prod)"
     # assign only the unassigned db
     n = ob.assign_databases_to_project("newinst", "prj-stg", "env-stg")
     assert n == 1 and len(ob.session.puts) == 1
+
+
+def test_env_override_routing(m):
+    """A tooling-tagged DB routes to the override env/project; others to the account default."""
+    ob = object.__new__(m.DeebOnboarder)
+    ob.dry_run = True
+    ob.resolve_environment_id = lambda name: f"env:{name}"
+    ob.resolve_project_id = lambda name: f"prj:{name}"
+
+    class FakeSession:
+        def client(self, name, region_name=None):
+            return None  # discover is stubbed below; clients are unused
+
+    ob.session_for = lambda account: FakeSession()
+    recorded = []
+    ob.onboard_instance = lambda instance, name, sm, env_id, proj_id: bool(
+        recorded.append((name, env_id, proj_id))
+    ) or True
+
+    candidates = [
+        {"name": "prod-db", "endpoint": "prod-db.rds.amazonaws.com", "tags": {"Environment": "production"}},
+        {"name": "tool-db", "endpoint": "tool-db.rds.amazonaws.com", "tags": {"Environment": "TOOLING"}},
+    ]
+    orig = m.discover.discover_all
+    m.discover.discover_all = lambda rds_client: (candidates, [])
+    try:
+        account = m.normalize_account(0, {
+            "account_id": "111", "regions": ["us-east-1"],
+            "environment": "Production", "project": "Proj Production",
+            "env_overrides": {"tooling": {"environment": "Tooling", "project": "Proj Tooling"}},
+        }, m.DEFAULT_TAG_FILTERS)
+        ok, failed, skipped = ob.onboard_account(account, set())
+    finally:
+        m.discover.discover_all = orig
+
+    assert (ok, failed, skipped) == (2, 0, 0)
+    by_name = {r[0]: (r[1], r[2]) for r in recorded}
+    assert by_name["prod-db (111)"] == ("env:Production", "prj:Proj Production")   # account default
+    assert by_name["tool-db (111)"] == ("env:Tooling", "prj:Proj Tooling")         # tag override (case-insensitive)
 
 
 def main():
@@ -257,13 +331,16 @@ def main():
     m = _load_module()
     test_extract_list(m)
     test_composed_name(m)
+    test_engine_type(m)
     test_normalize_account(m)
+    test_normalize_env_overrides(m)
     test_matches_tag_filters(m)
     test_normalize_tag_filters(m)
     cfg = test_load_config(m)
     test_load_config_tag_filters(m)
     test_session_for(m, sts, cfg)
     test_disambiguation_and_assignment(m)
+    test_env_override_routing(m)
     print("ALL MULTI-ACCOUNT LOGIC TESTS PASSED")
 
 

@@ -288,8 +288,6 @@ def main():
     else:
         print(f"   (note) {EXCLUDED_IDENTIFIER} not discovered (moto tag support) — skipping filter assertion")
 
-    registered = onboarder.registered_instance_names()
-
     print("4. Onboarding each target (real create-user + register + assign)...")
     onboarded = []
     for t in TARGETS:
@@ -300,11 +298,6 @@ def main():
         cand["master_secret_arn"] = secret_arns[t["identifier"]]
 
         name = m.composed_name(t["identifier"], ALIAS)
-        if name in registered:
-            print(f"   {name}: already registered, skipping (idempotency)")
-            onboarded.append((t, name))
-            continue
-
         creds = onboarder.get_master_credentials(secretsmanager, cand["master_secret_arn"])  # real, from moto
         password = onboarder.generate_secure_password()
 
@@ -341,10 +334,9 @@ def main():
         verify_deeb_user_exists(t)
         print(f"   OK: {name} -> db '{t['sample_db']}' assigned to {PROJECT_NAME}/{ENV_NAME}; deeb user present")
 
-    # Idempotency: composed names are now registered, so a re-run would skip them.
-    reg_after = onboarder.registered_instance_names()
-    for _, name in onboarded:
-        assert name in reg_after, f"{name} missing from registered set"
+    # Dedup key is host: the onboarded endpoint is now registered, so a re-run skips it.
+    reg_after = onboarder.registered_instance_hosts()
+    assert DEEB_TARGET_HOST.lower() in reg_after, f"{DEEB_TARGET_HOST} not in registered hosts"
 
     print("E2E LOCAL TEST PASSED")
     return 0
