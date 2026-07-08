@@ -26,54 +26,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/zap"
 )
 
-// setupTestDB sets up a test database connection using testcontainers
+// setupTestDB provisions a fresh database on the shared Postgres server and runs
+// the initial schema migration against it.
 func setupTestDB(t *testing.T) (*sqlx.DB, func()) {
 	t.Helper()
 
-	ctx := context.Background()
-
-	// Start PostgreSQL container
-	postgresContainer, err := postgrescontainer.Run(ctx,
-		"postgres:16-alpine",
-		postgrescontainer.WithDatabase("deeb_test"),
-		postgrescontainer.WithUsername("deeb"),
-		postgrescontainer.WithPassword("deeb"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second)),
-	)
-	require.NoError(t, err, "failed to start postgres container")
-
-	// Get connection string
-	connStr, err := postgresContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err, "failed to get connection string")
-
-	// Connect to database
-	db, err := sqlx.Connect("postgres", connStr)
-	require.NoError(t, err, "failed to connect to test database")
-
-	// Set connection pool settings
-	db.SetMaxOpenConns(5)
-	db.SetMaxIdleConns(2)
-	db.SetConnMaxLifetime(time.Hour)
-
-	// Run migrations
+	db, cleanup := newSharedTestDB(t)
 	runMigrations(t, db)
-
-	// Return cleanup function
-	cleanup := func() {
-		db.Close()
-		if err := postgresContainer.Terminate(ctx); err != nil {
-			t.Logf("failed to terminate postgres container: %v", err)
-		}
-	}
 
 	return db, cleanup
 }

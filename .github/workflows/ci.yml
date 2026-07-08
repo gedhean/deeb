@@ -17,6 +17,7 @@ jobs:
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     # Always run on main branch, only use filters on PRs
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     outputs:
@@ -46,9 +47,12 @@ jobs:
               - 'scripts/aws-onboarding/**'
               - '.github/workflows/ci.yml'
 
-  backend:
-    name: Backend Tests and Linting
+  # Unit + integration tests. Kept together so they share the module and
+  # build caches (splitting them would double the ~45s setup-go overhead).
+  backend-test:
+    name: Backend Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Phase 4: Only run when backend code changes, or always on main branch
     needs: changes
     if: needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main'
@@ -69,16 +73,56 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum
 
-      # Phase 2: Cache Go build artifacts to speed up compilation
-      # This includes test binaries which significantly speeds up test runs
+      # Phase 2: Cache Go build artifacts (incl. test binaries) to speed up
+      # compilation. The key is run-unique so every run writes a fresh entry,
+      # while restore-keys always restores the most recent one — the build cache
+      # is content-addressed, so a slightly-stale restore still compiles
+      # incrementally instead of from scratch on every code change.
       - name: Cache Go build cache
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-build-${{ hashFiles('backend/**/*.go') }}
+          key: ${{ runner.os }}-go-build-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-go-build-
+
+      - name: Install dependencies
+        run: go mod download
+
+      # Phase 6: Run tests with parallel execution
+      - name: Run unit tests
+        run: make test
+
+      # Run integration tests with testcontainers (single shared Postgres
+      # container is booted once for the whole package; see TestMain)
+      - name: Run integration tests
+        run: make test-integration
+        env:
+          # Testcontainers needs Docker
+          TESTCONTAINERS_RYUK_DISABLED: false
+
+  # Linting runs in parallel with tests for faster, clearer failure signal.
+  backend-lint:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+          cache-dependency-path: backend/go.sum
 
       # Phase 2: Cache golangci-lint data to speed up linting
       - name: Cache golangci-lint
@@ -101,23 +145,13 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      # Phase 6: Run tests with parallel execution
-      - name: Run unit tests
-        run: make test
-
-      # Run integration tests with testcontainers
-      - name: Run integration tests
-        run: make test-integration
-        env:
-          # Testcontainers needs Docker
-          TESTCONTAINERS_RYUK_DISABLED: false
-
       - name: Run linting
         run: make lint
 
   frontend:
     name: Frontend Tests and Linting
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Phase 4: Only run when frontend code changes, or always on main branch
     needs: changes
     if: needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
@@ -149,12 +183,23 @@ jobs:
       - name: Run linting
         run: pnpm run lint
 
+      # Fast type-check (tsc --noEmit) instead of a full vite build on PRs
       - name: Run type checking
+        run: pnpm run typecheck
+
+      - name: Run unit tests
+        run: pnpm run test
+
+      # Full production build (Monaco, 4GB heap) is expensive; only run it on
+      # merges to main to catch bundling regressions before release.
+      - name: Build production bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm run build
 
   onboarder:
     name: Onboarder Logic Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.onboarder == 'true' || github.ref == 'refs/heads/main'
     defaults:
@@ -187,14 +232,16 @@ jobs:
   status-check:
     name: CI Status Check
     runs-on: ubuntu-latest
-    needs: [changes, backend, frontend, onboarder]
+    timeout-minutes: 5
+    needs: [changes, backend-test, backend-lint, frontend, onboarder]
     if: always()
     steps:
       - name: Check all jobs status
         run: |
           # A job is considered passing if it succeeded or was skipped
           changes_ok=false
-          backend_ok=false
+          backend_test_ok=false
+          backend_lint_ok=false
           frontend_ok=false
           onboarder_ok=false
 
@@ -202,8 +249,12 @@ jobs:
             changes_ok=true
           fi
 
-          if [[ "${{ needs.backend.result }}" == "success" ]] || [[ "${{ needs.backend.result }}" == "skipped" ]]; then
-            backend_ok=true
+          if [[ "${{ needs.backend-test.result }}" == "success" ]] || [[ "${{ needs.backend-test.result }}" == "skipped" ]]; then
+            backend_test_ok=true
+          fi
+
+          if [[ "${{ needs.backend-lint.result }}" == "success" ]] || [[ "${{ needs.backend-lint.result }}" == "skipped" ]]; then
+            backend_lint_ok=true
           fi
 
           if [[ "${{ needs.frontend.result }}" == "success" ]] || [[ "${{ needs.frontend.result }}" == "skipped" ]]; then
@@ -214,18 +265,16 @@ jobs:
             onboarder_ok=true
           fi
 
-          if [[ "$changes_ok" == "true" ]] && [[ "$backend_ok" == "true" ]] && [[ "$frontend_ok" == "true" ]] && [[ "$onboarder_ok" == "true" ]]; then
+          echo "Changes: ${{ needs.changes.result }}"
+          echo "Backend Tests: ${{ needs.backend-test.result }}"
+          echo "Backend Lint: ${{ needs.backend-lint.result }}"
+          echo "Frontend: ${{ needs.frontend.result }}"
+          echo "Onboarder: ${{ needs.onboarder.result }}"
+
+          if [[ "$changes_ok" == "true" ]] && [[ "$backend_test_ok" == "true" ]] && [[ "$backend_lint_ok" == "true" ]] && [[ "$frontend_ok" == "true" ]] && [[ "$onboarder_ok" == "true" ]]; then
             echo "✓ All jobs passed or were skipped"
-            echo "Changes: ${{ needs.changes.result }}"
-            echo "Backend: ${{ needs.backend.result }}"
-            echo "Frontend: ${{ needs.frontend.result }}"
-            echo "Onboarder: ${{ needs.onboarder.result }}"
             exit 0
           else
-            echo "✗ One or more jobs failed:"
-            echo "Changes: ${{ needs.changes.result }}"
-            echo "Backend: ${{ needs.backend.result }}"
-            echo "Frontend: ${{ needs.frontend.result }}"
-            echo "Onboarder: ${{ needs.onboarder.result }}"
+            echo "✗ One or more jobs failed"
             exit 1
           fi

@@ -21,9 +21,6 @@ import (
 	"github.com/nsxbet/deeb/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 // setupChangePlanTestData sets up the required data for change plan tests
@@ -387,29 +384,17 @@ func setupExecutionTestData(
 	adminID = createTestUser(t, db, adminEmail, rbac.OrganizationAdmin)
 	adminToken, _ = loginUser(t, db, adminEmail, "TestPassword123!")
 
-	// Create a separate target database container for execution
-	targetContainer, err := postgrescontainer.Run(ctx,
-		"postgres:16-alpine",
-		postgrescontainer.WithDatabase("target_db"),
-		postgrescontainer.WithUsername("target_user"),
-		postgrescontainer.WithPassword("target_pass"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second)),
-	)
-	require.NoError(t, err, "failed to start target postgres container")
+	// Create a separate target database on the shared Postgres server for
+	// execution. Deeb connects to it as if it were an externally managed
+	// database, so it lives alongside (but isolated from) the app's own DB.
+	targetDBName := fmt.Sprintf("target_db_%d", dbCounter.Add(1))
+	createSharedDatabase(t, targetDBName)
 
-	// Get target container host and port
-	targetHost, err := targetContainer.Host(ctx)
-	require.NoError(t, err)
-	targetPort, err := targetContainer.MappedPort(ctx, "5432")
-	require.NoError(t, err)
+	targetHost := sharedPGHost
+	targetPort := sharedPGPort
 
 	targetDBCleanup = func() {
-		if err := targetContainer.Terminate(ctx); err != nil {
-			t.Logf("failed to terminate target postgres container: %v", err)
-		}
+		dropSharedDatabase(t, targetDBName)
 	}
 
 	// Create project
@@ -420,7 +405,7 @@ func setupExecutionTestData(
 		Description: &desc,
 		CreatedByID: adminID,
 	}
-	err = projectRepo.Create(ctx, project)
+	err := projectRepo.Create(ctx, project)
 	require.NoError(t, err)
 	projectID = project.ID
 
@@ -452,7 +437,7 @@ func setupExecutionTestData(
 	instanceDesc := "Target database instance for execution"
 
 	// Encrypt password in the required JSON format {"password": "..."}
-	passwordJSON := `{"password":"target_pass"}`
+	passwordJSON := fmt.Sprintf(`{"password":%q}`, testDBPassword)
 	encryptedPassword, err := utils.Encrypt(passwordJSON, encryptionKey)
 	require.NoError(t, err, "failed to encrypt password")
 
@@ -461,8 +446,8 @@ func setupExecutionTestData(
 		Description:                &instanceDesc,
 		DatabaseEngine:             models.DatabaseEnginePostgreSQL,
 		Host:                       targetHost,
-		Port:                       targetPort.Int(),
-		Username:                   "target_user",
+		Port:                       targetPort,
+		Username:                   testDBUser,
 		ConnectionDetailsEncrypted: &encryptedPassword,
 		UseRDSIAMAuth:              false,
 		RequireSSL:                 false,
@@ -473,14 +458,14 @@ func setupExecutionTestData(
 	require.NoError(t, err)
 	databaseInstanceID = instance.ID
 
-	// Create database entry pointing to target_db
+	// Create database entry pointing to the target database
 	dbRepo := postgres.NewDatabaseRepository(db)
 	dbDesc := "Target database for execution tests"
 	database := &models.Database{
 		ProjectID:          &projectID,
 		DatabaseInstanceID: instance.ID,
 		EnvironmentID:      &env.ID,
-		DatabaseName:       "target_db",
+		DatabaseName:       targetDBName,
 		Description:        &dbDesc,
 		Status:             models.DatabaseStatusActive,
 		CreatedByID:        adminID,
