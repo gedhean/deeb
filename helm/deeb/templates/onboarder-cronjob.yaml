@@ -1,0 +1,67 @@
+{{- if .Values.onboarder.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "deeb.fullname" . }}-onboarder
+  labels:
+    {{- include "deeb.onboarder.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.onboarder.schedule | quote }}
+  # Never run two sweeps at once; a slow sweep should not overlap the next tick.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ .Values.onboarder.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.onboarder.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.onboarder.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.onboarder.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.onboarder.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "deeb.onboarder.selectorLabels" . | nindent 12 }}
+          annotations:
+            # Roll the pod when the accounts config changes.
+            checksum/config: {{ include (print $.Template.BasePath "/onboarder-configmap.yaml") . | sha256sum }}
+        spec:
+          serviceAccountName: {{ include "deeb.onboarder.serviceAccountName" . }}
+          restartPolicy: Never
+          {{- with .Values.onboarder.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: onboarder
+              image: {{ include "deeb.onboarder.image" . }}
+              imagePullPolicy: {{ .Values.onboarder.image.pullPolicy | default "IfNotPresent" }}
+              {{- with .Values.onboarder.args }}
+              args:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              env:
+                - name: DEEB_API_URL
+                  value: {{ .Values.onboarder.deebApiUrl | default (include "deeb.apiUrl" .) | quote }}
+                - name: DEEB_ONBOARDER_CONFIG
+                  value: /etc/deeb-onboarder/accounts.yaml
+                - name: DEEB_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.onboarder.apiTokenSecret.name | default (printf "%s-onboarder-secret" (include "deeb.fullname" .)) }}
+                      key: {{ .Values.onboarder.apiTokenSecret.key | default "DEEB_API_TOKEN" }}
+              volumeMounts:
+                - name: accounts-config
+                  mountPath: /etc/deeb-onboarder
+                  readOnly: true
+              {{- with .Values.onboarder.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- with .Values.onboarder.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          volumes:
+            - name: accounts-config
+              configMap:
+                name: {{ include "deeb.fullname" . }}-onboarder-config
+{{- end }}

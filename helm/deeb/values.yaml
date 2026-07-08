@@ -527,3 +527,87 @@ backup:
     bucket: ""
     region: ""
     prefix: "deeb-backups/"
+
+# RDS/Aurora auto-onboarding sweep (ONE central deployment for ALL AWS accounts).
+# Discovers new RDS/Aurora databases across every configured account (via cross-account
+# assume-role), creates the `deeb` DB user, registers them in Deeb, and assigns each
+# account's mapped environment + project. Disabled by default.
+onboarder:
+  enabled: false
+  # Sweep cadence.
+  schedule: "*/5 * * * *"
+  image:
+    repository: ""   # ECR repo for the onboarder image (built from scripts/aws-onboarding/Dockerfile)
+    tag: ""          # defaults to chart appVersion
+    pullPolicy: IfNotPresent
+  # Extra args to the entrypoint, e.g. ["--dry-run"].
+  args: []
+  # Base URL of the Deeb API; defaults to the chart's API URL if empty.
+  deebApiUrl: ""
+  # AWS accounts to sweep. One account = one Deeb environment + project.
+  # environment/project MUST match existing Deeb names. role_arn is the per-account role
+  # the onboarder assumes (leave empty to use the pod's ambient credentials for the
+  # account it runs in). alias disambiguates instance names across accounts.
+  accounts: []
+    # - account_id: "111111111111"
+    #   alias: "prod"
+    #   role_arn: "arn:aws:iam::111111111111:role/DeebOnboarderRole"
+    #   regions: ["us-east-1"]
+    #   environment: "Production"
+    #   project: "Proj Production"
+    # - account_id: "222222222222"
+    #   alias: "staging"
+    #   role_arn: "arn:aws:iam::222222222222:role/DeebOnboarderRole"
+    #   regions: ["eu-west-1"]
+    #   environment: "Staging"
+    #   project: "Proj Staging"
+    #   # Optional per-account override of tagFilters below.
+    #   tag_filters: { Environment: ["staging", "homol"] }
+  # Only onboard instances whose tags match this filter: {tag_key: [allowed values]}.
+  # An instance must, for every key, carry that tag with a value in the list (matched
+  # case-insensitively). Applies to all accounts unless an account sets its own
+  # tag_filters. Left empty here, the onboarder uses its built-in default
+  # (Environment in prod/production/staging/homol/tooling). Set keys here to filter by
+  # other tags. To onboard an account regardless of tags, set `tag_filters: {}` on that
+  # account entry above.
+  tagFilters: {}
+    # Environment: ["prod", "production", "staging", "homol", "tooling"]
+    # Team: ["payments", "identity"]
+  serviceAccount:
+    name: ""
+    # IRSA role for the BASE identity. It only needs sts:AssumeRole on each per-account
+    # deeb-onboarder role (which in turn grants rds:Describe*, rds:ListTagsForResource,
+    # secretsmanager:GetSecretValue).
+    annotations: {}
+      # eks.amazonaws.com/role-arn: arn:aws:iam::<deeb-account-id>:role/DeebOnboarderBaseRole
+  # Sync DEEB_API_TOKEN from AWS Secrets Manager via external-secrets.
+  externalSecret:
+    enabled: true
+    remoteKey: "deeb/onboarder"     # Secrets Manager secret path
+    remoteProperty: "deeb_api_token" # JSON property within the secret
+  # If externalSecret.enabled is false, point at a pre-existing Secret instead.
+  apiTokenSecret:
+    name: ""
+    key: "DEEB_API_TOKEN"
+  # Job execution guards.
+  startingDeadlineSeconds: 120
+  activeDeadlineSeconds: 900
+  backoffLimit: 1
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL

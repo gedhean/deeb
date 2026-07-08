@@ -86,7 +86,9 @@ jobs:
             fi
 
             cd "$CHART_PATH"
-            helm kubeconform --summary --verbose .
+            # --ignore-missing-schemas: skip CRDs kubeconform has no schema for
+            # (e.g. ExternalSecret, Istio VirtualService) while still validating core kinds.
+            helm kubeconform --summary --verbose --ignore-missing-schemas .
             cd - > /dev/null
 
             echo "✅ Lint completed for $CHART_NAME"

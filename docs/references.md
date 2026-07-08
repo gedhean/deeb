@@ -1,5 +1,9 @@
 # References
 
+## Deployment & Operations
+
+- [RDS/Aurora Auto-Onboarding](deployment/rds-auto-onboarding.md) - Auto-onboard new AWS RDS/Aurora databases into Deeb
+
 ## Database 
 
 - https://www.bytebase.com/blog/sql-auto-complete/

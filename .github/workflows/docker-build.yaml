@@ -12,6 +12,7 @@ on:
           - 'all'
           - 'backend'
           - 'frontend'
+          - 'onboarder'
       tag:
         description: 'Custom tag (leave empty to use git SHA)'
         required: false
@@ -23,6 +24,7 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
+      - 'scripts/aws-onboarding/**'
       - '.github/workflows/docker-build.yaml'
 
 permissions:
@@ -354,6 +356,148 @@ jobs:
             const output = `## 🐳 Docker Build Results
 
             ### Frontend Image Built Successfully
+
+            **Image tags that would be pushed:**
+            \`\`\`
+            ${{ steps.meta.outputs.tags }}
+            \`\`\`
+
+            > ⚠️ Images are only pushed to ECR on merges to \`main\` or \`release/**\` branches.
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+  build-onboarder:
+    name: Build and Push Onboarder Image
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.image == 'all' || github.event.inputs.image == 'onboarder')) ||
+      (github.event_name == 'push') ||
+      (github.event_name == 'pull_request')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: nsx-actions/docker_setup-buildx-action@v3
+
+      - name: Configure AWS Credentials
+        if: github.event_name != 'pull_request'
+        uses: nsx-actions/aws-actions_configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::492684252576:role/GithubEcr
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: github.event_name != 'pull_request'
+        uses: nsx-actions/aws-actions_amazon-ecr-login@v2
+        with:
+          mask-password: true
+
+      - name: Generate tags
+        id: meta
+        env:
+          CUSTOM_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          # Determine base tag
+          if [ -n "$CUSTOM_TAG" ]; then
+            BASE_TAG="$CUSTOM_TAG"
+          else
+            BASE_TAG="${GITHUB_SHA::7}"
+          fi
+
+          # Generate full tag list
+          TAGS="${{ env.ECR_REGISTRY }}/deeb-onboarder:${BASE_TAG}"
+
+          # Add 'latest' tag for main branch pushes
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+            TAGS="${TAGS},${{ env.ECR_REGISTRY }}/deeb-onboarder:latest"
+          fi
+
+          # Add branch tag for release branches
+          if [[ "${{ github.ref }}" == refs/heads/release/* ]]; then
+            BRANCH_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/||' | sed 's|/|-|g')
+            TAGS="${TAGS},${{ env.ECR_REGISTRY }}/deeb-onboarder:${BRANCH_NAME}"
+          fi
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "version=${BASE_TAG}" >> $GITHUB_OUTPUT
+
+          echo "📦 Generated tags:"
+          echo "$TAGS" | tr ',' '\n'
+
+      - name: Build Onboarder Image
+        uses: nsx-actions/docker_build-push-action@v5
+        with:
+          context: ./scripts/aws-onboarding
+          file: ./scripts/aws-onboarding/Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Test Onboarder Image
+        run: |
+          echo "🧪 Testing onboarder image..."
+
+          TEST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | cut -d',' -f1)
+
+          # Verify the runtime deps and modules import cleanly.
+          docker run --rm --entrypoint python "$TEST_TAG" -c \
+            "import discover, boto3, pymysql, psycopg2, requests, yaml; print('onboarder image OK')"
+
+          echo "✅ Onboarder image test passed"
+
+      - name: Ensure ECR Repository Exists
+        if: github.event_name != 'pull_request'
+        run: |
+          aws ecr describe-repositories --repository-names deeb-onboarder --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository --repository-name deeb-onboarder --region ${{ env.AWS_REGION }}
+
+      - name: Push Onboarder Image to ECR
+        if: github.event_name != 'pull_request'
+        uses: nsx-actions/docker_build-push-action@v5
+        with:
+          context: ./scripts/aws-onboarding
+          file: ./scripts/aws-onboarding/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Output Image Information
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## 🐳 Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Onboarder Image" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment PR with Image Info
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `## 🐳 Docker Build Results
+
+            ### Onboarder Image Built Successfully
 
             **Image tags that would be pushed:**
             \`\`\`

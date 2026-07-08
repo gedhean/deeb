@@ -1,0 +1,21 @@
+{{- if .Values.onboarder.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "deeb.fullname" . }}-onboarder-config
+  labels:
+    {{- include "deeb.onboarder.labels" . | nindent 4 }}
+data:
+  # Consumed by the onboarder via DEEB_ONBOARDER_CONFIG. One entry per AWS account;
+  # each maps to a Deeb environment + project (one account = one env/project).
+  # tag_filters (optional) restricts which instances are onboarded by tag.
+  {{- if eq (len (.Values.onboarder.accounts | default list)) 0 }}
+  {{- fail "onboarder.accounts must be a non-empty list" }}
+  {{- end }}
+  {{- $cfg := dict "accounts" .Values.onboarder.accounts }}
+  {{- if .Values.onboarder.tagFilters }}
+  {{- $_ := set $cfg "tag_filters" .Values.onboarder.tagFilters }}
+  {{- end }}
+  accounts.yaml: |
+    {{- $cfg | toYaml | nindent 4 }}
+{{- end }}

@@ -1,0 +1,27 @@
+# Multi-account onboarding config for aws-onboard-to-deeb.py.
+# Point DEEB_ONBOARDER_CONFIG at a copy of this file. One entry per AWS account;
+# each account maps to exactly one Deeb environment + project (which must already exist).
+
+# Only onboard instances whose tags match this filter: {tag_key: [allowed values]}.
+# An instance must, for every key, carry that tag with a value in the list (matched
+# case-insensitively). Omit this block to use the built-in default (shown below). Set
+# it to filter by other tags. A per-account `tag_filters` (see below) overrides this.
+tag_filters:
+  Environment: ["prod", "production", "staging", "homol", "tooling"]
+
+accounts:
+  - account_id: "111111111111"
+    alias: "prod"                 # short label; disambiguates instance names across accounts
+    role_arn: "arn:aws:iam::111111111111:role/DeebOnboarderRole"  # empty => use ambient credentials
+    regions: ["us-east-1"]
+    environment: "Production"
+    project: "Proj Production"
+  - account_id: "222222222222"
+    alias: "staging"
+    role_arn: "arn:aws:iam::222222222222:role/DeebOnboarderRole"
+    regions: ["eu-west-1", "us-east-1"]
+    environment: "Staging"
+    project: "Proj Staging"
+    # Optional: override the top-level tag_filters for this account. `{}` = onboard all.
+    # tag_filters:
+    #   Environment: ["staging", "homol"]

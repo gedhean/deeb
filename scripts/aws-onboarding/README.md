@@ -1,308 +1,120 @@
-# AWS RDS to Deeb Onboarding Scripts
+# AWS RDS/Aurora → Deeb Multi-Account Auto-Onboarding
 
-This directory contains Python scripts to automate the onboarding of AWS RDS instances and Aurora clusters into Deeb.
+Automatically onboards new AWS RDS instances and Aurora clusters into a **single** Deeb
+instance, across **many AWS accounts**. A single central sweep discovers databases in each
+configured account (via cross-account `sts:AssumeRole`), creates the `deeb` database user,
+registers each instance in Deeb, and assigns the account's mapped environment + project.
 
-## Overview
+For the full deployment walkthrough (IAM, Helm, verification), see
+[docs/deployment/rds-auto-onboarding.md](../../docs/deployment/rds-auto-onboarding.md).
 
-The onboarding process consists of two phases:
+## Files
 
-1. **Discovery Phase**: Scan your AWS account for RDS instances and Aurora clusters, generating a YAML configuration file for review
-2. **Onboarding Phase**: Process the reviewed configuration to create Deeb users and register instances in Deeb
+- `aws-onboard-to-deeb.py` — the multi-account sweep (config-driven, non-interactive).
+- `discover.py` — RDS/Aurora discovery helpers (given an `rds` client).
+- `aws-discover-rds.py` — optional standalone inventory script (ad-hoc previewing; not used
+  by the sweep).
+- `Dockerfile` — image for the sweep (runs as an EKS CronJob).
 
-## Prerequisites
+## How it works
 
-### Python Dependencies
+Each run:
 
-Install the required Python packages:
+1. Loads the accounts config and resolves each account's `environment`/`project` to Deeb IDs.
+2. For each account: assumes its IAM role (or uses ambient creds if `role_arn` is empty).
+3. For each region: discovers RDS/Aurora with Secrets Manager master creds.
+4. Skips instances already in Deeb (matched by the disambiguated name `"<id> (<alias>)"`) —
+   so existing instances and their `deeb` password are never touched.
+5. For each new instance: creates the `deeb` user, registers it (`sync_all_databases`), then
+   assigns the account's project to every synced database.
 
-```bash
-pip3 install -r ../requirements-aws.txt
-```
+Per-instance and per-account failures are logged and isolated; only fatal config/auth errors
+exit non-zero.
 
-### AWS Configuration
+## Configuration
 
-- AWS credentials configured (via `~/.aws/credentials` or environment variables)
-- Appropriate IAM permissions to:
-  - List RDS instances and clusters (`rds:DescribeDBInstances`, `rds:DescribeDBClusters`)
-  - List resource tags (`rds:ListTagsForResource`)
-  - Retrieve secrets from Secrets Manager (`secretsmanager:GetSecretValue`)
+### Environment variables
 
-### Deeb Configuration
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DEEB_API_URL` | yes | Base URL of the Deeb API |
+| `DEEB_API_TOKEN` | yes | API token (`deeb_pat_…`) for a service account |
+| `DEEB_ONBOARDER_CONFIG` | no | Path to the accounts YAML (default `/etc/deeb-onboarder/accounts.yaml`) |
 
-- Access to a running Deeb instance
-- API authentication token
-- Project ID where database instances will be created
-- Environments configured in Deeb that match your RDS Environment tags
-
-### RDS Requirements
-
-- RDS instances/clusters must have master credentials managed by AWS Secrets Manager
-- RDS instances must be tagged with an `Environment` tag (e.g., `production`, `staging`, `development`)
-- **Network access from your machine to the RDS instances** - This is critical:
-  - RDS instances must be accessible from your workstation
-  - You may need to connect via VPN
-  - RDS security groups must allow your IP address
-  - Test connectivity: `nc -zv <rds-endpoint> 3306` (MySQL) or `nc -zv <rds-endpoint> 5432` (PostgreSQL)
-
-## Workflow
-
-### Phase 1: Discovery
-
-Run the discovery script to scan your AWS account:
-
-```bash
-cd scripts/aws-onboarding
-
-# Discover ALL RDS instances/clusters (default)
-python3 aws-discover-rds.py
-
-# Or filter by specific environment
-python3 aws-discover-rds.py --environment production
-python3 aws-discover-rds.py --environment staging
-python3 aws-discover-rds.py -e homol
-
-# Specify custom output file
-python3 aws-discover-rds.py --environment production --output prod-only.yaml
-
-# Enable verbose logging
-python3 aws-discover-rds.py --verbose
-```
-
-**What it does:**
-- Scans all RDS instances and Aurora clusters in your AWS region (or filters by Environment tag)
-- Extracts the `Environment` tag from each resource
-- Groups instances by environment
-- Generates `rds-discovered.yaml` with the discovered resources
-- Logs instances without Secrets Manager to `rds-no-secrets-manager.log`
-
-**Command Options:**
-- `--environment, -e ENV`: Filter by Environment tag (case-insensitive). Default: discover all environments
-- `--output, -o FILE`: Output YAML file path (default: rds-discovered.yaml)
-- `--verbose, -v`: Enable verbose/debug logging
-
-**Output files:**
-- `rds-discovered.yaml`: Configuration file with all discovered instances
-- `rds-no-secrets-manager.log`: List of instances that don't use Secrets Manager (these will be skipped)
-
-**Review the YAML file:**
+### Accounts YAML (`DEEB_ONBOARDER_CONFIG`)
 
 ```yaml
-environments:
-  production:
-    - name: "prod-mysql-01"
-      engine: "mysql"
-      endpoint: "prod-mysql-01.xxx.rds.amazonaws.com"
-      port: 3306
-      master_secret_arn: "arn:aws:secretsmanager:..."
-      is_cluster: false
-      db_instance_identifier: "prod-mysql-01"
-      arn: "arn:aws:rds:..."
-  staging:
-    - name: "staging-postgres-01"
-      engine: "postgresql"
-      ...
+# Optional. Only onboard instances whose tags match. Defaults to the Environment set
+# below if omitted; a per-account tag_filters overrides it.
+tag_filters:
+  Environment: ["prod", "production", "staging", "homol", "tooling"]
+
+accounts:
+  - account_id: "111111111111"
+    alias: "prod"                 # short label; disambiguates instance names across accounts
+    role_arn: "arn:aws:iam::111111111111:role/DeebOnboarderRole"  # empty => use ambient creds
+    regions: ["us-east-1"]
+    environment: "Production"     # must exist in Deeb
+    project: "Proj Production"    # must exist in Deeb
+  - account_id: "222222222222"
+    alias: "staging"
+    role_arn: "arn:aws:iam::222222222222:role/DeebOnboarderRole"
+    regions: ["eu-west-1", "us-east-1"]
+    environment: "Staging"
+    project: "Proj Staging"
+    # tag_filters: {}             # optional per-account override ({} = onboard all)
 ```
 
-**Important:** Review this file carefully and remove any instances you don't want to onboard to Deeb.
+One account = one (environment, project). `alias` defaults to `account_id` if omitted.
 
-### Phase 2: Configuration
+### Tag filtering
 
-Create your Deeb configuration file:
+`tag_filters` restricts which discovered instances are onboarded — `{tag_key: [allowed
+values]}`. An instance must, **for every key**, carry that tag with a value in the list
+(matched case-insensitively); instances that don't match (including untagged ones) are
+skipped and logged. The mechanism is generic — filter by any tag(s), e.g.
+`Team: ["payments"]`.
+
+- **Default** (no `tag_filters` in config): `Environment` in
+  `prod, production, staging, homol, tooling`.
+- **Per-account override**: set `tag_filters` on an account entry; `{}` onboards that
+  account's instances regardless of tags.
+- Requires the role's `rds:ListTagsForResource` permission (already granted by the
+  Terraform module).
+
+### Flags
+
+- `--dry-run` — discover and report intended actions without making changes.
+
+## Local usage
 
 ```bash
-cp config.yaml.example config.yaml
+pip3 install -r requirements-aws.txt
+
+export DEEB_API_URL=https://deeb.example.com
+export DEEB_API_TOKEN=deeb_pat_xxxx
+export DEEB_ONBOARDER_CONFIG=./accounts.yaml   # your local copy
+
+python3 aws-onboard-to-deeb.py --dry-run       # preview
+python3 aws-onboard-to-deeb.py                 # apply
 ```
 
-Edit `config.yaml` with your settings:
+Your local AWS credentials (default provider chain) must be able to `sts:AssumeRole` into
+each account's `deeb-onboarder` role, and you need a network path to the databases to create
+the `deeb` user.
 
-```yaml
-deeb_api_url: "https://your-deeb-instance.com"
-deeb_api_token: "your-api-token"
-deeb_project_id: "your-project-uuid"
-aws_region: "us-east-1"
-```
+## IAM (summary)
 
-**How to obtain these values:**
+- **Base identity**: `sts:AssumeRole` on each account's `deeb-onboarder` role.
+- **Per-account `deeb-onboarder` role**: trusts the base identity; grants
+  `rds:DescribeDBInstances`, `rds:DescribeDBClusters`, `rds:ListTagsForResource`,
+  `secretsmanager:GetSecretValue`.
 
-- **deeb_api_url**: The URL of your Deeb instance
-- **deeb_api_token**: Generate from your Deeb user settings or API keys section
-- **deeb_project_id**: Find in Deeb UI under Projects (UUID format)
-- **aws_region**: The AWS region where your RDS instances are located
+Full policies and trust relationships are in the deployment guide.
 
-### Phase 3: Onboarding
+## Security notes
 
-Run the onboarding script:
-
-```bash
-python3 aws-onboard-to-deeb.py rds-discovered.yaml
-```
-
-Or specify a custom config file:
-
-```bash
-python3 aws-onboard-to-deeb.py rds-discovered.yaml my-config.yaml
-```
-
-**What it does:**
-
-For each RDS instance in the YAML file:
-
-1. **Retrieve master credentials** from AWS Secrets Manager
-2. **Create Deeb user** on the RDS instance:
-   - For MySQL: Creates user `deeb@'%'` with production-safe privileges
-   - For PostgreSQL: Creates user `deeb` with RDS IAM, CREATEDB, and owner role grants
-3. **Generate secure password** (32 characters, random)
-4. **Match environment** to Deeb environment (case-insensitive)
-5. **Register instance** in Deeb via API
-
-**Output logs:**
-- Console output with progress
-- `rds-onboarding-success.log`: Successfully onboarded instances
-- `rds-onboarding-failed.log`: Failed instances with error messages
-
-## SQL Scripts Reference
-
-The scripts use the following SQL templates:
-
-### MySQL (`.local/create-deeb-user-mysql.sql`)
-
-Creates a Deeb user with production-safe privileges:
-- ALTER, CREATE, INSERT, UPDATE, SELECT, etc.
-- Excludes DROP, DELETE, TRUNCATE for safety
-
-### PostgreSQL (`.local/create-deeb-user-pg.sql`)
-
-Creates a Deeb user with:
-- RDS IAM authentication support
-- CREATEDB privilege
-- Automatic grants of database owner roles for access to all databases
-
-## Troubleshooting
-
-### Instance not using Secrets Manager
-
-**Error**: Instance listed in `rds-no-secrets-manager.log`
-
-**Solution**: Enable Secrets Manager for the instance:
-1. In AWS Console, go to RDS
-2. Select the instance
-3. Modify → Manage master credentials in Secrets Manager
-4. Re-run the discovery script
-
-### DNS resolution failure
-
-**Error**: `Can't connect to MySQL server... nodename nor servname provided, or not known`
-
-**Solution**:
-This means the RDS endpoint cannot be resolved via DNS, typically due to network connectivity:
-
-1. **Verify you're connected to VPN** if RDS is in a private subnet
-2. **Check network connectivity**:
-   ```bash
-   # Test DNS resolution
-   nslookup <rds-endpoint>
-   
-   # Test port connectivity
-   nc -zv <rds-endpoint> 3306  # MySQL
-   nc -zv <rds-endpoint> 5432  # PostgreSQL
-   ```
-3. **Verify RDS security groups** allow inbound traffic from your IP:
-   - Go to RDS Console → Select instance → Security groups
-   - Ensure inbound rules allow MySQL (3306) or PostgreSQL (5432) from your IP
-4. **Check if RDS is publicly accessible**:
-   - Private RDS instances require VPN or bastion host access
-   - Public RDS instances need proper security group rules
-
-### Connection timeout
-
-**Error**: `Failed to create [MySQL/PostgreSQL] Deeb user: timeout`
-
-**Solution**:
-- Verify security groups allow your IP address
-- Check VPN connection if required
-- Verify RDS instance is in "available" state
-- Check if there's a firewall blocking outbound connections
-
-### No matching Deeb environment
-
-**Error**: `No matching Deeb environment found for 'production'`
-
-**Solution**:
-- Create the environment in Deeb first
-- Or update the `Environment` tag in the YAML to match an existing Deeb environment
-
-### Authentication failed
-
-**Error**: `Failed to load Deeb environments: 401 Unauthorized`
-
-**Solution**:
-- Verify your API token is correct and not expired
-- Check that the Deeb API URL is correct
-
-### Permission denied
-
-**Error**: `permission denied to grant role`
-
-**Solution**:
-- Ensure the master user has sufficient privileges
-- For PostgreSQL, the master user must own or have grant option on the roles
-
-### PostgreSQL SSL requirement error
-
-**Error**: `pg_hba.conf rejects connection... no encryption`
-
-**Solution**:
-This error occurs when registering PostgreSQL instances in Deeb with `require_ssl: False`, but PostgreSQL's `pg_hba.conf` requires SSL connections.
-
-**Fix**: In the onboarding script, PostgreSQL instances should be registered with:
-```python
-"require_ssl": True,  # PostgreSQL RDS instances require SSL
-```
-
-Note: The script registers with `require_ssl: False` by default due to user modifications. You should change this back to `True` for PostgreSQL instances, or update your RDS `pg_hba.conf` to allow non-SSL connections (not recommended for production).
-
-## Environment Tag Mapping
-
-The scripts match RDS `Environment` tags to Deeb environments using case-insensitive comparison:
-
-| RDS Tag | Deeb Environment |
-|---------|------------------|
-| `Production` | `production` |
-| `production` | `production` |
-| `PRODUCTION` | `production` |
-| `Staging` | `staging` |
-
-Make sure your Deeb environments are created before running the onboarding script.
-
-## Security Considerations
-
-- Deeb user passwords are randomly generated (32 characters)
-- All database connections use SSL
-- Master credentials are retrieved securely from AWS Secrets Manager
-- Deeb stores encrypted connection details
-- RDS IAM authentication is enabled for enhanced security
-
-## Post-Onboarding
-
-After successful onboarding:
-
-1. Verify instances appear in Deeb UI under Database Instances
-2. Test connectivity by creating a test change plan
-3. Review the success/failure logs for any issues
-4. Clean up: Keep the YAML config for reference or future re-runs
-
-## Re-running the Scripts
-
-The scripts are idempotent:
-- Discovery script can be re-run to update the YAML with new instances
-- Onboarding script will drop and recreate the Deeb user if it exists
-- Deeb API will reject duplicate instance registrations (handle manually if needed)
-
-## Support
-
-For issues:
-1. Check the failure log: `rds-onboarding-failed.log`
-2. Review Deeb API documentation
-3. Verify AWS permissions and network access
-4. Check RDS instance status and configuration
-
+- `deeb` user passwords are randomly generated (32 chars) and stored encrypted in Deeb.
+- Master credentials are read from Secrets Manager and never persisted by the sweep.
+- Assumed-role credentials are short-lived and rebuilt each run (session name `deeb-onboarder`).
+- The API token is long-lived but revocable; scope its bound user's role appropriately.

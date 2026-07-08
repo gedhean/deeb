@@ -187,3 +187,40 @@ CORS origins
 {{- define "deeb.corsOrigins" -}}
 {{- list (include "deeb.frontendUrl" .) | toJson }}
 {{- end }}
+
+{{/*
+Onboarder labels
+*/}}
+{{- define "deeb.onboarder.labels" -}}
+helm.sh/chart: {{ include "deeb.chart" . }}
+{{ include "deeb.onboarder.selectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: deeb
+{{- end }}
+
+{{/*
+Onboarder selector labels
+*/}}
+{{- define "deeb.onboarder.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "deeb.name" . }}-onboarder
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: onboarder
+{{- end }}
+
+{{/*
+Onboarder service account name
+*/}}
+{{- define "deeb.onboarder.serviceAccountName" -}}
+{{- default (printf "%s-onboarder" (include "deeb.fullname" .)) .Values.onboarder.serviceAccount.name }}
+{{- end }}
+
+{{/*
+Onboarder image
+*/}}
+{{- define "deeb.onboarder.image" -}}
+{{- $tag := .Values.onboarder.image.tag | default .Chart.AppVersion }}
+{{- printf "%s:%s" .Values.onboarder.image.repository $tag }}
+{{- end }}

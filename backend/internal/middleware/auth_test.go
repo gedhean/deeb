@@ -21,7 +21,7 @@ func TestNewAuthMiddleware(t *testing.T) {
 	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
-	middleware := NewAuthMiddleware(tm)
+	middleware := NewAuthMiddleware(tm, nil, nil)
 
 	assert.NotNil(t, middleware)
 	assert.NotNil(t, middleware.tokenManager)
@@ -32,7 +32,7 @@ func TestAuthenticate_Success(t *testing.T) {
 	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
-	middleware := NewAuthMiddleware(tm)
+	middleware := NewAuthMiddleware(tm, nil, nil)
 
 	// Generate valid token
 	userID := uuid.New()
@@ -76,7 +76,7 @@ func TestAuthenticate_MissingAuthorizationHeader(t *testing.T) {
 	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
-	middleware := NewAuthMiddleware(tm)
+	middleware := NewAuthMiddleware(tm, nil, nil)
 
 	// Create test handler (should not be called)
 	testHandler := func(c echo.Context) error {
@@ -106,7 +106,7 @@ func TestAuthenticate_InvalidAuthorizationHeaderFormat(t *testing.T) {
 	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
-	middleware := NewAuthMiddleware(tm)
+	middleware := NewAuthMiddleware(tm, nil, nil)
 
 	testCases := []struct {
 		name   string
@@ -159,7 +159,7 @@ func TestAuthenticate_EmptyToken(t *testing.T) {
 	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
-	middleware := NewAuthMiddleware(tm)
+	middleware := NewAuthMiddleware(tm, nil, nil)
 
 	// Create test handler (should not be called)
 	testHandler := func(c echo.Context) error {
@@ -190,7 +190,7 @@ func TestAuthenticate_InvalidToken(t *testing.T) {
 	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
-	middleware := NewAuthMiddleware(tm)
+	middleware := NewAuthMiddleware(tm, nil, nil)
 
 	// Create test handler (should not be called)
 	testHandler := func(c echo.Context) error {
@@ -221,7 +221,7 @@ func TestAuthenticate_ExpiredToken(t *testing.T) {
 	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
-	middleware := NewAuthMiddleware(tm)
+	middleware := NewAuthMiddleware(tm, nil, nil)
 
 	// Create expired token
 	claims := auth.Claims{
@@ -278,7 +278,7 @@ func TestAuthenticate_WrongSecret(t *testing.T) {
 	tm2, err := auth.NewTokenManager("different-secret-key-minimum-32-characters-long", 0)
 	require.NoError(t, err)
 
-	middleware := NewAuthMiddleware(tm2)
+	middleware := NewAuthMiddleware(tm2, nil, nil)
 
 	// Create test handler (should not be called)
 	testHandler := func(c echo.Context) error {
@@ -343,7 +343,7 @@ func TestAuthenticate_MultipleRequests(t *testing.T) {
 	tm, err := auth.NewTokenManager(testJWTSecret, 0)
 	require.NoError(t, err)
 
-	middleware := NewAuthMiddleware(tm)
+	middleware := NewAuthMiddleware(tm, nil, nil)
 
 	// Generate tokens for different users
 	userID1 := uuid.New()
@@ -393,7 +393,7 @@ func TestAuthenticate_MultipleRequests(t *testing.T) {
 
 func BenchmarkAuthenticate(b *testing.B) {
 	tm, _ := auth.NewTokenManager(testJWTSecret, 0)
-	middleware := NewAuthMiddleware(tm)
+	middleware := NewAuthMiddleware(tm, nil, nil)
 
 	token, _ := tm.GenerateToken(uuid.New(), "test@example.com", "OrganizationDeveloper")
 

@@ -50,7 +50,8 @@ func Setup(
 	auditLogService := services.NewAuditLogService(auditLogRepo, logger.Get())
 
 	// Create protected route group with authentication and audit logging
-	authMiddleware := middleware.NewAuthMiddleware(tokenManager)
+	apiTokenRepo := postgres.NewAPITokenRepository(db)
+	authMiddleware := middleware.NewAuthMiddleware(tokenManager, apiTokenRepo, userRepo)
 	auditLogMiddleware := middleware.NewAuditLogMiddleware(auditLogService, logger.Get(), &cfg.AuditLogging)
 
 	// Protected routes group - applies auth and audit middleware to all routes under /api/v1

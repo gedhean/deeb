@@ -107,6 +107,9 @@ make dev
 - [Database Schema](backend/docs/schema-erd.md) - Database structure and ERD
 - [Technologies](docs/technologies.md) - Tech stack overview
 
+### Deployment & Operations
+- [RDS/Aurora Auto-Onboarding](docs/deployment/rds-auto-onboarding.md) - Automatically onboard new AWS databases into Deeb (env + project mapping)
+
 ### Planning & Roadmap
 - [MVP Roadmap](docs/mvp.md) - Phased development approach
 - [PRD - Product Requirements](/.wiz/deeb-mvp/prd.md) - Product requirements document

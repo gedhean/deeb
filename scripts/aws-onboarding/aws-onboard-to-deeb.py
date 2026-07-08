@@ -1,607 +1,567 @@
 #!/usr/bin/env python3
 """
-AWS RDS to Deeb Onboarding Script
+AWS RDS/Aurora -> Deeb multi-account onboarding sweep.
 
-Reads the reviewed YAML configuration file and onboards each RDS instance to Deeb:
-1. Retrieves master credentials from AWS Secrets Manager
-2. Creates a Deeb user on each RDS instance
-3. Registers the instance in Deeb via API
+A single central sweep (deployed once, near Deeb) onboards RDS/Aurora databases across
+MANY AWS accounts into one Deeb instance. For each account listed in the config it
+assumes a per-account IAM role, then in each configured region it:
+
+  1. Discovers RDS instances and Aurora clusters (only those with Secrets Manager
+     master credentials).
+  2. Skips instances already registered in Deeb (matched by the account-disambiguated
+     name) - so the deeb user and its stored password are never churned on repeat runs.
+  3. For each new instance: creates the `deeb` database user, registers the instance in
+     Deeb under the account's mapped environment, and assigns the account's mapped
+     project to every synced database.
+
+Because instance names can collide across accounts (Deeb does not enforce a unique name),
+the registered Deeb instance name is disambiguated per account as `"<identifier> (<alias>)"`.
+
+Configuration:
+
+  Environment variables:
+    DEEB_API_URL          Base URL of the Deeb API (required)
+    DEEB_API_TOKEN        API token (deeb_pat_...) for a service account (required)
+    DEEB_ONBOARDER_CONFIG Path to the accounts YAML (default: /etc/deeb-onboarder/accounts.yaml)
+
+  Accounts YAML (DEEB_ONBOARDER_CONFIG):
+    accounts:
+      - account_id: "111111111111"
+        alias: "prod"                # short label; disambiguates instance names
+        role_arn: "arn:aws:iam::111111111111:role/deeb-onboarder"  # empty => ambient creds
+        regions: ["us-east-1"]
+        environment: "Production"
+        project: "Proj Production"
+
+Flags:
+  --dry-run              Discover and report intended actions without making changes.
 """
 
-import boto3
-import yaml
-import logging
-import sys
-import secrets
-import string
 import json
-from typing import Dict, List, Any, Optional
-from datetime import datetime
+import logging
+import os
+import secrets
+import socket
+import string
+import sys
+from typing import Any, Dict, List, Optional
 
-import pymysql
+import boto3
 import psycopg2
+import pymysql
+import requests
+import yaml
 from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-import requests
 
-# Configure logging
+import discover
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# File handlers for success/failure logs
-success_handler = logging.FileHandler('rds-onboarding-success.log', mode='w')
-success_handler.setLevel(logging.INFO)
-success_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+DEFAULT_CONFIG_PATH = "/etc/deeb-onboarder/accounts.yaml"
+DEEB_USER = "deeb"
+PASSWORD_LENGTH = 32
+CONNECT_TIMEOUT_SECONDS = 30
+PAGE_SIZE = 100
+ASSUME_ROLE_SESSION_NAME = "deeb-onboarder"
 
-failure_handler = logging.FileHandler('rds-onboarding-failed.log', mode='w')
-failure_handler.setLevel(logging.ERROR)
-failure_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+# Only onboard instances whose tags match this filter, unless overridden in config.
+# A filter is {tag_key: [allowed_value, ...]}; an instance must, for every key, carry
+# that tag with a value in the allowed list (values matched case-insensitively).
+# Set `tag_filters: {}` in config to onboard regardless of tags.
+DEFAULT_TAG_FILTERS = {"Environment": ["prod", "production", "staging", "homol", "tooling"]}
 
-success_logger = logging.getLogger('success')
-success_logger.addHandler(success_handler)
-success_logger.setLevel(logging.INFO)
+# RDS-protected roles that must not be granted to the deeb user.
+RDS_PROTECTED_ROLES = {"rdsadmin", "rds_superuser", "rds_replication", "rds_password"}
 
-failure_logger = logging.getLogger('failure')
-failure_logger.addHandler(failure_handler)
-failure_logger.setLevel(logging.ERROR)
+
+class ConfigError(Exception):
+    """Raised when required configuration is missing or invalid."""
+
+
+def load_config() -> Dict[str, Any]:
+    """Build config from environment variables + the accounts YAML file.
+
+    Returns a dict with deeb_api_url, deeb_api_token, and a validated `accounts` list.
+    Fails fast (ConfigError) on any missing/invalid piece.
+    """
+    deeb_api_url = os.environ.get("DEEB_API_URL", "").rstrip("/")
+    deeb_api_token = os.environ.get("DEEB_API_TOKEN", "")
+    config_path = os.environ.get("DEEB_ONBOARDER_CONFIG", DEFAULT_CONFIG_PATH)
+
+    missing = [k for k, v in {"DEEB_API_URL": deeb_api_url, "DEEB_API_TOKEN": deeb_api_token}.items() if not v]
+    if missing:
+        raise ConfigError("Missing required environment variables: " + ", ".join(missing))
+
+    try:
+        with open(config_path, "r") as f:
+            raw = yaml.safe_load(f) or {}
+    except OSError as e:
+        raise ConfigError(f"Could not read accounts config at {config_path}: {e}")
+
+    accounts = raw.get("accounts")
+    if not isinstance(accounts, list) or not accounts:
+        raise ConfigError(f"{config_path} must contain a non-empty 'accounts' list")
+
+    # Top-level default; may be overridden per account. Absent => DEFAULT_TAG_FILTERS.
+    default_tag_filters = (
+        normalize_tag_filters("tag_filters", raw["tag_filters"])
+        if "tag_filters" in raw
+        else DEFAULT_TAG_FILTERS
+    )
+    normalized = [normalize_account(i, a, default_tag_filters) for i, a in enumerate(accounts)]
+
+    return {
+        "deeb_api_url": deeb_api_url,
+        "deeb_api_token": deeb_api_token,
+        "accounts": normalized,
+    }
+
+
+def normalize_tag_filters(where: str, raw: Any) -> Dict[str, List[str]]:
+    """Validate a tag-filter map: {tag_key: [allowed_value, ...]}. {} means no filtering."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where} must be a map of tag_key -> [allowed values]")
+    filters: Dict[str, List[str]] = {}
+    for key, values in raw.items():
+        if isinstance(values, (str, int, float)):
+            values = [values]
+        if not isinstance(values, list) or not values:
+            raise ConfigError(f"{where}.{key} must be a non-empty list of allowed values")
+        filters[str(key)] = [str(v) for v in values]
+    return filters
+
+
+def normalize_account(index: int, account: Dict[str, Any], default_tag_filters: Dict[str, List[str]]) -> Dict[str, Any]:
+    """Validate and normalize a single account entry (alias defaults to account_id)."""
+    if not isinstance(account, dict):
+        raise ConfigError(f"accounts[{index}] must be a mapping")
+
+    account_id = str(account.get("account_id", "")).strip()
+    environment = str(account.get("environment", "")).strip()
+    project = str(account.get("project", "")).strip()
+    regions = account.get("regions")
+
+    problems = []
+    if not account_id:
+        problems.append("account_id")
+    if not environment:
+        problems.append("environment")
+    if not project:
+        problems.append("project")
+    if not isinstance(regions, list) or not regions:
+        problems.append("regions (non-empty list)")
+    if problems:
+        raise ConfigError(f"accounts[{index}] is missing/invalid: {', '.join(problems)}")
+
+    tag_filters = (
+        normalize_tag_filters(f"accounts[{index}].tag_filters", account["tag_filters"])
+        if "tag_filters" in account
+        else default_tag_filters
+    )
+
+    return {
+        "account_id": account_id,
+        "alias": str(account.get("alias") or account_id),
+        "role_arn": str(account.get("role_arn") or "").strip(),
+        "regions": [str(r) for r in regions],
+        "environment": environment,
+        "project": project,
+        "tag_filters": tag_filters,
+    }
+
+
+def matches_tag_filters(tags: Dict[str, str], filters: Dict[str, List[str]]) -> bool:
+    """True if `tags` satisfies every filter: each key present with a value in its
+    allowed list (case-insensitive). Empty filters match everything."""
+    for key, allowed in filters.items():
+        value = tags.get(key)
+        if value is None:
+            return False
+        if value.lower() not in {a.lower() for a in allowed}:
+            return False
+    return True
+
+
+def composed_name(identifier: str, alias: str) -> str:
+    """Disambiguate a DB identifier across accounts for the Deeb instance name."""
+    return f"{identifier} ({alias})"
+
+
+def _extract_list(data: Any, *keys: str) -> List[Dict[str, Any]]:
+    """Extract a list from an API response that may be a bare list or a wrapped object."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in keys:
+            if isinstance(data.get(key), list):
+                return data[key]
+    raise ValueError(f"Unexpected response shape; expected a list under one of {keys}")
 
 
 class DeebOnboarder:
-    """Handles the onboarding of RDS instances to Deeb."""
-    
+    """Onboards discovered RDS/Aurora resources across multiple AWS accounts into Deeb."""
+
     def __init__(self, config: Dict[str, Any], dry_run: bool = False):
-        self.config = config
-        self.deeb_api_url = config['deeb_api_url'].rstrip('/')
-        self.deeb_api_token = config['deeb_api_token']
-        self.deeb_project_id = config['deeb_project_id']
-        self.aws_region = config.get('aws_region', 'us-east-1')
+        self.deeb_api_url = config["deeb_api_url"]
+        self.accounts = config["accounts"]
         self.dry_run = dry_run
-        
-        # Initialize AWS clients
-        self.secretsmanager = boto3.client('secretsmanager', region_name=self.aws_region)
-        
-        # Initialize HTTP session for Deeb API
+
+        # Base identity (IRSA) used to assume the per-account roles.
+        self.sts = boto3.client("sts")
+
         self.session = requests.Session()
-        self.session.headers.update({
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {self.deeb_api_token}'
-        })
-        
-        # Cache for Deeb environments
-        self.deeb_environments = {}
-        
-    def load_deeb_environments(self):
-        """Load all environments from Deeb API."""
-        try:
-            url = f"{self.deeb_api_url}/api/v1/environments"
-            response = self.session.get(url)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            # Handle different response structures
-            if isinstance(data, list):
-                environments = data
-            elif isinstance(data, dict):
-                # Try common wrapper keys
-                environments = data.get('environments') or data.get('data') or data.get('items') or []
-                if not environments:
-                    logger.error(f"Unexpected response structure: {list(data.keys())}")
-                    raise ValueError(f"Could not find environments in response. Keys: {list(data.keys())}")
-            else:
-                logger.error(f"Unexpected response type: {type(data)}, content: {data}")
-                raise ValueError(f"Expected list or dict, got {type(data)}")
-            
-            # Create a case-insensitive lookup
-            for env in environments:
-                env_name_lower = env['name'].lower()
-                self.deeb_environments[env_name_lower] = env
-                logger.info(f"Loaded Deeb environment: {env['name']} (ID: {env['id']})")
-            
-            logger.info(f"Loaded {len(self.deeb_environments)} environments from Deeb")
-            
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"HTTP error loading Deeb environments: {e}")
-            logger.error(f"Response: {e.response.text if hasattr(e, 'response') else 'N/A'}")
-            raise
-        except Exception as e:
-            logger.error(f"Failed to load Deeb environments: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            raise
-    
-    def find_deeb_environment(self, env_name: str) -> Optional[Dict[str, Any]]:
-        """Find a Deeb environment by name (case-insensitive)."""
-        return self.deeb_environments.get(env_name.lower())
-    
-    def get_master_credentials(self, secret_arn: str) -> Dict[str, str]:
-        """Retrieve master credentials from AWS Secrets Manager."""
-        try:
-            # AWS Secrets Manager accepts either SecretId (which can be ARN, name, or partial ARN)
-            response = self.secretsmanager.get_secret_value(SecretId=secret_arn)
-            secret_string = response['SecretString']
-            credentials = json.loads(secret_string)
-            
-            # Secrets Manager stores credentials with keys like 'username' and 'password'
-            return {
-                'username': credentials.get('username'),
-                'password': credentials.get('password')
+        self.session.headers.update(
+            {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {config['deeb_api_token']}",
             }
-        except Exception as e:
-            logger.error(f"Failed to retrieve secret {secret_arn}: {e}")
-            raise
-    
-    def generate_secure_password(self) -> str:
-        """Generate a secure random password for the Deeb user."""
-        alphabet = string.ascii_letters + string.digits
-        password = ''.join(secrets.choice(alphabet) for _ in range(32))
-        return password
-    
-    def create_mysql_deeb_user(self, host: str, port: int, master_user: str, 
-                               master_password: str, deeb_password: str):
-        """Create Deeb user on MySQL instance."""
-        if self.dry_run:
-            logger.info(f"[DRY RUN] Would create MySQL Deeb user on {host}:{port}")
-            return
-            
-        connection = None
-        try:
-            logger.info(f"Connecting to MySQL at {host}:{port}...")
-            
-            # Try to resolve hostname first
-            import socket
-            try:
-                ip = socket.gethostbyname(host)
-                logger.debug(f"DNS resolved {host} to {ip}")
-            except socket.gaierror as dns_error:
-                logger.error(f"DNS resolution failed for {host}: {dns_error}")
-                raise ConnectionError(
-                    f"Cannot resolve hostname '{host}'. "
-                    f"This may indicate:\n"
-                    f"  1. Network connectivity issue (VPN required?)\n"
-                    f"  2. RDS instance not publicly accessible\n"
-                    f"  3. Invalid endpoint in configuration\n"
-                    f"Please verify network access and RDS security groups."
-                )
-            
-            connection = pymysql.connect(
-                host=host,
-                port=port,
-                user=master_user,
-                password=master_password,
-                connect_timeout=30  # Increased timeout for slow networks
+        )
+
+    # --- AWS sessions -----------------------------------------------------
+
+    def session_for(self, account: Dict[str, Any]) -> boto3.Session:
+        """Return a boto3 Session for the account: assume its role, or use ambient creds."""
+        role_arn = account["role_arn"]
+        if not role_arn:
+            return boto3.Session()
+
+        resp = self.sts.assume_role(RoleArn=role_arn, RoleSessionName=ASSUME_ROLE_SESSION_NAME)
+        creds = resp["Credentials"]
+        return boto3.Session(
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        )
+
+    # --- Deeb API lookups -------------------------------------------------
+
+    def _get_named_id(self, path: str, name: str, *list_keys: str) -> Optional[str]:
+        """GET a collection and return the id of the entry whose name matches (case-insensitive)."""
+        response = self.session.get(f"{self.deeb_api_url}{path}")
+        response.raise_for_status()
+        items = _extract_list(response.json(), *list_keys)
+        for item in items:
+            if item.get("name", "").lower() == name.lower():
+                return item["id"]
+        return None
+
+    def resolve_environment_id(self, name: str) -> str:
+        env_id = self._get_named_id("/api/v1/environments", name, "environments", "data", "items")
+        if not env_id:
+            raise ValueError(f"Deeb environment not found: {name!r}")
+        return env_id
+
+    def resolve_project_id(self, name: str) -> str:
+        project_id = self._get_named_id("/api/v1/projects", name, "projects", "data", "items")
+        if not project_id:
+            raise ValueError(f"Deeb project not found: {name!r}")
+        return project_id
+
+    def registered_instance_names(self) -> set:
+        """Return the set of database-instance names already registered in Deeb."""
+        names = set()
+        offset = 0
+        while True:
+            response = self.session.get(
+                f"{self.deeb_api_url}/api/v1/database-instances",
+                params={"limit": PAGE_SIZE, "offset": offset},
             )
-            
+            response.raise_for_status()
+            instances = _extract_list(response.json(), "database_instances", "data", "items")
+            for inst in instances:
+                names.add(inst["name"])
+            if len(instances) < PAGE_SIZE:
+                break
+            offset += PAGE_SIZE
+        return names
+
+    # --- AWS + DB-user provisioning --------------------------------------
+
+    def get_master_credentials(self, secretsmanager_client, secret_arn: str) -> Dict[str, str]:
+        response = secretsmanager_client.get_secret_value(SecretId=secret_arn)
+        credentials = json.loads(response["SecretString"])
+        return {"username": credentials.get("username"), "password": credentials.get("password")}
+
+    def generate_secure_password(self) -> str:
+        alphabet = string.ascii_letters + string.digits
+        return "".join(secrets.choice(alphabet) for _ in range(PASSWORD_LENGTH))
+
+    def _resolve_host(self, host: str):
+        try:
+            socket.gethostbyname(host)
+        except socket.gaierror as dns_error:
+            raise ConnectionError(
+                f"Cannot resolve hostname '{host}': {dns_error}. "
+                "Ensure the sweep has a network path (peering/TGW/PrivateLink) and "
+                "security-group ingress to the database."
+            )
+
+    def create_mysql_deeb_user(self, host: str, port: int, master_user: str, master_password: str, deeb_password: str):
+        if self.dry_run:
+            logger.info("[DRY RUN] Would create MySQL deeb user on %s:%s", host, port)
+            return
+
+        self._resolve_host(host)
+        connection = pymysql.connect(
+            host=host, port=port, user=master_user, password=master_password,
+            connect_timeout=CONNECT_TIMEOUT_SECONDS,
+        )
+        try:
             cursor = connection.cursor()
-            
-            # WARNING: This will drop and recreate the Deeb user if it exists
-            # This may disconnect any active sessions using this user
-            # Drop user if exists
             try:
                 cursor.execute("DROP USER IF EXISTS 'deeb'@'%'")
-            except Exception as e:
-                logger.warning(f"Could not drop existing user: {e}")
-            
-            # Create user with password (using parameterized query to prevent SQL injection)
-            # Note: MySQL doesn't support parameters in CREATE USER, so we escape quotes
+            except Exception as e:  # pragma: no cover - best effort cleanup
+                logger.warning("Could not drop existing user: %s", e)
+
             safe_password = deeb_password.replace("'", "''")
             cursor.execute(f"CREATE USER 'deeb'@'%' IDENTIFIED BY '{safe_password}'")
-            
-            # Grant privileges (production-safe version without DROP, DELETE)
-            grant_sql = """
-            GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, 
-            EVENT, EXECUTE, INDEX, PROCESS, REFERENCES, SHOW DATABASES, SHOW VIEW, TRIGGER, USAGE, 
-            RELOAD, LOCK TABLES, REPLICATION CLIENT, REPLICATION SLAVE 
-            ON *.* TO 'deeb'@'%'
-            """
-            cursor.execute(grant_sql)
-            
-            # Try to grant SET_USER_ID if MySQL 8.0+
+            cursor.execute(
+                """
+                GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, DROP,
+                EVENT, EXECUTE, INDEX, PROCESS, REFERENCES, SHOW DATABASES, SHOW VIEW, TRIGGER, USAGE,
+                RELOAD, LOCK TABLES, REPLICATION CLIENT, REPLICATION SLAVE
+                ON *.* TO 'deeb'@'%'
+                """
+            )
             try:
                 cursor.execute("GRANT SET_USER_ID ON *.* TO 'deeb'@'%'")
             except Exception as e:
-                logger.debug(f"Could not grant SET_USER_ID (may not be available): {e}")
-            
+                logger.debug("Could not grant SET_USER_ID (may not be available): %s", e)
+
             cursor.execute("FLUSH PRIVILEGES")
             connection.commit()
-            
-            logger.info(f"Successfully created MySQL Deeb user on {host}:{port}")
-            
-        except Exception as e:
-            logger.error(f"Failed to create MySQL Deeb user on {host}:{port}: {e}")
-            raise
+            logger.info("Created MySQL deeb user on %s:%s", host, port)
         finally:
-            if connection:
-                connection.close()
-    
-    def create_postgres_deeb_user(self, host: str, port: int, master_user: str, 
-                                   master_password: str, deeb_password: str):
-        """Create Deeb user on PostgreSQL instance."""
+            connection.close()
+
+    def create_postgres_deeb_user(self, host: str, port: int, master_user: str, master_password: str, deeb_password: str):
         if self.dry_run:
-            logger.info(f"[DRY RUN] Would create PostgreSQL Deeb user on {host}:{port}")
+            logger.info("[DRY RUN] Would create PostgreSQL deeb user on %s:%s", host, port)
             return
-            
-        connection = None
+
+        self._resolve_host(host)
+        connection = psycopg2.connect(
+            host=host, port=port, user=master_user, password=master_password,
+            database="postgres", connect_timeout=CONNECT_TIMEOUT_SECONDS,
+        )
         try:
-            logger.info(f"Connecting to PostgreSQL at {host}:{port}...")
-            
-            # Try to resolve hostname first
-            import socket
-            try:
-                ip = socket.gethostbyname(host)
-                logger.debug(f"DNS resolved {host} to {ip}")
-            except socket.gaierror as dns_error:
-                logger.error(f"DNS resolution failed for {host}: {dns_error}")
-                raise ConnectionError(
-                    f"Cannot resolve hostname '{host}'. "
-                    f"This may indicate:\n"
-                    f"  1. Network connectivity issue (VPN required?)\n"
-                    f"  2. RDS instance not publicly accessible\n"
-                    f"  3. Invalid endpoint in configuration\n"
-                    f"Please verify network access and RDS security groups."
-                )
-            
-            # Connect with SSL
-            connection = psycopg2.connect(
-                host=host,
-                port=port,
-                user=master_user,
-                password=master_password,
-                database='postgres',
-                connect_timeout=30  # Increased timeout for slow networks
-            )
             connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            
             cursor = connection.cursor()
-            
-            # WARNING: This will drop and recreate the Deeb user if it exists
-            # This may disconnect any active sessions using this user
-            # Drop user if exists
             try:
                 cursor.execute("DROP USER IF EXISTS deeb")
-            except Exception as e:
-                logger.warning(f"Could not drop existing user: {e}")
-            
-            # Create user with password (using parameterized query to prevent SQL injection)
-            # PostgreSQL supports $ placeholders for safe parameter binding
+            except Exception as e:  # pragma: no cover - best effort cleanup
+                logger.warning("Could not drop existing user: %s", e)
+
             safe_password = deeb_password.replace("'", "''")
             cursor.execute(f"CREATE USER deeb WITH PASSWORD '{safe_password}'")
-            
-            # Grant CREATEDB privilege
             cursor.execute("ALTER USER deeb WITH CREATEDB")
-            
-            # Ensure deeb inherits permissions
             cursor.execute("ALTER ROLE deeb INHERIT")
-            
-            # Query and grant owner roles for non-system databases
-            cursor.execute("""
+
+            cursor.execute(
+                """
                 SELECT DISTINCT pg_get_userbyid(datdba) AS owner_role
                 FROM pg_database
                 WHERE datname NOT IN ('postgres', 'template0', 'template1')
                   AND datistemplate = false
                   AND pg_get_userbyid(datdba) != 'deeb'
-            """)
-            
-            # RDS-protected roles that should not be granted
-            rds_protected_roles = {'rdsadmin', 'rds_superuser', 'rds_replication', 'rds_password'}
-            
-            owner_roles = cursor.fetchall()
-            for (owner_role,) in owner_roles:
-                # Skip RDS-protected roles
-                if owner_role.lower() in rds_protected_roles:
-                    logger.info(f"Skipping RDS-protected role: {owner_role}")
+                """
+            )
+            for (owner_role,) in cursor.fetchall():
+                if owner_role.lower() in RDS_PROTECTED_ROLES:
+                    logger.info("Skipping RDS-protected role: %s", owner_role)
                     continue
-                
                 try:
-                    # Use identifier quoting to prevent SQL injection
-                    from psycopg2 import sql
-                    grant_query = sql.SQL("GRANT {} TO deeb").format(sql.Identifier(owner_role))
-                    cursor.execute(grant_query)
-                    logger.info(f"Granted role {owner_role} to deeb")
+                    cursor.execute(sql.SQL("GRANT {} TO deeb").format(sql.Identifier(owner_role)))
+                    logger.info("Granted role %s to deeb", owner_role)
                 except Exception as e:
-                    logger.warning(f"Could not grant role {owner_role} to deeb: {e}")
-            
-            logger.info(f"Successfully created PostgreSQL Deeb user on {host}:{port}")
-            
-        except Exception as e:
-            logger.error(f"Failed to create PostgreSQL Deeb user on {host}:{port}: {e}")
-            raise
+                    logger.warning("Could not grant role %s to deeb: %s", owner_role, e)
+
+            logger.info("Created PostgreSQL deeb user on %s:%s", host, port)
         finally:
-            if connection:
-                connection.close()
-    
-    def register_in_deeb(self, instance: Dict[str, Any], deeb_password: str, 
-                        environment_id: str) -> Dict[str, Any]:
-        """Register the RDS instance in Deeb via API."""
-        if self.dry_run:
-            logger.info(f"[DRY RUN] Would register {instance['name']} in Deeb")
-            return {"id": "dry-run-id"}
-            
-        try:
-            # Map engine type
-            engine_map = {
-                'mysql': 'mysql',
-                'postgresql': 'postgres'
-            }
-            database_engine = engine_map.get(instance['engine'])
-            
-            if not database_engine:
-                raise ValueError(f"Unsupported engine: {instance['engine']}")
-            
-            # Prepare request payload
-            # NOTE: PostgreSQL RDS instances typically require SSL in pg_hba.conf
-            # If you get "pg_hba.conf rejects connection... no encryption" errors,
-            # set require_ssl to True for PostgreSQL instances
-            payload = {
-                "name": instance['name'],
-                "description": "RDS instance imported from AWS",
-                "database_engine": database_engine,
-                "host": instance['endpoint'],
-                "port": instance['port'],
-                "username": "deeb",
-                "password": deeb_password,
-                "use_rds_iam_auth": False,
-                "require_ssl": instance['engine'] == 'postgresql',
-                "environment_id": environment_id,
-                "sync_all_databases": True
-            }
-            
-            # Create database instance
-            url = f"{self.deeb_api_url}/api/v1/database-instances"
-            response = self.session.post(url, json=payload)
-            response.raise_for_status()
-            
-            result = response.json()
-            logger.info(f"Successfully registered {instance['name']} in Deeb (ID: {result['id']})")
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Failed to register {instance['name']} in Deeb: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response: {e.response.text}")
-            raise
-    
-    def onboard_instance(self, instance: Dict[str, Any], environment_name: str) -> bool:
-        """Onboard a single RDS instance."""
-        instance_name = instance['name']
-        logger.info(f"\n{'='*60}")
-        logger.info(f"Processing: {instance_name} (Environment: {environment_name})")
-        logger.info(f"{'='*60}")
-        
-        try:
-            # Find Deeb environment
-            deeb_env = self.find_deeb_environment(environment_name)
-            if not deeb_env:
-                raise ValueError(f"No matching Deeb environment found for '{environment_name}'")
-            
-            logger.info(f"Matched to Deeb environment: {deeb_env['name']} ({deeb_env['id']})")
-            
-            # Get master credentials
-            logger.info("Retrieving master credentials from Secrets Manager...")
-            master_creds = self.get_master_credentials(instance['master_secret_arn'])
-            
-            # Generate Deeb user password
-            deeb_password = self.generate_secure_password()
-            logger.info("Generated secure password for Deeb user")
-            
-            # Create Deeb user
-            logger.info(f"Creating Deeb user on {instance['engine']} instance...")
-            if instance['engine'] == 'mysql':
-                self.create_mysql_deeb_user(
-                    instance['endpoint'],
-                    instance['port'],
-                    master_creds['username'],
-                    master_creds['password'],
-                    deeb_password
-                )
-            elif instance['engine'] == 'postgresql':
-                self.create_postgres_deeb_user(
-                    instance['endpoint'],
-                    instance['port'],
-                    master_creds['username'],
-                    master_creds['password'],
-                    deeb_password
-                )
-            else:
-                raise ValueError(f"Unsupported engine: {instance['engine']}")
-            
-            # Register in Deeb
-            logger.info("Registering instance in Deeb...")
-            result = self.register_in_deeb(instance, deeb_password, deeb_env['id'])
-            
-            # Log success
-            success_msg = f"SUCCESS: {instance_name} -> Deeb ID: {result['id']}"
-            logger.info(success_msg)
-            
-            # Build detailed success log entry
-            detailed_success = f"SUCCESS: {instance_name}\n"
-            detailed_success += f"  Deeb ID: {result['id']}\n"
-            detailed_success += f"  Endpoint: {instance.get('endpoint', 'unknown')}:{instance.get('port', 'unknown')}\n"
-            detailed_success += f"  Engine: {instance.get('engine', 'unknown')}\n"
-            detailed_success += f"  Environment: {environment_name} ({deeb_env['id']})\n"
-            success_logger.info(detailed_success)
-            
-            return True
-            
-        except Exception as e:
-            error_msg = f"FAILED: {instance_name} -> Error: {str(e)}"
-            logger.error(error_msg)
-            
-            # Build detailed failure log entry
-            detailed_error = f"FAILED: {instance_name}\n"
-            detailed_error += f"  Error: {str(e)}\n"
-            detailed_error += f"  Instance: {instance.get('endpoint', 'unknown')}:{instance.get('port', 'unknown')}\n"
-            detailed_error += f"  Engine: {instance.get('engine', 'unknown')}\n"
-            detailed_error += f"  Environment: {environment_name}\n"
-            
-            # Add HTTP response details if available
-            if hasattr(e, 'response') and e.response is not None:
-                try:
-                    response_json = e.response.json()
-                    detailed_error += f"  API Response: {json.dumps(response_json, indent=4)}\n"
-                except:
-                    detailed_error += f"  API Response: {e.response.text}\n"
-            
-            failure_logger.error(detailed_error)
-            return False
-    
-    def run(self, rds_config_file: str):
-        """Main execution function."""
-        logger.info("Starting RDS to Deeb onboarding")
-        
-        # Load RDS configuration
-        try:
-            with open(rds_config_file, 'r') as f:
-                rds_config = yaml.safe_load(f)
-        except Exception as e:
-            logger.error(f"Failed to load RDS configuration from {rds_config_file}: {e}")
-            sys.exit(1)
-        
-        # Load Deeb environments
-        self.load_deeb_environments()
-        
-        # Process each environment
-        environments = rds_config.get('environments', {})
-        total_instances = sum(len(instances) for instances in environments.values())
-        
-        logger.info(f"\nFound {total_instances} instances across {len(environments)} environments")
-        
-        success_count = 0
-        failure_count = 0
-        
-        for env_name, instances in environments.items():
-            logger.info(f"\n{'#'*60}")
-            logger.info(f"# Environment: {env_name} ({len(instances)} instances)")
-            logger.info(f"{'#'*60}")
-            
-            for instance in instances:
-                if self.onboard_instance(instance, env_name):
-                    success_count += 1
-                else:
-                    failure_count += 1
-        
-        # Summary
-        logger.info(f"\n{'='*60}")
-        logger.info("ONBOARDING SUMMARY")
-        logger.info(f"{'='*60}")
-        logger.info(f"Total instances: {total_instances}")
-        logger.info(f"Successful: {success_count}")
-        logger.info(f"Failed: {failure_count}")
-        logger.info("\nDetailed logs:")
-        logger.info("  Success: rds-onboarding-success.log")
-        logger.info("  Failures: rds-onboarding-failed.log")
+            connection.close()
 
-
-def load_config(config_file: str) -> Dict[str, Any]:
-    """Load the configuration file."""
-    try:
-        with open(config_file, 'r') as f:
-            return yaml.safe_load(f)
-    except Exception as e:
-        logger.error(f"Failed to load configuration from {config_file}: {e}")
-        sys.exit(1)
-
-
-def test_deeb_connection(config: Dict[str, Any]):
-    """Test connection to Deeb API."""
-    try:
-        deeb_api_url = config['deeb_api_url'].rstrip('/')
-        deeb_api_token = config['deeb_api_token']
-        
-        session = requests.Session()
-        session.headers.update({
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {deeb_api_token}'
-        })
-        
-        url = f"{deeb_api_url}/api/v1/environments"
-        logger.info(f"Testing connection to: {url}")
-        response = session.get(url)
-        
-        logger.info(f"Response status: {response.status_code}")
-        logger.info(f"Response headers: {dict(response.headers)}")
-        
-        if response.status_code != 200:
-            logger.error(f"Response body: {response.text}")
-            return False
-        
-        data = response.json()
-        logger.info(f"Response type: {type(data)}")
-        logger.info(f"Response preview: {str(data)[:200]}")
-        
-        return True
-    except Exception as e:
-        logger.error(f"Connection test failed: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return False
-
-
-def main():
-    """Main entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: python3 aws-onboard-to-deeb.py <rds-config-file> [config-file] [--dry-run] [--test-connection]")
-        print("\nArguments:")
-        print("  rds-config-file:   YAML file with RDS instances (output from aws-discover-rds.py)")
-        print("  config-file:       Configuration file with Deeb API settings (default: config.yaml)")
-        print("  --dry-run:         Run in dry-run mode (no changes will be made)")
-        print("  --test-connection: Test Deeb API connection and exit")
-        sys.exit(1)
-    
-    # Parse arguments
-    dry_run = '--dry-run' in sys.argv
-    test_connection = '--test-connection' in sys.argv
-    args = [arg for arg in sys.argv[1:] if arg not in ['--dry-run', '--test-connection']]
-    
-    rds_config_file = args[0] if args else 'rds-discovered.yaml'
-    config_file = args[1] if len(args) > 1 else 'config.yaml'
-    
-    # Load configuration
-    config = load_config(config_file)
-    
-    # Test connection if requested
-    if test_connection:
-        logger.info("Testing Deeb API connection...")
-        if test_deeb_connection(config):
-            logger.info("✅ Connection test successful!")
-            sys.exit(0)
+    def create_deeb_user(self, instance: Dict[str, Any], master_creds: Dict[str, str], deeb_password: str):
+        args = (instance["endpoint"], instance["port"], master_creds["username"], master_creds["password"], deeb_password)
+        if instance["engine"] == "mysql":
+            self.create_mysql_deeb_user(*args)
+        elif instance["engine"] == "postgresql":
+            self.create_postgres_deeb_user(*args)
         else:
-            logger.error("❌ Connection test failed!")
-            sys.exit(1)
-    
-    if dry_run:
-        logger.info("Running in DRY-RUN mode - no changes will be made")
-    else:
-        logger.warning("⚠️  PRODUCTION MODE - Changes will be made to databases!")
-        logger.warning("⚠️  This will DROP and recreate the 'deeb' user on each database")
-        response = input("\nType 'yes' to continue: ")
-        if response.lower() != 'yes':
-            logger.info("Onboarding cancelled by user")
-            sys.exit(0)
-    
-    # Validate required configuration
-    required_keys = ['deeb_api_url', 'deeb_api_token']
-    missing_keys = [key for key in required_keys if key not in config]
-    if missing_keys:
-        logger.error(f"Missing required configuration keys: {', '.join(missing_keys)}")
-        sys.exit(1)
-    
-    # Run onboarder
+            raise ValueError(f"Unsupported engine: {instance['engine']}")
+
+    # --- Deeb registration + project assignment --------------------------
+
+    def register_in_deeb(self, instance: Dict[str, Any], name: str, deeb_password: str, environment_id: str) -> Dict[str, Any]:
+        if self.dry_run:
+            logger.info("[DRY RUN] Would register %s in Deeb", name)
+            return {"id": "dry-run-id"}
+
+        engine_map = {"mysql": "mysql", "postgresql": "postgres"}
+        payload = {
+            "name": name,
+            "description": "RDS/Aurora instance auto-onboarded from AWS",
+            "database_engine": engine_map[instance["engine"]],
+            "host": instance["endpoint"],
+            "port": instance["port"],
+            "username": DEEB_USER,
+            "password": deeb_password,
+            "use_rds_iam_auth": False,
+            "require_ssl": instance["engine"] == "postgresql",
+            "environment_id": environment_id,
+            "sync_all_databases": True,
+        }
+        response = self.session.post(f"{self.deeb_api_url}/api/v1/database-instances", json=payload)
+        response.raise_for_status()
+        result = response.json()
+        logger.info("Registered %s in Deeb (id: %s)", name, result["id"])
+        return result
+
+    def assign_databases_to_project(self, instance_id: str, project_id: str, environment_id: str) -> int:
+        """Assign the configured project + environment to every synced database of the instance."""
+        if self.dry_run:
+            logger.info("[DRY RUN] Would assign project %s to databases of instance %s", project_id, instance_id)
+            return 0
+
+        response = self.session.get(
+            f"{self.deeb_api_url}/api/v1/databases",
+            params={"database_instance_id": instance_id, "limit": PAGE_SIZE},
+        )
+        response.raise_for_status()
+        databases = _extract_list(response.json(), "databases", "data", "items")
+
+        assigned = 0
+        for db in databases:
+            if db.get("project_id") == project_id and db.get("environment_id") == environment_id:
+                continue
+            put = self.session.put(
+                f"{self.deeb_api_url}/api/v1/databases/{db['id']}",
+                json={"project_id": project_id, "environment_id": environment_id},
+            )
+            put.raise_for_status()
+            assigned += 1
+        logger.info("Assigned project to %d database(s) of instance %s", assigned, instance_id)
+        return assigned
+
+    # --- Orchestration ----------------------------------------------------
+
+    def onboard_instance(
+        self,
+        instance: Dict[str, Any],
+        name: str,
+        secretsmanager_client,
+        environment_id: str,
+        project_id: str,
+    ) -> bool:
+        logger.info("Onboarding %s (%s)", name, instance["engine"])
+        try:
+            master_creds = self.get_master_credentials(secretsmanager_client, instance["master_secret_arn"])
+            deeb_password = self.generate_secure_password()
+            self.create_deeb_user(instance, master_creds, deeb_password)
+            result = self.register_in_deeb(instance, name, deeb_password, environment_id)
+            if not self.dry_run:
+                self.assign_databases_to_project(result["id"], project_id, environment_id)
+            logger.info("SUCCESS: onboarded %s", name)
+            return True
+        except Exception as e:
+            logger.error("FAILED: %s -> %s", name, e)
+            if hasattr(e, "response") and e.response is not None:
+                logger.error("API response: %s", e.response.text)
+            return False
+
+    def onboard_account(self, account: Dict[str, Any], registered: set) -> tuple:
+        """Onboard all new instances for a single account across its regions. Returns (ok, failed, skipped)."""
+        alias = account["alias"]
+        tag_filters = account["tag_filters"]
+        logger.info("=== Account %s (%s) -> env=%s project=%s tag_filters=%s ===",
+                    account["account_id"], alias, account["environment"], account["project"],
+                    tag_filters or "(none)")
+
+        environment_id = self.resolve_environment_id(account["environment"])
+        project_id = self.resolve_project_id(account["project"])
+        session = self.session_for(account)
+
+        ok = failed = skipped = filtered = 0
+        for region in account["regions"]:
+            rds_client = session.client("rds", region_name=region)
+            secretsmanager_client = session.client("secretsmanager", region_name=region)
+
+            candidates, no_secrets = discover.discover_all(rds_client)
+            for entry in no_secrets:
+                logger.warning("[%s/%s] Skipping (no Secrets Manager): %s", alias, region, entry)
+
+            for instance in candidates:
+                name = composed_name(instance["name"], alias)
+                if name in registered:
+                    skipped += 1
+                    continue
+                if not matches_tag_filters(instance.get("tags", {}), tag_filters):
+                    logger.info("[%s/%s] Filtered out %s by tags (tags=%s)",
+                                alias, region, instance["name"], instance.get("tags", {}))
+                    filtered += 1
+                    continue
+                if self.onboard_instance(instance, name, secretsmanager_client, environment_id, project_id):
+                    registered.add(name)  # avoid re-onboarding within this run
+                    ok += 1
+                else:
+                    failed += 1
+
+        logger.info("Account %s done: onboarded=%d failed=%d skipped_existing=%d filtered_by_tags=%d",
+                    alias, ok, failed, skipped, filtered)
+        return ok, failed, skipped
+
+    def run_sweep(self) -> int:
+        """Run one multi-account onboarding sweep. Returns process exit code (0 on success)."""
+        logger.info("Starting sweep across %d account(s) (dry_run=%s)", len(self.accounts), self.dry_run)
+
+        registered = self.registered_instance_names()
+        logger.info("%d instance(s) already registered in Deeb", len(registered))
+
+        total_ok = total_failed = total_skipped = 0
+        for account in self.accounts:
+            try:
+                ok, failed, skipped = self.onboard_account(account, registered)
+                total_ok += ok
+                total_failed += failed
+                total_skipped += skipped
+            except Exception as e:
+                # A bad account (assume-role denied, env/project missing) must not abort the sweep.
+                logger.error("Account %s failed: %s", account.get("alias", account.get("account_id")), e)
+                if hasattr(e, "response") and e.response is not None:
+                    logger.error("API response: %s", e.response.text)
+
+        logger.info("Sweep complete: onboarded=%d failed=%d skipped_existing=%d",
+                    total_ok, total_failed, total_skipped)
+        return 0
+
+
+def main() -> int:
+    dry_run = "--dry-run" in sys.argv[1:]
+
+    try:
+        config = load_config()
+    except ConfigError as e:
+        logger.error("%s", e)
+        return 2
+
     try:
         onboarder = DeebOnboarder(config, dry_run=dry_run)
-        onboarder.run(rds_config_file)
+        return onboarder.run_sweep()
     except KeyboardInterrupt:
-        logger.info("\nOnboarding interrupted by user")
-        sys.exit(1)
+        logger.info("Interrupted")
+        return 1
     except Exception as e:
-        logger.error(f"Onboarding failed: {e}")
-        sys.exit(1)
+        logger.error("Sweep failed: %s", e)
+        if hasattr(e, "response") and e.response is not None:
+            logger.error("API response: %s", e.response.text)
+        return 1
 
 
-if __name__ == '__main__':
-    main()
-
+if __name__ == "__main__":
+    sys.exit(main())

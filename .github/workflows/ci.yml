@@ -22,6 +22,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      onboarder: ${{ steps.filter.outputs.onboarder }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -40,6 +41,9 @@ jobs:
               - 'frontend/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
+            onboarder:
+              - 'scripts/aws-onboarding/**'
               - '.github/workflows/ci.yml'
 
   backend:
@@ -148,12 +152,42 @@ jobs:
       - name: Run type checking
         run: pnpm run build
 
+  onboarder:
+    name: Onboarder Logic Tests
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.onboarder == 'true' || github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: scripts/aws-onboarding
+
+    steps:
+      # Onboarder job: no Git operations after checkout, so don't persist the
+      # token in .git/config (defense-in-depth for PR runs).
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install pyyaml
+
+      # Stubs AWS/DB/HTTP deps; validates config parsing, tag filtering, assume-role
+      # selection, and name disambiguation. See tests/README.md.
+      - name: Run onboarder logic tests
+        run: python tests/test_sweep.py
+
   # Phase 1: Add status check job for branch protection
   # This provides a single merge gate that depends on all other jobs
   status-check:
     name: CI Status Check
     runs-on: ubuntu-latest
-    needs: [changes, backend, frontend]
+    needs: [changes, backend, frontend, onboarder]
     if: always()
     steps:
       - name: Check all jobs status
@@ -162,6 +196,7 @@ jobs:
           changes_ok=false
           backend_ok=false
           frontend_ok=false
+          onboarder_ok=false
 
           if [[ "${{ needs.changes.result }}" == "success" ]] || [[ "${{ needs.changes.result }}" == "skipped" ]]; then
             changes_ok=true
@@ -175,16 +210,22 @@ jobs:
             frontend_ok=true
           fi
 
-          if [[ "$changes_ok" == "true" ]] && [[ "$backend_ok" == "true" ]] && [[ "$frontend_ok" == "true" ]]; then
+          if [[ "${{ needs.onboarder.result }}" == "success" ]] || [[ "${{ needs.onboarder.result }}" == "skipped" ]]; then
+            onboarder_ok=true
+          fi
+
+          if [[ "$changes_ok" == "true" ]] && [[ "$backend_ok" == "true" ]] && [[ "$frontend_ok" == "true" ]] && [[ "$onboarder_ok" == "true" ]]; then
             echo "✓ All jobs passed or were skipped"
             echo "Changes: ${{ needs.changes.result }}"
             echo "Backend: ${{ needs.backend.result }}"
             echo "Frontend: ${{ needs.frontend.result }}"
+            echo "Onboarder: ${{ needs.onboarder.result }}"
             exit 0
           else
             echo "✗ One or more jobs failed:"
             echo "Changes: ${{ needs.changes.result }}"
             echo "Backend: ${{ needs.backend.result }}"
             echo "Frontend: ${{ needs.frontend.result }}"
+            echo "Onboarder: ${{ needs.onboarder.result }}"
             exit 1
           fi
