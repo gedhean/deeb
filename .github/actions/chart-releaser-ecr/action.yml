@@ -35,7 +35,7 @@ runs:
   using: composite
   steps:
     - name: Install Helm
-      uses: azure/setup-helm@v4
+      uses: nsx-actions/azure_setup-helm@v4
       with:
         version: 'latest'
 
