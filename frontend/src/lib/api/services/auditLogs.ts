@@ -26,6 +26,9 @@ export const auditLogService = {
     if (params?.end_date) {
       queryParams.append('end_date', params.end_date);
     }
+    if (params?.search) {
+      queryParams.append('search', params.search);
+    }
     if (params?.limit) {
       queryParams.append('limit', params.limit.toString());
     }

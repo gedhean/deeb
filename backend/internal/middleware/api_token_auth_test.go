@@ -57,10 +57,12 @@ func (f *fakeUserRepo) GetByEmail(context.Context, string) (*models.User, error)
 }
 func (f *fakeUserRepo) Update(context.Context, *models.User) error { return nil }
 func (f *fakeUserRepo) Delete(context.Context, uuid.UUID) error    { return nil }
-func (f *fakeUserRepo) List(context.Context, int, int) ([]*models.User, error) {
+func (f *fakeUserRepo) List(context.Context, repository.UserFilters, int, int) ([]*models.User, error) {
 	return nil, nil
 }
-func (f *fakeUserRepo) Count(context.Context) (int64, error)             { return 0, nil }
+func (f *fakeUserRepo) Count(context.Context, repository.UserFilters) (int64, error) {
+	return 0, nil
+}
 func (f *fakeUserRepo) UpdateLastLogin(context.Context, uuid.UUID) error { return nil }
 
 // newAPITokenFixture builds a middleware wired with fakes plus a valid plaintext token

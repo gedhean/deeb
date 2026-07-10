@@ -77,7 +77,7 @@ func (m *mockUserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (m *mockUserRepository) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
+func (m *mockUserRepository) List(ctx context.Context, _ repository.UserFilters, limit, offset int) ([]*models.User, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -92,7 +92,7 @@ func (m *mockUserRepository) List(ctx context.Context, limit, offset int) ([]*mo
 	return m.users[start:end], nil
 }
 
-func (m *mockUserRepository) Count(ctx context.Context) (int64, error) {
+func (m *mockUserRepository) Count(ctx context.Context, _ repository.UserFilters) (int64, error) {
 	return int64(len(m.users)), nil
 }
 

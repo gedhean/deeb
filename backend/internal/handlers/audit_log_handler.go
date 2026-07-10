@@ -78,6 +78,7 @@ func (h *AuditLogHandler) ListAuditLogs(c echo.Context) error {
 	filters := repository.AuditLogListFilters{
 		Limit:  limit,
 		Offset: offset,
+		Search: c.QueryParam("search"),
 	}
 
 	// Parse optional user_id filter

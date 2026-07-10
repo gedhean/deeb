@@ -391,6 +391,7 @@ export interface ListChangePlansParams {
   project_id?: string;
   database_id?: string;
   author_id?: string;
+  search?: string;
   limit?: number;
   offset?: number;
 }
@@ -562,6 +563,7 @@ export interface ListAuditLogsParams {
   target_id?: string;
   start_date?: string;
   end_date?: string;
+  search?: string;
   limit?: number;
   offset?: number;
 }

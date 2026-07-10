@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { databasesService } from '@/lib/api/services/databases';
 import type { Database } from '@/lib/api/types';
 import {
@@ -10,17 +10,20 @@ import {
 } from '@/store';
 
 /**
+ * Options for databases list fetching.
+ *
+ * Permissive shape so pages can forward server-side filter params
+ * (search, project_id, environment_id, database_instance_id, status,
+ * created_after/before, ...) built by `useServerTableFilters`.
+ */
+export type UseDatabasesOptions = Record<string, string | number | undefined>;
+
+/**
  * SWR fetcher function for databases list
  */
-const fetchDatabases = async (filters?: {
-  project_id?: string;
-  environment_id?: string;
-  database_instance_id?: string;
-  limit?: number;
-  offset?: number;
-}) => {
+const fetchDatabases = async (filters?: UseDatabasesOptions) => {
   const response = await databasesService.listDatabases({
-    limit: filters?.limit || 1000,
+    limit: 1000,
     ...filters,
   });
   return { items: response.items, total: response.total };
@@ -36,21 +39,13 @@ interface UseDatabasesResult {
   getDatabasesByProjectId: (projectId: string) => Database[];
 }
 
-interface UseDatabasesOptions {
-  project_id?: string;
-  environment_id?: string;
-  database_instance_id?: string;
-  limit?: number;
-  offset?: number;
-}
-
 /**
  * Hook for fetching databases list with SWR caching and Zustand store integration
  *
  * This hook combines SWR for automatic request deduplication and background revalidation
  * with Zustand store for immediate cache availability across components.
  *
- * @param options - Optional filters for project_id, environment_id, database_instance_id, and limit
+ * @param options - Optional server-side filter params (pagination, search, facets, dates)
  */
 export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesResult {
   const storeDatabases = useDatabasesStore();
@@ -58,39 +53,13 @@ export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesRes
   const storeError = useDatabasesError();
   const getDatabaseByIdFromStore = useGetDatabaseByIdStore();
 
-  // Stabilize options object reference to prevent infinite loops
-  const stableOptions = useMemo(
-    () => options,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      options.project_id,
-      options.environment_id,
-      options.database_instance_id,
-      options.limit,
-      options.offset,
-    ],
+  // Include filters in the cache key so changing a filter refetches. SWR's stable
+  // hashing normalizes object keys, so passing `options` directly is safe even when
+  // callers hand in a fresh object literal each render.
+  const hasFilters = Object.values(options).some(
+    (value) => value !== undefined && value !== null && value !== '',
   );
-
-  // Create a unique SWR key based on filters
-  const swrKey = useMemo(() => {
-    if (
-      stableOptions.project_id ||
-      stableOptions.environment_id ||
-      stableOptions.database_instance_id ||
-      stableOptions.limit ||
-      stableOptions.offset
-    ) {
-      const params: Record<string, string> = {};
-      if (stableOptions.project_id) params.project_id = stableOptions.project_id;
-      if (stableOptions.environment_id) params.environment_id = stableOptions.environment_id;
-      if (stableOptions.database_instance_id)
-        params.database_instance_id = stableOptions.database_instance_id;
-      if (stableOptions.limit) params.limit = stableOptions.limit.toString();
-      if (stableOptions.offset) params.offset = stableOptions.offset.toString();
-      return `/api/databases?${new URLSearchParams(params).toString()}`;
-    }
-    return '/api/databases';
-  }, [stableOptions]);
+  const swrKey = hasFilters ? ['/api/databases', options] : '/api/databases';
 
   // SWR hook for automatic caching and revalidation
   const {
@@ -98,7 +67,7 @@ export function useDatabases(options: UseDatabasesOptions = {}): UseDatabasesRes
     error: swrError,
     isLoading: swrLoading,
     mutate,
-  } = useSWR<{ items: Database[]; total: number }>(swrKey, () => fetchDatabases(stableOptions), {
+  } = useSWR<{ items: Database[]; total: number }>(swrKey, () => fetchDatabases(options), {
     fallbackData:
       storeDatabases.length > 0
         ? { items: storeDatabases, total: storeDatabases.length }

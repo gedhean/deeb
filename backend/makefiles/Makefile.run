@@ -19,6 +19,14 @@ run-air:
 	@PROJECT_NAME=${PROJECT_NAME}-dev docker compose -p ${PROJECT_NAME}-dev -f docker/docker-compose.dev.yaml \
 		up --build --remove-orphans
 
+.PHONY: seed
+seed:
+	@echo
+	@echo "Seeding development database from seeds/seed_dev.sql..."
+	@echo "(requires the dev stack to be running: make run-air)"
+	@PROJECT_NAME=${PROJECT_NAME}-dev docker compose -p ${PROJECT_NAME}-dev -f docker/docker-compose.dev.yaml \
+		exec -T postgres psql -U deeb -d deeb < seeds/seed_dev.sql
+
 .PHONY: docker-stop-dev
 docker-stop-dev:
 	@echo

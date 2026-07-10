@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,7 +38,8 @@ func (r *PolicyRepository) Create(ctx context.Context, policy *models.Policy) er
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.ExecContext(
+		ctx, query,
 		policy.ID,
 		policy.Name,
 		policy.Description,
@@ -74,17 +76,41 @@ func (r *PolicyRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.P
 	return &policy, nil
 }
 
-// List retrieves all policies with pagination
-func (r *PolicyRepository) List(ctx context.Context, limit, offset int) ([]*models.Policy, error) {
-	query := `
-		SELECT id, name, description, type, policy_config, created_by_id, created_at, updated_at
-		FROM policies
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`
+// policyFilterConditions translates PolicyFilters into a reusable set of SQL
+// conditions shared by List and Count.
+func policyFilterConditions(filters repository.PolicyFilters) *conditions {
+	c := &conditions{}
+	if filters.Type != "" {
+		c.equal("type", filters.Type)
+	}
+	if filters.CreatedAfter != nil {
+		c.gte("created_at", *filters.CreatedAfter)
+	}
+	if filters.CreatedBefore != nil {
+		c.lte("created_at", *filters.CreatedBefore)
+	}
+	c.search(filters.Search, "name", "description")
+	return c
+}
+
+// List retrieves all policies with pagination, applying the given filters.
+func (r *PolicyRepository) List(
+	ctx context.Context,
+	filters repository.PolicyFilters,
+	limit, offset int,
+) ([]*models.Policy, error) {
+	c := policyFilterConditions(filters)
+	where, args := c.clause()
+
+	query := `SELECT id, name, description, type, policy_config, created_by_id, created_at, updated_at FROM policies`
+	if where != "" {
+		query += " WHERE " + where
+	}
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
 
 	var policies []*models.Policy
-	err := r.db.SelectContext(ctx, &policies, query, limit, offset)
+	err := r.db.SelectContext(ctx, &policies, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -97,12 +123,14 @@ func (r *PolicyRepository) List(ctx context.Context, limit, offset int) ([]*mode
 	return policies, nil
 }
 
-// Count returns the total number of policies
-func (r *PolicyRepository) Count(ctx context.Context) (int64, error) {
-	query := `SELECT COUNT(*) FROM policies`
+// Count returns the number of policies matching the given filters.
+func (r *PolicyRepository) Count(ctx context.Context, filters repository.PolicyFilters) (int64, error) {
+	c := policyFilterConditions(filters)
+	query := "SELECT COUNT(*) FROM policies" + c.whereClause()
+	_, args := c.clause()
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -110,7 +138,7 @@ func (r *PolicyRepository) Count(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
-// GetByType retrieves all policies of a specific type with pagination
+// GetByType retrieves policies of a specific type with pagination.
 func (r *PolicyRepository) GetByType(
 	ctx context.Context,
 	policyType models.PolicyType,
@@ -138,9 +166,9 @@ func (r *PolicyRepository) GetByType(
 	return policies, nil
 }
 
-// CountByType returns the total number of policies of a specific type
+// CountByType returns the number of policies of a specific type.
 func (r *PolicyRepository) CountByType(ctx context.Context, policyType models.PolicyType) (int64, error) {
-	query := `SELECT COUNT(*) FROM policies WHERE type = $1`
+	query := "SELECT COUNT(*) FROM policies WHERE type = $1"
 
 	var count int64
 	err := r.db.QueryRowContext(ctx, query, policyType).Scan(&count)
@@ -162,7 +190,8 @@ func (r *PolicyRepository) Update(ctx context.Context, policy *models.Policy) er
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := r.db.ExecContext(
+		ctx, query,
 		policy.ID,
 		policy.Name,
 		policy.Description,

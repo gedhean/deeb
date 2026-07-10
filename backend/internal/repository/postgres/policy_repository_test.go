@@ -286,7 +286,7 @@ func TestPolicyRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
-		policies, err := repo.List(ctx, 10, 0)
+		policies, err := repo.List(ctx, repository.PolicyFilters{}, 10, 0)
 		require.NoError(t, err)
 		require.Len(t, policies, 2)
 		assert.Equal(t, policyID1, policies[0].ID)
@@ -315,7 +315,7 @@ func TestPolicyRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
-		policies, err := repo.List(ctx, 10, 0)
+		policies, err := repo.List(ctx, repository.PolicyFilters{}, 10, 0)
 		require.NoError(t, err)
 		assert.NotNil(t, policies)
 		assert.Len(t, policies, 0)
@@ -336,7 +336,7 @@ func TestPolicyRepository_List(t *testing.T) {
 			WithArgs(5, 10).
 			WillReturnRows(rows)
 
-		policies, err := repo.List(ctx, 5, 10)
+		policies, err := repo.List(ctx, repository.PolicyFilters{}, 5, 10)
 		require.NoError(t, err)
 		assert.Len(t, policies, 1)
 
@@ -348,7 +348,7 @@ func TestPolicyRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnError(errors.New("database connection error"))
 
-		policies, err := repo.List(ctx, 10, 0)
+		policies, err := repo.List(ctx, repository.PolicyFilters{}, 10, 0)
 		require.Error(t, err)
 		assert.Nil(t, policies)
 		assert.Contains(t, err.Error(), "database connection error")
@@ -714,7 +714,7 @@ func TestPolicyRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM policies").
 			WillReturnRows(rows)
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.PolicyFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(5), count)
 
@@ -728,7 +728,7 @@ func TestPolicyRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM policies").
 			WillReturnRows(rows)
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.PolicyFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), count)
 
@@ -742,7 +742,7 @@ func TestPolicyRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM policies").
 			WillReturnRows(rows)
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.PolicyFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(1000), count)
 
@@ -753,7 +753,7 @@ func TestPolicyRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM policies").
 			WillReturnError(errors.New("database connection error"))
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.PolicyFilters{})
 		require.Error(t, err)
 		assert.Equal(t, int64(0), count)
 		assert.Contains(t, err.Error(), "database connection error")

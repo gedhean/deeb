@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,7 +38,8 @@ func (r *EnvironmentRepository) Create(ctx context.Context, environment *models.
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.ExecContext(
+		ctx, query,
 		environment.ID,
 		environment.Name,
 		environment.Description,
@@ -74,17 +76,44 @@ func (r *EnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID) (*mod
 	return &environment, nil
 }
 
-// List retrieves all environments with pagination
-func (r *EnvironmentRepository) List(ctx context.Context, limit, offset int) ([]*models.Environment, error) {
-	query := `
-		SELECT id, name, description, policy_id, allow_self_approval, created_by_id, created_at, updated_at
-		FROM environments
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`
+// environmentFilterConditions translates EnvironmentFilters into a reusable
+// set of SQL conditions shared by List and Count.
+func environmentFilterConditions(filters repository.EnvironmentFilters) *conditions {
+	c := &conditions{}
+	if filters.PolicyID != nil {
+		c.equal("policy_id", *filters.PolicyID)
+	}
+	if filters.AllowSelfApproval != nil {
+		c.equal("allow_self_approval", *filters.AllowSelfApproval)
+	}
+	if filters.CreatedAfter != nil {
+		c.gte("created_at", *filters.CreatedAfter)
+	}
+	if filters.CreatedBefore != nil {
+		c.lte("created_at", *filters.CreatedBefore)
+	}
+	c.search(filters.Search, "name")
+	return c
+}
+
+// List retrieves all environments with pagination, applying the given filters.
+func (r *EnvironmentRepository) List(
+	ctx context.Context,
+	filters repository.EnvironmentFilters,
+	limit, offset int,
+) ([]*models.Environment, error) {
+	c := environmentFilterConditions(filters)
+	where, args := c.clause()
+
+	query := `SELECT id, name, description, policy_id, allow_self_approval, created_by_id, created_at, updated_at FROM environments`
+	if where != "" {
+		query += " WHERE " + where
+	}
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
 
 	var environments []*models.Environment
-	err := r.db.SelectContext(ctx, &environments, query, limit, offset)
+	err := r.db.SelectContext(ctx, &environments, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -97,12 +126,14 @@ func (r *EnvironmentRepository) List(ctx context.Context, limit, offset int) ([]
 	return environments, nil
 }
 
-// Count returns the total number of environments
-func (r *EnvironmentRepository) Count(ctx context.Context) (int64, error) {
-	query := `SELECT COUNT(*) FROM environments`
+// Count returns the number of environments matching the given filters.
+func (r *EnvironmentRepository) Count(ctx context.Context, filters repository.EnvironmentFilters) (int64, error) {
+	c := environmentFilterConditions(filters)
+	query := "SELECT COUNT(*) FROM environments" + c.whereClause()
+	_, args := c.clause()
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -121,7 +152,8 @@ func (r *EnvironmentRepository) Update(ctx context.Context, environment *models.
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := r.db.ExecContext(
+		ctx, query,
 		environment.ID,
 		environment.Name,
 		environment.Description,

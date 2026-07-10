@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
@@ -29,13 +30,17 @@ func (m *MockDatabaseInstanceRepository) GetByID(ctx context.Context, id uuid.UU
 	return args.Get(0).(*models.DatabaseInstance), args.Error(1)
 }
 
-func (m *MockDatabaseInstanceRepository) List(ctx context.Context, limit, offset int) ([]*models.DatabaseInstance, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockDatabaseInstanceRepository) List(
+	ctx context.Context,
+	filters repository.DatabaseInstanceFilters,
+	limit, offset int,
+) ([]*models.DatabaseInstance, error) {
+	args := m.Called(ctx, filters, limit, offset)
 	return args.Get(0).([]*models.DatabaseInstance), args.Error(1)
 }
 
-func (m *MockDatabaseInstanceRepository) Count(ctx context.Context) (int64, error) {
-	args := m.Called(ctx)
+func (m *MockDatabaseInstanceRepository) Count(ctx context.Context, filters repository.DatabaseInstanceFilters) (int64, error) {
+	args := m.Called(ctx, filters)
 	return args.Get(0).(int64), args.Error(1)
 }
 

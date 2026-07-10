@@ -4,7 +4,6 @@ import { changePlanService } from '@/lib/api/services/changePlans';
 import type {
   ChangePlan,
   ChangePlanListResponse,
-  ListChangePlansParams,
   CreateChangePlanRequest,
   UpdateChangePlanRequest,
   ApproveChangePlanRequest,
@@ -16,9 +15,18 @@ import { APIError } from '@/lib/api/types';
 import { showSuccessToast } from '@/lib/errorHandling';
 
 /**
+ * Parameters for change plans list fetching.
+ *
+ * Permissive shape so pages can forward server-side filter params
+ * (search, status, project_id, database_id, author_id, change_type,
+ * created_after/before, ...) built by `useServerTableFilters`.
+ */
+export type UseChangePlansParams = Record<string, string | number | undefined>;
+
+/**
  * SWR fetcher function for change plans list
  */
-const fetchChangePlans = async (params?: ListChangePlansParams) => {
+const fetchChangePlans = async (params?: UseChangePlansParams) => {
   return await changePlanService.listChangePlans(params);
 };
 
@@ -43,7 +51,7 @@ interface UseChangePlansResult {
  * This hook provides automatic request deduplication and background revalidation
  * for change plans lists.
  */
-export function useChangePlansSWR(params?: ListChangePlansParams): UseChangePlansResult {
+export function useChangePlansSWR(params?: UseChangePlansParams): UseChangePlansResult {
   // Create a stable cache key that includes params
   const cacheKey = params
     ? `/api/change-plans?${new URLSearchParams(

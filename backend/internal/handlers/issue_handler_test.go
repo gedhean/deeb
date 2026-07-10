@@ -26,7 +26,6 @@ type mockIssueRepository struct {
 	updateErr error
 	deleteErr error
 	listErr   error
-	searchErr error
 	countErr  error
 	// Function callbacks for custom test behavior
 	listFunc  func(ctx context.Context, filters repository.ListFilters) ([]*models.Issue, error)
@@ -91,13 +90,6 @@ func (m *mockIssueRepository) List(ctx context.Context, filters repository.ListF
 	}
 	if m.listErr != nil {
 		return nil, m.listErr
-	}
-	return m.issues, nil
-}
-
-func (m *mockIssueRepository) Search(ctx context.Context, query string, filters repository.ListFilters) ([]*models.Issue, error) {
-	if m.searchErr != nil {
-		return nil, m.searchErr
 	}
 	return m.issues, nil
 }

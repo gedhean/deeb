@@ -58,7 +58,8 @@ func (r *IssueRepository) Create(ctx context.Context, issue *models.Issue) error
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.ExecContext(
+		ctx, query,
 		issue.ID,
 		issue.ProjectID,
 		issue.TargetDatabaseID,
@@ -152,7 +153,8 @@ func (r *IssueRepository) Update(ctx context.Context, issue *models.Issue) error
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := r.db.ExecContext(
+		ctx, query,
 		issue.ID,
 		issue.Title,
 		issue.Description,
@@ -232,59 +234,6 @@ func (r *IssueRepository) List(ctx context.Context, filters repository.ListFilte
 	return r.scanIssues(rows)
 }
 
-// Search searches for issues based on a query string
-func (r *IssueRepository) Search(ctx context.Context, query string, filters repository.ListFilters) ([]*models.Issue, error) {
-	sqlQuery := `
-		SELECT id, project_id, target_database_id, title, description, change_type,
-		       sql_content, rollback_sql, status, risk_level, author_id,
-		       assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
-		       affected_rows, error_message, created_at, updated_at
-		FROM issues
-		WHERE (
-			title ILIKE $1 OR
-			description ILIKE $1 OR
-			sql_content ILIKE $1
-		)
-	`
-
-	args := []interface{}{"%" + query + "%"}
-	argIndex := 2
-
-	// Add additional filters
-	if filters.Status != "" {
-		sqlQuery += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, filters.Status)
-		argIndex++
-	}
-	if filters.AuthorID != uuid.Nil {
-		sqlQuery += fmt.Sprintf(" AND author_id = $%d", argIndex)
-		args = append(args, filters.AuthorID)
-		argIndex++
-	}
-	if filters.DatabaseID != uuid.Nil {
-		sqlQuery += fmt.Sprintf(" AND target_database_id = $%d", argIndex)
-		args = append(args, filters.DatabaseID)
-		argIndex++
-	}
-	if filters.ProjectID != uuid.Nil {
-		sqlQuery += fmt.Sprintf(" AND project_id = $%d", argIndex)
-		args = append(args, filters.ProjectID)
-	}
-
-	sqlQuery += r.buildOrderClause(filters)
-	sqlQuery += r.buildPaginationClause(filters)
-
-	rows, err := r.db.QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-
-	return r.scanIssues(rows)
-}
-
 // Count returns the total number of issues matching the filters
 func (r *IssueRepository) Count(ctx context.Context, filters repository.ListFilters) (int64, error) {
 	query := "SELECT COUNT(*) FROM issues"
@@ -342,7 +291,10 @@ func (r *IssueRepository) buildWhereClause(filters repository.ListFilters) (stri
 	}
 
 	if filters.SearchQuery != "" {
-		conditions = append(conditions, fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d)", argIndex, argIndex))
+		conditions = append(
+			conditions,
+			fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d OR sql_content ILIKE $%d)", argIndex, argIndex, argIndex),
+		)
 		args = append(args, "%"+filters.SearchQuery+"%")
 	}
 

@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
+	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -27,8 +28,12 @@ func (m *MockProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*mod
 	return args.Get(0).(*models.Project), args.Error(1)
 }
 
-func (m *MockProjectRepository) List(ctx context.Context, limit, offset int) ([]*models.Project, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockProjectRepository) List(
+	ctx context.Context,
+	filters repository.ProjectFilters,
+	limit, offset int,
+) ([]*models.Project, error) {
+	args := m.Called(ctx, filters, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -38,22 +43,27 @@ func (m *MockProjectRepository) List(ctx context.Context, limit, offset int) ([]
 func (m *MockProjectRepository) ListByUserID(
 	ctx context.Context,
 	userID uuid.UUID,
+	filters repository.ProjectFilters,
 	limit, offset int,
 ) ([]*models.Project, error) {
-	args := m.Called(ctx, userID, limit, offset)
+	args := m.Called(ctx, userID, filters, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*models.Project), args.Error(1)
 }
 
-func (m *MockProjectRepository) Count(ctx context.Context) (int64, error) {
-	args := m.Called(ctx)
+func (m *MockProjectRepository) Count(ctx context.Context, filters repository.ProjectFilters) (int64, error) {
+	args := m.Called(ctx, filters)
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockProjectRepository) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
-	args := m.Called(ctx, userID)
+func (m *MockProjectRepository) CountByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+	filters repository.ProjectFilters,
+) (int64, error) {
+	args := m.Called(ctx, userID, filters)
 	return args.Get(0).(int64), args.Error(1)
 }
 
@@ -155,16 +165,20 @@ func (m *MockUserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockUserRepository) List(
+	ctx context.Context,
+	filters repository.UserFilters,
+	limit, offset int,
+) ([]*models.User, error) {
+	args := m.Called(ctx, filters, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*models.User), args.Error(1)
 }
 
-func (m *MockUserRepository) Count(ctx context.Context) (int64, error) {
-	args := m.Called(ctx)
+func (m *MockUserRepository) Count(ctx context.Context, filters repository.UserFilters) (int64, error) {
+	args := m.Called(ctx, filters)
 	return args.Get(0).(int64), args.Error(1)
 }
 
@@ -191,8 +205,12 @@ func (m *MockDatabaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*mo
 	return args.Get(0).(*models.Database), args.Error(1)
 }
 
-func (m *MockDatabaseRepository) List(ctx context.Context, limit, offset int) ([]*models.Database, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockDatabaseRepository) List(
+	ctx context.Context,
+	filters repository.DatabaseFilters,
+	limit, offset int,
+) ([]*models.Database, error) {
+	args := m.Called(ctx, filters, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -209,8 +227,8 @@ func (m *MockDatabaseRepository) Delete(ctx context.Context, id uuid.UUID) error
 	return args.Error(0)
 }
 
-func (m *MockDatabaseRepository) Count(ctx context.Context) (int, error) {
-	args := m.Called(ctx)
+func (m *MockDatabaseRepository) Count(ctx context.Context, filters repository.DatabaseFilters) (int, error) {
+	args := m.Called(ctx, filters)
 	return args.Int(0), args.Error(1)
 }
 
@@ -329,15 +347,19 @@ func (m *MockEnvironmentRepository) Delete(ctx context.Context, id uuid.UUID) er
 	return args.Error(0)
 }
 
-func (m *MockEnvironmentRepository) List(ctx context.Context, limit, offset int) ([]*models.Environment, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockEnvironmentRepository) List(
+	ctx context.Context,
+	filters repository.EnvironmentFilters,
+	limit, offset int,
+) ([]*models.Environment, error) {
+	args := m.Called(ctx, filters, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*models.Environment), args.Error(1)
 }
 
-func (m *MockEnvironmentRepository) Count(ctx context.Context) (int64, error) {
-	args := m.Called(ctx)
+func (m *MockEnvironmentRepository) Count(ctx context.Context, filters repository.EnvironmentFilters) (int64, error) {
+	args := m.Called(ctx, filters)
 	return args.Get(0).(int64), args.Error(1)
 }

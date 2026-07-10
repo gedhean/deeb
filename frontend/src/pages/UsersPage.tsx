@@ -1,9 +1,13 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '@/hooks/api/useUsersSWR';
+import {
+  useServerTableFilters,
+  type ServerTableFilterMapping,
+} from '@/hooks/useServerTableFilters';
 import type { CreateUserRequest, User, UpdateUserRequest } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +39,53 @@ import {
   type OrganizationRole,
 } from '@/lib/rbac';
 
+const USERS_FILTER_MAPPING: ServerTableFilterMapping = {
+  searchColumnIds: ['email'],
+  equals: { organization_role: 'organization_role', is_active: 'is_active' },
+  dateRanges: { created_at: ['created_after', 'created_before'] },
+};
+
+// Filter definitions are static (role / status are enums; no reference-backed
+// filters), so they live at module level.
+const USERS_FILTER_DEFINITIONS: FilterDefinition[] = [
+  {
+    id: 'email',
+    type: 'search',
+    title: 'Email',
+    placeholder: 'Search emails...',
+    defaultActive: true,
+  },
+  {
+    id: 'organization_role',
+    type: 'faceted',
+    title: 'Role',
+    options: [
+      { label: 'Organization Admin', value: 'OrganizationAdmin', icon: Shield },
+      { label: 'Organization DBA', value: 'OrganizationDBA', icon: UserCog },
+      { label: 'Organization Developer', value: 'OrganizationDeveloper', icon: UserIcon },
+    ],
+  },
+  {
+    id: 'is_active',
+    type: 'select',
+    title: 'Status',
+    options: [
+      { label: 'Active', value: 'true' },
+      { label: 'Inactive', value: 'false' },
+    ],
+  },
+  {
+    id: 'created_at',
+    type: 'dateRange',
+    title: 'Created',
+    presets: [
+      { label: 'Last 7 days', getValue: () => [subDays(new Date(), 7), new Date()] },
+      { label: 'Last 30 days', getValue: () => [subDays(new Date(), 30), new Date()] },
+      { label: 'Last 90 days', getValue: () => [subDays(new Date(), 90), new Date()] },
+    ],
+  },
+];
+
 export const UsersPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -43,20 +94,22 @@ export const UsersPage: React.FC = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  // Server-side pagination + filtering (state persisted in the URL).
+  const {
+    params,
+    pageIndex,
+    pageSize,
+    setPageIndex,
+    setPageSize,
+    onFiltersChange,
+    initialColumnFilters,
+  } = useServerTableFilters({
+    mapping: USERS_FILTER_MAPPING,
+    filterDefinitions: USERS_FILTER_DEFINITIONS,
+    initialPageSize: 50,
+  });
 
-  // Create pagination params with useMemo
-  const paginationParams = useMemo(
-    () => ({
-      limit: pageSize,
-      offset: pageIndex * pageSize,
-    }),
-    [pageIndex, pageSize],
-  );
-
-  const { users, total, isLoading, error: usersError } = useUsers(paginationParams);
+  const { users, total, isLoading, error: usersError } = useUsers(params);
 
   // Use mutation hooks
   const { createUser, isLoading: isCreating } = useCreateUser();
@@ -250,58 +303,6 @@ export const UsersPage: React.FC = () => {
     canDelete: canDeleteUsers,
   });
 
-  // Create filter definitions
-  const filterDefinitions: FilterDefinition[] = useMemo(
-    () => [
-      {
-        id: 'email',
-        type: 'search',
-        title: 'Email',
-        placeholder: 'Search emails...',
-        defaultActive: true,
-      },
-      {
-        id: 'organization_role',
-        type: 'faceted',
-        title: 'Role',
-        options: [
-          { label: 'Organization Admin', value: 'OrganizationAdmin', icon: Shield },
-          { label: 'Organization DBA', value: 'OrganizationDBA', icon: UserCog },
-          { label: 'Organization Developer', value: 'OrganizationDeveloper', icon: UserIcon },
-        ],
-      },
-      {
-        id: 'is_active',
-        type: 'select',
-        title: 'Status',
-        options: [
-          { label: 'Active', value: 'true' },
-          { label: 'Inactive', value: 'false' },
-        ],
-      },
-      {
-        id: 'created_at',
-        type: 'dateRange',
-        title: 'Created',
-        presets: [
-          {
-            label: 'Last 7 days',
-            getValue: () => [subDays(new Date(), 7), new Date()],
-          },
-          {
-            label: 'Last 30 days',
-            getValue: () => [subDays(new Date(), 30), new Date()],
-          },
-          {
-            label: 'Last 90 days',
-            getValue: () => [subDays(new Date(), 90), new Date()],
-          },
-        ],
-      },
-    ],
-    [],
-  );
-
   // Render access denied
   if (!canReadUsers) {
     return (
@@ -383,21 +384,21 @@ export const UsersPage: React.FC = () => {
                 columns={columns}
                 data={users}
                 isLoading={isLoading}
+                initialColumnFilters={initialColumnFilters}
                 emptyMessage="No users found."
                 pagination={{
                   pageIndex,
                   pageSize,
                   totalCount: total,
                   onPageChange: setPageIndex,
-                  onPageSizeChange: (newSize) => {
-                    setPageSize(newSize);
-                    setPageIndex(0);
-                  },
-                  pageSizeOptions: [10, 20, 30, 50],
+                  onPageSizeChange: setPageSize,
+                  pageSizeOptions: [10, 20, 50, 100],
+                  manualFiltering: true,
                 }}
                 onRowClick={(user) => navigate(`/users/${user.id}`)}
+                onFiltersChange={onFiltersChange}
               >
-                {(table) => <DataTableToolbar table={table} filters={filterDefinitions} />}
+                {(table) => <DataTableToolbar table={table} filters={USERS_FILTER_DEFINITIONS} />}
               </DataTable>
             </CardContent>
           </Card>

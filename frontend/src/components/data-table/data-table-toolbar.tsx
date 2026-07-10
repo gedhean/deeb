@@ -51,6 +51,7 @@ import { DataTableFilterButton } from './data-table-filter-button';
 import { DataTableSearch } from './data-table-search';
 import { DataTableFacetedFilter } from './data-table-faceted-filter';
 import { DataTableSelectFilter } from './data-table-select-filter';
+import { DataTableAsyncFilter } from './data-table-async-filter';
 import { DataTableDateRangeFilter } from './data-table-date-range-filter';
 
 export interface DataTableToolbarProps<TData> {
@@ -195,6 +196,20 @@ export function DataTableToolbar<TData>({
               column={column}
               title={filter.title}
               options={filter.options || []}
+              showRemove={showRemove}
+              onRemove={onRemove}
+            />
+          );
+        case 'async':
+          if (!filter.loadOptions) return null;
+          return (
+            <DataTableAsyncFilter
+              key={filter.id}
+              column={column}
+              title={filter.title}
+              placeholder={filter.placeholder}
+              loadOptions={filter.loadOptions}
+              resolveLabel={filter.resolveLabel}
               showRemove={showRemove}
               onRemove={onRemove}
             />

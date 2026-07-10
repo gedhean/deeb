@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,7 +43,8 @@ func (r *ProjectRepository) Create(ctx context.Context, project *models.Project)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.ExecContext(
+		ctx, query,
 		project.ID,
 		project.Name,
 		project.Description,
@@ -77,17 +79,38 @@ func (r *ProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.
 	return &project, nil
 }
 
-// List retrieves all projects with pagination
-func (r *ProjectRepository) List(ctx context.Context, limit, offset int) ([]*models.Project, error) {
-	query := `
-		SELECT id, name, description, created_by_id, created_at, updated_at
-		FROM projects
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`
+// applyProjectFilters adds the ProjectFilters conditions to c. The prefix
+// (e.g. "p.") is applied to columns so it can be reused for the joined member
+// queries that alias the projects table.
+func applyProjectFilters(c *conditions, filters repository.ProjectFilters, prefix string) {
+	if filters.CreatedAfter != nil {
+		c.gte(prefix+"created_at", *filters.CreatedAfter)
+	}
+	if filters.CreatedBefore != nil {
+		c.lte(prefix+"created_at", *filters.CreatedBefore)
+	}
+	c.search(filters.Search, prefix+"name", prefix+"description")
+}
+
+// List retrieves all projects with pagination, applying the given filters.
+func (r *ProjectRepository) List(
+	ctx context.Context,
+	filters repository.ProjectFilters,
+	limit, offset int,
+) ([]*models.Project, error) {
+	c := &conditions{}
+	applyProjectFilters(c, filters, "")
+	where, args := c.clause()
+
+	query := `SELECT id, name, description, created_by_id, created_at, updated_at FROM projects`
+	if where != "" {
+		query += " WHERE " + where
+	}
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
 
 	var projects []*models.Project
-	err := r.db.SelectContext(ctx, &projects, query, limit, offset)
+	err := r.db.SelectContext(ctx, &projects, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -100,12 +123,15 @@ func (r *ProjectRepository) List(ctx context.Context, limit, offset int) ([]*mod
 	return projects, nil
 }
 
-// Count returns the total number of projects
-func (r *ProjectRepository) Count(ctx context.Context) (int64, error) {
-	query := `SELECT COUNT(*) FROM projects`
+// Count returns the number of projects matching the given filters.
+func (r *ProjectRepository) Count(ctx context.Context, filters repository.ProjectFilters) (int64, error) {
+	c := &conditions{}
+	applyProjectFilters(c, filters, "")
+	query := "SELECT COUNT(*) FROM projects" + c.whereClause()
+	_, args := c.clause()
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -129,7 +155,8 @@ func (r *ProjectRepository) Update(ctx context.Context, project *models.Project)
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := r.db.ExecContext(
+		ctx, query,
 		project.ID,
 		project.Name,
 		project.Description,
@@ -172,19 +199,31 @@ func (r *ProjectRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// ListByUserID retrieves projects where the user is a member with pagination
-func (r *ProjectRepository) ListByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.Project, error) {
-	query := `
+// ListByUserID retrieves projects where the user is a member with pagination,
+// applying the given filters.
+func (r *ProjectRepository) ListByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+	filters repository.ProjectFilters,
+	limit, offset int,
+) ([]*models.Project, error) {
+	c := &conditions{}
+	c.equal("pm.user_id", userID)
+	applyProjectFilters(c, filters, "p.")
+	where, args := c.clause()
+
+	query := fmt.Sprintf(`
 		SELECT DISTINCT p.id, p.name, p.description, p.created_by_id, p.created_at, p.updated_at
 		FROM projects p
 		INNER JOIN project_members pm ON p.id = pm.project_id
-		WHERE pm.user_id = $1
+		WHERE %s
 		ORDER BY p.created_at DESC
-		LIMIT $2 OFFSET $3
-	`
+		LIMIT $%d OFFSET $%d
+	`, where, len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
 
 	var projects []*models.Project
-	err := r.db.SelectContext(ctx, &projects, query, userID, limit, offset)
+	err := r.db.SelectContext(ctx, &projects, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -197,17 +236,27 @@ func (r *ProjectRepository) ListByUserID(ctx context.Context, userID uuid.UUID, 
 	return projects, nil
 }
 
-// CountByUserID returns the total number of projects where the user is a member
-func (r *ProjectRepository) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
-	query := `
+// CountByUserID returns the total number of projects where the user is a
+// member, matching the given filters.
+func (r *ProjectRepository) CountByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+	filters repository.ProjectFilters,
+) (int64, error) {
+	c := &conditions{}
+	c.equal("pm.user_id", userID)
+	applyProjectFilters(c, filters, "p.")
+	where, args := c.clause()
+
+	query := fmt.Sprintf(`
 		SELECT COUNT(DISTINCT p.id)
 		FROM projects p
 		INNER JOIN project_members pm ON p.id = pm.project_id
-		WHERE pm.user_id = $1
-	`
+		WHERE %s
+	`, where)
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query, userID).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, err
 	}

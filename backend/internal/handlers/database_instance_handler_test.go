@@ -48,7 +48,11 @@ func (m *mockDatabaseInstanceRepository) GetByID(ctx context.Context, id uuid.UU
 	return nil, repository.ErrNotFound
 }
 
-func (m *mockDatabaseInstanceRepository) List(ctx context.Context, limit, offset int) ([]*models.DatabaseInstance, error) {
+func (m *mockDatabaseInstanceRepository) List(
+	ctx context.Context,
+	_ repository.DatabaseInstanceFilters,
+	limit, offset int,
+) ([]*models.DatabaseInstance, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -81,7 +85,7 @@ func (m *mockDatabaseInstanceRepository) Delete(ctx context.Context, id uuid.UUI
 	return repository.ErrNotFound
 }
 
-func (m *mockDatabaseInstanceRepository) Count(ctx context.Context) (int64, error) {
+func (m *mockDatabaseInstanceRepository) Count(ctx context.Context, _ repository.DatabaseInstanceFilters) (int64, error) {
 	return int64(len(m.instances)), nil
 }
 
@@ -125,10 +129,17 @@ func (m *mockDatabaseRepositoryForInstance) GetByID(ctx context.Context, id uuid
 	return nil, nil
 }
 
-func (m *mockDatabaseRepositoryForInstance) List(ctx context.Context, limit, offset int) ([]*models.Database, error) {
+func (m *mockDatabaseRepositoryForInstance) List(
+	ctx context.Context,
+	filters repository.DatabaseFilters,
+	limit, offset int,
+) ([]*models.Database, error) {
 	return nil, nil
 }
-func (m *mockDatabaseRepositoryForInstance) Count(ctx context.Context) (int, error) { return 0, nil }
+
+func (m *mockDatabaseRepositoryForInstance) Count(ctx context.Context, filters repository.DatabaseFilters) (int, error) {
+	return 0, nil
+}
 
 func (m *mockDatabaseRepositoryForInstance) CountByProject(ctx context.Context, projectID uuid.UUID) (int, error) {
 	return 0, nil
@@ -208,23 +219,35 @@ func (m *mockProjectRepositoryForInstance) GetByID(ctx context.Context, id uuid.
 	return nil, nil
 }
 
-func (m *mockProjectRepositoryForInstance) List(ctx context.Context, limit, offset int) ([]*models.Project, error) {
+func (m *mockProjectRepositoryForInstance) List(
+	ctx context.Context,
+	_ repository.ProjectFilters,
+	limit, offset int,
+) ([]*models.Project, error) {
 	return nil, nil
 }
 
 func (m *mockProjectRepositoryForInstance) ListByUserID(
 	ctx context.Context,
 	userID uuid.UUID,
+	_ repository.ProjectFilters,
 	limit, offset int,
 ) ([]*models.Project, error) {
 	return nil, nil
 }
 
-func (m *mockProjectRepositoryForInstance) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+func (m *mockProjectRepositoryForInstance) CountByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+	_ repository.ProjectFilters,
+) (int64, error) {
 	return 0, nil
 }
 
-func (m *mockProjectRepositoryForInstance) Count(ctx context.Context) (int64, error) { return 0, nil }
+func (m *mockProjectRepositoryForInstance) Count(ctx context.Context, _ repository.ProjectFilters) (int64, error) {
+	return 0, nil
+}
+
 func (m *mockProjectRepositoryForInstance) Update(ctx context.Context, project *models.Project) error {
 	return nil
 }
@@ -251,11 +274,15 @@ func (m *mockEnvironmentRepositoryForInstance) GetByID(ctx context.Context, id u
 	return nil, nil
 }
 
-func (m *mockEnvironmentRepositoryForInstance) List(ctx context.Context, limit, offset int) ([]*models.Environment, error) {
+func (m *mockEnvironmentRepositoryForInstance) List(
+	ctx context.Context,
+	_ repository.EnvironmentFilters,
+	limit, offset int,
+) ([]*models.Environment, error) {
 	return nil, nil
 }
 
-func (m *mockEnvironmentRepositoryForInstance) Count(ctx context.Context) (int64, error) {
+func (m *mockEnvironmentRepositoryForInstance) Count(ctx context.Context, _ repository.EnvironmentFilters) (int64, error) {
 	return 0, nil
 }
 

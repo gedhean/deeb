@@ -31,7 +31,9 @@ services:
       dockerfile: docker/Dockerfile.dev
     container_name: deeb-backend-dev
     env_file:
-      - ../.env
+      # Optional: all required env is set inline below; load ../.env only if it exists.
+      - path: ../.env
+        required: false
     environment:
       DATABASE_URL: postgresql://deeb:deeb_dev_password@postgres:5432/deeb?sslmode=disable
       SERVER_PORT: 8080
@@ -48,8 +50,9 @@ services:
     volumes:
       # Mount source code for live reload
       - ..:/app
-      # Exclude vendor and tmp directories
-      - /app/vendor
+      # Keep the build output dir container-local. (Air builds with -mod=mod, so
+      # no vendor volume is needed — and an /app/vendor volume surfaces an empty
+      # backend/vendor/ on the host that breaks host `go`/IDE builds.)
       - /app/tmp
     depends_on:
       postgres:

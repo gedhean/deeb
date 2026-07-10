@@ -18,6 +18,7 @@ type AuditLogListFilters struct {
 	ResourceID   uuid.UUID  // Filter by resource ID (Nil for all)
 	StartDate    *time.Time // Filter by start date (Nil for all)
 	EndDate      *time.Time // Filter by end date (Nil for all)
+	Search       string     // Case-insensitive search over action and resource type (empty for all)
 }
 
 // AuditLogRepository defines the interface for audit log data operations

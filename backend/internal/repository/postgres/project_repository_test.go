@@ -248,7 +248,7 @@ func TestProjectRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
-		projects, err := repo.List(ctx, 10, 0)
+		projects, err := repo.List(ctx, repository.ProjectFilters{}, 10, 0)
 		require.NoError(t, err)
 		require.Len(t, projects, 2)
 		assert.Equal(t, projectID1, projects[0].ID)
@@ -266,7 +266,7 @@ func TestProjectRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
-		projects, err := repo.List(ctx, 10, 0)
+		projects, err := repo.List(ctx, repository.ProjectFilters{}, 10, 0)
 		require.NoError(t, err)
 		assert.NotNil(t, projects)
 		assert.Len(t, projects, 0)
@@ -286,7 +286,7 @@ func TestProjectRepository_List(t *testing.T) {
 			WithArgs(5, 10).
 			WillReturnRows(rows)
 
-		projects, err := repo.List(ctx, 5, 10)
+		projects, err := repo.List(ctx, repository.ProjectFilters{}, 5, 10)
 		require.NoError(t, err)
 		assert.Len(t, projects, 1)
 
@@ -298,7 +298,7 @@ func TestProjectRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnError(errors.New("database connection error"))
 
-		projects, err := repo.List(ctx, 10, 0)
+		projects, err := repo.List(ctx, repository.ProjectFilters{}, 10, 0)
 		require.Error(t, err)
 		assert.Nil(t, projects)
 		assert.Contains(t, err.Error(), "database connection error")
@@ -495,7 +495,7 @@ func TestProjectRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM projects").
 			WillReturnRows(rows)
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.ProjectFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(5), count)
 
@@ -509,7 +509,7 @@ func TestProjectRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM projects").
 			WillReturnRows(rows)
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.ProjectFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), count)
 
@@ -523,7 +523,7 @@ func TestProjectRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM projects").
 			WillReturnRows(rows)
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.ProjectFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(1000), count)
 
@@ -534,7 +534,7 @@ func TestProjectRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM projects").
 			WillReturnError(errors.New("database connection error"))
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.ProjectFilters{})
 		require.Error(t, err)
 		assert.Equal(t, int64(0), count)
 		assert.Contains(t, err.Error(), "database connection error")

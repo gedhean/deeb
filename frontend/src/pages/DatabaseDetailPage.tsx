@@ -544,7 +544,7 @@ export const DatabaseDetailPage: React.FC = () => {
                         setChangelogPageSize(newSize);
                         setChangelogPageIndex(0);
                       },
-                      pageSizeOptions: [10, 20, 30, 50],
+                      pageSizeOptions: [10, 20, 50, 100],
                     }}
                   />
                 )}

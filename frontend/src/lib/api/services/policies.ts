@@ -13,20 +13,14 @@ export const policiesService = {
    * Requires Organization Admin role
    * @param type Optional filter by type (e.g., 'SQL_REVIEW')
    */
-  async listPolicies(params?: {
-    limit?: number;
-    offset?: number;
-    type?: 'SQL_REVIEW';
-  }): Promise<ListResponse<Policy>> {
+  async listPolicies(
+    params?: Record<string, string | number | undefined>,
+  ): Promise<ListResponse<Policy>> {
     const queryParams = new URLSearchParams();
-    if (params?.limit) {
-      queryParams.append('limit', params.limit.toString());
-    }
-    if (params?.offset) {
-      queryParams.append('offset', params.offset.toString());
-    }
-    if (params?.type) {
-      queryParams.append('type', params.type);
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, String(value));
+      }
     }
 
     const queryString = queryParams.toString();
@@ -34,14 +28,14 @@ export const policiesService = {
 
     const response = await apiClient.get<{
       policies: Policy[];
-      count: number;
+      total: number;
       limit: number;
       offset: number;
     }>(url);
 
     return {
       items: response.policies,
-      total: response.count,
+      total: response.total,
       page: Math.floor((response.offset || 0) / (response.limit || 100)) + 1,
       page_size: response.limit || 100,
     };

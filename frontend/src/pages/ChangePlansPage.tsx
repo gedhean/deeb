@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
@@ -6,6 +6,14 @@ import { useUsers } from '@/hooks/api/useUsersSWR';
 import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
 import { useDatabases } from '@/hooks/api/useDatabases';
 import { useChangePlansSWR } from '@/hooks/api/useChangePlansSWR';
+import { projectsService } from '@/lib/api/services/projects';
+import { databasesService } from '@/lib/api/services/databases';
+import { usersService } from '@/lib/api/services/users';
+import { REFERENCE_LIST_LIMIT } from '@/lib/api/pagination';
+import {
+  useServerTableFilters,
+  type ServerTableFilterMapping,
+} from '@/hooks/useServerTableFilters';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, DataTableToolbar, DataTableViewOptions } from '@/components/data-table';
@@ -27,32 +35,154 @@ import { OrganizationPermission } from '@/lib/rbac';
 import { useCurrentProject } from '@/store';
 import { useAuth } from '@/contexts/AuthContext';
 
+const CHANGE_PLANS_FILTER_MAPPING: ServerTableFilterMapping = {
+  searchColumnIds: ['title'],
+  equals: {
+    status: 'status',
+    project: 'project_id',
+    database: 'database_id',
+    author: 'author_id',
+    change_type: 'change_type',
+  },
+  dateRanges: { created_at: ['created_after', 'created_before'] },
+};
+
+// Filter definitions are static: the reference-backed filters (project /
+// database / author) search the server as you type instead of preloading a full
+// option list, so they scale to any number of entities.
+const CHANGE_PLANS_FILTER_DEFINITIONS: FilterDefinition[] = [
+  {
+    id: 'title',
+    type: 'search',
+    title: 'Title',
+    placeholder: 'Search titles...',
+    defaultActive: true,
+  },
+  {
+    id: 'status',
+    type: 'faceted',
+    title: 'Status',
+    options: [
+      { label: 'Draft', value: 'Draft', icon: FilePlus },
+      { label: 'Open', value: 'Open', icon: FileEdit },
+      { label: 'Approved', value: 'Approved', icon: CheckCircle2 },
+      { label: 'In Progress', value: 'InProgress', icon: Loader },
+      { label: 'Completed', value: 'Completed', icon: CheckCircle2 },
+      { label: 'Failed', value: 'Failed', icon: XCircle },
+      { label: 'Cancelled', value: 'Cancelled', icon: Ban },
+      { label: 'Closed', value: 'Closed', icon: Archive },
+    ],
+    defaultActive: true,
+  },
+  {
+    id: 'project',
+    type: 'async',
+    title: 'Project',
+    placeholder: 'Search projects...',
+    defaultActive: true,
+    loadOptions: (search) =>
+      projectsService
+        .listProjects({ search, limit: 20 })
+        .then((r) => r.items.map((p) => ({ label: p.name, value: p.id }))),
+    resolveLabel: (id) =>
+      projectsService
+        .getProject(id)
+        .then((p) => p.name)
+        .catch(() => undefined),
+  },
+  {
+    id: 'database',
+    type: 'async',
+    title: 'Database',
+    placeholder: 'Search databases...',
+    loadOptions: (search) =>
+      databasesService
+        .listDatabases({ search, limit: 20 })
+        .then((r) => r.items.map((d) => ({ label: d.database_name, value: d.id }))),
+    resolveLabel: (id) =>
+      databasesService
+        .getDatabase(id)
+        .then((d) => d.database_name)
+        .catch(() => undefined),
+  },
+  {
+    id: 'author',
+    type: 'async',
+    title: 'Author',
+    placeholder: 'Search authors...',
+    defaultActive: true,
+    loadOptions: (search) =>
+      usersService
+        .listUsers({ search, limit: 20 })
+        .then((r) => r.items.map((u) => ({ label: u.display_name || u.email, value: u.id }))),
+    resolveLabel: (id) =>
+      usersService
+        .getUser(id)
+        .then((u) => u.display_name || u.email)
+        .catch(() => undefined),
+  },
+  {
+    id: 'change_type',
+    type: 'select',
+    title: 'Change Type',
+    options: [
+      { label: 'DDL', value: 'DDL' },
+      { label: 'DML', value: 'DML' },
+    ],
+  },
+  {
+    id: 'created_at',
+    type: 'dateRange',
+    title: 'Created',
+    presets: [
+      { label: 'Last 7 days', getValue: () => [subDays(new Date(), 7), new Date()] },
+      { label: 'Last 30 days', getValue: () => [subDays(new Date(), 30), new Date()] },
+      { label: 'Last 90 days', getValue: () => [subDays(new Date(), 90), new Date()] },
+    ],
+  },
+];
+
 export const ChangePlansPage: React.FC = () => {
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const { user: currentUser } = useAuth();
 
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(20);
+  // Reference lists feed the toolbar filter options (author/project/database) and
+  // resolve names, so fetch the full set rather than the default page of 100.
+  const { users } = useUsers({ limit: REFERENCE_LIST_LIMIT });
+  const { projects } = useProjectsSWR({ limit: REFERENCE_LIST_LIMIT });
+  const { databases } = useDatabases({ limit: REFERENCE_LIST_LIMIT });
 
-  // Use cached data from store instead of fetching
-  const { users } = useUsers();
-  const { projects } = useProjectsSWR();
+  // Default filters: status "Open", current project, current user author. Async
+  // filters (project/author) take a STRING value now, not an array.
+  const defaultColumnFilters = useMemo(() => {
+    const filters: { id: string; value: unknown }[] = [{ id: 'status', value: ['Open'] }];
+    if (currentProject?.id) {
+      filters.push({ id: 'project', value: currentProject.id });
+    }
+    if (currentUser?.id) {
+      filters.push({ id: 'author', value: currentUser.id });
+    }
+    return filters;
+  }, [currentProject, currentUser]);
 
-  // Fetch all databases for filtering
-  const { databases } = useDatabases({});
+  // Server-side pagination + filtering (state persisted in the URL).
+  const {
+    params,
+    pageIndex,
+    pageSize,
+    setPageIndex,
+    setPageSize,
+    onFiltersChange,
+    initialColumnFilters,
+  } = useServerTableFilters({
+    mapping: CHANGE_PLANS_FILTER_MAPPING,
+    filterDefinitions: CHANGE_PLANS_FILTER_DEFINITIONS,
+    initialPageSize: 50,
+    initialColumnFilters: defaultColumnFilters,
+  });
 
-  // Use SWR hook for change plans with pagination
-  const changePlansParams = useMemo(
-    () => ({
-      limit: pageSize,
-      offset: pageIndex * pageSize,
-    }),
-    [pageIndex, pageSize],
-  );
-
-  const { changePlans, total, isLoading, error: swrError } = useChangePlansSWR(changePlansParams);
+  const { changePlans, total, isLoading, error: swrError } = useChangePlansSWR(params);
   const error = swrError || '';
 
   // Helper functions to get names
@@ -81,34 +211,6 @@ export const ChangePlansPage: React.FC = () => {
     [users],
   );
 
-  // Prepare filter options for project, database, and author
-  const projectOptions = useMemo(
-    () =>
-      projects.map((project) => ({
-        label: project.name,
-        value: project.id,
-      })),
-    [projects],
-  );
-
-  const databaseOptions = useMemo(
-    () =>
-      databases.map((database) => ({
-        label: database.database_name,
-        value: database.id,
-      })),
-    [databases],
-  );
-
-  const authorOptions = useMemo(
-    () =>
-      users.map((user) => ({
-        label: user.email,
-        value: user.id,
-      })),
-    [users],
-  );
-
   // Get columns for change plans table with memoization to avoid unnecessary re-renders
   const changePlansColumns = useMemo(
     () =>
@@ -119,104 +221,6 @@ export const ChangePlansPage: React.FC = () => {
         getAuthorName,
       }),
     [navigate, getProjectName, getDatabaseName, getAuthorName],
-  );
-
-  // Calculate initial column filters
-  const initialColumnFilters = useMemo(() => {
-    const filters: { id: string; value: unknown }[] = [];
-
-    // Set default status to "Open"
-    filters.push({ id: 'status', value: ['Open'] });
-
-    // Set default project if currentProject exists
-    if (currentProject?.id) {
-      filters.push({ id: 'project', value: [currentProject.id] });
-    }
-
-    // Set default author if currentUser exists
-    if (currentUser?.id) {
-      filters.push({ id: 'author', value: [currentUser.id] });
-    }
-
-    return filters;
-  }, [currentProject, currentUser]);
-
-  // Define filter definitions for the toolbar
-  const filterDefinitions: FilterDefinition[] = useMemo(
-    () => [
-      {
-        id: 'title',
-        type: 'search',
-        title: 'Title',
-        placeholder: 'Search titles...',
-        defaultActive: true,
-      },
-      {
-        id: 'status',
-        type: 'faceted',
-        title: 'Status',
-        options: [
-          { label: 'Draft', value: 'Draft', icon: FilePlus },
-          { label: 'Open', value: 'Open', icon: FileEdit },
-          { label: 'Approved', value: 'Approved', icon: CheckCircle2 },
-          { label: 'In Progress', value: 'InProgress', icon: Loader },
-          { label: 'Completed', value: 'Completed', icon: CheckCircle2 },
-          { label: 'Failed', value: 'Failed', icon: XCircle },
-          { label: 'Cancelled', value: 'Cancelled', icon: Ban },
-          { label: 'Closed', value: 'Closed', icon: Archive },
-        ],
-        defaultActive: true,
-      },
-      {
-        id: 'project',
-        type: 'faceted',
-        title: 'Project',
-        options: projectOptions,
-        defaultActive: true,
-      },
-      {
-        id: 'database',
-        type: 'faceted',
-        title: 'Database',
-        options: databaseOptions,
-      },
-      {
-        id: 'author',
-        type: 'faceted',
-        title: 'Author',
-        options: authorOptions,
-        defaultActive: true,
-      },
-      {
-        id: 'change_type',
-        type: 'select',
-        title: 'Change Type',
-        options: [
-          { label: 'DDL', value: 'DDL' },
-          { label: 'DML', value: 'DML' },
-        ],
-      },
-      {
-        id: 'created_at',
-        type: 'dateRange',
-        title: 'Created',
-        presets: [
-          {
-            label: 'Last 7 days',
-            getValue: () => [subDays(new Date(), 7), new Date()],
-          },
-          {
-            label: 'Last 30 days',
-            getValue: () => [subDays(new Date(), 30), new Date()],
-          },
-          {
-            label: 'Last 90 days',
-            getValue: () => [subDays(new Date(), 90), new Date()],
-          },
-        ],
-      },
-    ],
-    [projectOptions, databaseOptions, authorOptions],
   );
 
   return (
@@ -274,16 +278,15 @@ export const ChangePlansPage: React.FC = () => {
                 pageSize,
                 totalCount: total,
                 onPageChange: setPageIndex,
-                onPageSizeChange: (newSize) => {
-                  setPageSize(newSize);
-                  setPageIndex(0);
-                },
-                pageSizeOptions: [10, 20, 30, 50],
+                onPageSizeChange: setPageSize,
+                pageSizeOptions: [10, 20, 50, 100],
+                manualFiltering: true,
               }}
               onRowClick={(changePlan) => navigate(`/change-plans/${changePlan.id}`)}
+              onFiltersChange={onFiltersChange}
             >
               {(table) => (
-                <DataTableToolbar table={table} filters={filterDefinitions}>
+                <DataTableToolbar table={table} filters={CHANGE_PLANS_FILTER_DEFINITIONS}>
                   <DataTableViewOptions table={table} />
                 </DataTableToolbar>
               )}

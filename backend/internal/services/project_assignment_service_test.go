@@ -41,7 +41,7 @@ func TestAssignUserToExistingProjects_HappyPath(t *testing.T) {
 	mockProjectMemberRepo := new(MockProjectMemberRepository)
 
 	mockUserRepo.On("GetByEmail", ctx, "system@deeb1.dev").Return(systemUser, nil)
-	mockProjectRepo.On("List", ctx, mock.Anything, 0).Return(projects, nil)
+	mockProjectRepo.On("List", ctx, mock.Anything, mock.Anything, 0).Return(projects, nil)
 	mockProjectMemberRepo.On("AddMembersBatch", ctx, mock.MatchedBy(func(members []*models.ProjectMember) bool {
 		return len(members) == 3
 	})).Return(nil)
@@ -79,7 +79,7 @@ func TestAssignUserToExistingProjects_NoProjects(t *testing.T) {
 	mockProjectMemberRepo := new(MockProjectMemberRepository)
 
 	mockUserRepo.On("GetByEmail", ctx, "system@deeb1.dev").Return(systemUser, nil)
-	mockProjectRepo.On("List", ctx, mock.Anything, 0).Return([]*models.Project{}, nil)
+	mockProjectRepo.On("List", ctx, mock.Anything, mock.Anything, 0).Return([]*models.Project{}, nil)
 
 	service := NewProjectAssignmentService(mockProjectRepo, mockProjectMemberRepo, mockUserRepo, true, logger)
 
@@ -143,7 +143,7 @@ func TestAssignUserToExistingProjects_UniqueConstraintViolation(t *testing.T) {
 	mockProjectMemberRepo := new(MockProjectMemberRepository)
 
 	mockUserRepo.On("GetByEmail", ctx, "system@deeb1.dev").Return(systemUser, nil)
-	mockProjectRepo.On("List", ctx, mock.Anything, 0).Return(projects, nil)
+	mockProjectRepo.On("List", ctx, mock.Anything, mock.Anything, 0).Return(projects, nil)
 
 	// Batch call returns unique constraint violation (transaction will rollback)
 	uniqueErr := &pq.Error{Code: "23505", Constraint: "unique_project_user"}
@@ -190,7 +190,7 @@ func TestAssignUserToExistingProjects_PartialFailure(t *testing.T) {
 	mockProjectMemberRepo := new(MockProjectMemberRepository)
 
 	mockUserRepo.On("GetByEmail", ctx, "system@deeb1.dev").Return(systemUser, nil)
-	mockProjectRepo.On("List", ctx, mock.Anything, 0).Return(projects, nil)
+	mockProjectRepo.On("List", ctx, mock.Anything, mock.Anything, 0).Return(projects, nil)
 
 	// Batch call fails with generic error (transaction will rollback, all or nothing)
 	mockProjectMemberRepo.On("AddMembersBatch", ctx, mock.AnythingOfType("[]*models.ProjectMember")).Return(assert.AnError)

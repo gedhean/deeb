@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -53,7 +54,8 @@ func (r *DatabaseInstanceRepository) Create(ctx context.Context, instance *model
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.ExecContext(
+		ctx, query,
 		instance.ID,
 		instance.Name,
 		instance.Description,
@@ -102,19 +104,52 @@ func (r *DatabaseInstanceRepository) GetByID(ctx context.Context, id uuid.UUID) 
 	return &instance, nil
 }
 
-// List retrieves all database instances with pagination
-func (r *DatabaseInstanceRepository) List(ctx context.Context, limit, offset int) ([]*models.DatabaseInstance, error) {
+// databaseInstanceFilterConditions translates DatabaseInstanceFilters into a
+// reusable set of SQL conditions shared by List and Count.
+func databaseInstanceFilterConditions(filters repository.DatabaseInstanceFilters) *conditions {
+	c := &conditions{}
+	if len(filters.EnvironmentIDs) > 0 {
+		ids := make([]interface{}, len(filters.EnvironmentIDs))
+		for i, id := range filters.EnvironmentIDs {
+			ids[i] = id
+		}
+		c.in("environment_id", ids)
+	}
+	// Engine and status are multi-select: comma-separated -> IN (...).
+	c.inCSV("database_engine", filters.DatabaseEngine)
+	c.inCSV("status", filters.Status)
+	if filters.CreatedAfter != nil {
+		c.gte("created_at", *filters.CreatedAfter)
+	}
+	if filters.CreatedBefore != nil {
+		c.lte("created_at", *filters.CreatedBefore)
+	}
+	c.search(filters.Search, "name", "host")
+	return c
+}
+
+// List retrieves all database instances with pagination, applying the given filters.
+func (r *DatabaseInstanceRepository) List(
+	ctx context.Context,
+	filters repository.DatabaseInstanceFilters,
+	limit, offset int,
+) ([]*models.DatabaseInstance, error) {
+	c := databaseInstanceFilterConditions(filters)
+	where, args := c.clause()
+
 	query := `
 		SELECT id, name, description, database_engine, host, port, username,
 		       connection_details_encrypted, use_rds_iam_auth, require_ssl,
 		       status, environment_id, created_by_id, created_at, updated_at
-		FROM database_instances
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`
+		FROM database_instances`
+	if where != "" {
+		query += " WHERE " + where
+	}
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
 
 	var instances []*models.DatabaseInstance
-	err := r.db.SelectContext(ctx, &instances, query, limit, offset)
+	err := r.db.SelectContext(ctx, &instances, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +162,7 @@ func (r *DatabaseInstanceRepository) List(ctx context.Context, limit, offset int
 	return instances, nil
 }
 
-// ListByEnvironment retrieves database instances filtered by environment ID with pagination
+// ListByEnvironment retrieves database instances filtered by environment ID with pagination.
 func (r *DatabaseInstanceRepository) ListByEnvironment(
 	ctx context.Context,
 	environmentID uuid.UUID,
@@ -157,12 +192,14 @@ func (r *DatabaseInstanceRepository) ListByEnvironment(
 	return instances, nil
 }
 
-// Count returns the total number of database instances
-func (r *DatabaseInstanceRepository) Count(ctx context.Context) (int64, error) {
-	query := `SELECT COUNT(*) FROM database_instances`
+// Count returns the number of database instances matching the given filters.
+func (r *DatabaseInstanceRepository) Count(ctx context.Context, filters repository.DatabaseInstanceFilters) (int64, error) {
+	c := databaseInstanceFilterConditions(filters)
+	query := "SELECT COUNT(*) FROM database_instances" + c.whereClause()
+	_, args := c.clause()
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -170,9 +207,9 @@ func (r *DatabaseInstanceRepository) Count(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
-// CountByEnvironment returns the total number of database instances for a specific environment
+// CountByEnvironment returns the number of database instances for a specific environment.
 func (r *DatabaseInstanceRepository) CountByEnvironment(ctx context.Context, environmentID uuid.UUID) (int64, error) {
-	query := `SELECT COUNT(*) FROM database_instances WHERE environment_id = $1`
+	query := "SELECT COUNT(*) FROM database_instances WHERE environment_id = $1"
 
 	var count int64
 	err := r.db.QueryRowContext(ctx, query, environmentID).Scan(&count)
@@ -204,7 +241,8 @@ func (r *DatabaseInstanceRepository) Update(ctx context.Context, instance *model
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := r.db.ExecContext(
+		ctx, query,
 		instance.ID,
 		instance.Name,
 		instance.Description,

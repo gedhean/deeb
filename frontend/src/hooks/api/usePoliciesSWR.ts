@@ -13,7 +13,10 @@ interface UsePoliciesOptions {
   enabled?: boolean;
   limit?: number;
   offset?: number;
-  type?: 'SQL_REVIEW';
+  type?: string;
+  search?: string;
+  created_after?: string;
+  created_before?: string;
 }
 
 interface UsePoliciesResult {
@@ -32,11 +35,9 @@ interface ListPoliciesResponse {
 /**
  * SWR fetcher function for policies list
  */
-const fetchPolicies = async (params: {
-  limit?: number;
-  offset?: number;
-  type?: 'SQL_REVIEW';
-}): Promise<ListPoliciesResponse> => {
+const fetchPolicies = async (
+  params: Record<string, string | number | undefined>,
+): Promise<ListPoliciesResponse> => {
   return await policiesService.listPolicies(params);
 };
 
@@ -45,12 +46,12 @@ const fetchPolicies = async (params: {
  * Uses SWR for automatic request deduplication and caching
  */
 export function usePolicies(options: UsePoliciesOptions = {}): UsePoliciesResult {
-  const { enabled = true, limit, offset, type } = options;
+  const { enabled = true, limit, offset, type, search, created_after, created_before } = options;
 
   // Create a stable cache key from params
   const cacheKey = useMemo(() => {
     if (!enabled) return null;
-    const params = { limit, offset, type };
+    const params = { limit, offset, type, search, created_after, created_before };
     // Sort keys to ensure consistent cache key
     const sortedParams = Object.keys(params)
       .sort()
@@ -65,7 +66,7 @@ export function usePolicies(options: UsePoliciesOptions = {}): UsePoliciesResult
         {} as Record<string, unknown>,
       );
     return `/api/policies?${JSON.stringify(sortedParams)}`;
-  }, [enabled, limit, offset, type]);
+  }, [enabled, limit, offset, type, search, created_after, created_before]);
 
   const {
     data,
@@ -74,7 +75,9 @@ export function usePolicies(options: UsePoliciesOptions = {}): UsePoliciesResult
     mutate,
   } = useSWR<ListPoliciesResponse>(
     cacheKey,
-    cacheKey ? () => fetchPolicies({ limit, offset, type }) : null,
+    cacheKey
+      ? () => fetchPolicies({ limit, offset, type, search, created_after, created_before })
+      : null,
     {
       revalidateIfStale: true,
       keepPreviousData: true,

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,6 +15,12 @@ import {
   useDeleteEnvironmentSWR,
 } from '@/hooks/api/useEnvironmentsSWR';
 import { usePolicies } from '@/hooks/api/usePoliciesSWR';
+import { policiesService } from '@/lib/api/services/policies';
+import { REFERENCE_LIST_LIMIT } from '@/lib/api/pagination';
+import {
+  useServerTableFilters,
+  type ServerTableFilterMapping,
+} from '@/hooks/useServerTableFilters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -40,6 +46,58 @@ import { DataTable, DataTableToolbar } from '@/components/data-table';
 import type { FilterDefinition } from '@/components/data-table/types';
 import { getEnvironmentsColumns } from './environments/columns';
 import { Plus, AlertTriangle, Globe } from 'lucide-react';
+
+const ENVIRONMENTS_FILTER_MAPPING: ServerTableFilterMapping = {
+  searchColumnIds: ['name'],
+  equals: { policy: 'policy_id', allow_self_approval: 'allow_self_approval' },
+  dateRanges: { created_at: ['created_after', 'created_before'] },
+};
+
+// Filter definitions are static: the reference-backed filter (policy) searches
+// the server as you type instead of preloading a full option list.
+const ENVIRONMENTS_FILTER_DEFINITIONS: FilterDefinition[] = [
+  {
+    id: 'name',
+    type: 'search',
+    title: 'Name',
+    placeholder: 'Search names...',
+    defaultActive: true,
+  },
+  {
+    id: 'policy',
+    type: 'async',
+    title: 'Policy',
+    placeholder: 'Search policies...',
+    loadOptions: (search) =>
+      policiesService
+        .listPolicies({ search, type: 'SQL_REVIEW', limit: 20 })
+        .then((r) => r.items.map((p) => ({ label: p.name, value: p.id }))),
+    resolveLabel: (id) =>
+      policiesService
+        .getPolicy(id)
+        .then((p) => p.name)
+        .catch(() => undefined),
+  },
+  {
+    id: 'allow_self_approval',
+    type: 'faceted',
+    title: 'Self Approval',
+    options: [
+      { label: 'Enabled', value: 'true' },
+      { label: 'Disabled', value: 'false' },
+    ],
+  },
+  {
+    id: 'created_at',
+    type: 'dateRange',
+    title: 'Created',
+    presets: [
+      { label: 'Last 7 days', getValue: () => [subDays(new Date(), 7), new Date()] },
+      { label: 'Last 30 days', getValue: () => [subDays(new Date(), 30), new Date()] },
+      { label: 'Last 90 days', getValue: () => [subDays(new Date(), 90), new Date()] },
+    ],
+  },
+];
 
 export const EnvironmentsPage: React.FC = () => {
   const { user } = useAuth();
@@ -79,24 +137,26 @@ export const EnvironmentsPage: React.FC = () => {
     OrganizationPermission.EnvironmentsDelete,
   );
 
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-
-  // Create pagination params with useMemo
-  const paginationParams = useMemo(
-    () => ({
-      limit: pageSize,
-      offset: pageIndex * pageSize,
-    }),
-    [pageIndex, pageSize],
-  );
+  // Server-side pagination + filtering (state persisted in the URL).
+  const {
+    params,
+    pageIndex,
+    pageSize,
+    setPageIndex,
+    setPageSize,
+    onFiltersChange,
+    initialColumnFilters,
+  } = useServerTableFilters({
+    mapping: ENVIRONMENTS_FILTER_MAPPING,
+    filterDefinitions: ENVIRONMENTS_FILTER_DEFINITIONS,
+    initialPageSize: 50,
+  });
 
   // Use SWR hooks for data fetching
-  const { environments, total, isLoading, error } = useEnvironmentsSWR(paginationParams);
+  const { environments, total, isLoading, error } = useEnvironmentsSWR(params);
   const { policies, isLoading: isLoadingPolicies } = usePolicies({
     type: 'SQL_REVIEW',
-    limit: 100,
+    limit: REFERENCE_LIST_LIMIT,
     enabled: canRead,
   });
 
@@ -230,64 +290,6 @@ export const EnvironmentsPage: React.FC = () => {
     getPolicyName,
   });
 
-  // Create policy filter options
-  const policyOptions = useMemo(
-    () =>
-      policies.map((policy) => ({
-        label: policy.name,
-        value: policy.id,
-      })),
-    [policies],
-  );
-
-  // Create filter definitions
-  const filterDefinitions: FilterDefinition[] = useMemo(
-    () => [
-      {
-        id: 'name',
-        type: 'search',
-        title: 'Name',
-        placeholder: 'Search names...',
-        defaultActive: true,
-      },
-      {
-        id: 'policy',
-        type: 'faceted',
-        title: 'Policy',
-        options: policyOptions,
-      },
-      {
-        id: 'allow_self_approval',
-        type: 'faceted',
-        title: 'Self Approval',
-        options: [
-          { label: 'Enabled', value: 'true' },
-          { label: 'Disabled', value: 'false' },
-        ],
-      },
-      {
-        id: 'created_at',
-        type: 'dateRange',
-        title: 'Created',
-        presets: [
-          {
-            label: 'Last 7 days',
-            getValue: () => [subDays(new Date(), 7), new Date()],
-          },
-          {
-            label: 'Last 30 days',
-            getValue: () => [subDays(new Date(), 30), new Date()],
-          },
-          {
-            label: 'Last 90 days',
-            getValue: () => [subDays(new Date(), 90), new Date()],
-          },
-        ],
-      },
-    ],
-    [policyOptions],
-  );
-
   // Render access denied if user doesn't have read permission
   if (!canRead) {
     return (
@@ -370,20 +372,22 @@ export const EnvironmentsPage: React.FC = () => {
                 columns={columns}
                 data={environments}
                 isLoading={isLoading}
+                initialColumnFilters={initialColumnFilters}
                 emptyMessage="No environments found."
                 pagination={{
                   pageIndex,
                   pageSize,
                   totalCount: total,
                   onPageChange: setPageIndex,
-                  onPageSizeChange: (newSize) => {
-                    setPageSize(newSize);
-                    setPageIndex(0);
-                  },
-                  pageSizeOptions: [10, 20, 30, 50],
+                  onPageSizeChange: setPageSize,
+                  pageSizeOptions: [10, 20, 50, 100],
+                  manualFiltering: true,
                 }}
+                onFiltersChange={onFiltersChange}
               >
-                {(table) => <DataTableToolbar table={table} filters={filterDefinitions} />}
+                {(table) => (
+                  <DataTableToolbar table={table} filters={ENVIRONMENTS_FILTER_DEFINITIONS} />
+                )}
               </DataTable>
             </CardContent>
           </Card>

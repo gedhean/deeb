@@ -203,7 +203,7 @@ func TestSetDefaults(t *testing.T) {
 	// Security defaults
 	assert.Equal(t, 12, cfg.Security.BcryptCost)
 	assert.True(t, cfg.Security.RateLimitEnabled)
-	assert.Equal(t, 100, cfg.Security.RateLimitRequests)
+	assert.Equal(t, 1000, cfg.Security.RateLimitRequests)
 	assert.Equal(t, 1*time.Minute, cfg.Security.RateLimitWindow)
 
 	// Logging defaults

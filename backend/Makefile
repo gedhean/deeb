@@ -20,6 +20,7 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  run-air          - Start development server with Air (live reload)"
+	@echo "  seed             - Load sample data into the dev database (seeds/seed_dev.sql)"
 	@echo "  docker-stop-dev  - Stop development docker containers"
 	@echo "  docker-down-dev  - Stop and remove development docker containers"
 	@echo ""

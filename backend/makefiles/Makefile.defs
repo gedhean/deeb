@@ -7,6 +7,13 @@ GHUSER := NSXBet
 PROJECT_NAME := deeb
 TARGET_BIN_DIR := target/${GOOS}/bin
 
+# Build in module mode (never vendor). vendor/ is gitignored and unused; CI uses
+# `go mod download` + module mode and the dev container uses `-mod=mod` (.air.toml).
+# This keeps `make test/lint/build` working even if a stale local vendor/ exists.
+# Two-line form (assign then export) for GNU Make 3.81 compatibility.
+GOFLAGS := -mod=mod
+export GOFLAGS
+
 # Golang source and packages
 # To ignore some files from formatting, try:
 # GOLANG_SOURCES := $(shell find . -type f -name '*.go' | grep -v /vendor/)
@@ -15,7 +22,7 @@ GOLANG_SOURCES := $(shell find . -type f -name '*.go' -not -path "./scripts/*" -
 
 # To ignore some packages, try:
 # GOLANG_PACKAGES := $(shell go list ./... | grep -v /vendor/ | sed...)
-GOLANG_PACKAGES := $(shell /bin/bash -c 'go list ./... | grep -v "/test" | grep -v "/gen/" | sed -e "s|${GHROOT}/${GHUSER}/${PROJECT_NAME}||g" | sed -e "s@^/@@g" | xargs -I {} echo "./{}"')
+GOLANG_PACKAGES := $(shell /bin/bash -c 'go list -mod=mod ./... | grep -v "/test" | grep -v "/gen/" | sed -e "s|${GHROOT}/${GHUSER}/${PROJECT_NAME}||g" | sed -e "s@^/@@g" | xargs -I {} echo "./{}"')
 
 # Yaml Sources
 YAML_SOURCES := $(shell find . -type f -name '*.yaml' -not -path "./vendor/*" -not -path "./tmp/*" -not -path "./kubernetes/*" -not -path "./docker/*" -not -path "./.golangci.yaml")

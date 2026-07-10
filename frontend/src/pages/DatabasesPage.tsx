@@ -4,12 +4,20 @@ import { subDays } from 'date-fns';
 import { DefaultLayout } from '@/components/layouts';
 import { useAuth } from '@/contexts/AuthContext';
 import { databasesService } from '@/lib/api/services/databases';
+import { projectsService } from '@/lib/api/services/projects';
+import { environmentsService } from '@/lib/api/services/environments';
+import { databaseInstancesService } from '@/lib/api/services/database-instances';
 import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
 import { useDatabases } from '@/hooks/api/useDatabases';
 import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
 import { useDatabaseInstancesSWR } from '@/hooks/api/useDatabaseInstancesSWR';
+import { REFERENCE_LIST_LIMIT } from '@/lib/api/pagination';
+import {
+  useServerTableFilters,
+  type ServerTableFilterMapping,
+} from '@/hooks/useServerTableFilters';
 import type { CreateDatabaseRequest, Database, UpdateDatabaseRequest } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
@@ -44,6 +52,96 @@ import { getDatabasesColumns } from './databases/columns';
 import { Plus, AlertTriangle, Database as DatabaseIcon } from 'lucide-react';
 import { useCurrentProject } from '@/store';
 
+const DATABASES_FILTER_MAPPING: ServerTableFilterMapping = {
+  searchColumnIds: ['database_name'],
+  equals: {
+    project: 'project_id',
+    environment: 'environment_id',
+    instance: 'database_instance_id',
+    status: 'status',
+  },
+  dateRanges: { created_at: ['created_after', 'created_before'] },
+};
+
+// Filter definitions are static: the reference-backed filters (project /
+// environment / instance) search the server as you type instead of preloading
+// a full option list, so they scale to any number of entities.
+const DATABASES_FILTER_DEFINITIONS: FilterDefinition[] = [
+  {
+    id: 'database_name',
+    type: 'search',
+    title: 'Database Name',
+    placeholder: 'Search database names...',
+    defaultActive: true,
+  },
+  {
+    id: 'project',
+    type: 'async',
+    title: 'Project',
+    placeholder: 'Search projects...',
+    defaultActive: true,
+    loadOptions: (search) =>
+      projectsService
+        .listProjects({ search, limit: 20 })
+        .then((r) => r.items.map((p) => ({ label: p.name, value: p.id }))),
+    resolveLabel: (id) =>
+      projectsService
+        .getProject(id)
+        .then((p) => p.name)
+        .catch(() => undefined),
+  },
+  {
+    id: 'environment',
+    type: 'async',
+    title: 'Environment',
+    placeholder: 'Search environments...',
+    loadOptions: (search) =>
+      environmentsService
+        .listEnvironments({ search, limit: 20 })
+        .then((r) => r.items.map((e) => ({ label: e.name, value: e.id }))),
+    resolveLabel: (id) =>
+      environmentsService
+        .getEnvironment(id)
+        .then((e) => e.name)
+        .catch(() => undefined),
+  },
+  {
+    id: 'instance',
+    type: 'async',
+    title: 'Instance',
+    placeholder: 'Search instances...',
+    loadOptions: (search) =>
+      databaseInstancesService
+        .listDatabaseInstances({ search, limit: 20 })
+        .then((r) => r.items.map((i) => ({ label: i.name, value: i.id }))),
+    resolveLabel: (id) =>
+      databaseInstancesService
+        .getDatabaseInstance(id)
+        .then((i) => i.name)
+        .catch(() => undefined),
+  },
+  {
+    id: 'status',
+    type: 'faceted',
+    title: 'Status',
+    options: [
+      { label: 'Active', value: 'Active', icon: DatabaseIcon },
+      { label: 'Inactive', value: 'Inactive', icon: DatabaseIcon },
+      { label: 'Pending', value: 'Pending', icon: DatabaseIcon },
+    ],
+  },
+  {
+    id: 'created_at',
+    type: 'dateRange',
+    title: 'Created',
+    presets: [
+      { label: 'Last 7 days', getValue: () => [subDays(new Date(), 7), new Date()] },
+      { label: 'Last 30 days', getValue: () => [subDays(new Date(), 30), new Date()] },
+      { label: 'Last 90 days', getValue: () => [subDays(new Date(), 90), new Date()] },
+    ],
+  },
+];
+
 export const DatabasesPage: React.FC = () => {
   const { user } = useAuth();
   const currentProject = useCurrentProject();
@@ -55,39 +153,40 @@ export const DatabasesPage: React.FC = () => {
   const [selectedDatabase, setSelectedDatabase] = useState<Database | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-
-  // Filter state for server-side filtering
-  const [projectFilter, setProjectFilter] = useState<string | undefined>(
-    currentProject?.id || undefined,
-  );
-  const [environmentFilter, setEnvironmentFilter] = useState<string | undefined>(undefined);
-  const [instanceFilter, setInstanceFilter] = useState<string | undefined>(undefined);
-
-  // Create pagination params with useMemo including filters
-  const databasesParams = useMemo(
-    () => ({
-      limit: pageSize,
-      offset: pageIndex * pageSize,
-      project_id: projectFilter,
-      environment_id: environmentFilter,
-      database_instance_id: instanceFilter,
-    }),
-    [pageIndex, pageSize, projectFilter, environmentFilter, instanceFilter],
+  // Default to the current project when one is selected (async filter => string value).
+  const defaultColumnFilters = useMemo(
+    () => (currentProject ? [{ id: 'project', value: currentProject.id }] : []),
+    [currentProject],
   );
 
-  // Use cached data from SWR hooks
-  const { projects, isLoading: projectsLoading } = useProjectsSWR();
+  // Server-side pagination + filtering (state persisted in the URL).
+  const {
+    params,
+    pageIndex,
+    pageSize,
+    setPageIndex,
+    setPageSize,
+    onFiltersChange,
+    initialColumnFilters,
+  } = useServerTableFilters({
+    mapping: DATABASES_FILTER_MAPPING,
+    filterDefinitions: DATABASES_FILTER_DEFINITIONS,
+    initialPageSize: 50,
+    initialColumnFilters: defaultColumnFilters,
+  });
+
+  // Reference lists are used to resolve related names in the table and to
+  // populate the edit-form dropdowns. Filter options are fetched server-side
+  // (async), so these are only for display/name-resolution of the current page.
+  const { projects, isLoading: projectsLoading } = useProjectsSWR({ limit: REFERENCE_LIST_LIMIT });
   const {
     databases,
     total,
     isLoading: databasesLoading,
     refetch: refetchDatabases,
-  } = useDatabases(databasesParams);
-  const { environments } = useEnvironmentsSWR();
-  const { databaseInstances } = useDatabaseInstancesSWR();
+  } = useDatabases(params);
+  const { environments } = useEnvironmentsSWR({ limit: REFERENCE_LIST_LIMIT });
+  const { databaseInstances } = useDatabaseInstancesSWR({ limit: REFERENCE_LIST_LIMIT });
 
   const isLoading = projectsLoading || databasesLoading;
 
@@ -321,34 +420,6 @@ export const DatabasesPage: React.FC = () => {
     [databaseInstances],
   );
 
-  // Prepare filter options
-  const projectOptions = useMemo(
-    () =>
-      projects.map((project) => ({
-        label: project.name,
-        value: project.id,
-      })),
-    [projects],
-  );
-
-  const environmentOptions = useMemo(
-    () =>
-      environments.map((environment) => ({
-        label: environment.name,
-        value: environment.id,
-      })),
-    [environments],
-  );
-
-  const instanceOptions = useMemo(
-    () =>
-      databaseInstances.map((instance) => ({
-        label: instance.name,
-        value: instance.id,
-      })),
-    [databaseInstances],
-  );
-
   // Get columns for databases table
   const databasesColumns = useMemo(
     () =>
@@ -374,120 +445,11 @@ export const DatabasesPage: React.FC = () => {
     ],
   );
 
-  // Calculate initial column filters based on filter state
-  const initialColumnFilters = useMemo(() => {
-    const columnFilters: { id: string; value: unknown }[] = [];
-
-    // Set project filter
-    if (projectFilter) {
-      columnFilters.push({ id: 'project', value: [projectFilter] });
-    }
-
-    // Set environment filter
-    if (environmentFilter) {
-      columnFilters.push({ id: 'environment', value: [environmentFilter] });
-    }
-
-    // Set instance filter
-    if (instanceFilter) {
-      columnFilters.push({ id: 'database_instance', value: [instanceFilter] });
-    }
-
-    return columnFilters;
-  }, [projectFilter, environmentFilter, instanceFilter]);
-
-  // Handle filter changes from DataTable
-  const handleFiltersChange = useCallback((filters: { id: string; value: unknown }[]) => {
-    // Extract filter values
-    const projectFilterObj = filters.find((f) => f.id === 'project');
-    const envFilterObj = filters.find((f) => f.id === 'environment');
-    const instFilterObj = filters.find((f) => f.id === 'database_instance');
-
-    // Update filter state (take first value from array, or undefined if filter not present or empty)
-    const projectVal = projectFilterObj?.value as string[] | undefined;
-    const envVal = envFilterObj?.value as string[] | undefined;
-    const instVal = instFilterObj?.value as string[] | undefined;
-
-    setProjectFilter(
-      projectVal && Array.isArray(projectVal) && projectVal.length > 0 ? projectVal[0] : undefined,
-    );
-    setEnvironmentFilter(
-      envVal && Array.isArray(envVal) && envVal.length > 0 ? envVal[0] : undefined,
-    );
-    setInstanceFilter(
-      instVal && Array.isArray(instVal) && instVal.length > 0 ? instVal[0] : undefined,
-    );
-
-    // Reset to first page when filters change
-    setPageIndex(0);
-  }, []);
-
-  // Define filter definitions for the toolbar
-  const filterDefinitions: FilterDefinition[] = useMemo(
-    () => [
-      {
-        id: 'database_name',
-        type: 'search',
-        title: 'Database Name',
-        placeholder: 'Search database names...',
-        defaultActive: true,
-      },
-      {
-        id: 'project',
-        type: 'faceted',
-        title: 'Project',
-        options: projectOptions,
-        defaultActive: true,
-      },
-      {
-        id: 'environment',
-        type: 'faceted',
-        title: 'Environment',
-        options: environmentOptions,
-      },
-      {
-        id: 'instance',
-        type: 'faceted',
-        title: 'Instance',
-        options: instanceOptions,
-      },
-      {
-        id: 'status',
-        type: 'faceted',
-        title: 'Status',
-        options: [
-          { label: 'Active', value: 'Active', icon: DatabaseIcon },
-          { label: 'Inactive', value: 'Inactive', icon: DatabaseIcon },
-          { label: 'Pending', value: 'Pending', icon: DatabaseIcon },
-        ],
-      },
-      {
-        id: 'created_at',
-        type: 'dateRange',
-        title: 'Created',
-        presets: [
-          {
-            label: 'Last 7 days',
-            getValue: () => [subDays(new Date(), 7), new Date()],
-          },
-          {
-            label: 'Last 30 days',
-            getValue: () => [subDays(new Date(), 30), new Date()],
-          },
-          {
-            label: 'Last 90 days',
-            getValue: () => [subDays(new Date(), 90), new Date()],
-          },
-        ],
-      },
-    ],
-    [projectOptions, environmentOptions, instanceOptions],
+  // Check if any server-side filters are active (anything beyond pagination)
+  const hasActiveFilters = useMemo(
+    () => Object.keys(params).some((key) => key !== 'limit' && key !== 'offset'),
+    [params],
   );
-
-  // Check if any filters are active
-  const hasActiveFilters = useMemo(() => {
-    return !!(projectFilter || environmentFilter || instanceFilter);
-  }, [projectFilter, environmentFilter, instanceFilter]);
 
   // Render access denied
   if (!canReadDatabases) {
@@ -588,18 +550,15 @@ export const DatabasesPage: React.FC = () => {
                   pageSize,
                   totalCount: total,
                   onPageChange: setPageIndex,
-                  onPageSizeChange: (newSize) => {
-                    setPageSize(newSize);
-                    setPageIndex(0);
-                  },
-                  pageSizeOptions: [10, 20, 30, 50],
+                  onPageSizeChange: setPageSize,
+                  pageSizeOptions: [10, 20, 50, 100],
                   manualFiltering: true,
                 }}
                 onRowClick={(database) => navigate(`/databases/${database.id}`)}
-                onFiltersChange={handleFiltersChange}
+                onFiltersChange={onFiltersChange}
               >
                 {(table) => (
-                  <DataTableToolbar table={table} filters={filterDefinitions}>
+                  <DataTableToolbar table={table} filters={DATABASES_FILTER_DEFINITIONS}>
                     <DataTableViewOptions table={table} />
                   </DataTableToolbar>
                 )}

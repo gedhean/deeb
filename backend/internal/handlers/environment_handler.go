@@ -144,8 +144,38 @@ func (h *EnvironmentHandler) ListEnvironments(c echo.Context) error {
 		}
 	}
 
+	// Build filters from query parameters
+	var filters repository.EnvironmentFilters
+	filters.Search = c.QueryParam("search")
+	filters.AllowSelfApproval = parseBoolParam(c, "allow_self_approval")
+
+	if policyIDStr := c.QueryParam("policy_id"); policyIDStr != "" {
+		policyID, parseErr := uuid.Parse(policyIDStr)
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "Invalid policy ID format",
+			})
+		}
+		filters.PolicyID = &policyID
+	}
+
+	createdAfter, err := parseTimeParam(c, "created_after")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_after (must be RFC3339)",
+		})
+	}
+	createdBefore, err := parseTimeParam(c, "created_before")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_before (must be RFC3339)",
+		})
+	}
+	filters.CreatedAfter = createdAfter
+	filters.CreatedBefore = createdBefore
+
 	// Fetch environments from repository
-	environments, err := h.envRepo.List(ctx, limit, offset)
+	environments, err := h.envRepo.List(ctx, filters, limit, offset)
 	if err != nil {
 		h.logger.Error("Failed to list environments", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -154,7 +184,7 @@ func (h *EnvironmentHandler) ListEnvironments(c echo.Context) error {
 	}
 
 	// Get total count
-	totalCount, err := h.envRepo.Count(ctx)
+	totalCount, err := h.envRepo.Count(ctx, filters)
 	if err != nil {
 		h.logger.Error("Failed to count environments", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -238,7 +268,8 @@ func (h *EnvironmentHandler) UpdateEnvironment(c echo.Context) error {
 	}
 
 	// Debug logging
-	h.logger.Info("Update request received",
+	h.logger.Info(
+		"Update request received",
 		zap.Bool("policy_provided", req.PolicyID.Provided),
 		zap.Any("policy_uuid", req.PolicyID.UUID),
 	)

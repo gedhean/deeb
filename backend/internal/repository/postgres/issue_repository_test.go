@@ -473,66 +473,6 @@ func TestIssueRepository_List(t *testing.T) {
 	}
 }
 
-func TestIssueRepository_Search(t *testing.T) {
-	db, mock, repo := setupIssueRepositoryMockDB(t)
-	defer db.Close()
-
-	now := time.Now().UTC()
-	projectID := uuid.New()
-	authorID := uuid.New()
-	databaseID := uuid.New()
-
-	tests := []struct {
-		name      string
-		query     string
-		filters   repository.ListFilters
-		setupMock func(sqlmock.Sqlmock)
-		wantLen   int
-		wantErr   bool
-	}{
-		{
-			name:  "search in title",
-			query: "test",
-			filters: repository.ListFilters{
-				Limit:  10,
-				Offset: 0,
-			},
-			setupMock: func(mock sqlmock.Sqlmock) {
-				rows := sqlmock.NewRows([]string{
-					"id", "project_id", "target_database_id", "title", "description", "change_type",
-					"sql_content", "rollback_sql", "status", "risk_level", "author_id",
-					"assigned_reviewer_id", "scheduled_for", "executed_at", "execution_duration_ms",
-					"affected_rows", "error_message", "created_at", "updated_at",
-				}).
-					AddRow(uuid.New(), projectID, databaseID, "Test Issue", "Description", "DDL", "SQL", nil, models.IssueStatusDraft, models.RiskLevelMedium, authorID, nil, nil, nil, nil, nil, nil, now, now)
-
-				mock.ExpectQuery("SELECT (.+) FROM issues WHERE (.+) ILIKE").
-					WithArgs("%test%").
-					WillReturnRows(rows)
-			},
-			wantLen: 1,
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.setupMock(mock)
-
-			issues, err := repo.Search(context.Background(), tt.query, tt.filters)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Len(t, issues, tt.wantLen)
-			}
-
-			assert.NoError(t, mock.ExpectationsWereMet())
-		})
-	}
-}
-
 func TestIssueRepository_Count(t *testing.T) {
 	db, mock, repo := setupIssueRepositoryMockDB(t)
 	defer db.Close()

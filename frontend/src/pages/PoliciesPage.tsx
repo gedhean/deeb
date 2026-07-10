@@ -16,6 +16,10 @@ import {
   useDeletePolicy,
 } from '@/hooks/api/usePoliciesSWR';
 import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
+import {
+  useServerTableFilters,
+  type ServerTableFilterMapping,
+} from '@/hooks/useServerTableFilters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,6 +38,46 @@ import { Plus, AlertTriangle, Code2, FileCheck2, Info } from 'lucide-react';
 import { SQLReviewRuleSelector } from '@/components/sql-review-rule-selector';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 
+const POLICIES_FILTER_MAPPING: ServerTableFilterMapping = {
+  searchColumnIds: ['name'],
+  equals: { type: 'type' },
+  dateRanges: { created_at: ['created_after', 'created_before'] },
+};
+
+// Filter definitions are static (type is a static enum; no reference-backed
+// filters), so they live at module level.
+const POLICIES_FILTER_DEFINITIONS: FilterDefinition[] = [
+  {
+    id: 'name',
+    type: 'search',
+    title: 'Name',
+    placeholder: 'Search names...',
+    defaultActive: true,
+  },
+  {
+    id: 'type',
+    type: 'faceted',
+    title: 'Type',
+    options: [
+      { label: 'Syntax', value: 'Syntax', icon: FileCheck2 },
+      { label: 'Security', value: 'Security', icon: AlertTriangle },
+      { label: 'Performance', value: 'Performance', icon: Info },
+      { label: 'Backwards Compatibility', value: 'BackwardsCompatibility', icon: FileCheck2 },
+      { label: 'Best Practices', value: 'BestPractices', icon: Info },
+    ],
+  },
+  {
+    id: 'created_at',
+    type: 'dateRange',
+    title: 'Created',
+    presets: [
+      { label: 'Last 7 days', getValue: () => [subDays(new Date(), 7), new Date()] },
+      { label: 'Last 30 days', getValue: () => [subDays(new Date(), 30), new Date()] },
+      { label: 'Last 90 days', getValue: () => [subDays(new Date(), 90), new Date()] },
+    ],
+  },
+];
+
 export const PoliciesPage: React.FC = () => {
   const { user } = useAuth();
   const [filterType, setFilterType] = useState<'SQL_REVIEW' | 'all'>('SQL_REVIEW');
@@ -44,9 +88,20 @@ export const PoliciesPage: React.FC = () => {
   const [useJsonEditor, setUseJsonEditor] = useState(false);
   const [jsonEditorError, setJsonEditorError] = useState('');
 
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  // Server-side pagination + filtering (state persisted in the URL).
+  const {
+    params,
+    pageIndex,
+    pageSize,
+    setPageIndex,
+    setPageSize,
+    onFiltersChange,
+    initialColumnFilters,
+  } = useServerTableFilters({
+    mapping: POLICIES_FILTER_MAPPING,
+    filterDefinitions: POLICIES_FILTER_DEFINITIONS,
+    initialPageSize: 50,
+  });
 
   // Form state
   const [formData, setFormData] = useState<CreatePolicyRequest>({
@@ -79,15 +134,24 @@ export const PoliciesPage: React.FC = () => {
     OrganizationPermission.PoliciesDelete,
   );
 
-  // Use SWR hooks for data fetching
+  // Use SWR hooks for data fetching. The dropdown drives `type` when a specific
+  // type is selected; otherwise fall back to the toolbar's faceted `type` filter.
   const policiesParams = useMemo(
     () => ({
-      type: filterType === 'SQL_REVIEW' ? ('SQL_REVIEW' as const) : undefined,
       limit: pageSize,
       offset: pageIndex * pageSize,
+      search: typeof params.search === 'string' ? params.search : undefined,
+      created_after: typeof params.created_after === 'string' ? params.created_after : undefined,
+      created_before: typeof params.created_before === 'string' ? params.created_before : undefined,
+      type:
+        filterType === 'SQL_REVIEW'
+          ? 'SQL_REVIEW'
+          : typeof params.type === 'string'
+            ? params.type
+            : undefined,
       enabled: canReadPolicies,
     }),
-    [filterType, pageSize, pageIndex, canReadPolicies],
+    [params, pageIndex, pageSize, filterType, canReadPolicies],
   );
 
   const { policies, total, isLoading, error } = usePolicies(policiesParams);
@@ -268,51 +332,6 @@ export const PoliciesPage: React.FC = () => {
     getReferencingEnvironmentsCount,
   });
 
-  // Create filter definitions
-  const filterDefinitions: FilterDefinition[] = useMemo(
-    () => [
-      {
-        id: 'name',
-        type: 'search',
-        title: 'Name',
-        placeholder: 'Search names...',
-        defaultActive: true,
-      },
-      {
-        id: 'type',
-        type: 'faceted',
-        title: 'Type',
-        options: [
-          { label: 'Syntax', value: 'Syntax', icon: FileCheck2 },
-          { label: 'Security', value: 'Security', icon: AlertTriangle },
-          { label: 'Performance', value: 'Performance', icon: Info },
-          { label: 'Backwards Compatibility', value: 'BackwardsCompatibility', icon: FileCheck2 },
-          { label: 'Best Practices', value: 'BestPractices', icon: Info },
-        ],
-      },
-      {
-        id: 'created_at',
-        type: 'dateRange',
-        title: 'Created',
-        presets: [
-          {
-            label: 'Last 7 days',
-            getValue: () => [subDays(new Date(), 7), new Date()],
-          },
-          {
-            label: 'Last 30 days',
-            getValue: () => [subDays(new Date(), 30), new Date()],
-          },
-          {
-            label: 'Last 90 days',
-            getValue: () => [subDays(new Date(), 90), new Date()],
-          },
-        ],
-      },
-    ],
-    [],
-  );
-
   // Render access denied
   if (!canReadPolicies) {
     return (
@@ -401,20 +420,22 @@ export const PoliciesPage: React.FC = () => {
                 columns={columns}
                 data={policies}
                 isLoading={isLoading}
+                initialColumnFilters={initialColumnFilters}
                 emptyMessage="No policies found."
                 pagination={{
                   pageIndex,
                   pageSize,
                   totalCount: total,
                   onPageChange: setPageIndex,
-                  onPageSizeChange: (newSize) => {
-                    setPageSize(newSize);
-                    setPageIndex(0);
-                  },
-                  pageSizeOptions: [10, 20, 30, 50],
+                  onPageSizeChange: setPageSize,
+                  pageSizeOptions: [10, 20, 50, 100],
+                  manualFiltering: true,
                 }}
+                onFiltersChange={onFiltersChange}
               >
-                {(table) => <DataTableToolbar table={table} filters={filterDefinitions} />}
+                {(table) => (
+                  <DataTableToolbar table={table} filters={POLICIES_FILTER_DEFINITIONS} />
+                )}
               </DataTable>
             </CardContent>
           </Card>

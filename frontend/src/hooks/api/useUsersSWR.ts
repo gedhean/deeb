@@ -11,12 +11,13 @@ import {
 } from '@/store';
 
 /**
- * Parameters for users list fetching
+ * Parameters for users list fetching.
+ *
+ * Permissive shape so pages can forward server-side filter params
+ * (search, organization_role, is_active, created_after/before, ...)
+ * built by `useServerTableFilters` straight through to the API.
  */
-export interface UseUsersParams {
-  limit?: number;
-  offset?: number;
-}
+export type UseUsersParams = Record<string, string | number | undefined>;
 
 /**
  * SWR fetcher function for users list
@@ -147,8 +148,13 @@ export function useCreateUser(): UseCreateUserResult {
       setError(null);
       const result = await usersService.createUser(data);
 
-      // Invalidate users cache using global mutate
-      await mutate('/api/users', undefined, { revalidate: true });
+      // Invalidate users cache. The list is cached under an array key
+      // (['/api/users', params]); match by predicate so filtered lists refresh.
+      await mutate(
+        (key) => (Array.isArray(key) && key[0] === '/api/users') || key === '/api/users',
+        undefined,
+        { revalidate: true },
+      );
 
       return result;
     } catch (err) {
@@ -188,8 +194,13 @@ export function useUpdateUser(): UseUpdateUserResult {
         setError(null);
         const result = await usersService.updateUser(id, data);
 
-        // Invalidate users cache using global mutate
-        await mutate('/api/users', undefined, { revalidate: true });
+        // Invalidate users cache. The list is cached under an array key
+        // (['/api/users', params]); match by predicate so filtered lists refresh.
+        await mutate(
+          (key) => (Array.isArray(key) && key[0] === '/api/users') || key === '/api/users',
+          undefined,
+          { revalidate: true },
+        );
 
         return result;
       } catch (err) {
@@ -230,8 +241,13 @@ export function useDeleteUser(): UseDeleteUserResult {
       setError(null);
       await usersService.deleteUser(id);
 
-      // Invalidate users cache using global mutate
-      await mutate('/api/users', undefined, { revalidate: true });
+      // Invalidate users cache. The list is cached under an array key
+      // (['/api/users', params]); match by predicate so filtered lists refresh.
+      await mutate(
+        (key) => (Array.isArray(key) && key[0] === '/api/users') || key === '/api/users',
+        undefined,
+        { revalidate: true },
+      );
 
       return true;
     } catch (err) {

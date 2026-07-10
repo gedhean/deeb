@@ -11,16 +11,14 @@ export const environmentsService = {
    * List all environments
    * Requires Organization Admin role
    */
-  async listEnvironments(params?: {
-    limit?: number;
-    offset?: number;
-  }): Promise<ListResponse<Environment>> {
+  async listEnvironments(
+    params?: Record<string, string | number | undefined>,
+  ): Promise<ListResponse<Environment>> {
     const queryParams = new URLSearchParams();
-    if (params?.limit) {
-      queryParams.append('limit', params.limit.toString());
-    }
-    if (params?.offset) {
-      queryParams.append('offset', params.offset.toString());
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, String(value));
+      }
     }
 
     const queryString = queryParams.toString();
@@ -28,14 +26,14 @@ export const environmentsService = {
 
     const response = await apiClient.get<{
       environments: Environment[];
-      count: number;
+      total: number;
       limit: number;
       offset: number;
     }>(url);
 
     return {
       items: response.environments,
-      total: response.count,
+      total: response.total,
       page: Math.floor((response.offset || 0) / (response.limit || 100)) + 1,
       page_size: response.limit || 100,
     };

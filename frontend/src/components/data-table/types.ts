@@ -94,8 +94,16 @@ export interface DateRangePreset {
 export interface FilterDefinition {
   /** Column ID that this filter targets */
   id: string;
-  /** Type of filter component to render */
-  type: 'search' | 'faceted' | 'select' | 'dateRange';
+  /**
+   * Type of filter component to render.
+   * - 'search'    : free-text input (single string value)
+   * - 'faceted'   : multi-select over a static option list (string[] value)
+   * - 'select'    : single-select over a static option list (string value)
+   * - 'async'     : single-select whose options are fetched from the server as
+   *                 you type (string value = selected id); scales past a preload
+   * - 'dateRange' : date range picker ([Date, Date] value)
+   */
+  type: 'search' | 'faceted' | 'select' | 'async' | 'dateRange';
   /** Title to display in the filter UI */
   title: string;
   /** Placeholder text for search filters */
@@ -108,4 +116,14 @@ export interface FilterDefinition {
   pinned?: boolean;
   /** If true, filter is visible by default */
   defaultActive?: boolean;
+  /**
+   * For type 'async': fetch matching options for the typed search term from the
+   * server (debounced). Should return a bounded list (e.g. limit 20).
+   */
+  loadOptions?: (search: string) => Promise<FilterOption[]>;
+  /**
+   * For type 'async': resolve the display label for an already-selected value
+   * (e.g. an id loaded from the URL) so the control can show its name.
+   */
+  resolveLabel?: (value: string) => Promise<string | undefined>;
 }

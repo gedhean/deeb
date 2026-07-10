@@ -40,7 +40,7 @@ type SetupStatusResponse struct {
 func (h *SetupHandler) GetSetupStatus(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	users, err := h.userRepo.List(ctx, 1, 0)
+	users, err := h.userRepo.List(ctx, repository.UserFilters{}, 1, 0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error: "Failed to check setup status",

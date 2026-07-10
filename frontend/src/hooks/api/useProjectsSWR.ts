@@ -14,12 +14,12 @@ import {
 } from '@/store';
 
 /**
- * Parameters for projects list fetching
+ * Parameters for projects list fetching.
+ *
+ * Permissive shape so pages can forward server-side filter params
+ * (search, created_after/before, ...) built by `useServerTableFilters`.
  */
-export interface UseProjectsParams {
-  limit?: number;
-  offset?: number;
-}
+export type UseProjectsParams = Record<string, string | number | undefined>;
 
 /**
  * SWR fetcher function for projects list
@@ -185,8 +185,13 @@ export function useCreateProjectSWR(): UseCreateProjectResult {
         // Update cache immediately
         addProjectToStore(result);
 
-        // Invalidate projects cache using global mutate
-        await mutate('/api/projects', undefined, { revalidate: true });
+        // Invalidate projects cache. The list is cached under an array key
+        // (['/api/projects', params]); match by predicate so filtered lists refresh.
+        await mutate(
+          (key) => (Array.isArray(key) && key[0] === '/api/projects') || key === '/api/projects',
+          undefined,
+          { revalidate: true },
+        );
 
         return result;
       } catch (err) {
@@ -232,8 +237,13 @@ export function useUpdateProjectSWR(): UseUpdateProjectResult {
         // Update cache immediately
         updateProjectInStore(id, result);
 
-        // Invalidate projects cache using global mutate
-        await mutate('/api/projects', undefined, { revalidate: true });
+        // Invalidate projects cache. The list is cached under an array key
+        // (['/api/projects', params]); match by predicate so filtered lists refresh.
+        await mutate(
+          (key) => (Array.isArray(key) && key[0] === '/api/projects') || key === '/api/projects',
+          undefined,
+          { revalidate: true },
+        );
 
         return result;
       } catch (err) {
@@ -279,8 +289,13 @@ export function useDeleteProjectSWR(): UseDeleteProjectResult {
         // Update cache immediately
         removeProjectFromStore(id);
 
-        // Invalidate projects cache using global mutate
-        await mutate('/api/projects', undefined, { revalidate: true });
+        // Invalidate projects cache. The list is cached under an array key
+        // (['/api/projects', params]); match by predicate so filtered lists refresh.
+        await mutate(
+          (key) => (Array.isArray(key) && key[0] === '/api/projects') || key === '/api/projects',
+          undefined,
+          { revalidate: true },
+        );
 
         return true;
       } catch (err) {

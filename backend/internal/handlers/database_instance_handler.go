@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -212,52 +213,58 @@ func (h *DatabaseInstanceHandler) ListDatabaseInstances(c echo.Context) error {
 		}
 	}
 
-	// Check for environment filter
-	var instances []*models.DatabaseInstance
-	var totalCount int64
-	var err error
+	// Build filters from query parameters
+	var filters repository.DatabaseInstanceFilters
+	filters.Search = c.QueryParam("search")
+	filters.DatabaseEngine = c.QueryParam("database_engine")
+	filters.Status = c.QueryParam("status")
 
-	environmentIDStr := c.QueryParam("environment_id")
-	if environmentIDStr != "" {
-		// Filter by environment
-		environmentID, parseErr := uuid.Parse(environmentIDStr)
-		if parseErr != nil {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "Invalid environment ID format",
-			})
+	// environment_id is a multi-select: comma-separated list of UUIDs.
+	if environmentIDStr := c.QueryParam("environment_id"); environmentIDStr != "" {
+		for _, raw := range strings.Split(environmentIDStr, ",") {
+			raw = strings.TrimSpace(raw)
+			if raw == "" {
+				continue
+			}
+			environmentID, parseErr := uuid.Parse(raw)
+			if parseErr != nil {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Invalid environment ID format",
+				})
+			}
+			filters.EnvironmentIDs = append(filters.EnvironmentIDs, environmentID)
 		}
-		instances, err = h.dbInstanceRepo.ListByEnvironment(ctx, environmentID, limit, offset)
-		if err != nil {
-			h.logger.Error("Failed to list database instances by environment", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to list database instances",
-			})
-		}
-		// Get total count for this environment
-		totalCount, err = h.dbInstanceRepo.CountByEnvironment(ctx, environmentID)
-		if err != nil {
-			h.logger.Error("Failed to count database instances by environment", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to count database instances",
-			})
-		}
-	} else {
-		// No filter, list all
-		instances, err = h.dbInstanceRepo.List(ctx, limit, offset)
-		if err != nil {
-			h.logger.Error("Failed to list database instances", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to list database instances",
-			})
-		}
-		// Get total count
-		totalCount, err = h.dbInstanceRepo.Count(ctx)
-		if err != nil {
-			h.logger.Error("Failed to count database instances", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to count database instances",
-			})
-		}
+	}
+
+	createdAfter, err := parseTimeParam(c, "created_after")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_after (must be RFC3339)",
+		})
+	}
+	createdBefore, err := parseTimeParam(c, "created_before")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_before (must be RFC3339)",
+		})
+	}
+	filters.CreatedAfter = createdAfter
+	filters.CreatedBefore = createdBefore
+
+	instances, err := h.dbInstanceRepo.List(ctx, filters, limit, offset)
+	if err != nil {
+		h.logger.Error("Failed to list database instances", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to list database instances",
+		})
+	}
+
+	totalCount, err := h.dbInstanceRepo.Count(ctx, filters)
+	if err != nil {
+		h.logger.Error("Failed to count database instances", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to count database instances",
+		})
 	}
 
 	// Convert to response format
@@ -743,7 +750,8 @@ func (h *DatabaseInstanceHandler) CreateDatabaseForInstance(c echo.Context) erro
 		h.logger.Error("Failed to create change plan", zap.Error(err))
 		// Cleanup: delete the orphaned database record
 		if deleteErr := h.databaseRepo.Delete(ctx, database.ID); deleteErr != nil {
-			h.logger.Error("Failed to cleanup orphaned database record",
+			h.logger.Error(
+				"Failed to cleanup orphaned database record",
 				zap.String("database_id", database.ID.String()),
 				zap.Error(deleteErr),
 			)
@@ -1003,7 +1011,8 @@ func (h *DatabaseInstanceHandler) syncDatabasesFromInstance(
 	// Discover databases on the instance
 	databaseNames, err := h.connManager.ListDatabasesOnInstance(ctx, instance)
 	if err != nil {
-		h.logger.Error("Failed to list databases on instance",
+		h.logger.Error(
+			"Failed to list databases on instance",
 			zap.String("instance_id", instance.ID.String()),
 			zap.Error(err),
 		)
@@ -1024,7 +1033,8 @@ func (h *DatabaseInstanceHandler) syncDatabasesFromInstance(
 			// Error checking for existing database
 			result.Failed++
 			result.FailedDatabases = append(result.FailedDatabases, fmt.Sprintf("%s (check failed)", dbName))
-			h.logger.Error("Failed to check if database exists",
+			h.logger.Error(
+				"Failed to check if database exists",
 				zap.String("database_name", dbName),
 				zap.String("instance_id", instance.ID.String()),
 				zap.Error(err),
@@ -1035,7 +1045,8 @@ func (h *DatabaseInstanceHandler) syncDatabasesFromInstance(
 			// Database already exists, skip it
 			result.Skipped++
 			result.SkippedDatabases = append(result.SkippedDatabases, dbName)
-			h.logger.Debug("Database already exists, skipping",
+			h.logger.Debug(
+				"Database already exists, skipping",
 				zap.String("database_name", dbName),
 				zap.String("instance_id", instance.ID.String()),
 				zap.String("existing_id", existingDB.ID.String()),
@@ -1056,7 +1067,8 @@ func (h *DatabaseInstanceHandler) syncDatabasesFromInstance(
 		if err := h.databaseRepo.Create(ctx, database); err != nil {
 			result.Failed++
 			result.FailedDatabases = append(result.FailedDatabases, dbName)
-			h.logger.Error("Failed to create database record during sync",
+			h.logger.Error(
+				"Failed to create database record during sync",
 				zap.String("database_name", dbName),
 				zap.String("instance_id", instance.ID.String()),
 				zap.Error(err),
@@ -1065,7 +1077,8 @@ func (h *DatabaseInstanceHandler) syncDatabasesFromInstance(
 		}
 
 		result.Synced++
-		h.logger.Debug("Database synced successfully",
+		h.logger.Debug(
+			"Database synced successfully",
 			zap.String("database_id", database.ID.String()),
 			zap.String("database_name", dbName),
 			zap.String("instance_id", instance.ID.String()),

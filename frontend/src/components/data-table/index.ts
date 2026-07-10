@@ -9,6 +9,7 @@ export type { DataTableToolbarProps } from './data-table-toolbar';
 export { DataTableSearch } from './data-table-search';
 export { DataTableFacetedFilter } from './data-table-faceted-filter';
 export { DataTableSelectFilter } from './data-table-select-filter';
+export { DataTableAsyncFilter } from './data-table-async-filter';
 export { DataTableDateRangeFilter } from './data-table-date-range-filter';
 export { DataTableViewOptions } from './data-table-view-options';
 

@@ -261,21 +261,26 @@ paths:
       security:
         - cookieAuth: []
       parameters:
-        - name: page
-          in: query
-          description: Page number for pagination
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
         - name: limit
           in: query
-          description: Number of items per page
+          description: Maximum number of items to return
           schema:
             type: integer
             minimum: 1
-            maximum: 100
-            default: 20
+            maximum: 1000
+            default: 100
+        - name: offset
+          in: query
+          description: Number of items to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: search
+          in: query
+          description: Case-insensitive search over email and display name
+          schema:
+            type: string
       responses:
         '200':
           description: List of users
@@ -476,6 +481,11 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: search
+          in: query
+          description: Case-insensitive search over name and description
+          schema:
+            type: string
       responses:
         '200':
           description: List of projects
@@ -813,6 +823,11 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: search
+          in: query
+          description: Case-insensitive search over name
+          schema:
+            type: string
       responses:
         '200':
           description: List of environments
@@ -992,6 +1007,11 @@ paths:
           schema:
             type: string
             enum: [SQL_REVIEW]
+        - name: search
+          in: query
+          description: Case-insensitive search over name and description
+          schema:
+            type: string
       responses:
         '200':
           description: List of policies
@@ -1166,6 +1186,17 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: environment_id
+          in: query
+          description: Filter by environment ID
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          description: Case-insensitive search over name and host
+          schema:
+            type: string
       responses:
         '200':
           description: List of database instances
@@ -1356,6 +1387,22 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: database_instance_id
+          in: query
+          description: Filter by database instance ID
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Filter by database status
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Case-insensitive search over database name and description
+          schema:
+            type: string
       responses:
         '200':
           description: List of databases
@@ -1612,6 +1659,11 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: search
+          in: query
+          description: Case-insensitive search over title and description
+          schema:
+            type: string
       responses:
         '200':
           description: List of change plans

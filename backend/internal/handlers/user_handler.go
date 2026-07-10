@@ -148,8 +148,29 @@ func (h *UserHandler) ListUsers(c echo.Context) error {
 		}
 	}
 
+	// Build filters from query parameters
+	var filters repository.UserFilters
+	filters.Search = c.QueryParam("search")
+	filters.OrganizationRole = c.QueryParam("organization_role")
+	filters.IsActive = parseBoolParam(c, "is_active")
+
+	createdAfter, err := parseTimeParam(c, "created_after")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_after (must be RFC3339)",
+		})
+	}
+	createdBefore, err := parseTimeParam(c, "created_before")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_before (must be RFC3339)",
+		})
+	}
+	filters.CreatedAfter = createdAfter
+	filters.CreatedBefore = createdBefore
+
 	// Fetch users from repository
-	users, err := h.userRepo.List(ctx, limit, offset)
+	users, err := h.userRepo.List(ctx, filters, limit, offset)
 	if err != nil {
 		h.logger.Error("Failed to list users", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -158,7 +179,7 @@ func (h *UserHandler) ListUsers(c echo.Context) error {
 	}
 
 	// Get total count
-	totalCount, err := h.userRepo.Count(ctx)
+	totalCount, err := h.userRepo.Count(ctx, filters)
 	if err != nil {
 		h.logger.Error("Failed to count users", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{

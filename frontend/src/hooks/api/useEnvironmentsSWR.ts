@@ -9,12 +9,12 @@ import type {
 import { APIError } from '@/lib/api/types';
 
 /**
- * Parameters for environments list fetching
+ * Parameters for environments list fetching.
+ *
+ * Permissive shape so pages can forward server-side filter params
+ * (search, policy_id, allow_self_approval, created_after/before, ...).
  */
-export interface UseEnvironmentsParams {
-  limit?: number;
-  offset?: number;
-}
+export type UseEnvironmentsParams = Record<string, string | number | undefined>;
 
 /**
  * SWR fetcher function for environments list
@@ -90,8 +90,14 @@ export function useCreateEnvironmentSWR(): UseCreateEnvironmentResult {
         setError(null);
         const result = await environmentsService.createEnvironment(data);
 
-        // Invalidate environments cache using global mutate
-        await mutate('/api/environments', undefined, { revalidate: true });
+        // Invalidate environments cache. The list is cached under an array key
+        // (['/api/environments', params]); match by predicate so filtered lists refresh.
+        await mutate(
+          (key) =>
+            (Array.isArray(key) && key[0] === '/api/environments') || key === '/api/environments',
+          undefined,
+          { revalidate: true },
+        );
 
         return result;
       } catch (err) {
@@ -133,8 +139,14 @@ export function useUpdateEnvironmentSWR(): UseUpdateEnvironmentResult {
         setError(null);
         const result = await environmentsService.updateEnvironment(id, data);
 
-        // Invalidate environments cache using global mutate
-        await mutate('/api/environments', undefined, { revalidate: true });
+        // Invalidate environments cache. The list is cached under an array key
+        // (['/api/environments', params]); match by predicate so filtered lists refresh.
+        await mutate(
+          (key) =>
+            (Array.isArray(key) && key[0] === '/api/environments') || key === '/api/environments',
+          undefined,
+          { revalidate: true },
+        );
 
         return result;
       } catch (err) {
@@ -175,8 +187,14 @@ export function useDeleteEnvironmentSWR(): UseDeleteEnvironmentResult {
       setError(null);
       await environmentsService.deleteEnvironment(id);
 
-      // Invalidate environments cache using global mutate
-      await mutate('/api/environments', undefined, { revalidate: true });
+      // Invalidate environments cache. The list is cached under an array key
+      // (['/api/environments', params]); match by predicate so filtered lists refresh.
+      await mutate(
+        (key) =>
+          (Array.isArray(key) && key[0] === '/api/environments') || key === '/api/environments',
+        undefined,
+        { revalidate: true },
+      );
 
       return true;
     } catch (err) {

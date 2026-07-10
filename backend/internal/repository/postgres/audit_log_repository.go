@@ -119,7 +119,8 @@ func (r *AuditLogRepository) Create(ctx context.Context, auditLog *models.AuditL
 		ipAddress = auditLog.IPAddress.String()
 	}
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.ExecContext(
+		ctx, query,
 		auditLog.ID,
 		auditLog.UserID,
 		auditLog.Action,
@@ -317,6 +318,15 @@ func (r *AuditLogRepository) Filter(ctx context.Context, filters repository.Audi
 		argIndex++
 	}
 
+	if filters.Search != "" {
+		whereConditions = append(
+			whereConditions,
+			fmt.Sprintf("(action ILIKE $%d OR resource_type ILIKE $%d)", argIndex, argIndex),
+		)
+		args = append(args, "%"+filters.Search+"%")
+		argIndex++
+	}
+
 	// Build query
 	query := `
 		SELECT id::text, user_id::text, action, resource_type, resource_id::text,
@@ -413,6 +423,15 @@ func (r *AuditLogRepository) CountWithFilters(ctx context.Context, filters repos
 	if filters.EndDate != nil {
 		whereConditions = append(whereConditions, fmt.Sprintf("timestamp <= $%d", argIndex))
 		args = append(args, *filters.EndDate)
+		argIndex++
+	}
+
+	if filters.Search != "" {
+		whereConditions = append(
+			whereConditions,
+			fmt.Sprintf("(action ILIKE $%d OR resource_type ILIKE $%d)", argIndex, argIndex),
+		)
+		args = append(args, "%"+filters.Search+"%")
 	}
 
 	// Build query

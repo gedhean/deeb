@@ -190,106 +190,68 @@ func (h *DatabaseHandler) ListDatabases(c echo.Context) error {
 		}
 	}
 
-	// Parse filters
-	projectIDStr := c.QueryParam("project_id")
-	environmentIDStr := c.QueryParam("environment_id")
-	databaseInstanceIDStr := c.QueryParam("database_instance_id")
+	// Parse filters into a single filter struct; all filtering (including
+	// project + environment together) is applied server-side in SQL.
+	var filters repository.DatabaseFilters
+	filters.Search = c.QueryParam("search")
+	filters.Status = c.QueryParam("status")
 
-	var databases []*models.Database
-	var totalCount int
-	var err error
+	createdAfter, err := parseTimeParam(c, "created_after")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_after (must be RFC3339)",
+		})
+	}
+	createdBefore, err := parseTimeParam(c, "created_before")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_before (must be RFC3339)",
+		})
+	}
+	filters.CreatedAfter = createdAfter
+	filters.CreatedBefore = createdBefore
 
-	// Filter by both project_id and environment_id
-	if projectIDStr != "" && environmentIDStr != "" {
+	if projectIDStr := c.QueryParam("project_id"); projectIDStr != "" {
 		projectID, parseErr := uuid.Parse(projectIDStr)
 		if parseErr != nil {
 			return c.JSON(http.StatusBadRequest, map[string]interface{}{
 				"error": "Invalid project ID",
 			})
 		}
+		filters.ProjectID = &projectID
+	}
+
+	if environmentIDStr := c.QueryParam("environment_id"); environmentIDStr != "" {
 		environmentID, parseErr := uuid.Parse(environmentIDStr)
 		if parseErr != nil {
 			return c.JSON(http.StatusBadRequest, map[string]interface{}{
 				"error": "Invalid environment ID",
 			})
 		}
-		// Filter by project first, then filter by environment in memory
-		// (Alternatively, we could add a ListByProjectAndEnvironment method)
-		projectDatabases, err := h.databaseRepo.ListByProject(ctx, projectID, limit*2, offset)
-		if err != nil {
-			h.logger.Error("Failed to list databases by project", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Failed to list databases",
-			})
-		}
-		// Filter by environment
-		databases = []*models.Database{}
-		for _, db := range projectDatabases {
-			if db.EnvironmentID != nil && *db.EnvironmentID == environmentID {
-				databases = append(databases, db)
-			}
-		}
-		// Apply limit
-		if len(databases) > limit {
-			databases = databases[:limit]
-		}
-		// For project+environment filter, count all matching databases
-		// This is inefficient but matches the filtering logic above
-		allProjectDatabases, err := h.databaseRepo.ListByProject(ctx, projectID, 10000, 0)
-		if err != nil {
-			h.logger.Error("Failed to count databases", zap.Error(err))
-			totalCount = len(databases)
-		} else {
-			count := 0
-			for _, db := range allProjectDatabases {
-				if db.EnvironmentID != nil && *db.EnvironmentID == environmentID {
-					count++
-				}
-			}
-			totalCount = count
-		}
-	} else if projectIDStr != "" {
-		projectID, parseErr := uuid.Parse(projectIDStr)
-		if parseErr != nil {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "Invalid project ID",
-			})
-		}
-		databases, err = h.databaseRepo.ListByProject(ctx, projectID, limit, offset)
-		if err == nil {
-			totalCount, err = h.databaseRepo.CountByProject(ctx, projectID)
-		}
-	} else if environmentIDStr != "" {
-		environmentID, parseErr := uuid.Parse(environmentIDStr)
-		if parseErr != nil {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "Invalid environment ID",
-			})
-		}
-		databases, err = h.databaseRepo.ListByEnvironmentID(ctx, environmentID, limit, offset)
-		if err == nil {
-			totalCount, err = h.databaseRepo.CountByEnvironmentID(ctx, environmentID)
-		}
-	} else if databaseInstanceIDStr != "" {
+		filters.EnvironmentID = &environmentID
+	}
+
+	if databaseInstanceIDStr := c.QueryParam("database_instance_id"); databaseInstanceIDStr != "" {
 		databaseInstanceID, parseErr := uuid.Parse(databaseInstanceIDStr)
 		if parseErr != nil {
 			return c.JSON(http.StatusBadRequest, map[string]interface{}{
 				"error": "Invalid database instance ID",
 			})
 		}
-		databases, err = h.databaseRepo.ListByInstanceID(ctx, databaseInstanceID, limit, offset)
-		if err == nil {
-			totalCount, err = h.databaseRepo.CountByInstanceID(ctx, databaseInstanceID)
-		}
-	} else {
-		databases, err = h.databaseRepo.List(ctx, limit, offset)
-		if err == nil {
-			totalCount, err = h.databaseRepo.Count(ctx)
-		}
+		filters.InstanceID = &databaseInstanceID
 	}
 
+	databases, err := h.databaseRepo.List(ctx, filters, limit, offset)
 	if err != nil {
 		h.logger.Error("Failed to list databases", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to list databases",
+		})
+	}
+
+	totalCount, err := h.databaseRepo.Count(ctx, filters)
+	if err != nil {
+		h.logger.Error("Failed to count databases", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "Failed to list databases",
 		})
@@ -660,7 +622,8 @@ func (h *DatabaseHandler) GetDatabaseSchema(c echo.Context) error {
 	// Extract schema metadata
 	schema, err := h.schemaMetadataService.ExtractSchemaMetadata(ctx, id)
 	if err != nil {
-		h.logger.Error("Failed to extract schema metadata",
+		h.logger.Error(
+			"Failed to extract schema metadata",
 			zap.String("database_id", id.String()),
 			zap.Error(err),
 		)
@@ -669,7 +632,8 @@ func (h *DatabaseHandler) GetDatabaseSchema(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Schema metadata extracted",
+	h.logger.Info(
+		"Schema metadata extracted",
 		zap.String("database_id", id.String()),
 		zap.String("database_name", database.DatabaseName),
 		zap.Int("table_count", len(schema.Tables)),
@@ -731,7 +695,8 @@ func (h *DatabaseHandler) GetTableDetail(c echo.Context) error {
 	// Extract table detail
 	tableDetail, err := h.schemaMetadataService.ExtractTableDetail(ctx, id, tableName)
 	if err != nil {
-		h.logger.Error("Failed to extract table detail",
+		h.logger.Error(
+			"Failed to extract table detail",
 			zap.String("database_id", id.String()),
 			zap.String("table_name", tableName),
 			zap.Error(err),
@@ -747,7 +712,8 @@ func (h *DatabaseHandler) GetTableDetail(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Table detail extracted",
+	h.logger.Info(
+		"Table detail extracted",
 		zap.String("database_id", id.String()),
 		zap.String("table_name", tableName),
 		zap.Int("column_count", len(tableDetail.Columns)),
@@ -799,7 +765,8 @@ func (h *DatabaseHandler) RefreshDatabaseSchema(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Refreshing schema metadata",
+	h.logger.Info(
+		"Refreshing schema metadata",
 		zap.String("database_id", id.String()),
 		zap.String("database_name", database.DatabaseName),
 		zap.String("user_id", claims.UserID.String()),
@@ -808,7 +775,8 @@ func (h *DatabaseHandler) RefreshDatabaseSchema(c echo.Context) error {
 	// Force refresh schema metadata (bypass cache)
 	schema, err := h.schemaMetadataService.RefreshSchemaMetadata(ctx, id)
 	if err != nil {
-		h.logger.Error("Failed to refresh schema metadata",
+		h.logger.Error(
+			"Failed to refresh schema metadata",
 			zap.String("database_id", id.String()),
 			zap.Error(err),
 		)
@@ -817,7 +785,8 @@ func (h *DatabaseHandler) RefreshDatabaseSchema(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Schema metadata refreshed",
+	h.logger.Info(
+		"Schema metadata refreshed",
 		zap.String("database_id", id.String()),
 		zap.String("database_name", database.DatabaseName),
 		zap.Int("table_count", len(schema.Tables)),

@@ -224,7 +224,7 @@ func TestEnvironmentRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
-		environments, err := repo.List(ctx, 10, 0)
+		environments, err := repo.List(ctx, repository.EnvironmentFilters{}, 10, 0)
 		require.NoError(t, err)
 		require.Len(t, environments, 2)
 		assert.Equal(t, envID1, environments[0].ID)
@@ -255,7 +255,7 @@ func TestEnvironmentRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
-		environments, err := repo.List(ctx, 10, 0)
+		environments, err := repo.List(ctx, repository.EnvironmentFilters{}, 10, 0)
 		require.NoError(t, err)
 		assert.NotNil(t, environments)
 		assert.Len(t, environments, 0)
@@ -276,7 +276,7 @@ func TestEnvironmentRepository_List(t *testing.T) {
 			WithArgs(5, 10).
 			WillReturnRows(rows)
 
-		environments, err := repo.List(ctx, 5, 10)
+		environments, err := repo.List(ctx, repository.EnvironmentFilters{}, 5, 10)
 		require.NoError(t, err)
 		assert.Len(t, environments, 1)
 
@@ -288,7 +288,7 @@ func TestEnvironmentRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnError(errors.New("database connection error"))
 
-		environments, err := repo.List(ctx, 10, 0)
+		environments, err := repo.List(ctx, repository.EnvironmentFilters{}, 10, 0)
 		require.Error(t, err)
 		assert.Nil(t, environments)
 		assert.Contains(t, err.Error(), "database connection error")
@@ -495,7 +495,7 @@ func TestEnvironmentRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM environments").
 			WillReturnRows(rows)
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.EnvironmentFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(5), count)
 
@@ -509,7 +509,7 @@ func TestEnvironmentRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM environments").
 			WillReturnRows(rows)
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.EnvironmentFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), count)
 
@@ -523,7 +523,7 @@ func TestEnvironmentRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM environments").
 			WillReturnRows(rows)
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.EnvironmentFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(1000), count)
 
@@ -534,7 +534,7 @@ func TestEnvironmentRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM environments").
 			WillReturnError(errors.New("database connection error"))
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.EnvironmentFilters{})
 		require.Error(t, err)
 		assert.Equal(t, int64(0), count)
 		assert.Contains(t, err.Error(), "database connection error")

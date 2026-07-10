@@ -2,10 +2,12 @@ package middleware
 
 import (
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/nsxbet/deeb/internal/config"
+	"golang.org/x/time/rate"
 )
 
 // Setup configures all Echo middleware in the correct order.
@@ -43,8 +45,29 @@ func Setup(e *echo.Echo, cfg *config.Config) {
 		MaxAge:           300, // 5 minutes
 	}))
 
-	// Rate limiting middleware - prevent abuse
-	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
+	// Rate limiting middleware - prevent abuse (configurable; skipped when disabled).
+	// Modeled as "RateLimitRequests per RateLimitWindow" per client IP: the window's
+	// worth of requests is the burst, and tokens refill at requests/window per second.
+	// This keeps a generous burst so a single SPA page load (which fans out many
+	// parallel requests, plus SWR revalidation and React StrictMode double-fires in
+	// dev) does not trip a 429, while still capping sustained abuse.
+	if cfg.Security.RateLimitEnabled {
+		window := cfg.Security.RateLimitWindow
+		if window <= 0 {
+			window = time.Minute
+		}
+		requests := cfg.Security.RateLimitRequests
+		if requests <= 0 {
+			requests = 1000
+		}
+		e.Use(middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
+				Rate:      rate.Limit(float64(requests) / window.Seconds()),
+				Burst:     requests,
+				ExpiresIn: 3 * time.Minute,
+			}),
+		}))
+	}
 
 	// Gzip compression middleware
 	e.Use(middleware.Gzip())

@@ -4,7 +4,6 @@ import type {
   ChangePlanListResponse,
   CreateChangePlanRequest,
   UpdateChangePlanRequest,
-  ListChangePlansParams,
   ApproveChangePlanRequest,
   CloseChangePlanRequest,
   ApprovalHistoryResponse,
@@ -16,26 +15,14 @@ export const changePlanService = {
   /**
    * List change plans with optional filters
    */
-  async listChangePlans(params?: ListChangePlansParams): Promise<ChangePlanListResponse> {
+  async listChangePlans(
+    params?: Record<string, string | number | undefined>,
+  ): Promise<ChangePlanListResponse> {
     const queryParams = new URLSearchParams();
-
-    if (params?.status) {
-      queryParams.append('status', params.status);
-    }
-    if (params?.project_id) {
-      queryParams.append('project_id', params.project_id);
-    }
-    if (params?.database_id) {
-      queryParams.append('database_id', params.database_id);
-    }
-    if (params?.author_id) {
-      queryParams.append('author_id', params.author_id);
-    }
-    if (params?.limit) {
-      queryParams.append('limit', params.limit.toString());
-    }
-    if (params?.offset) {
-      queryParams.append('offset', params.offset.toString());
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, String(value));
+      }
     }
 
     const queryString = queryParams.toString();

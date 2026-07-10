@@ -10,12 +10,12 @@ import { APIError } from '@/lib/api/types';
 import { showSuccessToast } from '@/lib/errorHandling';
 
 /**
- * Parameters for database instances list fetching
+ * Parameters for database instances list fetching.
+ *
+ * Permissive shape so pages can forward server-side filter params
+ * (search, database_engine, environment_id, status, created_after/before, ...).
  */
-export interface UseDatabaseInstancesParams {
-  limit?: number;
-  offset?: number;
-}
+export type UseDatabaseInstancesParams = Record<string, string | number | undefined>;
 
 /**
  * SWR fetcher function for database instances list
@@ -99,8 +99,15 @@ export function useCreateDatabaseInstance(): UseCreateDatabaseInstanceResult {
         setError(null);
         const result = await databaseInstancesService.createDatabaseInstance(data);
 
-        // Invalidate database instances cache using global mutate
-        await globalMutate('/api/database-instances', undefined, { revalidate: true });
+        // Invalidate database instances cache. The list is cached under an array key
+        // (['/api/database-instances', params]); match by predicate so filtered lists refresh.
+        await globalMutate(
+          (key) =>
+            (Array.isArray(key) && key[0] === '/api/database-instances') ||
+            key === '/api/database-instances',
+          undefined,
+          { revalidate: true },
+        );
 
         // Invalidate the new instance cache if we have the ID
         if (result?.id) {
@@ -150,8 +157,15 @@ export function useUpdateDatabaseInstance(): UseUpdateDatabaseInstanceResult {
         setError(null);
         const result = await databaseInstancesService.updateDatabaseInstance(id, data);
 
-        // Invalidate database instances cache using global mutate
-        await globalMutate('/api/database-instances', undefined, { revalidate: true });
+        // Invalidate database instances cache. The list is cached under an array key
+        // (['/api/database-instances', params]); match by predicate so filtered lists refresh.
+        await globalMutate(
+          (key) =>
+            (Array.isArray(key) && key[0] === '/api/database-instances') ||
+            key === '/api/database-instances',
+          undefined,
+          { revalidate: true },
+        );
 
         // Invalidate the specific instance cache
         await globalMutate(`/api/database-instances/${id}`);
@@ -195,8 +209,15 @@ export function useDeleteDatabaseInstance(): UseDeleteDatabaseInstanceResult {
       setError(null);
       await databaseInstancesService.deleteDatabaseInstance(id);
 
-      // Invalidate database instances cache using global mutate
-      await globalMutate('/api/database-instances', undefined, { revalidate: true });
+      // Invalidate database instances cache. The list is cached under an array key
+      // (['/api/database-instances', params]); match by predicate so filtered lists refresh.
+      await globalMutate(
+        (key) =>
+          (Array.isArray(key) && key[0] === '/api/database-instances') ||
+          key === '/api/database-instances',
+        undefined,
+        { revalidate: true },
+      );
 
       // Invalidate the specific instance cache
       await globalMutate(`/api/database-instances/${id}`);

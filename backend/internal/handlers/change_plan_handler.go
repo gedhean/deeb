@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -215,7 +216,8 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Change plan created successfully",
+	h.logger.Info(
+		"Change plan created successfully",
 		zap.String("change_plan_id", changePlan.ID.String()),
 		zap.String("project_id", changePlan.ProjectID.String()),
 	)
@@ -331,7 +333,8 @@ func (h *ChangePlanHandler) GetChangePlan(c echo.Context) error {
 
 	// RBAC check is done in middleware (RequireProjectPermission)
 
-	h.logger.Info("Change plan retrieved successfully",
+	h.logger.Info(
+		"Change plan retrieved successfully",
 		zap.String("change_plan_id", changePlan.ID.String()),
 	)
 
@@ -409,15 +412,44 @@ func (h *ChangePlanHandler) ListChangePlans(c echo.Context) error {
 	filters.Limit = limit
 	filters.Offset = offset
 
-	// Parse status filter
+	// Optional case-insensitive search over title and description
+	filters.Search = c.QueryParam("search")
+
+	// Optional change type filter
+	if changeTypeStr := c.QueryParam("change_type"); changeTypeStr != "" {
+		filters.ChangeType = models.ChangeType(changeTypeStr)
+	}
+
+	// Optional created_at range filters (RFC3339)
+	createdAfter, err := parseTimeParam(c, "created_after")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_after (must be RFC3339)",
+		})
+	}
+	createdBefore, err := parseTimeParam(c, "created_before")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_before (must be RFC3339)",
+		})
+	}
+	filters.CreatedAfter = createdAfter
+	filters.CreatedBefore = createdBefore
+
+	// Parse status filter (multi-select: comma-separated list of statuses).
 	if statusStr := c.QueryParam("status"); statusStr != "" {
-		status := models.ChangePlanStatus(statusStr)
-		if !status.IsValid() {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": "Invalid status value",
-			})
+		for _, raw := range strings.Split(statusStr, ",") {
+			raw = strings.TrimSpace(raw)
+			if raw == "" {
+				continue
+			}
+			if !models.ChangePlanStatus(raw).IsValid() {
+				return c.JSON(http.StatusBadRequest, map[string]interface{}{
+					"error": "Invalid status value",
+				})
+			}
 		}
-		filters.Status = status
+		filters.Status = models.ChangePlanStatus(statusStr)
 	}
 
 	// Parse project_id filter
@@ -717,7 +749,8 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		if changePlan.Status != models.ChangePlanStatusOpen && workflow.CanEditSQLContent(changePlan.Status) {
 			previousStatus := changePlan.Status
 			changePlan.Status = models.ChangePlanStatusOpen
-			h.logger.Info("Status transitioned to Open due to SQL content update",
+			h.logger.Info(
+				"Status transitioned to Open due to SQL content update",
 				zap.String("change_plan_id", changePlan.ID.String()),
 				zap.String("previous_status", string(previousStatus)),
 			)
@@ -728,13 +761,15 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		// Delete approvals whether status transitions to Open or is already Open
 		if changePlan.Status == models.ChangePlanStatusOpen {
 			if err := h.approvalRepo.DeleteByChangePlanID(ctx, changePlan.ID); err != nil {
-				h.logger.Warn("Failed to delete existing approvals after SQL content update",
+				h.logger.Warn(
+					"Failed to delete existing approvals after SQL content update",
 					zap.String("change_plan_id", changePlan.ID.String()),
 					zap.Error(err),
 				)
 				// Don't block the update - continue even if approval deletion fails
 			} else {
-				h.logger.Info("Deleted existing approvals after SQL content update",
+				h.logger.Info(
+					"Deleted existing approvals after SQL content update",
 					zap.String("change_plan_id", changePlan.ID.String()),
 				)
 			}
@@ -840,7 +875,8 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		h.trackChangeHistory(ctx, &oldChangePlan, changePlan, userID)
 	}
 
-	h.logger.Info("Change plan updated successfully",
+	h.logger.Info(
+		"Change plan updated successfully",
 		zap.String("change_plan_id", changePlan.ID.String()),
 	)
 
@@ -962,7 +998,8 @@ func (h *ChangePlanHandler) triggerSQLReview(c echo.Context, changePlan *models.
 		}
 	}
 
-	h.logger.Info("SQL Review completed successfully",
+	h.logger.Info(
+		"SQL Review completed successfully",
 		zap.String("change_plan_id", changePlan.ID.String()),
 		zap.Int("errors", reviewResult.ErrorCount),
 		zap.Int("warnings", reviewResult.WarningCount),
@@ -1213,7 +1250,8 @@ func (h *ChangePlanHandler) TriggerSQLReview(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("SQL Review triggered manually",
+	h.logger.Info(
+		"SQL Review triggered manually",
 		zap.String("change_plan_id", changePlan.ID.String()),
 		zap.Int("errors", reviewResult.ErrorCount),
 		zap.Int("warnings", reviewResult.WarningCount),
@@ -1435,7 +1473,8 @@ func (h *ChangePlanHandler) DeleteChangePlan(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Change plan deleted successfully",
+	h.logger.Info(
+		"Change plan deleted successfully",
 		zap.String("change_plan_id", changePlanID.String()),
 	)
 
@@ -1586,7 +1625,8 @@ func (h *ChangePlanHandler) ApproveChangePlan(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Change plan approved successfully",
+	h.logger.Info(
+		"Change plan approved successfully",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("approved_by", claims.UserID.String()),
 	)
@@ -1674,7 +1714,8 @@ func (h *ChangePlanHandler) CloseChangePlan(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Change plan closed successfully",
+	h.logger.Info(
+		"Change plan closed successfully",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("closed_by", claims.UserID.String()),
 	)
@@ -1912,7 +1953,8 @@ func (h *ChangePlanHandler) AssignReviewer(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Reviewer assigned successfully",
+	h.logger.Info(
+		"Reviewer assigned successfully",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("reviewer_id", req.ReviewerID.String()),
 		zap.String("author_id", userID.String()),
@@ -2018,7 +2060,8 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 			}
 		}
 
-		h.logger.Warn("Change plan execution blocked due to SQL Review errors (safety check)",
+		h.logger.Warn(
+			"Change plan execution blocked due to SQL Review errors (safety check)",
 			zap.String("change_plan_id", changePlan.ID.String()),
 			zap.Int("error_count", errorCount),
 		)
@@ -2080,7 +2123,8 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Change plan execution completed",
+	h.logger.Info(
+		"Change plan execution completed",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("executed_by", userID.String()),
 		zap.Bool("success", result.Success),
@@ -2331,7 +2375,8 @@ func (h *ChangePlanHandler) ResubmitChangePlan(c echo.Context) error {
 		})
 	}
 
-	h.logger.Info("Change plan resubmitted successfully",
+	h.logger.Info(
+		"Change plan resubmitted successfully",
 		zap.String("change_plan_id", changePlan.ID.String()),
 		zap.String("author_id", userID.String()),
 	)
@@ -2447,7 +2492,8 @@ func (h *ChangePlanHandler) trackChangeHistory(
 		}
 
 		if err := h.changeHistoryRepo.Create(ctx, changeHistory); err != nil {
-			h.logger.Error("Failed to create change history entry",
+			h.logger.Error(
+				"Failed to create change history entry",
 				zap.Error(err),
 				zap.String("change_plan_id", newChangePlan.ID.String()),
 				zap.String("field_name", change.fieldName),

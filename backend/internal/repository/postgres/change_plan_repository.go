@@ -53,7 +53,8 @@ func (r *ChangePlanRepository) Create(ctx context.Context, changePlan *models.Ch
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.ExecContext(
+		ctx, query,
 		changePlan.ID,
 		changePlan.ProjectID,
 		changePlan.TargetDatabaseID,
@@ -116,7 +117,8 @@ func (r *ChangePlanRepository) Update(ctx context.Context, changePlan *models.Ch
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := r.db.ExecContext(
+		ctx, query,
 		changePlan.ID,
 		changePlan.Title,
 		changePlan.Description,
@@ -344,10 +346,14 @@ func (r *ChangePlanRepository) ListWithFilters(
 	args := []interface{}{}
 	argIndex := 1
 
-	if filters.Status != "" {
-		whereClauses = append(whereClauses, "status = $"+fmt.Sprintf("%d", argIndex))
-		args = append(args, filters.Status)
-		argIndex++
+	if statuses := splitCSV(string(filters.Status)); len(statuses) > 0 {
+		placeholders := make([]string, len(statuses))
+		for i, s := range statuses {
+			placeholders[i] = fmt.Sprintf("$%d", argIndex)
+			args = append(args, s)
+			argIndex++
+		}
+		whereClauses = append(whereClauses, "status IN ("+strings.Join(placeholders, ", ")+")")
 	}
 
 	// Handle ProjectIDs (multiple projects) or ProjectID (single project)
@@ -374,6 +380,30 @@ func (r *ChangePlanRepository) ListWithFilters(
 	if filters.AuthorID != uuid.Nil {
 		whereClauses = append(whereClauses, "author_id = $"+fmt.Sprintf("%d", argIndex))
 		args = append(args, filters.AuthorID)
+		argIndex++
+	}
+
+	if filters.Search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d)", argIndex, argIndex))
+		args = append(args, "%"+filters.Search+"%")
+		argIndex++
+	}
+
+	if filters.ChangeType != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("change_type = $%d", argIndex))
+		args = append(args, filters.ChangeType)
+		argIndex++
+	}
+
+	if filters.CreatedAfter != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("created_at >= $%d", argIndex))
+		args = append(args, *filters.CreatedAfter)
+		argIndex++
+	}
+
+	if filters.CreatedBefore != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("created_at <= $%d", argIndex))
+		args = append(args, *filters.CreatedBefore)
 		argIndex++
 	}
 
@@ -425,10 +455,14 @@ func (r *ChangePlanRepository) CountWithFilters(ctx context.Context, filters rep
 	args := []interface{}{}
 	argIndex := 1
 
-	if filters.Status != "" {
-		whereClauses = append(whereClauses, "status = $"+fmt.Sprintf("%d", argIndex))
-		args = append(args, filters.Status)
-		argIndex++
+	if statuses := splitCSV(string(filters.Status)); len(statuses) > 0 {
+		placeholders := make([]string, len(statuses))
+		for i, s := range statuses {
+			placeholders[i] = fmt.Sprintf("$%d", argIndex)
+			args = append(args, s)
+			argIndex++
+		}
+		whereClauses = append(whereClauses, "status IN ("+strings.Join(placeholders, ", ")+")")
 	}
 
 	// Handle ProjectIDs (multiple projects) or ProjectID (single project)
@@ -455,6 +489,30 @@ func (r *ChangePlanRepository) CountWithFilters(ctx context.Context, filters rep
 	if filters.AuthorID != uuid.Nil {
 		whereClauses = append(whereClauses, "author_id = $"+fmt.Sprintf("%d", argIndex))
 		args = append(args, filters.AuthorID)
+		argIndex++
+	}
+
+	if filters.Search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d)", argIndex, argIndex))
+		args = append(args, "%"+filters.Search+"%")
+		argIndex++
+	}
+
+	if filters.ChangeType != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("change_type = $%d", argIndex))
+		args = append(args, filters.ChangeType)
+		argIndex++
+	}
+
+	if filters.CreatedAfter != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("created_at >= $%d", argIndex))
+		args = append(args, *filters.CreatedAfter)
+		argIndex++
+	}
+
+	if filters.CreatedBefore != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("created_at <= $%d", argIndex))
+		args = append(args, *filters.CreatedBefore)
 		argIndex++ //nolint:ineffassign
 	}
 

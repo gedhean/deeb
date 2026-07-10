@@ -81,7 +81,7 @@ func (s *ProjectAssignmentService) AssignUserToExistingProjects(ctx context.Cont
 	}
 
 	// Fetch projects (with reasonable limit for performance)
-	projects, err := s.projectRepo.List(ctx, maxProjectsToAssign, 0)
+	projects, err := s.projectRepo.List(ctx, repository.ProjectFilters{}, maxProjectsToAssign, 0)
 	if err != nil {
 		return 0, fmt.Errorf("failed to list projects: %w", err)
 	}

@@ -37,12 +37,9 @@ type IssueRepository interface {
 	// Delete deletes an issue by its ID
 	Delete(ctx context.Context, id uuid.UUID) error
 
-	// List retrieves a list of issues with optional filters
+	// List retrieves a list of issues with optional filters.
+	// The SearchQuery filter searches in title, description, and sql_content fields.
 	List(ctx context.Context, filters ListFilters) ([]*models.Issue, error)
-
-	// Search searches for issues based on a query string
-	// The query searches in title, description, and sql_content fields
-	Search(ctx context.Context, query string, filters ListFilters) ([]*models.Issue, error)
 
 	// Count returns the total number of issues matching the filters
 	Count(ctx context.Context, filters ListFilters) (int64, error)

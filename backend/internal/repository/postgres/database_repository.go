@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,7 +47,8 @@ func (r *DatabaseRepository) Create(ctx context.Context, database *models.Databa
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.ExecContext(
+		ctx, query,
 		database.ID,
 		database.ProjectID,
 		database.DatabaseInstanceID,
@@ -87,19 +89,53 @@ func (r *DatabaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*models
 	return &database, nil
 }
 
-// List retrieves all databases with pagination
-func (r *DatabaseRepository) List(ctx context.Context, limit, offset int) ([]*models.Database, error) {
+// databaseFilterConditions translates DatabaseFilters into a reusable set of
+// SQL conditions shared by List and Count.
+func databaseFilterConditions(filters repository.DatabaseFilters) *conditions {
+	c := &conditions{}
+	if filters.ProjectID != nil {
+		c.equal("project_id", *filters.ProjectID)
+	}
+	if filters.EnvironmentID != nil {
+		c.equal("environment_id", *filters.EnvironmentID)
+	}
+	if filters.InstanceID != nil {
+		c.equal("database_instance_id", *filters.InstanceID)
+	}
+	// Status is a multi-select: accepts a comma-separated list -> IN (...).
+	c.inCSV("status", filters.Status)
+	if filters.CreatedAfter != nil {
+		c.gte("created_at", *filters.CreatedAfter)
+	}
+	if filters.CreatedBefore != nil {
+		c.lte("created_at", *filters.CreatedBefore)
+	}
+	c.search(filters.Search, "database_name", "description")
+	return c
+}
+
+// List retrieves databases with pagination, applying the given filters.
+func (r *DatabaseRepository) List(
+	ctx context.Context,
+	filters repository.DatabaseFilters,
+	limit, offset int,
+) ([]*models.Database, error) {
+	c := databaseFilterConditions(filters)
+	where, args := c.clause()
+
 	query := `
 		SELECT id, project_id, database_instance_id, environment_id,
 		       database_name, description, status, created_by_id,
 		       created_at, updated_at
-		FROM databases
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`
+		FROM databases`
+	if where != "" {
+		query += " WHERE " + where
+	}
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
 
 	var databases []*models.Database
-	err := r.db.SelectContext(ctx, &databases, query, limit, offset)
+	err := r.db.SelectContext(ctx, &databases, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +148,14 @@ func (r *DatabaseRepository) List(ctx context.Context, limit, offset int) ([]*mo
 	return databases, nil
 }
 
-// Count returns the total number of databases
-func (r *DatabaseRepository) Count(ctx context.Context) (int, error) {
-	query := `SELECT COUNT(*) FROM databases`
+// Count returns the number of databases matching the given filters.
+func (r *DatabaseRepository) Count(ctx context.Context, filters repository.DatabaseFilters) (int, error) {
+	c := databaseFilterConditions(filters)
+	query := "SELECT COUNT(*) FROM databases" + c.whereClause()
+	_, args := c.clause()
 
 	var count int
-	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -279,7 +317,8 @@ func (r *DatabaseRepository) Update(ctx context.Context, database *models.Databa
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := r.db.ExecContext(
+		ctx, query,
 		database.ID,
 		database.ProjectID,
 		database.EnvironmentID,

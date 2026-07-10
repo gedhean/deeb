@@ -12,28 +12,14 @@ export const databasesService = {
    * List all databases
    * Requires authentication and database read permission
    */
-  async listDatabases(params?: {
-    limit?: number;
-    offset?: number;
-    project_id?: string;
-    environment_id?: string;
-    database_instance_id?: string;
-  }): Promise<ListResponse<Database>> {
+  async listDatabases(
+    params?: Record<string, string | number | undefined>,
+  ): Promise<ListResponse<Database>> {
     const queryParams = new URLSearchParams();
-    if (params?.limit) {
-      queryParams.append('limit', params.limit.toString());
-    }
-    if (params?.offset) {
-      queryParams.append('offset', params.offset.toString());
-    }
-    if (params?.project_id) {
-      queryParams.append('project_id', params.project_id);
-    }
-    if (params?.environment_id) {
-      queryParams.append('environment_id', params.environment_id);
-    }
-    if (params?.database_instance_id) {
-      queryParams.append('database_instance_id', params.database_instance_id);
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, String(value));
+      }
     }
 
     const queryString = queryParams.toString();

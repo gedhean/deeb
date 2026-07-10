@@ -11,6 +11,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
+	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -293,7 +294,7 @@ func TestUserRepository_List(t *testing.T) {
 		WithArgs(10, 0).
 		WillReturnRows(rows)
 
-	users, err := repo.List(ctx, 10, 0)
+	users, err := repo.List(ctx, repository.UserFilters{}, 10, 0)
 	assert.NoError(t, err)
 	assert.Len(t, users, 2)
 	assert.Equal(t, "user1@example.com", users[0].Email)

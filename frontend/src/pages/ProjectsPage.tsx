@@ -70,23 +70,56 @@ import {
   useUpdateProjectSWR,
   useDeleteProjectSWR,
 } from '@/hooks/api/useProjectsSWR';
+import {
+  useServerTableFilters,
+  type ServerTableFilterMapping,
+} from '@/hooks/useServerTableFilters';
+
+const PROJECTS_FILTER_MAPPING: ServerTableFilterMapping = {
+  searchColumnIds: ['name'],
+  dateRanges: { created_at: ['created_after', 'created_before'] },
+};
+
+// Filter definitions are static (no reference-backed filters), so they live at
+// module level.
+const PROJECTS_FILTER_DEFINITIONS: FilterDefinition[] = [
+  {
+    id: 'name',
+    type: 'search',
+    title: 'Name',
+    placeholder: 'Search names...',
+    defaultActive: true,
+  },
+  {
+    id: 'created_at',
+    type: 'dateRange',
+    title: 'Created',
+    presets: [
+      { label: 'Last 7 days', getValue: () => [subDays(new Date(), 7), new Date()] },
+      { label: 'Last 30 days', getValue: () => [subDays(new Date(), 30), new Date()] },
+      { label: 'Last 90 days', getValue: () => [subDays(new Date(), 90), new Date()] },
+    ],
+  },
+];
 
 export const ProjectsPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-
-  // Create pagination params with useMemo
-  const paginationParams = useMemo(
-    () => ({
-      limit: pageSize,
-      offset: pageIndex * pageSize,
-    }),
-    [pageIndex, pageSize],
-  );
+  // Server-side pagination + filtering (state persisted in the URL).
+  const {
+    params,
+    pageIndex,
+    pageSize,
+    setPageIndex,
+    setPageSize,
+    onFiltersChange,
+    initialColumnFilters,
+  } = useServerTableFilters({
+    mapping: PROJECTS_FILTER_MAPPING,
+    filterDefinitions: PROJECTS_FILTER_DEFINITIONS,
+    initialPageSize: 50,
+  });
 
   // Use cached projects from SWR hook
   const {
@@ -94,7 +127,7 @@ export const ProjectsPage: React.FC = () => {
     total,
     isLoading: projectsLoading,
     error: projectsError,
-  } = useProjectsSWR(paginationParams);
+  } = useProjectsSWR(params);
 
   // Use mutation hooks for create/update/delete
   const { createProject, isLoading: isCreating, error: createError } = useCreateProjectSWR();
@@ -388,39 +421,6 @@ export const ProjectsPage: React.FC = () => {
     [navigate, openEditForm, openDeleteConfirmation, canUpdateProjects, canDeleteProjects],
   );
 
-  // Define filter definitions for the toolbar
-  const filterDefinitions: FilterDefinition[] = useMemo(
-    () => [
-      {
-        id: 'name',
-        type: 'search',
-        title: 'Name',
-        placeholder: 'Search names...',
-        defaultActive: true,
-      },
-      {
-        id: 'created_at',
-        type: 'dateRange',
-        title: 'Created',
-        presets: [
-          {
-            label: 'Last 7 days',
-            getValue: () => [subDays(new Date(), 7), new Date()],
-          },
-          {
-            label: 'Last 30 days',
-            getValue: () => [subDays(new Date(), 30), new Date()],
-          },
-          {
-            label: 'Last 90 days',
-            getValue: () => [subDays(new Date(), 90), new Date()],
-          },
-        ],
-      },
-    ],
-    [],
-  );
-
   // Render access denied
   if (!user) {
     return (
@@ -513,22 +513,22 @@ export const ProjectsPage: React.FC = () => {
                 columns={projectsColumns}
                 data={projects}
                 isLoading={isLoading}
+                initialColumnFilters={initialColumnFilters}
                 emptyMessage="No projects found."
                 pagination={{
                   pageIndex,
                   pageSize,
                   totalCount: total,
                   onPageChange: setPageIndex,
-                  onPageSizeChange: (newSize) => {
-                    setPageSize(newSize);
-                    setPageIndex(0);
-                  },
-                  pageSizeOptions: [10, 20, 30, 50],
+                  onPageSizeChange: setPageSize,
+                  pageSizeOptions: [10, 20, 50, 100],
+                  manualFiltering: true,
                 }}
                 onRowClick={(project) => navigate(`/projects/${project.id}`)}
+                onFiltersChange={onFiltersChange}
               >
                 {(table) => (
-                  <DataTableToolbar table={table} filters={filterDefinitions}>
+                  <DataTableToolbar table={table} filters={PROJECTS_FILTER_DEFINITIONS}>
                     <DataTableViewOptions table={table} />
                   </DataTableToolbar>
                 )}

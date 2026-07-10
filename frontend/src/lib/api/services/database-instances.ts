@@ -12,20 +12,14 @@ export const databaseInstancesService = {
    * List all database instances
    * Requires authentication and database read permission
    */
-  async listDatabaseInstances(params?: {
-    limit?: number;
-    offset?: number;
-    environment_id?: string;
-  }): Promise<ListResponse<DatabaseInstance>> {
+  async listDatabaseInstances(
+    params?: Record<string, string | number | undefined>,
+  ): Promise<ListResponse<DatabaseInstance>> {
     const queryParams = new URLSearchParams();
-    if (params?.limit) {
-      queryParams.append('limit', params.limit.toString());
-    }
-    if (params?.offset) {
-      queryParams.append('offset', params.offset.toString());
-    }
-    if (params?.environment_id) {
-      queryParams.append('environment_id', params.environment_id);
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, String(value));
+      }
     }
 
     const queryString = queryParams.toString();

@@ -143,15 +143,33 @@ func (h *ProjectHandler) ListProjects(c echo.Context) error {
 		}
 	}
 
+	// Build filters from query parameters
+	var filters repository.ProjectFilters
+	filters.Search = c.QueryParam("search")
+
+	createdAfter, err := parseTimeParam(c, "created_after")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_after (must be RFC3339)",
+		})
+	}
+	createdBefore, err := parseTimeParam(c, "created_before")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_before (must be RFC3339)",
+		})
+	}
+	filters.CreatedAfter = createdAfter
+	filters.CreatedBefore = createdBefore
+
 	// Determine which projects to list based on organization role
 	var projects []*models.Project
-	var err error
 	var totalCount int64
 
 	orgRole := rbac.OrganizationRole(claims.OrganizationRole)
 	if orgRole == rbac.OrganizationAdmin {
 		// OrganizationAdmin sees all projects
-		projects, err = h.projectRepo.List(ctx, limit, offset)
+		projects, err = h.projectRepo.List(ctx, filters, limit, offset)
 		if err != nil {
 			h.logger.Error("Failed to list projects", zap.Error(err))
 			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -159,7 +177,7 @@ func (h *ProjectHandler) ListProjects(c echo.Context) error {
 			})
 		}
 
-		totalCount, err = h.projectRepo.Count(ctx)
+		totalCount, err = h.projectRepo.Count(ctx, filters)
 		if err != nil {
 			h.logger.Error("Failed to count projects", zap.Error(err))
 			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -168,7 +186,7 @@ func (h *ProjectHandler) ListProjects(c echo.Context) error {
 		}
 	} else {
 		// Non-admin users (OrganizationDBA, OrganizationDeveloper) only see projects they're members of
-		projects, err = h.projectRepo.ListByUserID(ctx, claims.UserID, limit, offset)
+		projects, err = h.projectRepo.ListByUserID(ctx, claims.UserID, filters, limit, offset)
 		if err != nil {
 			h.logger.Error("Failed to list projects for user", zap.Error(err), zap.String("user_id", claims.UserID.String()))
 			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
@@ -176,7 +194,7 @@ func (h *ProjectHandler) ListProjects(c echo.Context) error {
 			})
 		}
 
-		totalCount, err = h.projectRepo.CountByUserID(ctx, claims.UserID)
+		totalCount, err = h.projectRepo.CountByUserID(ctx, claims.UserID, filters)
 		if err != nil {
 			h.logger.Error("Failed to count projects for user", zap.Error(err), zap.String("user_id", claims.UserID.String()))
 			return c.JSON(http.StatusInternalServerError, map[string]interface{}{

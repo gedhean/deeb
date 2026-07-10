@@ -1,5 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDebounce } from '@/hooks/useDebounce';
+import { REFERENCE_LIST_LIMIT } from '@/lib/api/pagination';
 import { DefaultLayout } from '@/components/layouts';
 import type { ListAuditLogsParams, AuditLog } from '@/lib/api/types';
 import { useUsers } from '@/hooks/api/useUsersSWR';
@@ -50,18 +53,73 @@ const RESOURCE_TYPES = [
   'policy_finding',
 ];
 
+// Audit-log filter keys that are persisted to / restored from the URL.
+const AUDIT_FILTER_KEYS = [
+  'user_id',
+  'action',
+  'target_type',
+  'target_id',
+  'start_date',
+  'end_date',
+] as const;
+
 export const AuditLogPage: React.FC = () => {
   const { user } = useAuth();
 
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(50);
+  // The URL is the source of truth: initialize state from it on mount, then
+  // write it back (replace) whenever the state changes so the view is shareable
+  // and survives refresh / back-forward.
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Use cached users from store instead of fetching
-  const { getUserById } = useUsers();
+  // Pagination state
+  const [pageIndex, setPageIndex] = useState(() => {
+    const p = Number(searchParams.get('page'));
+    return Number.isFinite(p) && p > 0 ? p - 1 : 0;
+  });
+  const [pageSize, setPageSize] = useState(() => {
+    const s = Number(searchParams.get('pageSize'));
+    return Number.isFinite(s) && s > 0 ? s : 50;
+  });
+
+  // Full user list so audit entries by any user resolve to a name (not just 100).
+  const { getUserById } = useUsers({ limit: REFERENCE_LIST_LIMIT });
 
   // Filters
-  const [filters, setFilters] = useState<ListAuditLogsParams>({});
+  const [filters, setFilters] = useState<ListAuditLogsParams>(() => {
+    const initial: Record<string, string> = {};
+    for (const key of AUDIT_FILTER_KEYS) {
+      const value = searchParams.get(key);
+      if (value) {
+        initial[key] = value;
+      }
+    }
+    return initial as ListAuditLogsParams;
+  });
+
+  // Free-text search is debounced so typing doesn't fire an API call per keystroke.
+  // The debounced value feeds the request params directly (see `params` below),
+  // so no state-syncing effect is needed.
+  const [searchInput, setSearchInput] = useState(() => searchParams.get('search') ?? '');
+  const debouncedSearch = useDebounce(searchInput, 300);
+
+  // Persist the current view to the URL whenever it changes.
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (searchInput) {
+      next.set('search', searchInput);
+    }
+    for (const key of AUDIT_FILTER_KEYS) {
+      const value = (filters as Record<string, string | undefined>)[key];
+      if (value) {
+        next.set(key, value);
+      }
+    }
+    if (pageIndex > 0) {
+      next.set('page', String(pageIndex + 1));
+    }
+    next.set('pageSize', String(pageSize));
+    setSearchParams(next, { replace: true });
+  }, [searchInput, filters, pageIndex, pageSize, setSearchParams]);
 
   // Sheet state for audit log details
   const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null);
@@ -74,10 +132,11 @@ export const AuditLogPage: React.FC = () => {
   const params = useMemo(
     () => ({
       ...filters,
+      search: debouncedSearch || undefined,
       limit: pageSize,
       offset: pageIndex * pageSize,
     }),
-    [filters, pageSize, pageIndex],
+    [filters, debouncedSearch, pageSize, pageIndex],
   );
 
   // Use SWR hook for data fetching
@@ -115,6 +174,7 @@ export const AuditLogPage: React.FC = () => {
 
   const clearFilters = () => {
     setFilters({});
+    setSearchInput('');
     setPageIndex(0);
   };
 
@@ -178,7 +238,8 @@ export const AuditLogPage: React.FC = () => {
                 <Filter className="h-4 w-4" />
                 <CardTitle>Filters</CardTitle>
               </div>
-              {(filters.user_id ||
+              {(searchInput ||
+                filters.user_id ||
                 filters.action ||
                 filters.target_type ||
                 filters.target_id ||
@@ -194,6 +255,20 @@ export const AuditLogPage: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {/* Search Filter */}
+              <div className="space-y-2">
+                <Label htmlFor="search-filter">Search</Label>
+                <Input
+                  id="search-filter"
+                  placeholder="Search audit logs..."
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    setPageIndex(0);
+                  }}
+                />
+              </div>
+
               {/* User Filter */}
               <div className="space-y-2">
                 <Label htmlFor="user-filter">User</Label>
@@ -310,6 +385,7 @@ export const AuditLogPage: React.FC = () => {
               isLoading={isLoading}
               onRowClick={handleRowClick}
               emptyMessage={
+                searchInput ||
                 filters.user_id ||
                 filters.action ||
                 filters.target_type ||

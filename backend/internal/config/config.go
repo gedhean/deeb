@@ -164,7 +164,7 @@ func (c *Config) setDefaults() {
 	// Security defaults
 	c.Security.BcryptCost = 12
 	c.Security.RateLimitEnabled = true
-	c.Security.RateLimitRequests = 100
+	c.Security.RateLimitRequests = 1000
 	c.Security.RateLimitWindow = 1 * time.Minute
 
 	// Logging defaults
@@ -282,6 +282,14 @@ func (c *Config) loadFromEnv() {
 	if v := os.Getenv("BCRYPT_COST"); v != "" {
 		if cost, err := strconv.Atoi(v); err == nil {
 			c.Security.BcryptCost = cost
+		}
+	}
+	if v := os.Getenv("RATE_LIMIT_ENABLED"); v != "" {
+		c.Security.RateLimitEnabled = v == "true"
+	}
+	if v := os.Getenv("RATE_LIMIT_REQUESTS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.Security.RateLimitRequests = n
 		}
 	}
 

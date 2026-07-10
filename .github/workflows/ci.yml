@@ -166,7 +166,7 @@ jobs:
       - name: Set up pnpm
         uses: nsx-actions/pnpm_action-setup@v4
         with:
-          version: 9
+          version: 11.9.0
 
       # Phase 3: Node.js caching is already optimized with pnpm cache
       - name: Set up Node.js

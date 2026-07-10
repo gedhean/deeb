@@ -310,7 +310,7 @@ func TestDatabaseRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
-		databases, err := repo.List(ctx, 10, 0)
+		databases, err := repo.List(ctx, repository.DatabaseFilters{}, 10, 0)
 		require.NoError(t, err)
 		assert.Len(t, databases, 2)
 		assert.Equal(t, databaseID1, databases[0].ID)
@@ -329,7 +329,7 @@ func TestDatabaseRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
-		databases, err := repo.List(ctx, 10, 0)
+		databases, err := repo.List(ctx, repository.DatabaseFilters{}, 10, 0)
 		require.NoError(t, err)
 		assert.Len(t, databases, 0)
 		assert.NotNil(t, databases) // Should return empty slice, not nil
@@ -355,7 +355,7 @@ func TestDatabaseRepository_List(t *testing.T) {
 			WithArgs(5, 10).
 			WillReturnRows(rows)
 
-		databases, err := repo.List(ctx, 5, 10)
+		databases, err := repo.List(ctx, repository.DatabaseFilters{}, 5, 10)
 		require.NoError(t, err)
 		assert.Len(t, databases, 1)
 
@@ -367,7 +367,7 @@ func TestDatabaseRepository_List(t *testing.T) {
 			WithArgs(10, 0).
 			WillReturnError(errors.New("database error"))
 
-		databases, err := repo.List(ctx, 10, 0)
+		databases, err := repo.List(ctx, repository.DatabaseFilters{}, 10, 0)
 		require.Error(t, err)
 		assert.Nil(t, databases)
 		assert.Equal(t, "database error", err.Error())
@@ -387,7 +387,7 @@ func TestDatabaseRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM databases").
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(42))
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.DatabaseFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, 42, count)
 
@@ -398,7 +398,7 @@ func TestDatabaseRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM databases").
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.DatabaseFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, 0, count)
 
@@ -409,7 +409,7 @@ func TestDatabaseRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM databases").
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1000))
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.DatabaseFilters{})
 		require.NoError(t, err)
 		assert.Equal(t, 1000, count)
 
@@ -420,7 +420,7 @@ func TestDatabaseRepository_Count(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM databases").
 			WillReturnError(errors.New("database error"))
 
-		count, err := repo.Count(ctx)
+		count, err := repo.Count(ctx, repository.DatabaseFilters{})
 		require.Error(t, err)
 		assert.Equal(t, 0, count)
 		assert.Equal(t, "database error", err.Error())

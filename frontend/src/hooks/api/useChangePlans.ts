@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { changePlanService } from '@/lib/api/services/changePlans';
-import type { ChangePlan, CreateChangePlanRequest, ListChangePlansParams } from '@/lib/api/types';
+import type { ChangePlan, CreateChangePlanRequest } from '@/lib/api/types';
 import { APIError } from '@/lib/api/types';
 
 interface UseChangePlansOptions {
   enabled?: boolean;
-  params?: ListChangePlansParams;
+  params?: Record<string, string | number | undefined>;
 }
 
 interface UseChangePlansResult {

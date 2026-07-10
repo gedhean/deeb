@@ -179,9 +179,31 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// List retrieves all users with pagination
-func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
+// userFilterConditions translates UserFilters into a reusable set of SQL
+// conditions shared by List and Count.
+func userFilterConditions(filters repository.UserFilters) *conditions {
+	c := &conditions{}
+	// Organization role is a multi-select: comma-separated -> IN (...).
+	c.inCSV("organization_role", filters.OrganizationRole)
+	if filters.IsActive != nil {
+		c.equal("is_active", *filters.IsActive)
+	}
+	if filters.CreatedAfter != nil {
+		c.gte("created_at", *filters.CreatedAfter)
+	}
+	if filters.CreatedBefore != nil {
+		c.lte("created_at", *filters.CreatedBefore)
+	}
+	c.search(filters.Search, "email", "display_name")
+	return c
+}
+
+// List retrieves users with pagination, applying the given filters.
+func (r *userRepository) List(ctx context.Context, filters repository.UserFilters, limit, offset int) ([]*models.User, error) {
 	users := []*models.User{}
+
+	c := userFilterConditions(filters)
+	where, args := c.clause()
 
 	query := `
 		SELECT id, email, password_hash, display_name, organization_role,
@@ -189,11 +211,14 @@ func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*models
 			   two_factor_enabled, two_factor_secret,
 			   last_login_at, created_at, updated_at
 		FROM users
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
 	`
+	if where != "" {
+		query += " WHERE " + where
+	}
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
 
-	err := r.db.SelectContext(ctx, &users, query, limit, offset)
+	err := r.db.SelectContext(ctx, &users, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
@@ -201,12 +226,14 @@ func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*models
 	return users, nil
 }
 
-// Count returns the total number of users
-func (r *userRepository) Count(ctx context.Context) (int64, error) {
-	query := `SELECT COUNT(*) FROM users`
+// Count returns the number of users matching the given filters.
+func (r *userRepository) Count(ctx context.Context, filters repository.UserFilters) (int64, error) {
+	c := userFilterConditions(filters)
+	query := "SELECT COUNT(*) FROM users" + c.whereClause()
+	_, args := c.clause()
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count users: %w", err)
 	}

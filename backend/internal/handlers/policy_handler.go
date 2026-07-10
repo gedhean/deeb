@@ -103,13 +103,12 @@ func (h *PolicyHandler) ListPolicies(c echo.Context) error {
 		}
 	}
 
-	// Parse type filter if provided
-	typeParam := c.QueryParam("type")
-	var policies []*models.Policy
-	var totalCount int64
-	var err error
+	// Build filters from query parameters
+	var filters repository.PolicyFilters
+	filters.Search = c.QueryParam("search")
 
-	if typeParam != "" {
+	// Parse type filter if provided
+	if typeParam := c.QueryParam("type"); typeParam != "" {
 		policyType := models.PolicyType(typeParam)
 		// Validate type
 		if policyType != models.PolicyTypeSQLReview {
@@ -117,15 +116,28 @@ func (h *PolicyHandler) ListPolicies(c echo.Context) error {
 				"error": "Invalid policy type. Must be SQL_REVIEW",
 			})
 		}
-		policies, err = h.policyRepo.GetByType(ctx, policyType, limit, offset)
-		if err == nil {
-			totalCount, err = h.policyRepo.CountByType(ctx, policyType)
-		}
-	} else {
-		policies, err = h.policyRepo.List(ctx, limit, offset)
-		if err == nil {
-			totalCount, err = h.policyRepo.Count(ctx)
-		}
+		filters.Type = policyType
+	}
+
+	createdAfter, err := parseTimeParam(c, "created_after")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_after (must be RFC3339)",
+		})
+	}
+	createdBefore, err := parseTimeParam(c, "created_before")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid created_before (must be RFC3339)",
+		})
+	}
+	filters.CreatedAfter = createdAfter
+	filters.CreatedBefore = createdBefore
+
+	policies, err := h.policyRepo.List(ctx, filters, limit, offset)
+	var totalCount int64
+	if err == nil {
+		totalCount, err = h.policyRepo.Count(ctx, filters)
 	}
 
 	if err != nil {
@@ -275,7 +287,7 @@ func (h *PolicyHandler) DeletePolicy(c echo.Context) error {
 	// Check if policy is referenced by any environments
 	// We need to check all environments to see if any reference this policy
 	// Since we don't have a direct method, we'll list all environments and check
-	environments, err := h.envRepo.List(ctx, 1000, 0) // Get a large number to check all
+	environments, err := h.envRepo.List(ctx, repository.EnvironmentFilters{}, 1000, 0) // Get a large number to check all
 	if err != nil {
 		h.logger.Error("Failed to check environments for policy", zap.Error(err), zap.String("policy_id", policyID.String()))
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{

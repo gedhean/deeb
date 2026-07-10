@@ -127,7 +127,7 @@ func (h *RegisterHandler) Register(c echo.Context) error {
 
 	// Check if this is the first user (initial setup)
 	// First user automatically becomes OrganizationAdmin
-	users, err := h.userRepo.List(ctx, 1, 0)
+	users, err := h.userRepo.List(ctx, repository.UserFilters{}, 1, 0)
 	if err != nil {
 		h.logger.Error("Failed to check user count for first user setup", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})

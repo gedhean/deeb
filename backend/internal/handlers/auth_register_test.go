@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/rbac"
+	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
@@ -59,16 +60,20 @@ func (m *MockUserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockUserRepository) List(
+	ctx context.Context,
+	filters repository.UserFilters,
+	limit, offset int,
+) ([]*models.User, error) {
+	args := m.Called(ctx, filters, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*models.User), args.Error(1)
 }
 
-func (m *MockUserRepository) Count(ctx context.Context) (int64, error) {
-	args := m.Called(ctx)
+func (m *MockUserRepository) Count(ctx context.Context, filters repository.UserFilters) (int64, error) {
+	args := m.Called(ctx, filters)
 	return int64(args.Int(0)), args.Error(1)
 }
 
@@ -87,7 +92,7 @@ func TestRegisterHandler_ServeHTTP_Success(t *testing.T) {
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
-	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil) // Existing user
+	mockRepo.On("List", mock.Anything, mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil) // Existing user
 	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
 		return u.Email == "test@example.com" &&
 			u.PasswordHash != "" &&
@@ -137,7 +142,7 @@ func TestRegisterHandler_ServeHTTP_CustomOrganizationRole(t *testing.T) {
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "admin@example.com").Return(nil, sql.ErrNoRows)
-	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil) // Existing user
+	mockRepo.On("List", mock.Anything, mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil) // Existing user
 	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
 		return u.Email == "admin@example.com" &&
 			u.OrganizationRole == "OrganizationAdmin"
@@ -439,7 +444,7 @@ func TestRegisterHandler_ServeHTTP_DatabaseErrorOnCreate(t *testing.T) {
 
 	// Mock expectations
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
-	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil)
+	mockRepo.On("List", mock.Anything, mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil)
 	mockRepo.On("Create", mock.Anything, mock.Anything).Return(errors.New("database insert failed"))
 
 	// Create request
@@ -504,7 +509,7 @@ func TestRegisterHandler_ServeHTTP_EmailNormalization(t *testing.T) {
 
 	// Mock expectations - email should be lowercased and trimmed
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
-	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil)
+	mockRepo.On("List", mock.Anything, mock.Anything, 1, 0).Return([]*models.User{{ID: uuid.New()}}, nil)
 	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
 		return u.Email == "test@example.com" // Should be normalized
 	})).Return(nil)
@@ -539,7 +544,7 @@ func TestRegisterHandler_ServeHTTP_FirstUserBecomesAdmin(t *testing.T) {
 
 	// Mock expectations for first user (no existing users)
 	mockRepo.On("GetByEmail", mock.Anything, "first@example.com").Return(nil, sql.ErrNoRows)
-	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{}, nil) // No users exist
+	mockRepo.On("List", mock.Anything, mock.Anything, 1, 0).Return([]*models.User{}, nil) // No users exist
 	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
 		return u.Email == "first@example.com" &&
 			u.PasswordHash != "" &&
@@ -592,7 +597,7 @@ func TestRegisterHandler_ServeHTTP_SecondUserGetsDeveloperRole(t *testing.T) {
 	}
 
 	mockRepo.On("GetByEmail", mock.Anything, "second@example.com").Return(nil, sql.ErrNoRows)
-	mockRepo.On("List", mock.Anything, 1, 0).Return([]*models.User{existingUser}, nil) // One user exists
+	mockRepo.On("List", mock.Anything, mock.Anything, 1, 0).Return([]*models.User{existingUser}, nil) // One user exists
 	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
 		return u.Email == "second@example.com" &&
 			u.PasswordHash != "" &&
@@ -638,7 +643,7 @@ func TestRegisterHandler_ServeHTTP_FirstUserSetup_DatabaseError(t *testing.T) {
 
 	// Mock expectations - List() returns an error
 	mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, sql.ErrNoRows)
-	mockRepo.On("List", mock.Anything, 1, 0).Return(nil, errors.New("database connection failed"))
+	mockRepo.On("List", mock.Anything, mock.Anything, 1, 0).Return(nil, errors.New("database connection failed"))
 
 	// Create request
 	reqBody := RegisterRequest{

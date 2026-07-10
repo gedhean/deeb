@@ -6,13 +6,14 @@ export const usersService = {
    * List all users
    * Requires Organization Admin role
    */
-  async listUsers(params?: { limit?: number; offset?: number }): Promise<ListResponse<User>> {
+  async listUsers(
+    params?: Record<string, string | number | undefined>,
+  ): Promise<ListResponse<User>> {
     const queryParams = new URLSearchParams();
-    if (params?.limit) {
-      queryParams.append('limit', params.limit.toString());
-    }
-    if (params?.offset) {
-      queryParams.append('offset', params.offset.toString());
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, String(value));
+      }
     }
 
     const queryString = queryParams.toString();
@@ -20,14 +21,14 @@ export const usersService = {
 
     const response = await apiClient.get<{
       users: User[];
-      count: number;
+      total: number;
       limit: number;
       offset: number;
     }>(url);
 
     return {
       items: response.users,
-      total: response.count,
+      total: response.total,
       page: Math.floor((response.offset || 0) / (response.limit || 100)) + 1,
       page_size: response.limit || 100,
     };

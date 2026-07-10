@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
@@ -16,6 +17,11 @@ type ChangePlanListFilters struct {
 	ProjectIDs []uuid.UUID             // Filter by multiple project IDs (empty for all, overrides ProjectID)
 	DatabaseID uuid.UUID               // Filter by database ID (Nil for all)
 	AuthorID   uuid.UUID               // Filter by author ID (Nil for all)
+	Search     string                  // Case-insensitive search over title and description (empty for all)
+	ChangeType models.ChangeType       // Filter by change type (empty for all)
+
+	CreatedAfter  *time.Time // Filter by change plans created at/after this time (nil for all)
+	CreatedBefore *time.Time // Filter by change plans created at/before this time (nil for all)
 }
 
 // ChangePlanRepository defines the interface for change plan data operations

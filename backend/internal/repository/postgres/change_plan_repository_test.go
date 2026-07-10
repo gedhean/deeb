@@ -490,7 +490,7 @@ func TestChangePlanRepository_ListWithFilters(t *testing.T) {
 				time.Now(), time.Now(),
 			)
 
-		mock.ExpectQuery("SELECT.*FROM change_plans.*WHERE.*status = \\$1.*LIMIT \\$2").
+		mock.ExpectQuery("SELECT.*FROM change_plans.*WHERE.*status IN \\(\\$1\\).*LIMIT \\$2").
 			WithArgs("Open", 10).
 			WillReturnRows(rows)
 

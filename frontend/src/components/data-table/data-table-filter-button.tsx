@@ -49,28 +49,33 @@ export function DataTableFilterButton<TData>({
 }: DataTableFilterButtonProps<TData>) {
   const [open, setOpen] = React.useState(false);
 
-  // Group filters by type for better organization
-  const filtersByType = React.useMemo(() => {
-    const grouped: Record<string, FilterDefinition[]> = {
-      search: [],
-      faceted: [],
-      select: [],
-      dateRange: [],
-    };
-
-    filters.forEach((filter) => {
-      grouped[filter.type]?.push(filter);
-    });
-
-    return grouped;
-  }, [filters]);
-
+  // Display order + headings for the known filter types.
+  const typeOrder = ['search', 'faceted', 'select', 'async', 'dateRange'];
   const typeLabels: Record<string, string> = {
     search: 'Search',
     faceted: 'Multi-select',
     select: 'Select',
+    async: 'Lookup',
     dateRange: 'Date Range',
   };
+
+  // Group filters by type. Build the map from the filters themselves so any
+  // type (including 'async') is included rather than silently dropped.
+  const filtersByType = React.useMemo(() => {
+    const grouped: Record<string, FilterDefinition[]> = {};
+    filters.forEach((filter) => {
+      (grouped[filter.type] ??= []).push(filter);
+    });
+    return grouped;
+  }, [filters]);
+
+  const orderedTypes = React.useMemo(() => {
+    const present = Object.keys(filtersByType);
+    const known = typeOrder.filter((t) => present.includes(t));
+    const extra = present.filter((t) => !typeOrder.includes(t));
+    return [...known, ...extra];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersByType]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -85,11 +90,12 @@ export function DataTableFilterButton<TData>({
           <CommandInput placeholder="Search filters..." />
           <CommandList>
             <CommandEmpty>No filters found.</CommandEmpty>
-            {Object.entries(filtersByType).map(([type, typeFilters]) => {
-              if (typeFilters.length === 0) return null;
+            {orderedTypes.map((type) => {
+              const typeFilters = filtersByType[type];
+              if (!typeFilters || typeFilters.length === 0) return null;
 
               return (
-                <CommandGroup key={type} heading={typeLabels[type]}>
+                <CommandGroup key={type} heading={typeLabels[type] ?? type}>
                   {typeFilters.map((filter) => {
                     const isActive = activeFilterIds.has(filter.id);
                     const isPinned = filter.pinned;

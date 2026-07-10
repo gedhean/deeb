@@ -11,6 +11,11 @@ import {
   useTestConnection,
 } from '@/hooks/api/useDatabaseInstancesSWR';
 import { useEnvironmentsSWR } from '@/hooks/api/useEnvironmentsSWR';
+import { REFERENCE_LIST_LIMIT } from '@/lib/api/pagination';
+import {
+  useServerTableFilters,
+  type ServerTableFilterMapping,
+} from '@/hooks/useServerTableFilters';
 import { hasOrganizationPermission, OrganizationPermission } from '@/lib/rbac';
 import { objDiff } from '@/lib/utils';
 import { databaseInstancesService } from '@/lib/api/services/database-instances';
@@ -40,6 +45,16 @@ import type { FilterDefinition } from '@/components/data-table/types';
 import { getDatabaseInstancesColumns } from './database-instances/columns';
 import { Plus, AlertTriangle, CheckCircle2, Loader2, Server } from 'lucide-react';
 
+const DATABASE_INSTANCES_FILTER_MAPPING: ServerTableFilterMapping = {
+  searchColumnIds: ['name'],
+  equals: {
+    database_engine: 'database_engine',
+    environment: 'environment_id',
+    status: 'status',
+  },
+  dateRanges: { created_at: ['created_after', 'created_before'] },
+};
+
 export const DatabaseInstancesPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -60,18 +75,73 @@ export const DatabaseInstancesPage: React.FC = () => {
     skipped_databases?: string[];
   } | null>(null);
 
-  // Pagination state
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  // Full environment list — used for the (multi-select) Environment filter
+  // options and for resolving names in the table.
+  const { environments } = useEnvironmentsSWR({ limit: REFERENCE_LIST_LIMIT });
 
-  // Create pagination params with useMemo
-  const paginationParams = useMemo(
-    () => ({
-      limit: pageSize,
-      offset: pageIndex * pageSize,
-    }),
-    [pageIndex, pageSize],
+  // Environment is a small bounded set, so it's a faceted multi-select rather
+  // than a server-searched picker.
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      {
+        id: 'name',
+        type: 'search',
+        title: 'Name',
+        placeholder: 'Search names...',
+        defaultActive: true,
+      },
+      {
+        id: 'database_engine',
+        type: 'faceted',
+        title: 'Engine',
+        options: [
+          { label: 'PostgreSQL', value: 'postgres', icon: Server },
+          { label: 'MySQL', value: 'mysql', icon: Server },
+        ],
+      },
+      {
+        id: 'environment',
+        type: 'faceted',
+        title: 'Environment',
+        options: environments.map((e) => ({ label: e.name, value: e.id })),
+      },
+      {
+        id: 'status',
+        type: 'faceted',
+        title: 'Status',
+        options: [
+          { label: 'Active', value: 'Active', icon: Server },
+          { label: 'Inactive', value: 'Inactive', icon: Server },
+        ],
+      },
+      {
+        id: 'created_at',
+        type: 'dateRange',
+        title: 'Created',
+        presets: [
+          { label: 'Last 7 days', getValue: () => [subDays(new Date(), 7), new Date()] },
+          { label: 'Last 30 days', getValue: () => [subDays(new Date(), 30), new Date()] },
+          { label: 'Last 90 days', getValue: () => [subDays(new Date(), 90), new Date()] },
+        ],
+      },
+    ],
+    [environments],
   );
+
+  // Server-side pagination + filtering (state persisted in the URL).
+  const {
+    params,
+    pageIndex,
+    pageSize,
+    setPageIndex,
+    setPageSize,
+    onFiltersChange,
+    initialColumnFilters,
+  } = useServerTableFilters({
+    mapping: DATABASE_INSTANCES_FILTER_MAPPING,
+    filterDefinitions,
+    initialPageSize: 50,
+  });
 
   // Use SWR hooks for data fetching
   const {
@@ -79,8 +149,7 @@ export const DatabaseInstancesPage: React.FC = () => {
     total,
     isLoading,
     error: instancesError,
-  } = useDatabaseInstancesSWR(paginationParams);
-  const { environments } = useEnvironmentsSWR();
+  } = useDatabaseInstancesSWR(params);
 
   // Use mutation hooks
   const { createDatabaseInstance, isLoading: isCreating } = useCreateDatabaseInstance();
@@ -375,16 +444,6 @@ export const DatabaseInstancesPage: React.FC = () => {
     [environments],
   );
 
-  // Create filter options
-  const environmentOptions = useMemo(
-    () =>
-      environments.map((env) => ({
-        label: env.name,
-        value: env.id,
-      })),
-    [environments],
-  );
-
   // Get columns with action handlers
   const columns = useMemo(
     () =>
@@ -404,63 +463,6 @@ export const DatabaseInstancesPage: React.FC = () => {
       canDeleteDatabaseInstances,
       getEnvironmentName,
     ],
-  );
-
-  // Define filter definitions for the toolbar
-  const filterDefinitions: FilterDefinition[] = useMemo(
-    () => [
-      {
-        id: 'name',
-        type: 'search',
-        title: 'Name',
-        placeholder: 'Search names...',
-        defaultActive: true,
-      },
-      {
-        id: 'database_engine',
-        type: 'faceted',
-        title: 'Engine',
-        options: [
-          { label: 'PostgreSQL', value: 'postgres', icon: Server },
-          { label: 'MySQL', value: 'mysql', icon: Server },
-        ],
-      },
-      {
-        id: 'environment',
-        type: 'faceted',
-        title: 'Environment',
-        options: environmentOptions,
-      },
-      {
-        id: 'status',
-        type: 'faceted',
-        title: 'Status',
-        options: [
-          { label: 'Active', value: 'Active', icon: Server },
-          { label: 'Inactive', value: 'Inactive', icon: Server },
-        ],
-      },
-      {
-        id: 'created_at',
-        type: 'dateRange',
-        title: 'Created',
-        presets: [
-          {
-            label: 'Last 7 days',
-            getValue: () => [subDays(new Date(), 7), new Date()],
-          },
-          {
-            label: 'Last 30 days',
-            getValue: () => [subDays(new Date(), 30), new Date()],
-          },
-          {
-            label: 'Last 90 days',
-            getValue: () => [subDays(new Date(), 90), new Date()],
-          },
-        ],
-      },
-    ],
-    [environmentOptions],
   );
 
   // Render access denied
@@ -589,19 +591,19 @@ export const DatabaseInstancesPage: React.FC = () => {
               columns={columns}
               data={instances}
               isLoading={isLoading}
+              initialColumnFilters={initialColumnFilters}
               emptyMessage="No database instances match your filters. Try adjusting your search criteria."
               pagination={{
                 pageIndex,
                 pageSize,
                 totalCount: total,
                 onPageChange: setPageIndex,
-                onPageSizeChange: (newSize) => {
-                  setPageSize(newSize);
-                  setPageIndex(0);
-                },
-                pageSizeOptions: [10, 20, 30, 50],
+                onPageSizeChange: setPageSize,
+                pageSizeOptions: [10, 20, 50, 100],
+                manualFiltering: true,
               }}
               onRowClick={(instance) => navigate(`/database-instances/${instance.id}`)}
+              onFiltersChange={onFiltersChange}
             >
               {(table) => (
                 <DataTableToolbar table={table} filters={filterDefinitions}>
