@@ -5,17 +5,20 @@ FROM node:24-alpine AS builder
 # Build argument for API base URL
 ARG VITE_API_BASE_URL=https://deeb.nsx.services
 
-# Install pnpm — pin to v9 to match CI (pnpm_action-setup version 9) and the
-# lockfile (lockfileVersion 9.0). pnpm 10+ reads build-script approvals only
-# from pnpm-workspace.yaml, so it would ignore the .npmrc / package.json
-# onlyBuiltDependencies here and fail on esbuild/msw with ERR_PNPM_IGNORED_BUILDS.
-RUN corepack enable && corepack prepare pnpm@9 --activate
+# Install pnpm — pin to 11.9.0 to match CI (pnpm_action-setup) and local dev.
+# pnpm 10+ reads build-script approvals from pnpm-workspace.yaml (allowBuilds:
+# esbuild/msw); pnpm 9 instead treats pnpm-workspace.yaml as a workspace def and
+# fails with "packages field missing or empty" on `pnpm run`. The lockfile
+# (lockfileVersion 9.0) is read unchanged by pnpm 11.
+RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY frontend/package.json frontend/pnpm-lock.yaml frontend/.npmrc ./
+# Copy package files. pnpm-workspace.yaml carries the build-script approvals
+# (allowBuilds: esbuild/msw); without it here, `pnpm install` aborts with
+# ERR_PNPM_IGNORED_BUILDS.
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/.npmrc frontend/pnpm-workspace.yaml ./
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile

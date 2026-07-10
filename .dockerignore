@@ -1,0 +1,14 @@
+# Dependencies and build artifacts must be produced inside the image, never
+# copied from the host. In particular, letting the host's frontend/node_modules
+# overlay the container's install makes pnpm's verify-deps-before-run try to
+# reinstall (and abort with no TTY) during `pnpm run build`.
+**/node_modules
+frontend/dist
+frontend/coverage
+
+# VCS and local-only tooling / artifacts
+.git
+.github
+graphify-out
+.mcp.json
+**/*.log
