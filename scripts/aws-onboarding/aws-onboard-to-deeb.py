@@ -73,7 +73,7 @@ ASSUME_ROLE_SESSION_NAME = "deeb-onboarder"
 # A filter is {tag_key: [allowed_value, ...]}; an instance must, for every key, carry
 # that tag with a value in the allowed list (values matched case-insensitively).
 # Set `tag_filters: {}` in config to onboard regardless of tags.
-DEFAULT_TAG_FILTERS = {"Environment": ["prod", "production", "staging", "homol", "tooling"]}
+DEFAULT_TAG_FILTERS = {"Environment": ["prod", "production", "staging", "homol", "tooling", "ai-prod"]}
 
 # Tag whose value drives per-account env/project overrides (see normalize_env_overrides).
 # Overridable per account via `env_override_tag`.
