@@ -6,6 +6,7 @@ import type {
   UpdateChangePlanRequest,
   ApproveChangePlanRequest,
   CloseChangePlanRequest,
+  GhostPreflightResponse,
   ApprovalHistoryResponse,
   ExecutionLogHistoryResponse,
   StatementExecutionResultsResponse,
@@ -84,6 +85,30 @@ export const changePlanService = {
    */
   async executeChangePlan(id: string): Promise<void> {
     await apiClient.post(`/api/v1/change-plans/${id}/execute`, {});
+  },
+
+  /**
+   * Approve ghost cutover (ghost executor plans in AwaitingCutover)
+   */
+  async approveGhostCutover(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/cutover-approve`, {});
+  },
+
+  /**
+   * Abort ghost execution (creates the panic flag pre-cutover)
+   */
+  async abortGhostExecution(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/abort`, {});
+  },
+
+  /**
+   * Run ghost executor pre-flight checks against the target database
+   */
+  async getGhostPreflight(id: string): Promise<GhostPreflightResponse> {
+    const response = await apiClient.get<GhostPreflightResponse>(
+      `/api/v1/change-plans/${id}/ghost-preflight`,
+    );
+    return response.data;
   },
 
   /**

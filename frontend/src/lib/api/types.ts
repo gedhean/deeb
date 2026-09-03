@@ -220,6 +220,7 @@ export interface Environment {
   description?: string;
   policy_id?: string;
   allow_self_approval: boolean;
+  is_production: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -326,9 +327,12 @@ export type ChangePlanStatus =
   | 'Approved'
   | 'Closed'
   | 'InProgress'
+  | 'AwaitingCutover'
   | 'Completed'
   | 'Failed'
   | 'Cancelled';
+
+export type ExecutionBackend = 'direct' | 'ghost';
 
 export type ChangeType = 'DDL' | 'DML';
 
@@ -365,6 +369,7 @@ export interface ChangePlan {
   sql_content: string;
   rollback_sql?: string;
   status: ChangePlanStatus;
+  execution_backend: ExecutionBackend;
   risk_level: RiskLevel;
   author_id: string;
   assigned_reviewer_id?: string;
@@ -404,6 +409,7 @@ export interface CreateChangePlanRequest {
   change_type: ChangeType;
   sql_content: string;
   rollback_sql?: string;
+  execution_backend?: ExecutionBackend;
 }
 
 export interface ApproveChangePlanRequest {
@@ -422,6 +428,20 @@ export interface UpdateChangePlanRequest {
   status?: ChangePlanStatus;
   risk_level?: RiskLevel;
   assigned_reviewer_id?: string;
+  execution_backend?: ExecutionBackend;
+}
+
+export interface GhostPreflightCheck {
+  name: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface GhostPreflightResponse {
+  change_plan_id: string;
+  engine: 'mysql' | 'postgres';
+  all_passed: boolean;
+  checks: GhostPreflightCheck[];
 }
 
 export interface Approval {
