@@ -47,6 +47,7 @@ type Environment struct {
 	Description       *string    `json:"description,omitempty" db:"description"`
 	PolicyID          *uuid.UUID `json:"policy_id,omitempty"   db:"policy_id"`
 	AllowSelfApproval bool       `json:"allow_self_approval"   db:"allow_self_approval"`
+	IsProduction      bool       `json:"is_production"        db:"is_production"`
 	CreatedByID       uuid.UUID  `json:"created_by_id"         db:"created_by_id"`
 	CreatedAt         time.Time  `json:"created_at"            db:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"            db:"updated_at"`
@@ -58,6 +59,7 @@ type CreateEnvironmentRequest struct {
 	Description       *string    `json:"description,omitempty"         validate:"omitempty"`
 	PolicyID          *uuid.UUID `json:"policy_id,omitempty"`
 	AllowSelfApproval *bool      `json:"allow_self_approval,omitempty"`
+	IsProduction      *bool      `json:"is_production,omitempty"`
 }
 
 // UpdateEnvironmentRequest represents the request to update an environment
@@ -66,6 +68,7 @@ type UpdateEnvironmentRequest struct {
 	Description       *string      `json:"description,omitempty"`
 	PolicyID          NullableUUID `json:"policy_id,omitempty"`
 	AllowSelfApproval *bool        `json:"allow_self_approval,omitempty"`
+	IsProduction      *bool        `json:"is_production,omitempty"`
 }
 
 // EnvironmentResponse represents an environment response
@@ -75,6 +78,7 @@ type EnvironmentResponse struct {
 	Description       *string    `json:"description,omitempty"`
 	PolicyID          *uuid.UUID `json:"policy_id,omitempty"`
 	AllowSelfApproval bool       `json:"allow_self_approval"`
+	IsProduction      bool       `json:"is_production"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
@@ -87,6 +91,7 @@ func (e *Environment) ToResponse() *EnvironmentResponse {
 		Description:       e.Description,
 		PolicyID:          e.PolicyID,
 		AllowSelfApproval: e.AllowSelfApproval,
+		IsProduction:      e.IsProduction,
 		CreatedAt:         e.CreatedAt,
 		UpdatedAt:         e.UpdatedAt,
 	}

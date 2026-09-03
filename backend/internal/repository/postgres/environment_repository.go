@@ -34,7 +34,7 @@ func (r *EnvironmentRepository) Create(ctx context.Context, environment *models.
 	environment.UpdatedAt = now
 
 	query := `
-		INSERT INTO environments (id, name, description, policy_id, allow_self_approval, created_by_id, created_at, updated_at)
+		INSERT INTO environments (id, name, description, policy_id, allow_self_approval, is_production, created_by_id, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
@@ -59,7 +59,7 @@ func (r *EnvironmentRepository) Create(ctx context.Context, environment *models.
 // GetByID retrieves an environment by its ID
 func (r *EnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Environment, error) {
 	query := `
-		SELECT id, name, description, policy_id, allow_self_approval, created_by_id, created_at, updated_at
+		SELECT id, name, description, policy_id, allow_self_approval, is_production, created_by_id, created_at, updated_at
 		FROM environments
 		WHERE id = $1
 	`
@@ -105,7 +105,7 @@ func (r *EnvironmentRepository) List(
 	c := environmentFilterConditions(filters)
 	where, args := c.clause()
 
-	query := `SELECT id, name, description, policy_id, allow_self_approval, created_by_id, created_at, updated_at FROM environments`
+	query := `SELECT id, name, description, policy_id, allow_self_approval, is_production, created_by_id, created_at, updated_at FROM environments`
 	if where != "" {
 		query += " WHERE " + where
 	}
@@ -148,7 +148,8 @@ func (r *EnvironmentRepository) Update(ctx context.Context, environment *models.
 
 	query := `
 		UPDATE environments
-		SET name = $2, description = $3, policy_id = $4, allow_self_approval = $5, updated_at = $6
+		SET name = $2, description = $3, policy_id = $4, allow_self_approval = $5,
+			is_production = $6, updated_at = $7
 		WHERE id = $1
 	`
 
@@ -159,6 +160,7 @@ func (r *EnvironmentRepository) Update(ctx context.Context, environment *models.
 		environment.Description,
 		environment.PolicyID,
 		environment.AllowSelfApproval,
+		environment.IsProduction,
 		environment.UpdatedAt,
 	)
 	if err != nil {
