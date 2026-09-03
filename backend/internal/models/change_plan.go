@@ -88,21 +88,21 @@ type ChangePlan struct {
 	AffectedRows        *int             `json:"affected_rows,omitempty"         db:"affected_rows"`
 	ErrorMessage        *string          `json:"error_message,omitempty"         db:"error_message"`
 	StatementCount      *int             `json:"statement_count,omitempty"       db:"statement_count"`
-	ExecutionBackend    ExecutionBackend `json:"execution_backend"                db:"execution_backend"`
+	ExecutionBackend    ExecutionBackend `json:"execution_backend"               db:"execution_backend"`
 	CreatedAt           time.Time        `json:"created_at"                      db:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"                      db:"updated_at"`
 }
 
 // CreateChangePlanRequest represents the request to create a new change plan
 type CreateChangePlanRequest struct {
-	ProjectID        uuid.UUID        `json:"project_id"             validate:"required"`
-	TargetDatabaseID uuid.UUID        `json:"target_database_id"     validate:"required"`
-	Title            string           `json:"title"                  validate:"required,max=255"`
-	Description      string           `json:"description"            validate:"omitempty"`
-	ChangeType       ChangeType       `json:"change_type"            validate:"required,oneof=DDL DML"`
-	SQLContent       string           `json:"sql_content"            validate:"required"`
+	ProjectID        uuid.UUID        `json:"project_id"                  validate:"required"`
+	TargetDatabaseID uuid.UUID        `json:"target_database_id"          validate:"required"`
+	Title            string           `json:"title"                       validate:"required,max=255"`
+	Description      string           `json:"description"                 validate:"omitempty"`
+	ChangeType       ChangeType       `json:"change_type"                 validate:"required,oneof=DDL DML"`
+	SQLContent       string           `json:"sql_content"                 validate:"required"`
 	RollbackSQL      *string          `json:"rollback_sql,omitempty"`
-	ExecutionBackend ExecutionBackend `json:"execution_backend,omitempty"     validate:"omitempty,oneof=direct ghost"`
+	ExecutionBackend ExecutionBackend `json:"execution_backend,omitempty" validate:"omitempty,oneof=direct ghost"`
 }
 
 // UpdateChangePlanRequest represents the request to update a change plan
@@ -114,7 +114,7 @@ type UpdateChangePlanRequest struct {
 	Status             *ChangePlanStatus `json:"status,omitempty"               validate:"omitempty,oneof=Draft Open Approved Closed InProgress Completed Failed Cancelled"`
 	RiskLevel          *RiskLevel        `json:"risk_level,omitempty"           validate:"omitempty,oneof=Low Medium High"`
 	AssignedReviewerID *uuid.UUID        `json:"assigned_reviewer_id,omitempty"`
-	ExecutionBackend   *ExecutionBackend `json:"execution_backend,omitempty"     validate:"omitempty,oneof=direct ghost"`
+	ExecutionBackend   *ExecutionBackend `json:"execution_backend,omitempty"    validate:"omitempty,oneof=direct ghost"`
 }
 
 // ChangePlanResponse represents a change plan response

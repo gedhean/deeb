@@ -47,7 +47,7 @@ type Environment struct {
 	Description       *string    `json:"description,omitempty" db:"description"`
 	PolicyID          *uuid.UUID `json:"policy_id,omitempty"   db:"policy_id"`
 	AllowSelfApproval bool       `json:"allow_self_approval"   db:"allow_self_approval"`
-	IsProduction      bool       `json:"is_production"        db:"is_production"`
+	IsProduction      bool       `json:"is_production"         db:"is_production"`
 	CreatedByID       uuid.UUID  `json:"created_by_id"         db:"created_by_id"`
 	CreatedAt         time.Time  `json:"created_at"            db:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"            db:"updated_at"`
