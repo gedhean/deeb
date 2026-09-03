@@ -174,6 +174,14 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 
 	// RBAC check is done in middleware (RequireProjectPermission)
 
+	// Validate ghost executor selection (DDL + non-production environment).
+	executionBackend, err := h.validateGhostSelection(ctx, req.ExecutionBackend, req.ChangeType, database)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
 	// Create change plan with Draft status
 	statementCount := parseResult.TotalCount
 	changePlan := &models.ChangePlan{
@@ -188,6 +196,7 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		RiskLevel:        models.RiskLevelMedium, // Default, will be calculated
 		AuthorID:         claims.UserID,
 		StatementCount:   &statementCount,
+		ExecutionBackend: executionBackend,
 	}
 
 	// Assess risk level based on SQL content, environment, and database type
@@ -256,6 +265,37 @@ func validateUpdateChangePlanRequest(req *models.UpdateChangePlanRequest) *middl
 	}
 
 	return nil
+}
+
+// validateGhostSelection enforces ghost executor constraints at the API
+// boundary: only DDL plans on databases in non-production environments may
+// pick execution_backend=ghost. Empty backend defaults to direct.
+func (h *ChangePlanHandler) validateGhostSelection(
+	ctx context.Context,
+	backend models.ExecutionBackend,
+	changeType models.ChangeType,
+	database *models.Database,
+) (models.ExecutionBackend, error) {
+	if backend == "" || backend == models.ExecutionBackendDirect {
+		return models.ExecutionBackendDirect, nil
+	}
+	if backend != models.ExecutionBackendGhost {
+		return "", fmt.Errorf("invalid execution_backend: must be direct or ghost")
+	}
+	if changeType != models.ChangeTypeDDL {
+		return "", fmt.Errorf("execution_backend=ghost is only supported for DDL change plans")
+	}
+	if database.EnvironmentID == nil {
+		return "", fmt.Errorf("execution_backend=ghost requires the database to be assigned to an environment")
+	}
+	env, err := h.environmentRepo.GetByID(ctx, *database.EnvironmentID)
+	if err != nil {
+		return "", fmt.Errorf("failed to validate environment: %w", err)
+	}
+	if env.IsProduction {
+		return "", fmt.Errorf("execution_backend=ghost is not permitted on production environments")
+	}
+	return models.ExecutionBackendGhost, nil
 }
 
 // validateCreateChangePlanRequest validates the create change plan request
@@ -685,6 +725,24 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 	// Update fields if provided
 	if req.Title != nil {
 		changePlan.Title = *req.Title
+	}
+
+	// Execution backend switch: validated against DDL type and the target
+	// database's environment (ghost only allowed on non-production).
+	if req.ExecutionBackend != nil {
+		database, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to validate target database",
+			})
+		}
+		backend, err := h.validateGhostSelection(ctx, *req.ExecutionBackend, changePlan.ChangeType, database)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		changePlan.ExecutionBackend = backend
 	}
 
 	if req.Description != nil {
@@ -2583,5 +2641,208 @@ func (h *ChangePlanHandler) GetStatementResults(c echo.Context) error {
 		"execution_log_id":  executionLogID.String(),
 		"statement_results": resultResponses,
 		"total":             len(resultResponses),
+	})
+}
+
+// ApproveGhostCutover handles POST /api/v1/change-plans/:id/cutover-approve
+// Removes the ghost postpone flag so the running tool proceeds to cutover.
+func (h *ChangePlanHandler) ApproveGhostCutover(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	if err := h.executionService.ApproveGhostCutover(ctx, changePlanID); err != nil {
+		status := http.StatusBadRequest
+		if err == repository.ErrNotFound {
+			status = http.StatusNotFound
+		}
+		return c.JSON(status, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	h.logger.Info("Ghost cutover approved",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Cutover approved",
+	})
+}
+
+// AbortGhostExecution handles POST /api/v1/change-plans/:id/abort
+// Creates the ghost panic flag to abort cleanly before the cutover.
+func (h *ChangePlanHandler) AbortGhostExecution(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	if err := h.executionService.AbortGhostExecution(ctx, changePlanID); err != nil {
+		status := http.StatusBadRequest
+		if err == repository.ErrNotFound {
+			status = http.StatusNotFound
+		}
+		return c.JSON(status, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	h.logger.Info("Ghost execution aborted",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Abort requested",
+	})
+}
+
+// GhostPreflightCheck handles GET /api/v1/change-plans/:id/ghost-preflight
+// Validates the target database meets ghost executor requirements:
+// MySQL — binlog ROW + FULL row image, REPLICATION SLAVE/CLIENT grants,
+// and ALL privileges on the database; PostgreSQL — table has PK and no
+// triggers (pg-online-schema-change constraints). Returns per-check
+// pass/fail with remediation guidance.
+func (h *ChangePlanHandler) GhostPreflightCheck(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	db, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve target database",
+		})
+	}
+	dbInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve database instance",
+		})
+	}
+
+	conn, err := h.connectionManager.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": fmt.Sprintf("Failed to connect to target database: %s", err.Error()),
+		})
+	}
+	defer conn.Close()
+
+	type preflightCheck struct {
+		Name   string `json:"name"`
+		Passed bool   `json:"passed"`
+		Detail string `json:"detail"`
+	}
+	var checks []preflightCheck
+	addCheck := func(name string, passed bool, detail string) {
+		checks = append(checks, preflightCheck{Name: name, Passed: passed, Detail: detail})
+	}
+
+	switch dbInstance.DatabaseEngine {
+	case models.DatabaseEngineMySQL:
+		// binlog_format must be ROW
+		var name, value string
+		err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_format'").Scan(&name, &value)
+		addCheck("binlog_format=ROW", err == nil && strings.EqualFold(value, "ROW"),
+			fmt.Sprintf("current: %s (gh-ost requires ROW; check RDS parameter group)", value))
+
+		// binlog_row_image must be FULL
+		value = ""
+		err = conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_row_image'").Scan(&name, &value)
+		addCheck("binlog_row_image=FULL", err == nil && strings.EqualFold(value, "FULL"),
+			fmt.Sprintf("current: %s (gh-ost requires FULL row image)", value))
+
+		// Grants: REPLICATION SLAVE + REPLICATION CLIENT + ALL ON <db>.*
+		rows, err := conn.QueryContext(ctx, "SHOW GRANTS")
+		grantsPass, grantsDetail := false, "could not read grants"
+		if err == nil {
+			defer rows.Close()
+			var all string
+			for rows.Next() {
+				var g string
+				if scanErr := rows.Scan(&g); scanErr == nil {
+					all += " " + strings.ToUpper(g)
+				}
+			}
+			hasReplication := strings.Contains(all, "REPLICATION SLAVE") && strings.Contains(all, "REPLICATION CLIENT")
+			dbNameEsc := strings.ToUpper(db.DatabaseName)
+			hasDBPrivs := strings.Contains(all, "ALL PRIVILEGES") &&
+				(strings.Contains(all, "ON *.*") || strings.Contains(all, "ON `"+dbNameEsc+"`.*") || strings.Contains(all, "ON "+dbNameEsc+".*"))
+			grantsPass = hasReplication && hasDBPrivs
+			grantsDetail = fmt.Sprintf(
+				"required: ALL PRIVILEGES ON %s.* plus REPLICATION SLAVE, REPLICATION CLIENT ON *.*",
+				db.DatabaseName,
+			)
+		}
+		addCheck("privileges", grantsPass, grantsDetail)
+
+	case models.DatabaseEnginePostgreSQL:
+		// pg-online-schema-change constraints: target table needs PK and no triggers.
+		table, _, parseErr := services.ParseAlterStatement(changePlan.SQLContent)
+		if parseErr != nil {
+			addCheck("sql_parse", false, parseErr.Error())
+			break
+		}
+
+		var pkCount int
+		err := conn.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM information_schema.table_constraints
+			 WHERE table_name = $1 AND constraint_type = 'PRIMARY KEY'`, table,
+		).Scan(&pkCount)
+		addCheck("primary_key", err == nil && pkCount > 0,
+			"pg-online-schema-change requires a primary key on the target table")
+
+		var triggerCount int
+		err = conn.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM information_schema.triggers
+			 WHERE event_object_table = $1`, table,
+		).Scan(&triggerCount)
+		addCheck("no_triggers", err == nil && triggerCount == 0,
+			"pg-online-schema-change cannot run on tables with triggers")
+	}
+
+	allPassed := true
+	for _, ch := range checks {
+		if !ch.Passed {
+			allPassed = false
+			break
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"change_plan_id": changePlanID.String(),
+		"engine":         dbInstance.DatabaseEngine,
+		"all_passed":     allPassed,
+		"checks":         checks,
 	})
 }

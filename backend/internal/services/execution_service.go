@@ -114,6 +114,44 @@ func (s *ExecutionService) GhostMaxDuration() time.Duration {
 	return s.ghostExecutor.maxDuration
 }
 
+// ApproveGhostCutover removes the ghost postpone flag for a plan that is
+// AwaitingCutover, letting the running tool proceed to the atomic rename.
+func (s *ExecutionService) ApproveGhostCutover(ctx context.Context, changePlanID uuid.UUID) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	if plan.ExecutionBackend != models.ExecutionBackendGhost {
+		return fmt.Errorf("change plan is not running under the ghost executor")
+	}
+	if plan.Status != models.ChangePlanStatusAwaitingCutover {
+		return fmt.Errorf("cutover can only be approved while the plan is AwaitingCutover (current: %s)", plan.Status)
+	}
+	return s.ghostExecutor.ApproveCutover(changePlanID)
+}
+
+// AbortGhostExecution creates the panic flag asking the ghost tool to abort
+// cleanly before the cutover; the original table stays untouched.
+func (s *ExecutionService) AbortGhostExecution(ctx context.Context, changePlanID uuid.UUID) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	if plan.ExecutionBackend != models.ExecutionBackendGhost {
+		return fmt.Errorf("change plan is not running under the ghost executor")
+	}
+	if plan.Status != models.ChangePlanStatusInProgress && plan.Status != models.ChangePlanStatusAwaitingCutover {
+		return fmt.Errorf("abort is only available while the plan is executing (current: %s)", plan.Status)
+	}
+	return s.ghostExecutor.Abort(changePlanID)
+}
+
 // Executor dispatch errors
 var (
 	ErrGhostUnsupported = fmt.Errorf("ghost executor not configured")

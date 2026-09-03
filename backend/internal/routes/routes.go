@@ -838,6 +838,25 @@ func setupChangePlanRoutes(
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
 	)
+
+	// GHOST cutover approve - removes the postpone flag (execution permission)
+	changePlansGroup.POST("/:id/cutover-approve",
+		changePlanHandler.ApproveGhostCutover,
+		executionAuthMiddleware.RequireExecutionPermission(),
+	)
+
+	// GHOST abort - creates the panic flag (execution permission)
+	changePlansGroup.POST("/:id/abort",
+		changePlanHandler.AbortGhostExecution,
+		executionAuthMiddleware.RequireExecutionPermission(),
+	)
+
+	// GHOST pre-flight privileges check (changes.read)
+	changePlansGroup.GET("/:id/ghost-preflight",
+		changePlanHandler.GhostPreflightCheck,
+		changePlanExtractor.Extract(),
+		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
+	)
 }
 
 // setupAuditLogRoutes registers audit log querying routes
