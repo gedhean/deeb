@@ -30,6 +30,8 @@ export const ChangePlanStatusBadge: React.FC<ChangePlanStatusBadgeProps> = ({
         return 'secondary';
       case 'InProgress':
         return 'outline';
+      case 'AwaitingCutover':
+        return 'outline';
       case 'Failed':
         return 'destructive';
       case 'Cancelled':
@@ -54,6 +56,8 @@ export const ChangePlanStatusBadge: React.FC<ChangePlanStatusBadgeProps> = ({
         return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
       case 'InProgress':
         return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+      case 'AwaitingCutover':
+        return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200';
       case 'Failed':
         return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
       case 'Cancelled':

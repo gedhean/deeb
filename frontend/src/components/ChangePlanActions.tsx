@@ -21,6 +21,7 @@ import {
   useCloseChangePlan,
   useExecuteChangePlan,
 } from '@/hooks/api/useChangePlansSWR';
+import { changePlanService } from '@/lib/api/services/changePlans';
 import type { ChangePlan } from '@/lib/api/types';
 import {
   Send,
@@ -41,7 +42,7 @@ interface ChangePlanActionsProps {
   canExecute: boolean;
 }
 
-type ActionType = 'submit' | 'approve' | 'close' | 'execute' | 'retry';
+type ActionType = 'submit' | 'approve' | 'close' | 'execute' | 'retry' | 'approve-cutover' | 'abort';
 
 export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   changePlan,
@@ -72,6 +73,37 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
     setActiveAction(null);
   };
 
+  // Ghost executor actions
+  const handleApproveCutover = async () => {
+    setError('');
+    try {
+      await changePlanService.approveGhostCutover(changePlan.id);
+      showSuccessToast('Cutover approved');
+      handleDialogClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to approve cutover');
+    }
+  };
+
+  const handleAbort = async () => {
+    setError('');
+    try {
+      await changePlanService.abortGhostExecution(changePlan.id);
+      showSuccessToast('Abort requested');
+      handleDialogClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to abort migration');
+    }
+  };
+
+  const isGhostPlan = changePlan.execution_backend === 'ghost';
+
   // Determine primary action based on status
   const getPrimaryAction = (): ActionType | null => {
     switch (changePlan.status) {
@@ -81,6 +113,8 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
         return canApprove ? 'approve' : null;
       case 'Approved':
         return canExecute ? 'execute' : null;
+      case 'AwaitingCutover':
+        return isGhostPlan && canExecute ? 'approve-cutover' : null;
       case 'Failed':
         return canApprove ? 'retry' : null;
       default:
@@ -101,6 +135,12 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
       case 'Approved':
         if (canReject) {
           actions.push('close');
+        }
+        break;
+      case 'InProgress':
+      case 'AwaitingCutover':
+        if (isGhostPlan && canExecute) {
+          actions.push('abort');
         }
         break;
       case 'Failed':
@@ -259,6 +299,20 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           icon: Play,
           variant: 'default' as const,
           handler: handleExecute,
+        };
+      case 'approve-cutover':
+        return {
+          label: 'Approve Cutover',
+          icon: Play,
+          variant: 'default' as const,
+          handler: handleApproveCutover,
+        };
+      case 'abort':
+        return {
+          label: 'Abort Migration',
+          icon: XCircle,
+          variant: 'destructive' as const,
+          handler: handleAbort,
         };
     }
   };
