@@ -46,6 +46,9 @@ export interface Step2SQLContentAndReviewProps {
   };
   theme: EditorTheme;
   dialect: SQLDialect;
+  executionBackend: 'direct' | 'ghost';
+  onExecutionBackendChange: (backend: 'direct' | 'ghost') => void;
+  ghostEligible: boolean;
 }
 
 export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> = ({
@@ -64,6 +67,9 @@ export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> =
   errors,
   theme,
   dialect,
+  executionBackend,
+  onExecutionBackendChange,
+  ghostEligible,
 }) => {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(!!description);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -231,6 +237,39 @@ export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> =
             tested.
           </FieldDescription>
           <FieldError id="sql-content-error">{errors.sql_content}</FieldError>
+        </FieldContent>
+      </Field>
+
+      {/* Execution backend (ghost executor for eligible DDL plans) */}
+      <Field>
+        <FieldLabel>Execution backend</FieldLabel>
+        <FieldContent>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="execution-backend"
+                checked={executionBackend === 'direct'}
+                onChange={() => onExecutionBackendChange('direct')}
+              />
+              Direct (transactional SQL)
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="execution-backend"
+                disabled={!ghostEligible}
+                checked={executionBackend === 'ghost'}
+                onChange={() => onExecutionBackendChange('ghost')}
+              />
+              Ghost (gh-ost / pg-online-schema-change)
+            </label>
+          </div>
+          <FieldDescription>
+            {ghostEligible
+              ? 'Ghost runs DDL through an online schema change tool with a human-gated cutover (single ALTER TABLE per plan).'
+              : 'Ghost is available only for DDL plans on databases in non-production environments.'}
+          </FieldDescription>
         </FieldContent>
       </Field>
 

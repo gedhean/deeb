@@ -399,6 +399,13 @@ export const ChangePlanCreatePage: React.FC = () => {
 
   const selectedDatabase = databases.find((db) => db.id === formData.target_database_id);
 
+  // Ghost executor is available for DDL plans on databases in
+  // non-production environments (server enforces this too).
+  const ghostEligible =
+    formData.change_type === 'DDL' &&
+    !!selectedDatabase?.environment &&
+    !selectedDatabase.environment.is_production;
+
   const steps = [
     { label: 'Target Database', description: 'Select database' },
     { label: 'SQL Content & Submit', description: 'Write SQL and submit' },
@@ -465,6 +472,11 @@ export const ChangePlanCreatePage: React.FC = () => {
                 errors={formErrors}
                 theme={getEditorTheme()}
                 dialect={getSQLDialect()}
+                executionBackend={formData.execution_backend}
+                onExecutionBackendChange={(backend) =>
+                  setFormData((prev) => ({ ...prev, execution_backend: backend }))
+                }
+                ghostEligible={ghostEligible}
               />
             )}
           </CardContent>
