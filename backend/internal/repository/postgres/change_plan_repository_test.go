@@ -62,6 +62,7 @@ func TestChangePlanRepository_Create(t *testing.T) {
 				nil, // statement_count
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				models.ExecutionBackendDirect, // execution_backend
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -107,6 +108,7 @@ func TestChangePlanRepository_Create(t *testing.T) {
 				nil, // statement_count
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				models.ExecutionBackendDirect, // execution_backend
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -154,6 +156,7 @@ func TestChangePlanRepository_Create(t *testing.T) {
 				nil, // statement_count
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
+				models.ExecutionBackendDirect, // execution_backend
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -291,8 +294,9 @@ func TestChangePlanRepository_Update(t *testing.T) {
 				changePlan.ExecutionDurationMs,
 				changePlan.AffectedRows,
 				changePlan.ErrorMessage,
-				changePlan.StatementCount, // statement_count
-				sqlmock.AnyArg(),          // updated_at
+				changePlan.StatementCount,   // statement_count
+				sqlmock.AnyArg(),            // updated_at
+				changePlan.ExecutionBackend, // execution_backend
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -332,6 +336,7 @@ func TestChangePlanRepository_Update(t *testing.T) {
 				changePlan.ErrorMessage,
 				changePlan.StatementCount, // statement_count
 				sqlmock.AnyArg(),
+				changePlan.ExecutionBackend, // execution_backend
 			).
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -372,6 +377,7 @@ func TestChangePlanRepository_Update(t *testing.T) {
 				changePlan.ErrorMessage,
 				changePlan.StatementCount, // statement_count
 				sqlmock.AnyArg(),
+				changePlan.ExecutionBackend, // execution_backend
 			).
 			WillReturnError(errors.New("database error"))
 

@@ -35,7 +35,7 @@ func (r *EnvironmentRepository) Create(ctx context.Context, environment *models.
 
 	query := `
 		INSERT INTO environments (id, name, description, policy_id, allow_self_approval, is_production, created_by_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
 	_, err := r.db.ExecContext(
@@ -45,6 +45,7 @@ func (r *EnvironmentRepository) Create(ctx context.Context, environment *models.
 		environment.Description,
 		environment.PolicyID,
 		environment.AllowSelfApproval,
+		environment.IsProduction,
 		environment.CreatedByID,
 		environment.CreatedAt,
 		environment.UpdatedAt,
