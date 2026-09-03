@@ -74,8 +74,8 @@ func (g *GhostExecutor) ValidateGhostEligibility(ctx context.Context, plan *mode
 
 	if g.envRepo != nil && g.databaseRepo != nil {
 		dbRow, err := g.databaseRepo.GetByID(ctx, plan.TargetDatabaseID)
-		if err == nil {
-			env, err := g.envRepo.GetByID(ctx, dbRow.EnvironmentID)
+		if err == nil && dbRow.EnvironmentID != nil {
+			env, err := g.envRepo.GetByID(ctx, *dbRow.EnvironmentID)
 			if err == nil && env != nil && env.IsProduction {
 				return fmt.Errorf("ghost executor not permitted on production environments")
 			}

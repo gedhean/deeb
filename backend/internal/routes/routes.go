@@ -152,6 +152,7 @@ func Setup(
 		db,
 		connectionMgr,
 		cfg.Security.EncryptionKey,
+		cfg.Features.GhostExecutor,
 	)
 	setupAuditLogRoutes(authenticated, auditLogRepo)
 	setupChangelogRoutes(authenticated, changelogRepo, schemaHistoryRepo, changePlanRepo, projectMemberRepo)
@@ -603,6 +604,7 @@ func setupChangePlanRoutes(
 	db *sqlx.DB,
 	connectionMgr *database.ConnectionManager,
 	encryptionKey string,
+	ghostCfg config.GhostFeatureConfig,
 ) {
 	// Initialize risk assessment service
 	riskAssessmentSvc := services.NewRiskAssessmentService(
@@ -684,12 +686,12 @@ func setupChangePlanRoutes(
 
 	// Optional ghost executor support (mysql via gh-ost, postgres via pg-online-schema-change)
 	ghostExecutor := services.NewGhostExecutor(
-		cfg.Features.GhostExecutor.GhostBin,
-		cfg.Features.GhostExecutor.PGOSCBin,
-		cfg.Features.GhostExecutor.FlagDir,
+		ghostCfg.GhostBin,
+		ghostCfg.PGOSCBin,
+		ghostCfg.FlagDir,
 		environmentRepo,
 		databaseRepo,
-		cfg.Features.GhostExecutor.MaxDuration,
+		ghostCfg.MaxDuration,
 	)
 	executionService.WithGhostSupport(ghostExecutor, environmentRepo)
 

@@ -770,8 +770,8 @@ func (s *ExecutionService) validateGhostPlan(ctx context.Context, changePlan *mo
 	}
 	if s.envRepo != nil {
 		dbRow, err := s.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
-		if err == nil {
-			env, err := s.envRepo.GetByID(ctx, dbRow.EnvironmentID)
+		if err == nil && dbRow.EnvironmentID != nil {
+			env, err := s.envRepo.GetByID(ctx, *dbRow.EnvironmentID)
 			if err == nil && env != nil && env.IsProduction {
 				return ErrGhostRejectedEnv
 			}
