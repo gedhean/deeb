@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/parser"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/utils"
 	"go.uber.org/zap"
 )
 
@@ -39,6 +41,10 @@ type ExecutionService struct {
 	executionTimeout     time.Duration // Timeout for SQL execution (default: 10 minutes)
 	maxStatementCount    int           // Maximum number of statements allowed (default: 1000)
 	logger               *zap.Logger
+
+	// Optional ghost executor support (nil when unsupported)
+	ghostExecutor *GhostExecutor
+	envRepo       repository.EnvironmentRepository
 }
 
 // ExecutionResult represents the result of a SQL execution
@@ -66,7 +72,7 @@ func NewExecutionService(
 	logger *zap.Logger,
 ) *ExecutionService {
 	executionTimeout := 10 * time.Minute // Default: 10 minutes
-	maxStatementCount := 1000           // Default: 1000 statements max
+	maxStatementCount := 1000            // Default: 1000 statements max
 
 	return &ExecutionService{
 		changePlanRepo:       changePlanRepo,
@@ -86,6 +92,33 @@ func NewExecutionService(
 		logger:               logger,
 	}
 }
+
+// WithGhostSupport attaches the ghost executor + environment repository for
+// executor dispatch (optional; only used when set).
+func (s *ExecutionService) WithGhostSupport(
+	ghostExecutor *GhostExecutor,
+	envRepo repository.EnvironmentRepository,
+) *ExecutionService {
+	s.ghostExecutor = ghostExecutor
+	s.envRepo = envRepo
+	return s
+}
+
+// GhostMaxDuration exposes the configured ghost executor max duration (0 when
+// ghost support isn't configured). Used by the queue processor to size the
+// per-item timeout window.
+func (s *ExecutionService) GhostMaxDuration() time.Duration {
+	if s.ghostExecutor == nil {
+		return 0
+	}
+	return s.ghostExecutor.maxDuration
+}
+
+// Executor dispatch errors
+var (
+	ErrGhostUnsupported = fmt.Errorf("ghost executor not configured")
+	ErrGhostRejectedEnv = fmt.Errorf("ghost executor not permitted on production environments")
+)
 
 // NewExecutionServiceWithTimeout creates a new execution service with custom timeout
 func NewExecutionServiceWithTimeout(
@@ -162,6 +195,19 @@ func (s *ExecutionService) Execute(
 			zap.String("current_status", string(changePlan.Status)),
 		)
 		return nil, fmt.Errorf("change plan must be in Approved status to execute, current status: %s", changePlan.Status)
+	}
+
+	// Ghost executor dispatch: defense-in-depth validation happens again in
+	// ghost executor; when requested by user preference we use it or fail.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		if s.ghostExecutor == nil {
+			return nil, ErrGhostUnsupported
+		}
+		if err := s.validateGhostPlan(ctx, changePlan); err != nil {
+			return nil, err
+		}
+		// Ghost run handled by a dedicated implementation below; direct path untouched.
+		return s.executeGhost(ctx, changePlan, executorID)
 	}
 
 	// Get database and database instance
@@ -674,6 +720,231 @@ func (e *PositionedError) Error() string {
 
 func (e *PositionedError) Unwrap() error {
 	return e.OriginalError
+}
+
+// validateGhostPlan runs defense-in-depth checks before ghost execution.
+func (s *ExecutionService) validateGhostPlan(ctx context.Context, changePlan *models.ChangePlan) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
+	if err := s.ghostExecutor.ValidateGhostEligibility(ctx, changePlan); err != nil {
+		return err
+	}
+	if s.envRepo != nil {
+		dbRow, err := s.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+		if err == nil {
+			env, err := s.envRepo.GetByID(ctx, dbRow.EnvironmentID)
+			if err == nil && env != nil && env.IsProduction {
+				return ErrGhostRejectedEnv
+			}
+		}
+	}
+	return nil
+}
+
+// executeGhost runs a DDL change plan through the configured ghost tool
+// (gh-ost for MySQL, pg-online-schema-change for PostgreSQL). It mirrors the
+// direct executor's lifecycle: lock → InProgress → changelog/log → run →
+// Completed/Failed. Between copy and cutover the plan sits in
+// AwaitingCutover while the tool parks on its postpone flag; the database
+// lock is intentionally held until the run finishes so queued plans wait
+// for the whole migration (decisions locked).
+func (s *ExecutionService) executeGhost(
+	ctx context.Context,
+	changePlan *models.ChangePlan,
+	executorID uuid.UUID,
+) (*ExecutionResult, error) {
+	changePlanID := changePlan.ID
+	startedAt := time.Now()
+
+	// Resolve database + instance (same as direct path)
+	db, err := s.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, ErrDatabaseNotFound
+		}
+		return nil, fmt.Errorf("failed to get database: %w", err)
+	}
+	dbInstance, err := s.dbInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, ErrDatabaseInstanceNotFound
+		}
+		return nil, fmt.Errorf("failed to get database instance: %w", err)
+	}
+
+	// Extract table + alter clause; ghost supports a single ALTER TABLE per plan.
+	table, alterClause, err := ParseAlterStatement(changePlan.SQLContent)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ghost SQL: %w", err)
+	}
+
+	// Decrypt instance password for the tool invocation.
+	password, err := utils.DecryptPassword(dbInstance.ConnectionDetailsEncrypted, s.encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt instance password: %w", err)
+	}
+
+	postponeFlag, panicFlag := s.ghostExecutor.ControlFlagPaths(changePlanID)
+	binPath, args, err := s.ghostExecutor.BuildArgs(
+		dbInstance.DatabaseEngine,
+		dbInstance.Host,
+		dbInstance.Username,
+		password,
+		db.DatabaseName,
+		table,
+		alterClause,
+		dbInstance.Port,
+		postponeFlag,
+		panicFlag,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// gh-ost requires the postpone flag to exist BEFORE the copy finishes to
+	// park awaiting cutover; create it up front (doc'd ghost-lab workflow).
+	if dbInstance.DatabaseEngine == models.DatabaseEngineMySQL && postponeFlag != "" {
+		if f, err := os.Create(postponeFlag); err == nil {
+			_ = f.Close()
+			defer os.Remove(postponeFlag)
+		}
+	}
+
+	// Acquire the execution lock (queued behavior mirrors direct executor).
+	if err := s.lockManager.AcquireLock(ctx, db.ID, changePlanID, executorID); err != nil {
+		if err == ErrDatabaseLocked && s.queueService != nil {
+			if _, enqueueErr := s.queueService.Enqueue(ctx, changePlanID, db.ID, executorID); enqueueErr != nil {
+				return nil, fmt.Errorf("database locked and failed to enqueue: %w", enqueueErr)
+			}
+		}
+		return nil, ErrDatabaseLocked
+	}
+	defer func() {
+		if releaseErr := s.lockManager.ReleaseLock(ctx, db.ID); releaseErr != nil {
+			s.logger.Error("Failed to release execution lock", zap.Error(releaseErr))
+		}
+	}()
+
+	// Mark plan InProgress and create changelog + execution log entries.
+	changePlan.Status = models.ChangePlanStatusInProgress
+	changePlan.UpdatedAt = time.Now()
+	if err := s.changePlanRepo.Update(ctx, changePlan); err != nil {
+		return nil, fmt.Errorf("failed to update change plan status to InProgress: %w", err)
+	}
+
+	changelog := &models.Changelog{
+		ID:                 uuid.New(),
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseID:         db.ID,
+		ChangePlanID:       changePlanID,
+		Status:             models.ChangelogStatusPending,
+		CreatedAt:          time.Now(),
+	}
+	if err := s.changelogRepo.Create(ctx, changelog); err != nil {
+		return nil, fmt.Errorf("failed to create changelog entry: %w", err)
+	}
+
+	executionLogID := uuid.New()
+	dbType := string(dbInstance.DatabaseEngine)
+	sqlContent := changePlan.SQLContent
+	executionLog := &models.ExecutionLog{
+		ID:                   executionLogID,
+		ChangePlanID:         changePlanID,
+		ExecutorID:           executorID,
+		Status:               models.ExecutionLogStatusFailed,
+		SQLContent:           &sqlContent,
+		DatabaseID:           &db.ID,
+		DatabaseName:         &db.DatabaseName,
+		DatabaseInstanceName: &dbInstance.Name,
+		DatabaseEngine:       &dbType,
+		StartedAt:            time.Now(),
+	}
+	if err := s.executionLogRepo.Create(ctx, executionLog); err != nil {
+		return nil, fmt.Errorf("failed to create execution log: %w", err)
+	}
+
+	// Stream tool output into the zap logger and flip the plan into
+	// AwaitingCutover when the tool parks behind the postpone flag.
+	callbacks := GhostRunCallbacks{
+		OnLogLine: func(line string) {
+			s.logger.Info("ghost",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("line", line),
+			)
+		},
+		OnStateChange: func(status string) {
+			if status == GhostStatusAwaiting {
+				changePlan.Status = models.ChangePlanStatusAwaitingCutover
+				changePlan.UpdatedAt = time.Now()
+				if err := s.changePlanRepo.Update(context.Background(), changePlan); err != nil {
+					s.logger.Error("Failed to set AwaitingCutover status", zap.Error(err))
+				}
+				s.logger.Info("Ghost awaiting cutover",
+					zap.String("change_plan_id", changePlanID.String()),
+				)
+			}
+		},
+	}
+
+	runErr := s.ghostExecutor.Run(ctx, binPath, args, callbacks)
+	duration := time.Since(startedAt)
+
+	// Finalize plan/log/changelog based on the tool's outcome.
+	if runErr != nil {
+		errMsg := runErr.Error()
+		changePlan.Status = models.ChangePlanStatusFailed
+		changePlan.ErrorMessage = &errMsg
+		changePlan.UpdatedAt = time.Now()
+		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
+			s.logger.Error("Failed to update change plan with failure", zap.Error(updateErr))
+		}
+
+		changelog.Status = models.ChangelogStatusFailed
+		if updateErr := s.changelogRepo.Update(ctx, changelog); updateErr != nil {
+			s.logger.Error("Failed to update changelog status to failed", zap.Error(updateErr))
+		}
+
+		executionLog.Status = models.ExecutionLogStatusFailed
+		executionLog.ErrorMessage = &errMsg
+		executionLog.CompletedAt = time.Now()
+		executionLog.ExecutionDurationMs = int(duration.Milliseconds())
+		if logErr := s.executionLogRepo.Update(ctx, executionLog); logErr != nil {
+			s.logger.Warn("Failed to update execution log entry", zap.Error(logErr))
+		}
+
+		return &ExecutionResult{Success: false, Duration: duration, ErrorMessage: &errMsg}, runErr
+	}
+
+	// Success path
+	changePlan.Status = models.ChangePlanStatusCompleted
+	executedAt := time.Now()
+	changePlan.ExecutedAt = &executedAt
+	durationMs := int(duration.Milliseconds())
+	changePlan.ExecutionDurationMs = &durationMs
+	changePlan.UpdatedAt = time.Now()
+	if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
+		s.logger.Error("Failed to update change plan to Completed", zap.Error(updateErr))
+	}
+
+	changelog.Status = models.ChangelogStatusDone
+	if updateErr := s.changelogRepo.Update(ctx, changelog); updateErr != nil {
+		s.logger.Error("Failed to update changelog status to completed", zap.Error(updateErr))
+	}
+
+	executionLog.Status = models.ExecutionLogStatusCompleted
+	executionLog.CompletedAt = time.Now()
+	executionLog.ExecutionDurationMs = durationMs
+	if logErr := s.executionLogRepo.Update(ctx, executionLog); logErr != nil {
+		s.logger.Warn("Failed to update execution log entry", zap.Error(logErr))
+	}
+
+	s.logger.Info("Ghost execution completed",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.Duration("duration", duration),
+	)
+
+	return &ExecutionResult{Success: true, Duration: duration}, nil
 }
 
 // executeInTransaction executes SQL statements within a SERIALIZABLE transaction

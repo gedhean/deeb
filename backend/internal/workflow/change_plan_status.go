@@ -113,8 +113,13 @@ var validTransitions = map[models.ChangePlanStatus][]models.ChangePlanStatus{
 		models.ChangePlanStatusCancelled,
 	},
 	models.ChangePlanStatusInProgress: {
+		models.ChangePlanStatusAwaitingCutover, // Ghost executor parks between copy and cutover
 		models.ChangePlanStatusCompleted,
 		models.ChangePlanStatusFailed,
+	},
+	models.ChangePlanStatusAwaitingCutover: {
+		models.ChangePlanStatusCompleted, // Cutover approved, atomic rename done
+		models.ChangePlanStatusFailed,    // Aborted or tool failure post-copy
 	},
 	models.ChangePlanStatusCompleted: {
 		// Terminal state - no transitions allowed

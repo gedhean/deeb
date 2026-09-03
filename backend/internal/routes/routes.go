@@ -682,6 +682,17 @@ func setupChangePlanRoutes(
 		logger.Get(),
 	)
 
+	// Optional ghost executor support (mysql via gh-ost, postgres via pg-online-schema-change)
+	ghostExecutor := services.NewGhostExecutor(
+		cfg.Features.GhostExecutor.GhostBin,
+		cfg.Features.GhostExecutor.PGOSCBin,
+		cfg.Features.GhostExecutor.FlagDir,
+		environmentRepo,
+		databaseRepo,
+		cfg.Features.GhostExecutor.MaxDuration,
+	)
+	executionService.WithGhostSupport(ghostExecutor, environmentRepo)
+
 	// Initialize queue processor (background worker)
 	queueProcessor := services.NewQueueProcessor(queueRepo, executionService, logger.Get())
 	// Start the queue processor in background
