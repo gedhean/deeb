@@ -795,6 +795,13 @@ func (s *ExecutionService) executeGhost(
 	changePlanID := changePlan.ID
 	startedAt := time.Now()
 
+	// Extract table + alter clause first; ghost supports a single ALTER TABLE
+	// per plan and invalid SQL should fail before touching repositories.
+	table, alterClause, err := ParseAlterStatement(changePlan.SQLContent)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ghost SQL: %w", err)
+	}
+
 	// Resolve database + instance (same as direct path)
 	db, err := s.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
 	if err != nil {
@@ -809,12 +816,6 @@ func (s *ExecutionService) executeGhost(
 			return nil, ErrDatabaseInstanceNotFound
 		}
 		return nil, fmt.Errorf("failed to get database instance: %w", err)
-	}
-
-	// Extract table + alter clause; ghost supports a single ALTER TABLE per plan.
-	table, alterClause, err := ParseAlterStatement(changePlan.SQLContent)
-	if err != nil {
-		return nil, fmt.Errorf("invalid ghost SQL: %w", err)
 	}
 
 	// Decrypt instance password for the tool invocation.

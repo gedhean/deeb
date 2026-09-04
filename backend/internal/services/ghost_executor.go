@@ -173,7 +173,9 @@ func ParseGhostStatus(line string) (string, bool) {
 }
 
 // alterTableRe matches a single `ALTER TABLE <name> <clauses>;` statement.
-var alterTableRe = regexp.MustCompile(`(?is)^\s*ALTER\s+TABLE\s+(?:\x60?([\w.]+)\x60?|"([\w.]+)")\s+(.*?);?\s*$`)
+// The clause capture rejects internal semicolons so multi-statement input
+// fails validation (ghost handles one table per plan).
+var alterTableRe = regexp.MustCompile(`(?is)^\s*ALTER\s+TABLE\s+(?:\x60?([\w.]+)\x60?|"([\w.]+)")\s+([^;]*?);?\s*$`)
 
 // ParseAlterStatement extracts table name and ALTER clause from a single
 // ALTER TABLE statement; rejects anything else (multi-statement or non-ALTER).
