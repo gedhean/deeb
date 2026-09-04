@@ -42,7 +42,14 @@ interface ChangePlanActionsProps {
   canExecute: boolean;
 }
 
-type ActionType = 'submit' | 'approve' | 'close' | 'execute' | 'retry' | 'approve-cutover' | 'abort';
+type ActionType =
+  | 'submit'
+  | 'approve'
+  | 'close'
+  | 'execute'
+  | 'retry'
+  | 'approve-cutover'
+  | 'abort';
 
 export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   changePlan,

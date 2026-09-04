@@ -221,9 +221,7 @@ export const ChangePlanDetailPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-3">
             <ChangePlanStatusBadge status={changePlan.status} />
-            {changePlan.execution_backend === 'ghost' && (
-              <Badge variant="outline">ghost</Badge>
-            )}
+            {changePlan.execution_backend === 'ghost' && <Badge variant="outline">ghost</Badge>}
             <ChangePlanActions
               changePlan={changePlan}
               onSuccess={() => refetch()}
