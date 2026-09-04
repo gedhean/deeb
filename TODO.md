@@ -47,3 +47,4 @@
 
 ### Integrations
 - [ ] Feat: integrate Catalog with SQL Reviewer to provide schema analysis for SQL Reviewer
+- [x] Feat: ghost execution backend (gh-ost / pg-online-schema-change) for DDL change plans on non-production environments — user-selected executor, human-gated cutover (AwaitingCutover), pre-flight privilege checks
