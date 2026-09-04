@@ -846,7 +846,9 @@ func (s *ExecutionService) executeGhost(
 	if dbInstance.DatabaseEngine == models.DatabaseEngineMySQL && postponeFlag != "" {
 		if f, err := os.Create(postponeFlag); err == nil {
 			_ = f.Close()
-			defer os.Remove(postponeFlag)
+			defer func() {
+				_ = os.Remove(postponeFlag)
+			}()
 		}
 	}
 

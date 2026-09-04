@@ -2756,7 +2756,9 @@ func (h *ChangePlanHandler) GhostPreflightCheck(c echo.Context) error {
 			"error": fmt.Sprintf("Failed to connect to target database: %s", err.Error()),
 		})
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	type preflightCheck struct {
 		Name   string `json:"name"`
@@ -2786,7 +2788,9 @@ func (h *ChangePlanHandler) GhostPreflightCheck(c echo.Context) error {
 		rows, err := conn.QueryContext(ctx, "SHOW GRANTS")
 		grantsPass, grantsDetail := false, "could not read grants"
 		if err == nil {
-			defer rows.Close()
+			defer func() {
+				_ = rows.Close()
+			}()
 			var all string
 			for rows.Next() {
 				var g string
