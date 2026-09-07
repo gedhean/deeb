@@ -231,6 +231,13 @@ func (c *Config) loadFromEnv() {
 	if v := os.Getenv("FRONTEND_URL"); v != "" {
 		c.Server.FrontendURL = v
 	}
+	if v := os.Getenv("SERVER_CORS_ORIGINS"); v != "" {
+		parts := strings.Split(v, ",")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+		c.Server.CORSOrigins = parts
+	}
 
 	// Database - check DATABASE_URL first, then individual env vars
 	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
