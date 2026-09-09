@@ -5,6 +5,9 @@ FROM golang:1.25-alpine AS builder
 # Install build dependencies (including gcc, musl-dev for CGO)
 RUN apk add --no-cache git ca-certificates gcc musl-dev
 
+# Install gh-ost
+RUN go install github.com/github/gh-ost/go/cmd/gh-ost@v1.1.11
+
 # Set working directory
 WORKDIR /app
 
@@ -44,6 +47,9 @@ COPY --from=builder /app/api ./api
 
 # Copy production configuration
 COPY --from=builder /app/config.prd.yaml ./config.yaml
+
+# Copy gh-ost from builder
+COPY --from=builder /go/bin/gh-ost /bin/gh-ost
 
 # Change ownership to non-root user
 RUN chown -R deeb:deeb /app
