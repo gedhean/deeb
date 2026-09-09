@@ -11,6 +11,29 @@ The change-plan workflow (create → review → approve → execute) stays
 identical; only the execution engine differs. Executor choice is explicit
 user preference at plan creation (`execution_backend: direct | ghost`).
 
+## Execution deployment decision: subprocess vs Go library
+
+The ghost executor intentionally shells out to the gh-ost / pg-online-schema-change binaries via `exec.CommandContext` (see `internal/services/ghost_executor.go`).
+
+gh-ost **is** an importable Go module (`github.com/github/gh-ost/go/logic` exposing `Migrator.Migrate()`), so a future migration to an in-process executor is possible. The subprocess choice was deliberate for this first iteration because:
+
+- **Validated runbook path** — the ghost-lab rehearsal (process doc) used the CLI with flag files; the executor matches that exact behavior.
+- **Independent lifecycles** — a gh-ost copy legitimately takes hours; an in-process migrator would hold deeb resources for that whole window and couples deeb's lifecycle (deployments, crashes) to in-flight migrations. A subprocess can be killed/restarted without deeb restarting.
+- **Binary parity with docs** — gh-ost CLI flags (`--exact-rowcount --concurrent-rowcount --chunk-size --max-load --critical-load --cut-over --allow-on-master --execute`) are precisely what `GhostExecutor.BuildArgs` emits, so the DDT/runbook stays the source of truth for flags.
+- **Two tools, one abstraction** — pg-online-schema-change does not have a Go library; subprocess treats both engines uniformly.
+
+A future in-process integration is a documented option; it would replace `GhostExecutor.Run` while keeping every other layer (validation, status transitions, queue semantics, UI) unchanged.
+
+## Execution tracking & cutover control
+
+What deeb persists and what the user can do at each stage:
+
+1. **Execution starts** — `ExecutionService.executeGhost` (services/execution_service.go) creates an execution log entry, a changelog entry, acquires the database execution lock, and marks the plan `InProgress`. The **postpone flag** `deeb-<plan-id>.postpone` is created up front so gh-ost parks awaiting cutover rather than swapping immediately (ghost-lab workflow).
+2. **Copy phase streams** — gh-ost output lines are scanned by `ParseGhostStatus`; when it sees `postponing cut-over`, the callback flips the plan status to **`AwaitingCutover`**. All tool output is also emitted into the configured logger for operators.
+3. **Cutover approval UX** — the user clicks **Approve Cutover** in the UI (or hits `POST /api/v1/change-plans/:id/cutover-approve`). The backend calls `GhostExecutor.ApproveCutover`, which **removes the postpone flag file**; gh-ost immediately performs the atomic `RENAME TABLE`. Plan transitions to `Completed` and the lock releases, unblocking queued plans for the same DB.
+4. **Abort UX** — the **Abort Migration** button (`POST /api/v1/change-plans/:id/abort`) creates the **panic flag** `deeb-<plan-id>.panic`; gh-ost aborts cleanly before cut-over, the original table is untouched, and the plan is marked `Failed`/`Cancelled`.
+5. **Socket control (not wired today)** — gh-ost also supports `--serve-socket-file` (default `/tmp/gh-ost.<db>.<table>.sock`) where operators can push `throttle`, `no-throttle`, `chunk-size=N`, `status`. Deeb intentionally uses only the flag-file model (part of the ghost-lab validated setup, engine-uniform). Socket-based throttle/status probing is noted as a possible future enhancement below.
+
 ## Constraints
 
 Ghost execution is only allowed when **all** of the following hold:
@@ -111,3 +134,6 @@ Approved → InProgress → AwaitingCutover → Completed
 - Automatic executor selection via `RiskAssessmentService` (DDL + table size)
 - Configurable throttle/replica-lag knobs
 - pg-online-schema-change cutover flag parity with gh-ost
+- Socket-based control (`--serve-socket-file` channel for throttle/status probing) instead of or alongside flag files
+- Percent-complete parsing from gh-ost output into the execution log (currently only the `AwaitingCutover` flip is persisted; tool stdout otherwise streams to logs only)
+- Optional in-process Go integration (`gh-ost/go/logic`) if subprocess hosting ever becomes a blocker
