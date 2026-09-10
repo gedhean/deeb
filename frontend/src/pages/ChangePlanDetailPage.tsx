@@ -572,7 +572,11 @@ export const ChangePlanDetailPage: React.FC = () => {
 
         {/* Ghost readiness checks (PR-checks style) */}
         {changePlan.execution_backend === 'ghost' && (
-          <GhostChecksPanel report={ghostChecksReport} onRefresh={() => refetch()} />
+          <GhostChecksPanel
+            changePlanId={changePlan.id}
+            report={ghostChecksReport}
+            onRefreshed={() => refetch()}
+          />
         )}
 
         {/* SQL Review Results */}

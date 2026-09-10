@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -668,33 +669,47 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
             const config = getActionConfig(primaryAction);
             const Icon = config.icon;
             // Ghost plans: submit stays visible but disabled until all
-            // readiness checks pass (PR-checks semantics).
+            // readiness checks pass (PR-checks semantics), with a tooltip
+            // naming the failed check count.
             const ghostChecksFailed =
               primaryAction === 'submit' &&
               isGhostPlan &&
               planGhostChecks != null &&
               !planGhostChecks.all_passed;
+            const failedCount = planGhostChecks
+              ? planGhostChecks.checks.filter((c) => !c.passed).length
+              : 0;
             const isDisabled =
               ((primaryAction === 'approve' || primaryAction === 'retry') &&
                 changePlan.has_errors) ||
               (primaryAction === 'execute' && changePlan.has_errors) ||
               ghostChecksFailed;
 
-            return (
+            const button = (
               <Button
                 variant={config.variant}
                 onClick={() => setActiveAction(primaryAction)}
                 disabled={isDisabled}
-                title={
-                  ghostChecksFailed
-                    ? 'Ghost readiness checks must pass before submitting for review'
-                    : undefined
-                }
               >
                 <Icon className="mr-2 h-4 w-4" />
                 {config.label}
               </Button>
             );
+
+            if (ghostChecksFailed) {
+              return (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-block">{button}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {failedCount} ghost readiness check{failedCount === 1 ? '' : 's'} failing —
+                    resolve them before submitting for review.
+                  </TooltipContent>
+                </Tooltip>
+              );
+            }
+            return button;
           })()}
 
         {/* Secondary Actions Dropdown */}

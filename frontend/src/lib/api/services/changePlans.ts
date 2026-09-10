@@ -126,6 +126,28 @@ export const changePlanService = {
   },
 
   /**
+   * Re-run all ghost readiness checks and get the fresh report
+   */
+  async rerunGhostChecks(id: string): Promise<GhostReadinessReport> {
+    const response = await apiClient.post<GhostReadinessReport>(
+      `/api/v1/change-plans/${id}/ghost-checks`,
+      {},
+    );
+    return response.data;
+  },
+
+  /**
+   * Re-run a single ghost readiness check by name
+   */
+  async rerunGhostCheck(id: string, checkName: string): Promise<GhostReadinessReport> {
+    const response = await apiClient.post<GhostReadinessReport>(
+      `/api/v1/change-plans/${id}/ghost-checks/${checkName}`,
+      {},
+    );
+    return response.data;
+  },
+
+  /**
    * Get execution log history for a change plan
    */
   async getExecutionLogHistory(id: string): Promise<ExecutionLogHistoryResponse> {
