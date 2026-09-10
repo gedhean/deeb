@@ -51,4 +51,5 @@
 - [ ] Feat: pg-online-schema-change support for PostgreSQL ghost plans (currently MySQL-only; selection gate rejects postgres)
 - [ ] Feat: RDS replica discovery for ghost plans — enumerate RDS replicas via AWS API and let the user choose which instance gh-ost runs against (currently runs on the primary with --allow-on-master)
 - [ ] Feat: CloudWatch FreeStorageSpace check for ghost disk headroom (currently an information_schema size estimate shown as a warning; operator verifies actual free disk)
+- [ ] Feat: ghost live log tail endpoint — in-memory ring buffer in GhostExecutor exposed via GET /:id/ghost-log (Option 2 from progress discussion)
 - [ ] Feat: async ghost readiness checks job — run the check suite (especially the slow dry_run) as a background job with a status table + polling endpoint so the UI can show real progress; today checks are synchronous (spinners only) and dry-run progress is only visible in backend logs
