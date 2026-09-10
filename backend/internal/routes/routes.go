@@ -859,6 +859,18 @@ func setupChangePlanRoutes(
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
 	)
+
+	// GHOST drop backup table - cleanup after validation window (execution permission)
+	changePlansGroup.POST("/:id/ghost-drop-backup",
+		changePlanHandler.DropGhostBackupTable,
+		executionAuthMiddleware.RequireExecutionPermission(),
+	)
+
+	// GHOST rollback - atomic swap-back with data-loss warning (execution permission)
+	changePlansGroup.POST("/:id/ghost-rollback",
+		changePlanHandler.RollbackGhostPlan,
+		executionAuthMiddleware.RequireExecutionPermission(),
+	)
 }
 
 // setupAuditLogRoutes registers audit log querying routes

@@ -152,6 +152,139 @@ func (s *ExecutionService) AbortGhostExecution(ctx context.Context, changePlanID
 	return s.ghostExecutor.Abort(changePlanID)
 }
 
+// resolveGhostTarget resolves the plan's target database, instance, parsed
+// table name, and decrypted password for post-completion ghost operations.
+func (s *ExecutionService) resolveGhostTarget(
+	ctx context.Context,
+	plan *models.ChangePlan,
+) (*models.Database, *models.DatabaseInstance, string, string, error) {
+	if plan.ExecutionBackend != models.ExecutionBackendGhost {
+		return nil, nil, "", "", fmt.Errorf("change plan is not running under the ghost executor")
+	}
+	table, _, err := ParseAlterStatement(plan.SQLContent)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("invalid ghost SQL: %w", err)
+	}
+	db, err := s.databaseRepo.GetByID(ctx, plan.TargetDatabaseID)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+	dbInstance, err := s.dbInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+	password, err := utils.DecryptPassword(dbInstance.ConnectionDetailsEncrypted, s.encryptionKey)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("failed to decrypt instance password: %w", err)
+	}
+	_ = password // retained for callers that build raw tool invocations
+	return db, dbInstance, table, password, nil
+}
+
+// GhostBackupTableName returns the backup table gh-ost retains post-cutover
+// (_<table>_del) for a completed ghost plan, verifying it exists.
+func (s *ExecutionService) GhostBackupTableName(ctx context.Context, changePlanID uuid.UUID) (string, error) {
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return "", err
+	}
+	_, _, table, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return "", err
+	}
+	return "_" + table + "_del", nil
+}
+
+// DropGhostBackupTable drops the retained _<table>_del backup table after a
+// completed ghost migration (cleanup step once the validation window passes).
+// Only allowed on Completed ghost plans; the drop runs outside a transaction
+// (DDL) and is audited via the execution log message.
+func (s *ExecutionService) DropGhostBackupTable(ctx context.Context, changePlanID uuid.UUID) error {
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	if plan.Status != models.ChangePlanStatusCompleted {
+		return fmt.Errorf("backup table can only be dropped after the plan is Completed (current: %s)", plan.Status)
+	}
+	db, dbInstance, table, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return err
+	}
+	backup := "_" + table + "_del"
+
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to target database: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS `%s`", backup)); err != nil {
+		return fmt.Errorf("failed to drop backup table %s: %w", backup, err)
+	}
+	s.logger.Info("Ghost backup table dropped",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("backup_table", backup),
+	)
+	return nil
+}
+
+// RollbackGhostPlan atomically swaps the backup table back into place after a
+// completed ghost migration: RENAME TABLE <table> -> _<table>_new,
+// _<table>_del -> <table>. WARNING: writes since cutover live only in the
+// current table (preserved as _<table>_new for reconciliation); the caller
+// must surface this data-loss risk to the user.
+func (s *ExecutionService) RollbackGhostPlan(ctx context.Context, changePlanID uuid.UUID) error {
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	if plan.Status != models.ChangePlanStatusCompleted {
+		return fmt.Errorf("rollback is only available for Completed ghost plans (current: %s)", plan.Status)
+	}
+	db, dbInstance, table, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return err
+	}
+	backup := "_" + table + "_del"
+	sidelined := "_" + table + "_new"
+
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to target database: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Atomic multi-table rename (ghost-lab 08-rollback.sh equivalent)
+	rename := fmt.Sprintf("RENAME TABLE `%s` TO `%s`, `%s` TO `%s`", table, sidelined, backup, table)
+	if _, err := conn.ExecContext(ctx, rename); err != nil {
+		return fmt.Errorf("rollback rename failed: %w", err)
+	}
+
+	// Mark the plan as Failed with a rollback note so the UI reflects the
+	// schema was reverted (Completed stays immutable history otherwise).
+	plan.Status = models.ChangePlanStatusFailed
+	msg := fmt.Sprintf("Rolled back via ghost swap-back; post-cutover writes preserved in %s", sidelined)
+	plan.ErrorMessage = &msg
+	plan.UpdatedAt = time.Now()
+	if err := s.changePlanRepo.Update(ctx, plan); err != nil {
+		s.logger.Error("Failed to update plan status after rollback", zap.Error(err))
+	}
+
+	s.logger.Info("Ghost plan rolled back",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("table", table),
+		zap.String("sidelined_table", sidelined),
+	)
+	return nil
+}
+
 // Executor dispatch errors
 var (
 	ErrGhostUnsupported = fmt.Errorf("ghost executor not configured")

@@ -2850,3 +2850,66 @@ func (h *ChangePlanHandler) GhostPreflightCheck(c echo.Context) error {
 		"checks":         checks,
 	})
 }
+
+// DropGhostBackupTable handles POST /api/v1/change-plans/:id/ghost-drop-backup
+// Drops the retained _<table>_del backup table after a completed ghost migration.
+func (h *ChangePlanHandler) DropGhostBackupTable(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	if err := h.executionService.DropGhostBackupTable(ctx, changePlanID); err != nil {
+		status := http.StatusBadRequest
+		if err == repository.ErrNotFound {
+			status = http.StatusNotFound
+		}
+		return c.JSON(status, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	h.logger.Info("Ghost backup table dropped",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Backup table dropped",
+	})
+}
+
+// RollbackGhostPlan handles POST /api/v1/change-plans/:id/ghost-rollback
+// Atomically swaps the backup table back into place (data-loss warning:
+// post-cutover writes are sidelined into _<table>_new).
+func (h *ChangePlanHandler) RollbackGhostPlan(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	if err := h.executionService.RollbackGhostPlan(ctx, changePlanID); err != nil {
+		status := http.StatusBadRequest
+		if err == repository.ErrNotFound {
+			status = http.StatusNotFound
+		}
+		return c.JSON(status, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	h.logger.Info("Ghost plan rolled back",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Plan rolled back; post-cutover writes preserved in the sidelined table",
+	})
+}
