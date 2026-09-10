@@ -49,7 +49,9 @@ type ActionType =
   | 'execute'
   | 'retry'
   | 'approve-cutover'
-  | 'abort';
+  | 'abort'
+  | 'ghost-rollback'
+  | 'ghost-drop-backup';
 
 export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   changePlan,
@@ -109,6 +111,34 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
     }
   };
 
+  const handleGhostRollback = async () => {
+    setError('');
+    try {
+      await changePlanService.rollbackGhostPlan(changePlan.id);
+      showSuccessToast('Plan rolled back');
+      handleDialogClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to roll back plan');
+    }
+  };
+
+  const handleGhostDropBackup = async () => {
+    setError('');
+    try {
+      await changePlanService.dropGhostBackupTable(changePlan.id);
+      showSuccessToast('Backup table dropped');
+      handleDialogClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to drop backup table');
+    }
+  };
+
   const isGhostPlan = changePlan.execution_backend === 'ghost';
 
   // Determine primary action based on status
@@ -148,6 +178,11 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
       case 'AwaitingCutover':
         if (isGhostPlan && canExecute) {
           actions.push('abort');
+        }
+        break;
+      case 'Completed':
+        if (isGhostPlan && canExecute) {
+          actions.push('ghost-rollback', 'ghost-drop-backup');
         }
         break;
       case 'Failed':
@@ -320,6 +355,20 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           icon: XCircle,
           variant: 'destructive' as const,
           handler: handleAbort,
+        };
+      case 'ghost-rollback':
+        return {
+          label: 'Rollback',
+          icon: XCircle,
+          variant: 'destructive' as const,
+          handler: handleGhostRollback,
+        };
+      case 'ghost-drop-backup':
+        return {
+          label: 'Drop Backup Table',
+          icon: XCircle,
+          variant: 'outline' as const,
+          handler: handleGhostDropBackup,
         };
     }
   };
@@ -529,6 +578,49 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
             </div>
           ),
           confirmLabel: 'Abort Migration',
+          confirmIcon: XCircle,
+          confirmVariant: 'destructive' as const,
+        };
+
+      case 'ghost-rollback':
+        return {
+          title: 'Roll Back Migration',
+          description:
+            'Atomically swap the backup table back into place, reverting the schema change.',
+          content: (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20">
+              <div className="flex items-start gap-2 text-red-800 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4 mt-0.5" />
+                <div className="text-sm">
+                  <span className="font-medium">Data loss warning:</span> writes made to the live
+                  table since the cutover are NOT in the backup. They will be preserved in a
+                  sidelined table (_table_new) for manual reconciliation, but the live table
+                  reverts to its pre-migration contents.
+                </div>
+              </div>
+            </div>
+          ),
+          confirmLabel: 'Roll Back',
+          confirmIcon: XCircle,
+          confirmVariant: 'destructive' as const,
+        };
+
+      case 'ghost-drop-backup':
+        return {
+          title: 'Drop Backup Table',
+          description:
+            'Permanently drop the backup table retained by the migration. Only do this after your validation window has passed — it removes the rollback safety net.',
+          content: (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm font-medium">
+                  After dropping, rollback via table swap is no longer possible.
+                </span>
+              </div>
+            </div>
+          ),
+          confirmLabel: 'Drop Backup Table',
           confirmIcon: XCircle,
           confirmVariant: 'destructive' as const,
         };

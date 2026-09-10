@@ -112,6 +112,20 @@ export const changePlanService = {
   },
 
   /**
+   * Drop the retained _<table>_del backup table after a completed ghost migration
+   */
+  async dropGhostBackupTable(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/ghost-drop-backup`, {});
+  },
+
+  /**
+   * Roll back a completed ghost plan (atomic swap-back; post-cutover writes are sidelined)
+   */
+  async rollbackGhostPlan(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/ghost-rollback`, {});
+  },
+
+  /**
    * Get execution log history for a change plan
    */
   async getExecutionLogHistory(id: string): Promise<ExecutionLogHistoryResponse> {
