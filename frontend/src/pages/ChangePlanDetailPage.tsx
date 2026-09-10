@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTheme } from '@/components/theme-provider';
 import { DefaultLayout } from '@/components/layouts';
 import { useProjectPermissions } from '@/hooks/api/useProjectPermissions';
-import type { ChangePlanStatus } from '@/lib/api/types';
+import type { ChangePlanStatus, GhostReadinessReport } from '@/lib/api/types';
 import { useUsers } from '@/hooks/api/useUsersSWR';
 import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
 import { useDatabases } from '@/hooks/api/useDatabases';
@@ -45,6 +45,21 @@ export const ChangePlanDetailPage: React.FC = () => {
 
   // Use SWR hook for change plan - automatic caching and revalidation
   const { changePlan, isLoading, error: swrError, refetch } = useChangePlanSWR(id);
+
+  // ghost_checks arrives as a JSON string (TEXT column); parse for the panel
+  const ghostChecksReport = useMemo(() => {
+    if (!changePlan?.ghost_checks) {
+      return null;
+    }
+    if (typeof changePlan.ghost_checks === 'string') {
+      try {
+        return JSON.parse(changePlan.ghost_checks) as GhostReadinessReport;
+      } catch {
+        return null;
+      }
+    }
+    return changePlan.ghost_checks;
+  }, [changePlan?.ghost_checks]);
 
   // Use cached data from store
   const { getUserById } = useUsers();
@@ -557,7 +572,7 @@ export const ChangePlanDetailPage: React.FC = () => {
 
         {/* Ghost readiness checks (PR-checks style) */}
         {changePlan.execution_backend === 'ghost' && (
-          <GhostChecksPanel report={changePlan.ghost_checks} onRefresh={() => refetch()} />
+          <GhostChecksPanel report={ghostChecksReport} onRefresh={() => refetch()} />
         )}
 
         {/* SQL Review Results */}

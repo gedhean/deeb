@@ -370,7 +370,7 @@ export interface ChangePlan {
   rollback_sql?: string;
   status: ChangePlanStatus;
   execution_backend: ExecutionBackend;
-  ghost_checks?: GhostReadinessReport;
+  ghost_checks?: GhostReadinessReport | string;
   risk_level: RiskLevel;
   author_id: string;
   assigned_reviewer_id?: string;

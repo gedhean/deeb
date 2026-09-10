@@ -142,6 +142,18 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
 
   const isGhostPlan = changePlan.execution_backend === 'ghost';
 
+  // ghost_checks may arrive as a JSON string (TEXT column) — parse once
+  const planGhostChecks: GhostReadinessReport | null =
+    typeof changePlan.ghost_checks === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(changePlan.ghost_checks) as GhostReadinessReport;
+          } catch {
+            return null;
+          }
+        })()
+      : (changePlan.ghost_checks ?? null);
+
   // Determine primary action based on status
   const getPrimaryAction = (): ActionType | null => {
     switch (changePlan.status) {
@@ -659,9 +671,9 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
             // readiness checks pass (PR-checks semantics).
             const ghostChecksFailed =
               primaryAction === 'submit' &&
-              changePlan.execution_backend === 'ghost' &&
-              changePlan.ghost_checks != null &&
-              !changePlan.ghost_checks.all_passed;
+              isGhostPlan &&
+              planGhostChecks != null &&
+              !planGhostChecks.all_passed;
             const isDisabled =
               ((primaryAction === 'approve' || primaryAction === 'retry') &&
                 changePlan.has_errors) ||
