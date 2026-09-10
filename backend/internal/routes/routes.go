@@ -871,6 +871,19 @@ func setupChangePlanRoutes(
 		changePlanHandler.RollbackGhostPlan,
 		executionAuthMiddleware.RequireExecutionPermission(),
 	)
+
+	// GHOST re-run readiness checks (all or single) — changes.read is enough;
+	// checks are read-only against the target.
+	changePlansGroup.POST("/:id/ghost-checks",
+		changePlanHandler.ReRunGhostChecks,
+		changePlanExtractor.Extract(),
+		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
+	)
+	changePlansGroup.POST("/:id/ghost-checks/:checkName",
+		changePlanHandler.ReRunGhostCheck,
+		changePlanExtractor.Extract(),
+		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
+	)
 }
 
 // setupAuditLogRoutes registers audit log querying routes

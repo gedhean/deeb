@@ -3014,3 +3014,127 @@ func (h *ChangePlanHandler) RollbackGhostPlan(c echo.Context) error {
 		"message": "Plan rolled back; post-cutover writes preserved in the sidelined table",
 	})
 }
+
+// ReRunGhostChecks handles POST /api/v1/change-plans/:id/ghost-checks
+// Re-runs all ghost readiness checks and persists the fresh report.
+func (h *ChangePlanHandler) ReRunGhostChecks(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	if changePlan.ExecutionBackend != models.ExecutionBackendGhost {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Change plan is not running under the ghost executor",
+		})
+	}
+
+	report, err := h.executionService.RunGhostReadinessChecks(ctx, changePlan)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": fmt.Sprintf("Failed to run ghost readiness checks: %s", err.Error()),
+		})
+	}
+
+	// Persist fresh report
+	if raw, mErr := json.Marshal(report); mErr == nil {
+		str := string(raw)
+		changePlan.GhostChecks = &str
+		if uErr := h.changePlanRepo.Update(ctx, changePlan); uErr != nil {
+			h.logger.Warn("Failed to persist ghost checks report", zap.Error(uErr))
+		}
+	}
+
+	return c.JSON(http.StatusOK, report)
+}
+
+// ReRunGhostCheck handles POST /api/v1/change-plans/:id/ghost-checks/:checkName
+// Re-runs a single named check and merges it into the persisted report.
+func (h *ChangePlanHandler) ReRunGhostCheck(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+	checkName := c.Param("checkName")
+
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	if changePlan.ExecutionBackend != models.ExecutionBackendGhost {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Change plan is not running under the ghost executor",
+		})
+	}
+
+	result, err := h.executionService.RunGhostCheck(ctx, changePlan, checkName)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	// Merge into the stored report (replace same-named check, recompute all_passed)
+	var report services.GhostReadinessReport
+	if changePlan.GhostChecks != nil && *changePlan.GhostChecks != "" {
+		if err := json.Unmarshal([]byte(*changePlan.GhostChecks), &report); err != nil {
+			report = services.GhostReadinessReport{}
+		}
+	}
+	merged := false
+	report.AllPassed = true
+	for i, chk := range report.Checks {
+		if chk.Name == result.Name {
+			report.Checks[i] = result
+			merged = true
+			break
+		}
+	}
+	if !merged {
+		report.Checks = append(report.Checks, result)
+	}
+	for _, chk := range report.Checks {
+		if !chk.Passed {
+			report.AllPassed = false
+			break
+		}
+	}
+
+	if raw, mErr := json.Marshal(report); mErr == nil {
+		str := string(raw)
+		changePlan.GhostChecks = &str
+		if uErr := h.changePlanRepo.Update(ctx, changePlan); uErr != nil {
+			h.logger.Warn("Failed to persist ghost checks report", zap.Error(uErr))
+		}
+	}
+
+	return c.JSON(http.StatusOK, report)
+}
