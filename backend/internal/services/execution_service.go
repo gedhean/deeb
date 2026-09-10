@@ -153,6 +153,170 @@ func (s *ExecutionService) AbortGhostExecution(ctx context.Context, changePlanID
 	return s.ghostExecutor.Abort(changePlanID)
 }
 
+// GhostCheckResult is one item in the ghost readiness report.
+type GhostCheckResult struct {
+	Name   string `json:"name"`
+	Passed bool   `json:"passed"`
+	Detail string `json:"detail"`
+}
+
+// GhostReadinessReport is the structured result of all ghost checks, run at
+// submit-for-review time. AllPassed gates the Draft → Open transition.
+type GhostReadinessReport struct {
+	AllPassed bool               `json:"all_passed"`
+	Checks    []GhostCheckResult `json:"checks"`
+}
+
+// RunGhostReadinessChecks executes the full ghost readiness suite against the
+// live target and returns per-check results. Used by the submit-for-review
+// gate and the preflight endpoint. Dry run is included as the final check.
+func (s *ExecutionService) RunGhostReadinessChecks(ctx context.Context, plan *models.ChangePlan) (*GhostReadinessReport, error) {
+	report := &GhostReadinessReport{AllPassed: true}
+	add := func(name string, passed bool, detail string) {
+		report.Checks = append(report.Checks, GhostCheckResult{Name: name, Passed: passed, Detail: detail})
+		if !passed {
+			report.AllPassed = false
+		}
+	}
+
+	db, dbInstance, table, password, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return nil, err
+	}
+
+	// Engine
+	if dbInstance.DatabaseEngine == models.DatabaseEngineMySQL {
+		add("engine_mysql", true, "target is MySQL")
+	} else {
+		add("engine_mysql", false, fmt.Sprintf("ghost currently supports MySQL only (target: %s)", dbInstance.DatabaseEngine))
+		return report, nil // no point connecting further
+	}
+
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		add("connection", false, fmt.Sprintf("failed to connect: %s", err.Error()))
+		return report, nil
+	}
+	defer func() { _ = conn.Close() }()
+	add("connection", true, "connected to target instance")
+
+	// Binlog format
+	var name, value string
+	rowErr := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_format'").Scan(&name, &value)
+	add("binlog_format", rowErr == nil && strings.EqualFold(value, "ROW"),
+		fmt.Sprintf("gh-ost requires binlog_format=ROW (current: %s); check the RDS parameter group", value))
+
+	// Binlog row image
+	value = ""
+	rowErr = conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_row_image'").Scan(&name, &value)
+	add("binlog_row_image", rowErr == nil && strings.EqualFold(value, "FULL"),
+		fmt.Sprintf("gh-ost requires binlog_row_image=FULL (current: %s); check the RDS parameter group", value))
+
+	// Grants
+	rows, qErr := conn.QueryContext(ctx, "SHOW GRANTS")
+	grantsPass, grantsDetail := false, "could not read grants"
+	if qErr == nil {
+		var all string
+		for rows.Next() {
+			var g string
+			if scanErr := rows.Scan(&g); scanErr == nil {
+				all += " " + strings.ToUpper(g)
+			}
+		}
+		_ = rows.Close()
+		hasReplication := strings.Contains(all, "REPLICATION SLAVE") && strings.Contains(all, "REPLICATION CLIENT")
+		dbNameEsc := strings.ToUpper(db.DatabaseName)
+		hasDBPrivs := strings.Contains(all, "ALL PRIVILEGES") &&
+			(strings.Contains(all, "ON *.*") || strings.Contains(all, "ON `"+dbNameEsc+"`.*") || strings.Contains(all, "ON "+dbNameEsc+".*"))
+		grantsPass = hasReplication && hasDBPrivs
+		grantsDetail = fmt.Sprintf("required: ALL PRIVILEGES ON %s.* plus REPLICATION SLAVE, REPLICATION CLIENT ON *.*", db.DatabaseName)
+	}
+	add("privileges", grantsPass, grantsDetail)
+
+	// Disk headroom estimate (always passes — operator verifies actual free disk)
+	var dataLen, indexLen sql.NullInt64
+	_ = conn.QueryRowContext(ctx,
+		`SELECT DATA_LENGTH, INDEX_LENGTH FROM information_schema.TABLES
+		 WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`, db.DatabaseName, table,
+	).Scan(&dataLen, &indexLen)
+	totalBytes := dataLen.Int64 + indexLen.Int64
+	estGB := float64(totalBytes) / (1024 * 1024 * 1024)
+	add("disk_headroom_estimate", true,
+		fmt.Sprintf("table %s is %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth — verify free disk on the instance before executing", table, estGB))
+
+	// Dry run (only meaningful if the earlier checks pass)
+	if report.AllPassed {
+		if dryErr := s.ghostDryRunWithCreds(ctx, plan, db, dbInstance, table, password); dryErr != nil {
+			add("dry_run", false, dryErr.Error())
+		} else {
+			add("dry_run", true, "gh-ost dry run completed successfully")
+		}
+	} else {
+		add("dry_run", false, "skipped: earlier checks failed")
+	}
+
+	return report, nil
+}
+
+// ghostDryRunWithCreds is the shared dry-run implementation (avoids
+// re-resolving the target when the caller already has it).
+func (s *ExecutionService) ghostDryRunWithCreds(
+	ctx context.Context,
+	plan *models.ChangePlan,
+	db *models.Database,
+	dbInstance *models.DatabaseInstance,
+	table, password string,
+) error {
+	_, alterClause, err := ParseAlterStatement(plan.SQLContent)
+	if err != nil {
+		return fmt.Errorf("invalid ghost SQL: %w", err)
+	}
+	binPath, args, err := s.ghostExecutor.BuildArgs(
+		dbInstance.DatabaseEngine,
+		dbInstance.Host,
+		dbInstance.Username,
+		password,
+		db.DatabaseName,
+		table,
+		alterClause,
+		dbInstance.Port,
+		"", "",
+	)
+	if err != nil {
+		return err
+	}
+	dryArgs := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == "--execute" {
+			continue
+		}
+		dryArgs = append(dryArgs, a)
+	}
+	var lastErr string
+	callbacks := GhostRunCallbacks{
+		OnLogLine: func(line string) {
+			s.logger.Info("ghost-dryrun",
+				zap.String("change_plan_id", plan.ID.String()),
+				zap.String("line", line),
+			)
+			l := strings.ToLower(line)
+			if strings.Contains(l, "error") || strings.Contains(l, "fatal") {
+				lastErr = line
+			}
+		},
+	}
+	if err := s.ghostExecutor.Run(ctx, binPath, dryArgs, callbacks); err != nil {
+		if lastErr != "" {
+			return fmt.Errorf("ghost dry-run failed: %s", lastErr)
+		}
+		return fmt.Errorf("ghost dry-run failed: %w", err)
+	}
+	return nil
+}
+
 // GhostDryRun validates a ghost plan by running gh-ost WITHOUT --execute
 // (dry run): it checks privileges, binlog access, and ALTER syntax against
 // the live target without migrating. Called at approval time so plans with
@@ -178,61 +342,7 @@ func (s *ExecutionService) GhostDryRunForPlan(ctx context.Context, plan *models.
 	if err != nil {
 		return err
 	}
-	_, alterClause, err := ParseAlterStatement(plan.SQLContent)
-	if err != nil {
-		return fmt.Errorf("invalid ghost SQL: %w", err)
-	}
-
-	binPath, args, err := s.ghostExecutor.BuildArgs(
-		dbInstance.DatabaseEngine,
-		dbInstance.Host,
-		dbInstance.Username,
-		password,
-		db.DatabaseName,
-		table,
-		alterClause,
-		dbInstance.Port,
-		"", "", // no flag files for a dry run
-	)
-	if err != nil {
-		return err
-	}
-
-	// Strip --execute to make it a dry run (gh-ost validates and exits).
-	dryArgs := make([]string, 0, len(args))
-	for _, a := range args {
-		if a == "--execute" {
-			continue
-		}
-		dryArgs = append(dryArgs, a)
-	}
-
-	s.logger.Info("Running ghost dry-run",
-		zap.String("change_plan_id", plan.ID.String()),
-		zap.String("table", table),
-	)
-
-	var lastErr string
-	callbacks := GhostRunCallbacks{
-		OnLogLine: func(line string) {
-			s.logger.Info("ghost-dryrun",
-				zap.String("change_plan_id", plan.ID.String()),
-				zap.String("line", line),
-			)
-			l := strings.ToLower(line)
-			if strings.Contains(l, "error") || strings.Contains(l, "fatal") {
-				lastErr = line
-			}
-		},
-	}
-
-	if err := s.ghostExecutor.Run(ctx, binPath, dryArgs, callbacks); err != nil {
-		if lastErr != "" {
-			return fmt.Errorf("ghost dry-run failed: %s", lastErr)
-		}
-		return fmt.Errorf("ghost dry-run failed: %w", err)
-	}
-	return nil
+	return s.ghostDryRunWithCreds(ctx, plan, db, dbInstance, table, password)
 }
 
 // resolveGhostTarget resolves the plan's target database, instance, parsed

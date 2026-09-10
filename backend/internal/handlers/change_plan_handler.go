@@ -217,17 +217,6 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		})
 	}
 
-	// Ghost dry-run gate: ghost plans must pass a gh-ost dry run against the
-	// live target at authoring time (privileges, binlog access, ALTER syntax
-	// validated without migrating) before they can be created.
-	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
-		if dryRunErr := h.executionService.GhostDryRunForPlan(ctx, changePlan); dryRunErr != nil {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": fmt.Sprintf("Ghost dry-run failed: %s", dryRunErr.Error()),
-			})
-		}
-	}
-
 	// Save to repository
 	if err := h.changePlanRepo.Create(ctx, changePlan); err != nil {
 		h.logger.Error("Failed to create change plan", zap.Error(err))
@@ -307,8 +296,10 @@ func (h *ChangePlanHandler) validateGhostSelection(
 		return "", fmt.Errorf("execution_backend=ghost is not permitted on production environments")
 	}
 
-	// Engine gate: pg-online-schema-change is not implemented yet, so ghost
-	// is MySQL-only for now.
+	// Engine gate at authoring time: ghost is selectable only for MySQL
+	// (pg-online-schema-change is not implemented). All other ghost checks
+	// (binlog, privileges, dry run) run at submit-for-review time where the
+	// UI can surface per-check results.
 	dbInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
 	if err != nil {
 		return "", fmt.Errorf("failed to validate database instance: %w", err)
@@ -317,44 +308,7 @@ func (h *ChangePlanHandler) validateGhostSelection(
 		return "", fmt.Errorf("execution_backend=ghost is currently supported only for MySQL databases")
 	}
 
-	// Binlog gate: gh-ost requires ROW binlog format with FULL row image.
-	// Verified live against the target so misconfigured RDS parameter groups
-	// fail fast at plan creation instead of at execution time.
-	if err := h.checkGhostBinlogRequirements(ctx, dbInstance, db); err != nil {
-		return "", err
-	}
-
 	return models.ExecutionBackendGhost, nil
-}
-
-// checkGhostBinlogRequirements verifies the target MySQL server has
-// binlog_format=ROW and binlog_row_image=FULL, which gh-ost requires.
-func (h *ChangePlanHandler) checkGhostBinlogRequirements(
-	ctx context.Context,
-	dbInstance *models.DatabaseInstance,
-	db *models.Database,
-) error {
-	if h.connectionManager == nil {
-		return fmt.Errorf("failed to connect to target database for ghost validation: connection manager not configured")
-	}
-	conn, err := h.connectionManager.Connect(ctx, database.ConnectionParams{
-		DatabaseInstance: dbInstance,
-		Database:         db,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to connect to target database for ghost validation: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	var name, value string
-	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_format'").Scan(&name, &value); err != nil || !strings.EqualFold(value, "ROW") {
-		return fmt.Errorf("ghost requires binlog_format=ROW (current: %s); check the RDS parameter group", value)
-	}
-	value = ""
-	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_row_image'").Scan(&name, &value); err != nil || !strings.EqualFold(value, "FULL") {
-		return fmt.Errorf("ghost requires binlog_row_image=FULL (current: %s); check the RDS parameter group", value)
-	}
-	return nil
 }
 
 // validateCreateChangePlanRequest validates the create change plan request
@@ -920,6 +874,23 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 
 		// If transitioning from Draft to Open, trigger SQL Review
 		if changePlan.Status == models.ChangePlanStatusDraft && *req.Status == models.ChangePlanStatusOpen {
+			// Ghost readiness gate: ghost plans must pass the full check suite
+			// (binlog, privileges, dry run) before they can be submitted for review.
+			if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+				report, checkErr := h.executionService.RunGhostReadinessChecks(ctx, changePlan)
+				if checkErr != nil {
+					return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+						"error": fmt.Sprintf("Failed to run ghost readiness checks: %s", checkErr.Error()),
+					})
+				}
+				if !report.AllPassed {
+					return c.JSON(http.StatusBadRequest, map[string]interface{}{
+						"error":        "Ghost readiness checks failed — cannot submit for review",
+						"ghost_checks": report,
+					})
+				}
+			}
+
 			if err := h.triggerSQLReview(c, changePlan); err != nil {
 				h.logger.Error("SQL Review failed", zap.Error(err), zap.String("change_plan_id", changePlan.ID.String()))
 
@@ -961,16 +932,6 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"error": err.Error(),
 		})
-	}
-
-	// Ghost dry-run gate: when the plan is (or is being switched to) ghost,
-	// re-validate against the live target at authoring time.
-	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
-		if dryRunErr := h.executionService.GhostDryRunForPlan(ctx, changePlan); dryRunErr != nil {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": fmt.Sprintf("Ghost dry-run failed: %s", dryRunErr.Error()),
-			})
-		}
 	}
 
 	// If SQL content was updated, trigger SQL Review

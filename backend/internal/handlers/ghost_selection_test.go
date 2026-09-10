@@ -93,13 +93,13 @@ func TestValidateGhostSelection(t *testing.T) {
 			wantBackend: models.ExecutionBackendDirect,
 		},
 		{
-			name:         "ghost mysql plan proceeds to live binlog check (fails without live DB in unit test)",
+			name:         "ghost allowed for mysql on DDL + non-production (other checks run at submit)",
 			backend:      models.ExecutionBackendGhost,
 			changeType:   models.ChangeTypeDDL,
 			envID:        &envID,
 			envRepo:      &stubEnvironmentRepo{env: nonProdEnv},
 			instanceRepo: &stubDatabaseInstanceRepo{instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL}},
-			wantErr:      "failed to connect to target database",
+			wantBackend:  models.ExecutionBackendGhost,
 		},
 		{
 			name:         "ghost rejected for postgres (pgosc not implemented)",
