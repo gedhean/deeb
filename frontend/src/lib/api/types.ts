@@ -371,6 +371,7 @@ export interface ChangePlan {
   status: ChangePlanStatus;
   execution_backend: ExecutionBackend;
   ghost_checks?: GhostReadinessReport | string;
+  ghost_progress?: string;
   risk_level: RiskLevel;
   author_id: string;
   assigned_reviewer_id?: string;

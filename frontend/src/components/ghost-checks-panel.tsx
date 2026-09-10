@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { CheckCircle2, XCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import type { GhostReadinessReport } from '@/lib/api/types';
 import { changePlanService } from '@/lib/api/services/changePlans';
 
 interface GhostChecksPanelProps {
   changePlanId: string;
   report: GhostReadinessReport | null | undefined;
+  ghostProgress?: string;
+  planStatus?: string;
   onRefreshed?: (report: GhostReadinessReport) => void;
 }
 
@@ -18,12 +21,20 @@ interface GhostChecksPanelProps {
 export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
   changePlanId,
   report,
+  ghostProgress,
+  planStatus,
   onRefreshed,
 }) => {
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [refreshingCheck, setRefreshingCheck] = useState<string | null>(null);
 
-  if (!report) {
+  // Parse the latest copy progress snapshot (".." persisted on the plan)
+  const progressValue = ghostProgress ? parseFloat(ghostProgress) : null;
+  const showProgress =
+    progressValue != null &&
+    (planStatus === 'InProgress' || planStatus === 'AwaitingCutover');
+
+  if (!report && !showProgress) {
     return null;
   }
 
@@ -66,6 +77,15 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
           Re-run all checks
         </Button>
       </CardHeader>
+      {showProgress && progressValue != null && (
+        <div className="px-6 pb-4">
+          <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+            <span>{planStatus === 'AwaitingCutover' ? 'Awaiting cutover approval' : 'Copying shadow table'}</span>
+            <span>{progressValue.toFixed(1)}%</span>
+          </div>
+          <Progress value={progressValue} />
+        </div>
+      )}
       <CardContent>
         <ul className="space-y-2.5">
           {report.checks.map((check) => (

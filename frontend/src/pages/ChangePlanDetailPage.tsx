@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTheme } from '@/components/theme-provider';
 import { DefaultLayout } from '@/components/layouts';
@@ -48,6 +48,30 @@ export const ChangePlanDetailPage: React.FC = () => {
 
   // ghost_checks arrives as a JSON string (TEXT column); parse for the panel
   const ghostChecksReport = useMemo(() => {
+    if (!changePlan?.ghost_checks) {
+      return null;
+    }
+    if (typeof changePlan.ghost_checks === 'string') {
+      try {
+        return JSON.parse(changePlan.ghost_checks) as GhostReadinessReport;
+      } catch {
+        return null;
+      }
+    }
+    return changePlan.ghost_checks;
+  }, [changePlan?.ghost_checks]);
+
+  // Poll the plan while a ghost migration is copying so the progress bar
+  // updates without manual refresh (uses SWR refetch, no websockets).
+  useEffect(() => {
+    if (changePlan?.status !== 'InProgress' || changePlan?.execution_backend !== 'ghost') {
+      return;
+    }
+    const interval = setInterval(() => {
+      refetch();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [changePlan?.status, changePlan?.execution_backend, refetch]);
     if (!changePlan?.ghost_checks) {
       return null;
     }
@@ -575,6 +599,8 @@ export const ChangePlanDetailPage: React.FC = () => {
           <GhostChecksPanel
             changePlanId={changePlan.id}
             report={ghostChecksReport}
+            ghostProgress={changePlan.ghost_progress}
+            planStatus={changePlan.status}
             onRefreshed={() => refetch()}
           />
         )}
