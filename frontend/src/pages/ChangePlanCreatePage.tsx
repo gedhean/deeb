@@ -31,6 +31,7 @@ interface FormData {
   description: string;
   change_type: ChangeType;
   sql_content: string;
+  execution_backend: 'direct' | 'ghost';
 }
 
 export const ChangePlanCreatePage: React.FC = () => {
@@ -86,6 +87,7 @@ export const ChangePlanCreatePage: React.FC = () => {
       description: '',
       change_type: 'DDL',
       sql_content: '',
+      execution_backend: 'direct',
     };
   };
 
@@ -368,6 +370,7 @@ export const ChangePlanCreatePage: React.FC = () => {
         description: formData.description?.trim() || '',
         change_type: formData.change_type,
         sql_content: formData.sql_content.trim(),
+        execution_backend: ghostEligible ? formData.execution_backend : 'direct',
       };
 
       const createdChangePlan = await changePlanService.createChangePlan(createData);
