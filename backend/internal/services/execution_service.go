@@ -915,6 +915,7 @@ func (s *ExecutionService) executeGhost(
 
 	// Stream tool output into the zap logger and flip the plan into
 	// AwaitingCutover when the tool parks behind the postpone flag.
+	awaitingCutoverSet := false
 	callbacks := GhostRunCallbacks{
 		OnLogLine: func(line string) {
 			s.logger.Info("ghost",
@@ -923,7 +924,8 @@ func (s *ExecutionService) executeGhost(
 			)
 		},
 		OnStateChange: func(status string) {
-			if status == GhostStatusAwaiting {
+			if status == GhostStatusAwaiting && !awaitingCutoverSet {
+				awaitingCutoverSet = true
 				changePlan.Status = models.ChangePlanStatusAwaitingCutover
 				changePlan.UpdatedAt = time.Now()
 				if err := s.changePlanRepo.Update(context.Background(), changePlan); err != nil {
