@@ -3045,11 +3045,28 @@ func (h *ChangePlanHandler) ReRunGhostChecks(c echo.Context) error {
 		})
 	}
 
+	h.logger.Info("Re-running all ghost readiness checks",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
 	report, err := h.executionService.RunGhostReadinessChecks(ctx, changePlan)
 	if err != nil {
+		h.logger.Error("Ghost readiness checks failed to run",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Error(err),
+		)
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": fmt.Sprintf("Failed to run ghost readiness checks: %s", err.Error()),
 		})
+	}
+
+	for _, chk := range report.Checks {
+		h.logger.Info("ghost check result",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("check", chk.Name),
+			zap.Bool("passed", chk.Passed),
+			zap.String("detail", chk.Detail),
+		)
 	}
 
 	// Persist fresh report
@@ -3095,12 +3112,29 @@ func (h *ChangePlanHandler) ReRunGhostCheck(c echo.Context) error {
 		})
 	}
 
+	h.logger.Info("Re-running single ghost check",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("check", checkName),
+	)
+
 	result, err := h.executionService.RunGhostCheck(ctx, changePlan, checkName)
 	if err != nil {
+		h.logger.Error("Ghost check failed to run",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("check", checkName),
+			zap.Error(err),
+		)
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"error": err.Error(),
 		})
 	}
+
+	h.logger.Info("ghost check result",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("check", result.Name),
+		zap.Bool("passed", result.Passed),
+		zap.String("detail", result.Detail),
+	)
 
 	// Merge into the stored report (replace same-named check, recompute all_passed)
 	var report services.GhostReadinessReport

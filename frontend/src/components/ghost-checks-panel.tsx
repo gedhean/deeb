@@ -69,31 +69,30 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
       <CardContent>
         <ul className="space-y-2.5">
           {report.checks.map((check) => (
-            <li key={check.name} className="flex items-start gap-2.5 group">
+            <li key={check.name} className="flex items-start gap-2.5">
               {check.passed ? (
                 <CheckCircle2 className="h-4.5 w-4.5 mt-0.5 text-green-600 dark:text-green-400 shrink-0" />
               ) : (
                 <XCircle className="h-4.5 w-4.5 mt-0.5 text-red-600 dark:text-red-400 shrink-0" />
               )}
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{check.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => rerunOne(check.name)}
-                    disabled={refreshingCheck === check.name || isRefreshingAll}
-                    title={`Re-run ${check.name}`}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground disabled:opacity-50"
-                  >
-                    {refreshingCheck === check.name ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                </div>
+                <span className="text-sm font-medium">{check.name}</span>
                 <p className="text-xs text-muted-foreground break-words">{check.detail}</p>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => rerunOne(check.name)}
+                disabled={refreshingCheck === check.name || isRefreshingAll}
+                title={`Re-run ${check.name}`}
+                className="shrink-0 h-7 px-2"
+              >
+                {refreshingCheck === check.name ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+              </Button>
             </li>
           ))}
         </ul>
