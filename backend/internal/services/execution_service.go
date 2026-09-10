@@ -261,10 +261,12 @@ func (s *ExecutionService) checkGhostConnection(ctx context.Context, plan *model
 	})
 	if err != nil {
 		return GhostCheckResult{Name: GhostCheckConnection, Passed: false,
-			Detail: fmt.Sprintf("failed to connect: %s", err.Error())}
+			Detail: fmt.Sprintf("connecting as '%s' to %s:%d/%s failed: %s",
+				dbInstance.Username, dbInstance.Host, dbInstance.Port, db.DatabaseName, err.Error())}
 	}
 	_ = conn.Close()
-	return GhostCheckResult{Name: GhostCheckConnection, Passed: true, Detail: "connected to target instance"}
+	return GhostCheckResult{Name: GhostCheckConnection, Passed: true,
+		Detail: fmt.Sprintf("connected as '%s' to %s:%d/%s", dbInstance.Username, dbInstance.Host, dbInstance.Port, db.DatabaseName)}
 }
 
 // checkGhostBinlogFormat verifies binlog_format=ROW.
@@ -287,7 +289,8 @@ func (s *ExecutionService) ghostVariableCheck(ctx context.Context, plan *models.
 		Database:         db,
 	})
 	if err != nil {
-		return GhostCheckResult{Name: checkName, Passed: false, Detail: fmt.Sprintf("failed to connect: %s", err.Error())}
+		return GhostCheckResult{Name: checkName, Passed: false,
+			Detail: fmt.Sprintf("connecting as '%s' failed: %s", dbInstance.Username, err.Error())}
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -299,10 +302,21 @@ func (s *ExecutionService) ghostVariableCheck(ctx context.Context, plan *models.
 		return GhostCheckResult{Name: checkName, Passed: false,
 			Detail: fmt.Sprintf("gh-ost requires %s=%s (current: %s); check the RDS parameter group", variable, want, value)}
 	}
-	return GhostCheckResult{Name: checkName, Passed: true, Detail: fmt.Sprintf("%s=%s", variable, want)}
+	return GhostCheckResult{Name: checkName, Passed: true,
+		Detail: fmt.Sprintf("%s=%s (verified as '%s')", variable, want, dbInstance.Username)}
 }
 
-// checkGhostPrivileges verifies grants needed by gh-ost.
+// ghostRequiredDBPrivs is the set of DML/DDL privileges gh-ost needs on the
+// target database (besides the replication privileges). An enumerated grant
+// covering all of these is equivalent to ALL PRIVILEGES for our purposes.
+var ghostRequiredDBPrivs = []string{
+	"SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "INDEX",
+}
+
+// checkGhostPrivileges verifies grants needed by gh-ost. Evaluation is
+// semantic rather than literal: a literal `ALL PRIVILEGES` passes, and so
+// does an enumerated grant list covering ghostRequiredDBPrivs plus
+// REPLICATION SLAVE + REPLICATION CLIENT (e.g. a fully privileged root).
 func (s *ExecutionService) checkGhostPrivileges(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
 	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
 	if err != nil {
@@ -313,13 +327,14 @@ func (s *ExecutionService) checkGhostPrivileges(ctx context.Context, plan *model
 		Database:         db,
 	})
 	if err != nil {
-		return GhostCheckResult{Name: GhostCheckPrivileges, Passed: false, Detail: fmt.Sprintf("failed to connect: %s", err.Error())}
+		return GhostCheckResult{Name: GhostCheckPrivileges, Passed: false, Detail: fmt.Sprintf("failed to connect as '%s': %s", dbInstance.Username, err.Error())}
 	}
 	defer func() { _ = conn.Close() }()
 
 	rows, qErr := conn.QueryContext(ctx, "SHOW GRANTS")
 	if qErr != nil {
-		return GhostCheckResult{Name: GhostCheckPrivileges, Passed: false, Detail: "could not read grants"}
+		return GhostCheckResult{Name: GhostCheckPrivileges, Passed: false,
+			Detail: fmt.Sprintf("connecting as '%s': could not read grants: %s", dbInstance.Username, qErr.Error())}
 	}
 	var all string
 	for rows.Next() {
@@ -329,16 +344,46 @@ func (s *ExecutionService) checkGhostPrivileges(ctx context.Context, plan *model
 		}
 	}
 	_ = rows.Close()
-	hasReplication := strings.Contains(all, "REPLICATION SLAVE") && strings.Contains(all, "REPLICATION CLIENT")
-	dbNameEsc := strings.ToUpper(db.DatabaseName)
-	hasDBPrivs := strings.Contains(all, "ALL PRIVILEGES") &&
-		(strings.Contains(all, "ON *.*") || strings.Contains(all, "ON `"+dbNameEsc+"`.*") || strings.Contains(all, "ON "+dbNameEsc+".*"))
-	passed := hasReplication && hasDBPrivs
-	detail := "grants OK"
-	if !passed {
-		detail = fmt.Sprintf("required: ALL PRIVILEGES ON %s.* plus REPLICATION SLAVE, REPLICATION CLIENT ON *.*", db.DatabaseName)
+
+	var missing []string
+	hasReplicationSlave := strings.Contains(all, "REPLICATION SLAVE")
+	hasReplicationClient := strings.Contains(all, "REPLICATION CLIENT")
+	if !hasReplicationSlave {
+		missing = append(missing, "REPLICATION SLAVE")
 	}
-	return GhostCheckResult{Name: GhostCheckPrivileges, Passed: passed, Detail: detail}
+	if !hasReplicationClient {
+		missing = append(missing, "REPLICATION CLIENT")
+	}
+
+	// DB-level privileges: literal ALL PRIVILEGES, or enumerated coverage.
+	hasAll := strings.Contains(all, "ALL PRIVILEGES")
+	var missingDB []string
+	if !hasAll {
+		for _, priv := range ghostRequiredDBPrivs {
+			if !strings.Contains(all, priv) {
+				missingDB = append(missingDB, priv)
+			}
+		}
+	}
+
+	passed := len(missing) == 0 && (hasAll || len(missingDB) == 0)
+	if passed {
+		detail := fmt.Sprintf("connecting as '%s': privileges OK", dbInstance.Username)
+		if !hasAll {
+			detail += " (enumerated grant set covers required privileges)"
+		}
+		return GhostCheckResult{Name: GhostCheckPrivileges, Passed: true, Detail: detail}
+	}
+
+	detail := fmt.Sprintf("connecting as '%s': missing %s", dbInstance.Username, strings.Join(missing, ", "))
+	if len(missingDB) > 0 {
+		detail += fmt.Sprintf("; db-level privileges missing: %s (or grant ALL PRIVILEGES ON %s.*)",
+			strings.Join(missingDB, ", "), db.DatabaseName)
+	}
+	if len(missing) == 0 && hasAll {
+		detail = fmt.Sprintf("connecting as '%s': grants OK", dbInstance.Username)
+	}
+	return GhostCheckResult{Name: GhostCheckPrivileges, Passed: false, Detail: detail}
 }
 
 // checkGhostDiskHeadroom estimates free-disk need (always passes — operator verifies).
@@ -364,7 +409,7 @@ func (s *ExecutionService) checkGhostDiskHeadroom(ctx context.Context, plan *mod
 	totalBytes := dataLen.Int64 + indexLen.Int64
 	estGB := float64(totalBytes) / (1024 * 1024 * 1024)
 	return GhostCheckResult{Name: GhostCheckDisk, Passed: true,
-		Detail: fmt.Sprintf("table %s is %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth — verify free disk on the instance before executing", table, estGB)}
+		Detail: fmt.Sprintf("table %s is estimated at roughly %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth during the copy — this is an estimate, verify actual free disk on the instance before executing", table, estGB)}
 }
 
 // checkGhostDryRun runs gh-ost without --execute against the live target.
