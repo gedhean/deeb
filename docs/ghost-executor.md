@@ -51,13 +51,14 @@ DML plans and production environments always use the direct executor.
 Validation happens both at the API layer (create/update) and again at
 execution time (defense-in-depth).
 
-## Approval gate: gh-ost dry run
+## Authoring gate: gh-ost dry run
 
-A ghost plan can only be **approved** after a successful **gh-ost dry run**
-(`gh-ost` without `--execute`) against the live target. The dry run validates
+A ghost plan must pass a **gh-ost dry run** (`gh-ost` without `--execute`)
+against the live target **at create/update time**. The dry run validates
 privileges, binlog access, and ALTER syntax without migrating. If it fails,
-approval is blocked with the dry-run error. This runs in addition to the
-SQL Review error check.
+the plan cannot be created or saved with `execution_backend=ghost` — the
+error is returned immediately to the author. Approval requires no further
+ghost validation beyond the standard SQL Review error check.
 
 ## Pre-flight checks and disk headroom
 

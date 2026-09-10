@@ -217,6 +217,17 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		})
 	}
 
+	// Ghost dry-run gate: ghost plans must pass a gh-ost dry run against the
+	// live target at authoring time (privileges, binlog access, ALTER syntax
+	// validated without migrating) before they can be created.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		if dryRunErr := h.executionService.GhostDryRunForPlan(ctx, changePlan); dryRunErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": fmt.Sprintf("Ghost dry-run failed: %s", dryRunErr.Error()),
+			})
+		}
+	}
+
 	// Save to repository
 	if err := h.changePlanRepo.Create(ctx, changePlan); err != nil {
 		h.logger.Error("Failed to create change plan", zap.Error(err))
@@ -952,6 +963,16 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		})
 	}
 
+	// Ghost dry-run gate: when the plan is (or is being switched to) ghost,
+	// re-validate against the live target at authoring time.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		if dryRunErr := h.executionService.GhostDryRunForPlan(ctx, changePlan); dryRunErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": fmt.Sprintf("Ghost dry-run failed: %s", dryRunErr.Error()),
+			})
+		}
+	}
+
 	// If SQL content was updated, trigger SQL Review
 	if isUpdatingSQLContent {
 		if err := h.triggerSQLReview(c, changePlan); err != nil {
@@ -1674,18 +1695,6 @@ func (h *ChangePlanHandler) ApproveChangePlan(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		// If binding fails, continue with empty comments (comments are optional)
 		req.Comments = nil
-	}
-
-	// Ghost dry-run gate: ghost plans must pass a gh-ost dry run against the
-	// live target before they can be approved (privileges, binlog access,
-	// ALTER syntax validated without migrating).
-	plan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
-	if err == nil && plan.ExecutionBackend == models.ExecutionBackendGhost {
-		if dryRunErr := h.executionService.GhostDryRun(ctx, changePlanID); dryRunErr != nil {
-			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"error": fmt.Sprintf("Ghost dry-run failed; the plan cannot be approved: %s", dryRunErr.Error()),
-			})
-		}
 	}
 
 	// Use approval service to approve the change plan

@@ -165,6 +165,15 @@ func (s *ExecutionService) GhostDryRun(ctx context.Context, changePlanID uuid.UU
 	if err != nil {
 		return err
 	}
+	return s.GhostDryRunForPlan(ctx, plan)
+}
+
+// GhostDryRunForPlan runs the gh-ost dry run for an in-memory plan (used at
+// create/update time before the plan is persisted, and at approval time).
+func (s *ExecutionService) GhostDryRunForPlan(ctx context.Context, plan *models.ChangePlan) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
 	db, dbInstance, table, password, err := s.resolveGhostTarget(ctx, plan)
 	if err != nil {
 		return err
@@ -199,7 +208,7 @@ func (s *ExecutionService) GhostDryRun(ctx context.Context, changePlanID uuid.UU
 	}
 
 	s.logger.Info("Running ghost dry-run",
-		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("change_plan_id", plan.ID.String()),
 		zap.String("table", table),
 	)
 
@@ -207,7 +216,7 @@ func (s *ExecutionService) GhostDryRun(ctx context.Context, changePlanID uuid.UU
 	callbacks := GhostRunCallbacks{
 		OnLogLine: func(line string) {
 			s.logger.Info("ghost-dryrun",
-				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("change_plan_id", plan.ID.String()),
 				zap.String("line", line),
 			)
 			l := strings.ToLower(line)
