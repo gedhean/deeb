@@ -146,10 +146,13 @@ func (g *GhostExecutor) BuildArgs(
 }
 
 // ControlFlagPaths returns the cutover/panic flag paths for a plan.
+// It also ensures the flag directory exists (gh-ost and the executor both
+// create files there, and containers may not have it pre-provisioned).
 func (g *GhostExecutor) ControlFlagPaths(planID uuid.UUID) (postpone string, panic string) {
 	if g.flagDir == "" {
 		g.flagDir = "."
 	}
+	_ = os.MkdirAll(g.flagDir, 0o755)
 	postpone = fmt.Sprintf("%s/deeb-%s.postpone", g.flagDir, planID)
 	panic = fmt.Sprintf("%s/deeb-%s.panic", g.flagDir, planID)
 	return
