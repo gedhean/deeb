@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -150,6 +151,79 @@ func (s *ExecutionService) AbortGhostExecution(ctx context.Context, changePlanID
 		return fmt.Errorf("abort is only available while the plan is executing (current: %s)", plan.Status)
 	}
 	return s.ghostExecutor.Abort(changePlanID)
+}
+
+// GhostDryRun validates a ghost plan by running gh-ost WITHOUT --execute
+// (dry run): it checks privileges, binlog access, and ALTER syntax against
+// the live target without migrating. Called at approval time so plans with
+// misconfigured targets fail before they can be approved.
+func (s *ExecutionService) GhostDryRun(ctx context.Context, changePlanID uuid.UUID) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	db, dbInstance, table, password, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return err
+	}
+	_, alterClause, err := ParseAlterStatement(plan.SQLContent)
+	if err != nil {
+		return fmt.Errorf("invalid ghost SQL: %w", err)
+	}
+
+	binPath, args, err := s.ghostExecutor.BuildArgs(
+		dbInstance.DatabaseEngine,
+		dbInstance.Host,
+		dbInstance.Username,
+		password,
+		db.DatabaseName,
+		table,
+		alterClause,
+		dbInstance.Port,
+		"", "", // no flag files for a dry run
+	)
+	if err != nil {
+		return err
+	}
+
+	// Strip --execute to make it a dry run (gh-ost validates and exits).
+	dryArgs := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == "--execute" {
+			continue
+		}
+		dryArgs = append(dryArgs, a)
+	}
+
+	s.logger.Info("Running ghost dry-run",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("table", table),
+	)
+
+	var lastErr string
+	callbacks := GhostRunCallbacks{
+		OnLogLine: func(line string) {
+			s.logger.Info("ghost-dryrun",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("line", line),
+			)
+			l := strings.ToLower(line)
+			if strings.Contains(l, "error") || strings.Contains(l, "fatal") {
+				lastErr = line
+			}
+		},
+	}
+
+	if err := s.ghostExecutor.Run(ctx, binPath, dryArgs, callbacks); err != nil {
+		if lastErr != "" {
+			return fmt.Errorf("ghost dry-run failed: %s", lastErr)
+		}
+		return fmt.Errorf("ghost dry-run failed: %w", err)
+	}
+	return nil
 }
 
 // resolveGhostTarget resolves the plan's target database, instance, parsed

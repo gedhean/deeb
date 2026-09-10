@@ -30,6 +30,35 @@ func (s *stubEnvironmentRepo) Count(context.Context, repository.EnvironmentFilte
 func (s *stubEnvironmentRepo) Update(context.Context, *models.Environment) error { return nil }
 func (s *stubEnvironmentRepo) Delete(context.Context, uuid.UUID) error           { return nil }
 
+// stubDatabaseInstanceRepo is a minimal DatabaseInstanceRepository for tests.
+type stubDatabaseInstanceRepo struct {
+	instance *models.DatabaseInstance
+	err      error
+}
+
+func (s *stubDatabaseInstanceRepo) Create(context.Context, *models.DatabaseInstance) error {
+	return nil
+}
+func (s *stubDatabaseInstanceRepo) GetByID(context.Context, uuid.UUID) (*models.DatabaseInstance, error) {
+	return s.instance, s.err
+}
+func (s *stubDatabaseInstanceRepo) List(context.Context, repository.DatabaseInstanceFilters, int, int) ([]*models.DatabaseInstance, error) {
+	return nil, nil
+}
+func (s *stubDatabaseInstanceRepo) ListByEnvironment(context.Context, uuid.UUID, int, int) ([]*models.DatabaseInstance, error) {
+	return nil, nil
+}
+func (s *stubDatabaseInstanceRepo) Count(context.Context, repository.DatabaseInstanceFilters) (int64, error) {
+	return 0, nil
+}
+func (s *stubDatabaseInstanceRepo) CountByEnvironment(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (s *stubDatabaseInstanceRepo) Update(context.Context, *models.DatabaseInstance) error {
+	return nil
+}
+func (s *stubDatabaseInstanceRepo) Delete(context.Context, uuid.UUID) error { return nil }
+
 func TestValidateGhostSelection(t *testing.T) {
 	envID := uuid.New()
 	dbID := uuid.New()
@@ -38,13 +67,14 @@ func TestValidateGhostSelection(t *testing.T) {
 	prodEnv := &models.Environment{ID: envID, Name: "Production", IsProduction: true}
 
 	tests := []struct {
-		name        string
-		backend     models.ExecutionBackend
-		changeType  models.ChangeType
-		envID       *uuid.UUID
-		envRepo     repository.EnvironmentRepository
-		wantBackend models.ExecutionBackend
-		wantErr     string
+		name         string
+		backend      models.ExecutionBackend
+		changeType   models.ChangeType
+		envID        *uuid.UUID
+		envRepo      repository.EnvironmentRepository
+		instanceRepo repository.DatabaseInstanceRepository
+		wantBackend  models.ExecutionBackend
+		wantErr      string
 	}{
 		{
 			name:        "empty backend defaults to direct",
@@ -63,12 +93,22 @@ func TestValidateGhostSelection(t *testing.T) {
 			wantBackend: models.ExecutionBackendDirect,
 		},
 		{
-			name:        "ghost allowed on DDL + non-production",
-			backend:     models.ExecutionBackendGhost,
-			changeType:  models.ChangeTypeDDL,
-			envID:       &envID,
-			envRepo:     &stubEnvironmentRepo{env: nonProdEnv},
-			wantBackend: models.ExecutionBackendGhost,
+			name:         "ghost mysql plan proceeds to live binlog check (fails without live DB in unit test)",
+			backend:      models.ExecutionBackendGhost,
+			changeType:   models.ChangeTypeDDL,
+			envID:        &envID,
+			envRepo:      &stubEnvironmentRepo{env: nonProdEnv},
+			instanceRepo: &stubDatabaseInstanceRepo{instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL}},
+			wantErr:      "failed to connect to target database",
+		},
+		{
+			name:         "ghost rejected for postgres (pgosc not implemented)",
+			backend:      models.ExecutionBackendGhost,
+			changeType:   models.ChangeTypeDDL,
+			envID:        &envID,
+			envRepo:      &stubEnvironmentRepo{env: nonProdEnv},
+			instanceRepo: &stubDatabaseInstanceRepo{instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEnginePostgreSQL}},
+			wantErr:      "only for MySQL",
 		},
 		{
 			name:       "ghost rejected for DML",
@@ -114,7 +154,10 @@ func TestValidateGhostSelection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := &ChangePlanHandler{environmentRepo: tt.envRepo}
+			h := &ChangePlanHandler{
+				environmentRepo:      tt.envRepo,
+				databaseInstanceRepo: tt.instanceRepo,
+			}
 			db := &models.Database{ID: dbID, EnvironmentID: tt.envID}
 
 			got, err := h.validateGhostSelection(context.Background(), tt.backend, tt.changeType, db)

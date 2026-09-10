@@ -274,7 +274,7 @@ func (h *ChangePlanHandler) validateGhostSelection(
 	ctx context.Context,
 	backend models.ExecutionBackend,
 	changeType models.ChangeType,
-	database *models.Database,
+	db *models.Database,
 ) (models.ExecutionBackend, error) {
 	if backend == "" || backend == models.ExecutionBackendDirect {
 		return models.ExecutionBackendDirect, nil
@@ -285,17 +285,65 @@ func (h *ChangePlanHandler) validateGhostSelection(
 	if changeType != models.ChangeTypeDDL {
 		return "", fmt.Errorf("execution_backend=ghost is only supported for DDL change plans")
 	}
-	if database.EnvironmentID == nil {
+	if db.EnvironmentID == nil {
 		return "", fmt.Errorf("execution_backend=ghost requires the database to be assigned to an environment")
 	}
-	env, err := h.environmentRepo.GetByID(ctx, *database.EnvironmentID)
+	env, err := h.environmentRepo.GetByID(ctx, *db.EnvironmentID)
 	if err != nil {
 		return "", fmt.Errorf("failed to validate environment: %w", err)
 	}
 	if env.IsProduction {
 		return "", fmt.Errorf("execution_backend=ghost is not permitted on production environments")
 	}
+
+	// Engine gate: pg-online-schema-change is not implemented yet, so ghost
+	// is MySQL-only for now.
+	dbInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+	if err != nil {
+		return "", fmt.Errorf("failed to validate database instance: %w", err)
+	}
+	if dbInstance.DatabaseEngine != models.DatabaseEngineMySQL {
+		return "", fmt.Errorf("execution_backend=ghost is currently supported only for MySQL databases")
+	}
+
+	// Binlog gate: gh-ost requires ROW binlog format with FULL row image.
+	// Verified live against the target so misconfigured RDS parameter groups
+	// fail fast at plan creation instead of at execution time.
+	if err := h.checkGhostBinlogRequirements(ctx, dbInstance, db); err != nil {
+		return "", err
+	}
+
 	return models.ExecutionBackendGhost, nil
+}
+
+// checkGhostBinlogRequirements verifies the target MySQL server has
+// binlog_format=ROW and binlog_row_image=FULL, which gh-ost requires.
+func (h *ChangePlanHandler) checkGhostBinlogRequirements(
+	ctx context.Context,
+	dbInstance *models.DatabaseInstance,
+	db *models.Database,
+) error {
+	if h.connectionManager == nil {
+		return fmt.Errorf("failed to connect to target database for ghost validation: connection manager not configured")
+	}
+	conn, err := h.connectionManager.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to target database for ghost validation: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	var name, value string
+	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_format'").Scan(&name, &value); err != nil || !strings.EqualFold(value, "ROW") {
+		return fmt.Errorf("ghost requires binlog_format=ROW (current: %s); check the RDS parameter group", value)
+	}
+	value = ""
+	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_row_image'").Scan(&name, &value); err != nil || !strings.EqualFold(value, "FULL") {
+		return fmt.Errorf("ghost requires binlog_row_image=FULL (current: %s); check the RDS parameter group", value)
+	}
+	return nil
 }
 
 // validateCreateChangePlanRequest validates the create change plan request
@@ -1628,6 +1676,18 @@ func (h *ChangePlanHandler) ApproveChangePlan(c echo.Context) error {
 		req.Comments = nil
 	}
 
+	// Ghost dry-run gate: ghost plans must pass a gh-ost dry run against the
+	// live target before they can be approved (privileges, binlog access,
+	// ALTER syntax validated without migrating).
+	plan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err == nil && plan.ExecutionBackend == models.ExecutionBackendGhost {
+		if dryRunErr := h.executionService.GhostDryRun(ctx, changePlanID); dryRunErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": fmt.Sprintf("Ghost dry-run failed; the plan cannot be approved: %s", dryRunErr.Error()),
+			})
+		}
+	}
+
 	// Use approval service to approve the change plan
 	// The service handles:
 	// - Change plan existence check
@@ -2809,6 +2869,23 @@ func (h *ChangePlanHandler) GhostPreflightCheck(c echo.Context) error {
 			)
 		}
 		addCheck("privileges", grantsPass, grantsDetail)
+
+		// Disk headroom estimate: gh-ost copies the full table (data + all
+		// indexes) plus the new index and binlog growth during the copy. We
+		// report the estimated requirement from information_schema; verifying
+		// actual free disk (CloudWatch FreeStorageSpace on RDS) is the
+		// operator's responsibility — this check always passes with a warning.
+		if table, _, parseErr := services.ParseAlterStatement(changePlan.SQLContent); parseErr == nil {
+			var dataLen, indexLen sql.NullInt64
+			_ = conn.QueryRowContext(ctx,
+				`SELECT DATA_LENGTH, INDEX_LENGTH FROM information_schema.TABLES
+				 WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`, db.DatabaseName, table,
+			).Scan(&dataLen, &indexLen)
+			totalBytes := dataLen.Int64 + indexLen.Int64
+			estGB := float64(totalBytes) / (1024 * 1024 * 1024)
+			addCheck("disk_headroom_estimate", true,
+				fmt.Sprintf("table %s is %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth during the copy — verify free disk on the instance before executing", table, estGB))
+		}
 
 	case models.DatabaseEnginePostgreSQL:
 		// pg-online-schema-change constraints: target table needs PK and no triggers.
