@@ -54,9 +54,9 @@ func (r *ChangePlanRepository) Create(ctx context.Context, changePlan *models.Ch
 			id, project_id, target_database_id, title, description, change_type,
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, statement_count, created_at, updated_at,
-			execution_backend, ghost_checks
+			execution_backend, ghost_checks, ghost_progress
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 	`
 
 	_, err := r.db.ExecContext(
@@ -79,6 +79,7 @@ func (r *ChangePlanRepository) Create(ctx context.Context, changePlan *models.Ch
 		changePlan.UpdatedAt,
 		changePlan.ExecutionBackend,
 		changePlan.GhostChecks,
+		changePlan.GhostProgress,
 	)
 	if err != nil {
 		return err
@@ -94,7 +95,7 @@ func (r *ChangePlanRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
 			affected_rows, error_message, statement_count, created_at, updated_at,
-			execution_backend, ghost_checks
+			execution_backend, ghost_checks, ghost_progress
 		FROM change_plans
 		WHERE id = $1
 	`
@@ -122,7 +123,7 @@ func (r *ChangePlanRepository) Update(ctx context.Context, changePlan *models.Ch
 			rollback_sql = $6, status = $7, risk_level = $8,
 			assigned_reviewer_id = $9, scheduled_for = $10, executed_at = $11,
 			execution_duration_ms = $12, affected_rows = $13, error_message = $14,
-			statement_count = $15, updated_at = $16, execution_backend = $17, ghost_checks = $18
+			statement_count = $15, updated_at = $16, execution_backend = $17, ghost_checks = $18, ghost_progress = $19
 		WHERE id = $1
 	`
 
@@ -146,6 +147,7 @@ func (r *ChangePlanRepository) Update(ctx context.Context, changePlan *models.Ch
 		changePlan.UpdatedAt,
 		changePlan.ExecutionBackend,
 		changePlan.GhostChecks,
+		changePlan.GhostProgress,
 	)
 	if err != nil {
 		return err
@@ -191,7 +193,7 @@ func (r *ChangePlanRepository) List(ctx context.Context, limit, offset int) ([]*
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
 			affected_rows, error_message, statement_count, created_at, updated_at,
-			execution_backend, ghost_checks
+			execution_backend, ghost_checks, ghost_progress
 		FROM change_plans
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -235,7 +237,7 @@ func (r *ChangePlanRepository) GetByStatus(
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
 			affected_rows, error_message, statement_count, created_at, updated_at,
-			execution_backend, ghost_checks
+			execution_backend, ghost_checks, ghost_progress
 		FROM change_plans
 		WHERE status = $1
 		ORDER BY created_at DESC
@@ -267,7 +269,7 @@ func (r *ChangePlanRepository) GetByProjectID(
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
 			affected_rows, error_message, statement_count, created_at, updated_at,
-			execution_backend, ghost_checks
+			execution_backend, ghost_checks, ghost_progress
 		FROM change_plans
 		WHERE project_id = $1
 		ORDER BY created_at DESC
@@ -299,7 +301,7 @@ func (r *ChangePlanRepository) GetByDatabaseID(
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
 			affected_rows, error_message, statement_count, created_at, updated_at,
-			execution_backend, ghost_checks
+			execution_backend, ghost_checks, ghost_progress
 		FROM change_plans
 		WHERE target_database_id = $1
 		ORDER BY created_at DESC
@@ -331,7 +333,7 @@ func (r *ChangePlanRepository) GetByAuthorID(
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
 			affected_rows, error_message, statement_count, created_at, updated_at,
-			execution_backend, ghost_checks
+			execution_backend, ghost_checks, ghost_progress
 		FROM change_plans
 		WHERE author_id = $1
 		ORDER BY created_at DESC
@@ -429,7 +431,7 @@ func (r *ChangePlanRepository) ListWithFilters(
 			sql_content, rollback_sql, status, risk_level, author_id,
 			assigned_reviewer_id, scheduled_for, executed_at, execution_duration_ms,
 			affected_rows, error_message, statement_count, created_at, updated_at,
-			execution_backend, ghost_checks
+			execution_backend, ghost_checks, ghost_progress
 		FROM change_plans
 	`
 

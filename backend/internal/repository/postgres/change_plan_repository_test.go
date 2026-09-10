@@ -64,6 +64,7 @@ func TestChangePlanRepository_Create(t *testing.T) {
 				sqlmock.AnyArg(),
 				models.ExecutionBackendDirect, // execution_backend
 				sqlmock.AnyArg(),              // ghost_checks
+				sqlmock.AnyArg(),              // ghost_progress
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -111,6 +112,7 @@ func TestChangePlanRepository_Create(t *testing.T) {
 				sqlmock.AnyArg(),
 				models.ExecutionBackendDirect, // execution_backend
 				sqlmock.AnyArg(),              // ghost_checks
+				sqlmock.AnyArg(),              // ghost_progress
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -160,6 +162,7 @@ func TestChangePlanRepository_Create(t *testing.T) {
 				sqlmock.AnyArg(),
 				models.ExecutionBackendDirect, // execution_backend
 				sqlmock.AnyArg(),              // ghost_checks
+				sqlmock.AnyArg(),              // ghost_progress
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -301,6 +304,7 @@ func TestChangePlanRepository_Update(t *testing.T) {
 				sqlmock.AnyArg(),            // updated_at
 				changePlan.ExecutionBackend, // execution_backend
 				sqlmock.AnyArg(),            // ghost_checks
+				sqlmock.AnyArg(),            // ghost_progress
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -342,6 +346,7 @@ func TestChangePlanRepository_Update(t *testing.T) {
 				sqlmock.AnyArg(),
 				changePlan.ExecutionBackend, // execution_backend
 				sqlmock.AnyArg(),            // ghost_checks
+				sqlmock.AnyArg(),            // ghost_progress
 			).
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -384,6 +389,7 @@ func TestChangePlanRepository_Update(t *testing.T) {
 				sqlmock.AnyArg(),
 				changePlan.ExecutionBackend, // execution_backend
 				sqlmock.AnyArg(),            // ghost_checks
+				sqlmock.AnyArg(),            // ghost_progress
 			).
 			WillReturnError(errors.New("database error"))
 

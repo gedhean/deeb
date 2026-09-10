@@ -1420,6 +1420,14 @@ func (s *ExecutionService) executeGhost(
 				zap.String("change_plan_id", changePlanID.String()),
 				zap.String("line", line),
 			)
+			// Persist latest copy progress so the UI can render a progress bar
+			if pct := ParseGhostProgress(line); pct != nil {
+				progress := fmt.Sprintf("%.2f", *pct)
+				changePlan.GhostProgress = &progress
+				if err := s.changePlanRepo.Update(context.Background(), changePlan); err != nil {
+					s.logger.Warn("Failed to persist ghost progress", zap.Error(err))
+				}
+			}
 		},
 		OnStateChange: func(status string) {
 			if status == GhostStatusAwaiting && !awaitingCutoverSet {

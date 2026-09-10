@@ -158,6 +158,25 @@ func (g *GhostExecutor) ControlFlagPaths(planID uuid.UUID) (postpone string, pan
 	return
 }
 
+// ghostCopyRe extracts the copy progress percentage from gh-ost status lines
+// (e.g. "Copy: 23711127/23711127 45.2%; ..."). Used to render the plan's
+// live progress bar.
+var ghostCopyRe = regexp.MustCompile(`Copy:\s*([0-9.]+)%`)
+
+// ParseGhostProgress extracts the numeric copy percent from a gh-ost status
+// line, or returns nil when the line has no progress value.
+func ParseGhostProgress(line string) *float64 {
+	m := ghostCopyRe.FindStringSubmatch(line)
+	if m == nil {
+		return nil
+	}
+	var pct float64
+	if _, err := fmt.Sscanf(m[1], "%f", &pct); err != nil {
+		return nil
+	}
+	return &pct
+}
+
 // ParseGhostStatus identifies status transitions from tool stdout lines.
 func ParseGhostStatus(line string) (string, bool) {
 	l := strings.ToLower(line)
