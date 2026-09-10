@@ -49,6 +49,11 @@ func (r *ChangePlanRepository) Create(ctx context.Context, changePlan *models.Ch
 		changePlan.ExecutionBackend = models.ExecutionBackendDirect
 	}
 
+	// JSONB columns reject empty byte slices — normalize to NULL when empty
+	if len(changePlan.GhostChecks) == 0 {
+		changePlan.GhostChecks = nil
+	}
+
 	query := `
 		INSERT INTO change_plans (
 			id, project_id, target_database_id, title, description, change_type,
@@ -115,6 +120,11 @@ func (r *ChangePlanRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 func (r *ChangePlanRepository) Update(ctx context.Context, changePlan *models.ChangePlan) error {
 	// Update timestamp
 	changePlan.UpdatedAt = time.Now()
+
+	// JSONB columns reject empty byte slices — normalize to NULL when empty
+	if len(changePlan.GhostChecks) == 0 {
+		changePlan.GhostChecks = nil
+	}
 
 	query := `
 		UPDATE change_plans
