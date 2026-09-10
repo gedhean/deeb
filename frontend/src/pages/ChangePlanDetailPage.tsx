@@ -72,18 +72,6 @@ export const ChangePlanDetailPage: React.FC = () => {
     }, 3000);
     return () => clearInterval(interval);
   }, [changePlan?.status, changePlan?.execution_backend, refetch]);
-    if (!changePlan?.ghost_checks) {
-      return null;
-    }
-    if (typeof changePlan.ghost_checks === 'string') {
-      try {
-        return JSON.parse(changePlan.ghost_checks) as GhostReadinessReport;
-      } catch {
-        return null;
-      }
-    }
-    return changePlan.ghost_checks;
-  }, [changePlan?.ghost_checks]);
 
   // Use cached data from store
   const { getUserById } = useUsers();
