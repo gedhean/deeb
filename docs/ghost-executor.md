@@ -36,29 +36,26 @@ What deeb persists and what the user can do at each stage:
 
 ## Constraints
 
-Ghost execution is only allowed when **all** of the following hold:
+Ghost execution requires, at different lifecycle stages:
 
+**At plan create/update** (gates `execution_backend=ghost` selection):
 1. `change_type = DDL`
-2. The SQL is a **single `ALTER TABLE` statement** (one table per plan)
-3. The target database's environment has `is_production = false`
-4. The target engine is **MySQL** (pg-online-schema-change for PostgreSQL is
-   not implemented yet — selection is rejected for postgres)
-5. The target MySQL server has `binlog_format=ROW` and
-   `binlog_row_image=FULL` (verified live at plan creation/update against
-   the instance; misconfigured RDS parameter groups fail fast)
+2. Target database's environment has `is_production = false`
+3. Target engine is **MySQL** (pg-online-schema-change not implemented)
+
+**At submit-for-review (Draft → Open)** (blocks the transition, per-check
+results returned in the `ghost_checks` response and shown in the UI):
+4. Target reachable (connection)
+5. `binlog_format=ROW` and `binlog_row_image=FULL` (RDS parameter group)
+6. Grants: `ALL PRIVILEGES ON <db>.*` + `REPLICATION SLAVE, REPLICATION CLIENT`
+7. **gh-ost dry run** completes successfully (privileges, binlog access,
+   ALTER syntax validated without migrating)
+8. Disk headroom estimate (information_schema table size shown as a warning;
+   operator verifies actual free disk — always passes)
 
 DML plans and production environments always use the direct executor.
-Validation happens both at the API layer (create/update) and again at
-execution time (defense-in-depth).
-
-## Authoring gate: gh-ost dry run
-
-A ghost plan must pass a **gh-ost dry run** (`gh-ost` without `--execute`)
-against the live target **at create/update time**. The dry run validates
-privileges, binlog access, and ALTER syntax without migrating. If it fails,
-the plan cannot be created or saved with `execution_backend=ghost` — the
-error is returned immediately to the author. Approval requires no further
-ghost validation beyond the standard SQL Review error check.
+Validation happens at the API layer and again at execution time
+(defense-in-depth).
 
 ## Pre-flight checks and disk headroom
 
