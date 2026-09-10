@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { MonacoSQLEditor } from '@/components/editors/MonacoSQLEditor';
 import { SQLReviewResults } from '@/components/SQLReviewResults';
+import { GhostChecksPanel } from '@/components/ghost-checks-panel';
 import { ApprovalHistory } from '@/components/ApprovalHistory';
 import { ExecutionResults } from '@/components/ExecutionResults';
 import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
@@ -552,6 +553,11 @@ export const ChangePlanDetailPage: React.FC = () => {
               </p>
             </CardContent>
           </Card>
+        )}
+
+        {/* Ghost readiness checks (PR-checks style) */}
+        {changePlan.execution_backend === 'ghost' && (
+          <GhostChecksPanel report={changePlan.ghost_checks} onRefresh={() => refetch()} />
         )}
 
         {/* SQL Review Results */}

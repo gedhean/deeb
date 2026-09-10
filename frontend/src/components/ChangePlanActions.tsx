@@ -655,16 +655,29 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           (() => {
             const config = getActionConfig(primaryAction);
             const Icon = config.icon;
+            // Ghost plans: submit stays visible but disabled until all
+            // readiness checks pass (PR-checks semantics).
+            const ghostChecksFailed =
+              primaryAction === 'submit' &&
+              changePlan.execution_backend === 'ghost' &&
+              changePlan.ghost_checks != null &&
+              !changePlan.ghost_checks.all_passed;
             const isDisabled =
               ((primaryAction === 'approve' || primaryAction === 'retry') &&
                 changePlan.has_errors) ||
-              (primaryAction === 'execute' && changePlan.has_errors);
+              (primaryAction === 'execute' && changePlan.has_errors) ||
+              ghostChecksFailed;
 
             return (
               <Button
                 variant={config.variant}
                 onClick={() => setActiveAction(primaryAction)}
                 disabled={isDisabled}
+                title={
+                  ghostChecksFailed
+                    ? 'Ghost readiness checks must pass before submitting for review'
+                    : undefined
+                }
               >
                 <Icon className="mr-2 h-4 w-4" />
                 {config.label}
