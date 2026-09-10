@@ -43,8 +43,11 @@ Ghost execution requires, at different lifecycle stages:
 2. Target database's environment has `is_production = false`
 3. Target engine is **MySQL** (pg-online-schema-change not implemented)
 
-**At submit-for-review (Draft → Open)** (blocks the transition, per-check
-results returned in the `ghost_checks` response and shown in the UI):
+**Readiness checks** run immediately after creation (and on update), are
+persisted on the plan (`change_plans.ghost_checks` JSONB), and are re-run
+at submit-for-review. The UI shows them as a PR-checks style panel with
+per-check pass/fail and remediation; the **Submit for Review** button
+stays visible but disabled until all checks pass:
 4. Target reachable (connection)
 5. `binlog_format=ROW` and `binlog_row_image=FULL` (RDS parameter group)
 6. Grants: `ALL PRIVILEGES ON <db>.*` + `REPLICATION SLAVE, REPLICATION CLIENT`
@@ -52,6 +55,9 @@ results returned in the `ghost_checks` response and shown in the UI):
    ALTER syntax validated without migrating)
 8. Disk headroom estimate (information_schema table size shown as a warning;
    operator verifies actual free disk — always passes)
+
+The Draft → Open transition also enforces the suite server-side
+(defense-in-depth); the persisted report is refreshed on every run.
 
 DML plans and production environments always use the direct executor.
 Validation happens at the API layer and again at execution time
