@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -225,6 +226,13 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		})
 	}
 
+	// Run ghost readiness checks at creation so the UI can show a PR-checks
+	// style report; the report is persisted on the plan and refreshed on
+	// submit-for-review. Checks never block creation — they gate submission.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		h.refreshGhostChecks(ctx, changePlan)
+	}
+
 	h.logger.Info(
 		"Change plan created successfully",
 		zap.String("change_plan_id", changePlan.ID.String()),
@@ -265,6 +273,37 @@ func validateUpdateChangePlanRequest(req *models.UpdateChangePlanRequest) *middl
 	}
 
 	return nil
+}
+
+// refreshGhostChecks runs the ghost readiness suite for a plan and persists
+// the JSON report on change_plans.ghost_checks. Best-effort: failures to run
+// the suite are logged and stored as a failed report rather than blocking.
+func (h *ChangePlanHandler) refreshGhostChecks(ctx context.Context, changePlan *models.ChangePlan) {
+	report, err := h.executionService.RunGhostReadinessChecks(ctx, changePlan)
+	if err != nil {
+		h.logger.Error("Failed to run ghost readiness checks",
+			zap.String("change_plan_id", changePlan.ID.String()),
+			zap.Error(err),
+		)
+		report = &services.GhostReadinessReport{
+			AllPassed: false,
+			Checks: []services.GhostCheckResult{
+				{Name: "checks_error", Passed: false, Detail: err.Error()},
+			},
+		}
+	}
+	raw, err := json.Marshal(report)
+	if err != nil {
+		h.logger.Error("Failed to marshal ghost checks report", zap.Error(err))
+		return
+	}
+	changePlan.GhostChecks = raw
+	if err := h.changePlanRepo.Update(ctx, changePlan); err != nil {
+		h.logger.Error("Failed to persist ghost checks report",
+			zap.String("change_plan_id", changePlan.ID.String()),
+			zap.Error(err),
+		)
+	}
 }
 
 // validateGhostSelection enforces ghost executor constraints at the API
@@ -883,6 +922,13 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 						"error": fmt.Sprintf("Failed to run ghost readiness checks: %s", checkErr.Error()),
 					})
 				}
+				// Persist the fresh report so the UI reflects the latest state
+				if raw, mErr := json.Marshal(report); mErr == nil {
+					changePlan.GhostChecks = raw
+					if uErr := h.changePlanRepo.Update(ctx, changePlan); uErr != nil {
+						h.logger.Warn("Failed to persist ghost checks report", zap.Error(uErr))
+					}
+				}
 				if !report.AllPassed {
 					return c.JSON(http.StatusBadRequest, map[string]interface{}{
 						"error":        "Ghost readiness checks failed — cannot submit for review",
@@ -956,6 +1002,12 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "Failed to update change plan",
 		})
+	}
+
+	// Refresh ghost readiness checks after updates (SQL, target, or backend
+	// may have changed); only for ghost plans.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		h.refreshGhostChecks(ctx, changePlan)
 	}
 
 	// Track field changes after successful update
