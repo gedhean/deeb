@@ -494,6 +494,45 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           isDisabled: changePlan.has_errors || executionStatus === 'success',
         };
 
+      case 'approve-cutover':
+        return {
+          title: 'Approve Cutover',
+          description:
+            'The shadow table copy is complete and the migration is parked awaiting cutover. Approving performs the atomic table rename (under a second). This cannot be undone.',
+          content: (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm font-medium">
+                  The atomic rename swaps the new table into place immediately.
+                </span>
+              </div>
+            </div>
+          ),
+          confirmLabel: 'Approve Cutover',
+          confirmIcon: Play,
+        };
+
+      case 'abort':
+        return {
+          title: 'Abort Migration',
+          description:
+            'Abort the running migration before the cutover. The original table stays untouched; the shadow table is dropped.',
+          content: (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20">
+              <div className="flex items-center gap-2 text-red-800 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm font-medium">
+                  This stops the migration; it must be re-executed to try again.
+                </span>
+              </div>
+            </div>
+          ),
+          confirmLabel: 'Abort Migration',
+          confirmIcon: XCircle,
+          confirmVariant: 'destructive' as const,
+        };
+
       default:
         return null;
     }
