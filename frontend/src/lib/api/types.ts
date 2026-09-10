@@ -444,6 +444,11 @@ export interface GhostPreflightResponse {
   checks: GhostPreflightCheck[];
 }
 
+export interface GhostReadinessReport {
+  all_passed: boolean;
+  checks: GhostPreflightCheck[];
+}
+
 export interface Approval {
   id: string;
   change_plan_id: string;

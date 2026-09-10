@@ -22,7 +22,7 @@ import {
   useExecuteChangePlan,
 } from '@/hooks/api/useChangePlansSWR';
 import { changePlanService } from '@/lib/api/services/changePlans';
-import type { ChangePlan } from '@/lib/api/types';
+import type { ChangePlan, GhostReadinessReport } from '@/lib/api/types';
 import {
   Send,
   CheckCircle2,
@@ -61,7 +61,7 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   canExecute,
 }) => {
   // Use SWR mutation hooks for consistent cache management
-  const { updateChangePlan, isLoading: isUpdating, error: updateError } = useUpdateChangePlanSWR();
+  const { updateChangePlan, isLoading: isUpdating } = useUpdateChangePlanSWR();
   const { approveChangePlan, isLoading: isApproving } = useApproveChangePlan();
   const { closeChangePlan, isLoading: isClosing } = useCloseChangePlan();
   const { executeChangePlan, isLoading: isExecuting } = useExecuteChangePlan();
@@ -69,6 +69,7 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   const [activeAction, setActiveAction] = useState<ActionType | null>(null);
   const [comments, setComments] = useState('');
   const [error, setError] = useState('');
+  const [ghostChecks, setGhostChecks] = useState<GhostReadinessReport | null>(null);
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'executing' | 'success'>('idle');
 
   // Computed combined loading state
@@ -198,20 +199,27 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   // Handle submit for review
   const handleSubmit = async () => {
     setError('');
+    setGhostChecks(null);
 
-    const result = await updateChangePlan(changePlan.id, {
-      status: 'Open',
-    });
-
-    if (result) {
+    try {
+      await changePlanService.updateChangePlan(changePlan.id, { status: 'Open' });
       handleDialogClose();
       showSuccessToast('Change plan submitted for review. SQL Review will run automatically.');
-
       if (onSuccess) {
         onSuccess();
       }
-    } else {
-      setError(`Failed to submit change plan for review: ${updateError || 'Unknown error'}`);
+    } catch (err) {
+      // Ghost readiness failures return a structured per-check report
+      const response = (err as { response?: { ghost_checks?: GhostReadinessReport; error?: string } })
+        ?.response;
+      if (response?.ghost_checks) {
+        setGhostChecks(response.ghost_checks);
+        setError('Ghost readiness checks failed — see details below.');
+      } else {
+        setError(
+          `Failed to submit change plan for review: ${response?.error || (err instanceof Error ? err.message : 'Unknown error')}`,
+        );
+      }
     }
   };
 
@@ -706,6 +714,27 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
                     <AlertTriangle className="h-4 w-4" />
                     <span className="text-sm">{error}</span>
                   </div>
+                </div>
+              )}
+
+              {ghostChecks && (
+                <div className="rounded-md border p-3 space-y-2">
+                  <p className="text-sm font-medium">Ghost readiness checks</p>
+                  <ul className="space-y-1.5">
+                    {ghostChecks.checks.map((check) => (
+                      <li key={check.name} className="flex items-start gap-2 text-sm">
+                        {check.passed ? (
+                          <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600 dark:text-green-400 shrink-0" />
+                        ) : (
+                          <XCircle className="h-4 w-4 mt-0.5 text-red-600 dark:text-red-400 shrink-0" />
+                        )}
+                        <div>
+                          <span className="font-medium">{check.name}</span>
+                          <p className="text-muted-foreground text-xs">{check.detail}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>
