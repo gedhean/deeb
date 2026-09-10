@@ -41,10 +41,37 @@ Ghost execution is only allowed when **all** of the following hold:
 1. `change_type = DDL`
 2. The SQL is a **single `ALTER TABLE` statement** (one table per plan)
 3. The target database's environment has `is_production = false`
+4. The target engine is **MySQL** (pg-online-schema-change for PostgreSQL is
+   not implemented yet — selection is rejected for postgres)
+5. The target MySQL server has `binlog_format=ROW` and
+   `binlog_row_image=FULL` (verified live at plan creation/update against
+   the instance; misconfigured RDS parameter groups fail fast)
 
 DML plans and production environments always use the direct executor.
 Validation happens both at the API layer (create/update) and again at
 execution time (defense-in-depth).
+
+## Approval gate: gh-ost dry run
+
+A ghost plan can only be **approved** after a successful **gh-ost dry run**
+(`gh-ost` without `--execute`) against the live target. The dry run validates
+privileges, binlog access, and ALTER syntax without migrating. If it fails,
+approval is blocked with the dry-run error. This runs in addition to the
+SQL Review error check.
+
+## Pre-flight checks and disk headroom
+
+`GET /api/v1/change-plans/:id/ghost-preflight` verifies the target before
+execution and returns per-check pass/fail with remediation:
+
+- **MySQL**: `binlog_format=ROW`, `binlog_row_image=FULL`, grants
+  (`ALL PRIVILEGES ON <db>.*`, `REPLICATION SLAVE`, `REPLICATION CLIENT`)
+- **Disk headroom estimate**: reads the table's `DATA_LENGTH + INDEX_LENGTH`
+  from `information_schema` and reports the approximate free disk gh-ost
+  needs (full table copy + new index + binlog growth during the copy).
+  This is an **estimate shown as a warning** — verifying actual free disk
+  (CloudWatch `FreeStorageSpace` on RDS) is the operator's responsibility.
+- **PostgreSQL** (future): primary key + no triggers
 
 ## Workflow
 
