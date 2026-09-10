@@ -116,9 +116,25 @@ future configuration (Decisions Locked #3).
 
 - **Pre-cutover**: Abort endpoint (panic flag) → original table untouched.
 - **Post-cutover**: gh-ost keeps the old table as `_<table>_del` (we do not
-  pass `--ok-to-drop-table`); atomic rename swap-back, or `DROP INDEX` for
-  ADD INDEX plans. Retained old table is the rollback net — drop it manually
-  after the validation window.
+  pass `--ok-to-drop-table`); deeb exposes two actions on **Completed** ghost
+  plans (execution permission required):
+
+  1. **Rollback** (`POST /api/v1/change-plans/:id/ghost-rollback`) — atomic
+     swap-back: `RENAME TABLE <table> → _<table>_new, _<table>_del → <table>`.
+     ⚠️ **Data-loss warning**: writes made to the live table since cutover are
+     NOT in the backup; they are preserved in `_<table>_new` for manual
+     reconciliation, but the live table reverts to pre-migration contents.
+     The plan is marked `Failed` with a note pointing at the sidelined table.
+     For ADD INDEX plans, also consider the gentler `DROP INDEX` alternative.
+  2. **Drop Backup Table** (`POST /api/v1/change-plans/:id/ghost-drop-backup`) —
+     `DROP TABLE IF EXISTS _<table>_del` after the validation window passes.
+     This removes the rollback net permanently.
+
+  Both actions are available in the change plan detail UI (actions dropdown)
+  only for Completed ghost plans.
+
+  Note: these paths assume the gh-ost `_del` naming convention;
+  pg-online-schema-change artifact naming differs (future parity work).
 
 ## Status additions
 
