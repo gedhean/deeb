@@ -210,6 +210,14 @@ func (s *ExecutionService) Execute(
 		zap.String("executor_id", executorID.String()),
 	)
 
+	// Detach execution from the caller's context (typically the HTTP request).
+	// Database changes legitimately outlive request timeouts (e.g. the 30s
+	// server write timeout); if the request context is canceled mid-run,
+	// cleanup steps (lock release, changelog/execution-log updates) must
+	// still complete. WithoutCancel keeps values (correlation IDs) but
+	// removes the deadline/cancel propagation.
+	ctx = context.WithoutCancel(ctx)
+
 	// Get change plan
 	changePlan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
 	if err != nil {

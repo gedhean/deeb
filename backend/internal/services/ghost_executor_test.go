@@ -7,7 +7,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/database"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/repository"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -241,7 +243,7 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 	t.Run("ghost backend without configured executor is rejected", func(t *testing.T) {
 		changePlanID := uuid.New()
 		changePlanRepo := new(MockChangePlanRepository)
-		changePlanRepo.On("GetByID", ctx, changePlanID).Return(&models.ChangePlan{
+		changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(&models.ChangePlan{
 			ID:               changePlanID,
 			Status:           models.ChangePlanStatusApproved,
 			ChangeType:       models.ChangeTypeDDL,
@@ -258,7 +260,7 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 	t.Run("ghost backend with DML is rejected", func(t *testing.T) {
 		changePlanID := uuid.New()
 		changePlanRepo := new(MockChangePlanRepository)
-		changePlanRepo.On("GetByID", ctx, changePlanID).Return(&models.ChangePlan{
+		changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(&models.ChangePlan{
 			ID:               changePlanID,
 			Status:           models.ChangePlanStatusApproved,
 			ChangeType:       models.ChangeTypeDML,
@@ -280,7 +282,7 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 		envID := uuid.New()
 
 		changePlanRepo := new(MockChangePlanRepository)
-		changePlanRepo.On("GetByID", ctx, changePlanID).Return(&models.ChangePlan{
+		changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(&models.ChangePlan{
 			ID:               changePlanID,
 			Status:           models.ChangePlanStatusApproved,
 			ChangeType:       models.ChangeTypeDDL,
@@ -289,13 +291,13 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 		}, nil)
 
 		databaseRepo := new(MockDatabaseRepository)
-		databaseRepo.On("GetByID", ctx, dbID).Return(&models.Database{
+		databaseRepo.On("GetByID", mock.Anything, dbID).Return(&models.Database{
 			ID:            dbID,
 			EnvironmentID: &envID,
 		}, nil)
 
 		envRepo := new(MockEnvironmentRepository)
-		envRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+		envRepo.On("GetByID", mock.Anything, envID).Return(&models.Environment{
 			ID: envID, Name: "Production", IsProduction: true,
 		}, nil)
 
@@ -313,7 +315,7 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 		envID := uuid.New()
 
 		changePlanRepo := new(MockChangePlanRepository)
-		changePlanRepo.On("GetByID", ctx, changePlanID).Return(&models.ChangePlan{
+		changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(&models.ChangePlan{
 			ID:               changePlanID,
 			Status:           models.ChangePlanStatusApproved,
 			ChangeType:       models.ChangeTypeDDL,
@@ -323,13 +325,13 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 		}, nil)
 
 		databaseRepo := new(MockDatabaseRepository)
-		databaseRepo.On("GetByID", ctx, dbID).Return(&models.Database{
+		databaseRepo.On("GetByID", mock.Anything, dbID).Return(&models.Database{
 			ID:            dbID,
 			EnvironmentID: &envID,
 		}, nil)
 
 		envRepo := new(MockEnvironmentRepository)
-		envRepo.On("GetByID", ctx, envID).Return(&models.Environment{
+		envRepo.On("GetByID", mock.Anything, envID).Return(&models.Environment{
 			ID: envID, Name: "Staging", IsProduction: false,
 		}, nil)
 
@@ -340,4 +342,47 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 		assert.Nil(t, result)
 		assert.ErrorContains(t, err, "ALTER TABLE")
 	})
+}
+
+// TestExecutionService_Execute_DetachesRequestContext verifies that cleanup
+// continues even when the caller's context (e.g. HTTP request) is canceled.
+func TestExecutionService_Execute_DetachesRequestContext(t *testing.T) {
+	encryptionKey := "12345678901234567890123456789012"
+	logger := zap.NewNop()
+	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
+
+	changePlanID := uuid.New()
+	changePlanRepo := new(MockChangePlanRepository)
+	// Mock matches regardless of context (Execute detaches via WithoutCancel)
+	changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(nil, repository.ErrNotFound)
+
+	service := NewExecutionService(
+		changePlanRepo,
+		new(MockDatabaseInstanceRepository),
+		new(MockDatabaseRepository),
+		new(MockChangelogRepository),
+		new(MockSchemaHistoryRepository),
+		NewSchemaVersionService(
+			new(MockSchemaHistoryRepository),
+			new(MockDatabaseInstanceRepository),
+			new(MockDatabaseRepository),
+			database.NewConnectionManager(encryptionKey, zap.NewNop()),
+			encryptionKey,
+			zap.NewNop(),
+		),
+		&MockExecutionLockManager{},
+		nil, nil, nil,
+		connectionMgr,
+		encryptionKey,
+		logger,
+	)
+
+	// Caller context already canceled (simulates HTTP timeout before Execute)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// Execute must still reach the repository despite the canceled parent ctx
+	_, err := service.Execute(ctx, changePlanID, uuid.New())
+	assert.ErrorIs(t, err, ErrChangePlanNotFound)
+	changePlanRepo.AssertExpectations(t)
 }
