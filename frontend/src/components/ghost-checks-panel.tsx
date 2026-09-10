@@ -31,8 +31,7 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
   // Parse the latest copy progress snapshot (".." persisted on the plan)
   const progressValue = ghostProgress ? parseFloat(ghostProgress) : null;
   const showProgress =
-    progressValue != null &&
-    (planStatus === 'InProgress' || planStatus === 'AwaitingCutover');
+    progressValue != null && (planStatus === 'InProgress' || planStatus === 'AwaitingCutover');
 
   if (!report && !showProgress) {
     return null;
@@ -80,7 +79,11 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
       {showProgress && progressValue != null && (
         <div className="px-6 pb-4">
           <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-            <span>{planStatus === 'AwaitingCutover' ? 'Awaiting cutover approval' : 'Copying shadow table'}</span>
+            <span>
+              {planStatus === 'AwaitingCutover'
+                ? 'Awaiting cutover approval'
+                : 'Copying shadow table'}
+            </span>
             <span>{progressValue.toFixed(1)}%</span>
           </div>
           <Progress value={progressValue} />
@@ -88,7 +91,7 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
       )}
       <CardContent>
         <ul className="space-y-2.5">
-          {report.checks.map((check) => (
+          {report?.checks.map((check) => (
             <li key={check.name} className="flex items-start gap-2.5">
               {check.passed ? (
                 <CheckCircle2 className="h-4.5 w-4.5 mt-0.5 text-green-600 dark:text-green-400 shrink-0" />

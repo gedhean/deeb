@@ -62,7 +62,7 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   canExecute,
 }) => {
   // Use SWR mutation hooks for consistent cache management
-  const { updateChangePlan, isLoading: isUpdating } = useUpdateChangePlanSWR();
+  const { isLoading: isUpdating } = useUpdateChangePlanSWR();
   const { approveChangePlan, isLoading: isApproving } = useApproveChangePlan();
   const { closeChangePlan, isLoading: isClosing } = useCloseChangePlan();
   const { executeChangePlan, isLoading: isExecuting } = useExecuteChangePlan();
@@ -223,8 +223,9 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
       }
     } catch (err) {
       // Ghost readiness failures return a structured per-check report
-      const response = (err as { response?: { ghost_checks?: GhostReadinessReport; error?: string } })
-        ?.response;
+      const response = (
+        err as { response?: { ghost_checks?: GhostReadinessReport; error?: string } }
+      )?.response;
       if (response?.ghost_checks) {
         setGhostChecks(response.ghost_checks);
         setError('Ghost readiness checks failed — see details below.');
@@ -615,8 +616,8 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
                 <div className="text-sm">
                   <span className="font-medium">Data loss warning:</span> writes made to the live
                   table since the cutover are NOT in the backup. They will be preserved in a
-                  sidelined table (_table_new) for manual reconciliation, but the live table
-                  reverts to its pre-migration contents.
+                  sidelined table (_table_new) for manual reconciliation, but the live table reverts
+                  to its pre-migration contents.
                 </div>
               </div>
             </div>

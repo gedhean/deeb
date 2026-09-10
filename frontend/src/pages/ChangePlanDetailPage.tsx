@@ -46,20 +46,24 @@ export const ChangePlanDetailPage: React.FC = () => {
   // Use SWR hook for change plan - automatic caching and revalidation
   const { changePlan, isLoading, error: swrError, refetch } = useChangePlanSWR(id);
 
-  // ghost_checks arrives as a JSON string (TEXT column); parse for the panel
+  // ghost_checks arrives as a JSON string (TEXT column); parse for the panel.
+  // Extract the raw value first so the memo depends on a plain primitive.
+  const ghostChecksRaw =
+    changePlan?.execution_backend === 'ghost' ? (changePlan.ghost_checks ?? null) : null;
+
   const ghostChecksReport = useMemo(() => {
-    if (!changePlan?.ghost_checks) {
+    if (!ghostChecksRaw) {
       return null;
     }
-    if (typeof changePlan.ghost_checks === 'string') {
+    if (typeof ghostChecksRaw === 'string') {
       try {
-        return JSON.parse(changePlan.ghost_checks) as GhostReadinessReport;
+        return JSON.parse(ghostChecksRaw) as GhostReadinessReport;
       } catch {
         return null;
       }
     }
-    return changePlan.ghost_checks;
-  }, [changePlan?.ghost_checks]);
+    return ghostChecksRaw;
+  }, [ghostChecksRaw]);
 
   // Poll the plan while a ghost migration is copying so the progress bar
   // updates without manual refresh (uses SWR refetch, no websockets).

@@ -7,6 +7,7 @@ import type {
   ApproveChangePlanRequest,
   CloseChangePlanRequest,
   GhostPreflightResponse,
+  GhostReadinessReport,
   ApprovalHistoryResponse,
   ExecutionLogHistoryResponse,
   StatementExecutionResultsResponse,
@@ -105,10 +106,7 @@ export const changePlanService = {
    * Run ghost executor pre-flight checks against the target database
    */
   async getGhostPreflight(id: string): Promise<GhostPreflightResponse> {
-    const response = await apiClient.get<GhostPreflightResponse>(
-      `/api/v1/change-plans/${id}/ghost-preflight`,
-    );
-    return response.data;
+    return apiClient.get<GhostPreflightResponse>(`/api/v1/change-plans/${id}/ghost-preflight`);
   },
 
   /**
@@ -129,22 +127,17 @@ export const changePlanService = {
    * Re-run all ghost readiness checks and get the fresh report
    */
   async rerunGhostChecks(id: string): Promise<GhostReadinessReport> {
-    const response = await apiClient.post<GhostReadinessReport>(
-      `/api/v1/change-plans/${id}/ghost-checks`,
-      {},
-    );
-    return response.data;
+    return apiClient.post<GhostReadinessReport>(`/api/v1/change-plans/${id}/ghost-checks`, {});
   },
 
   /**
    * Re-run a single ghost readiness check by name
    */
   async rerunGhostCheck(id: string, checkName: string): Promise<GhostReadinessReport> {
-    const response = await apiClient.post<GhostReadinessReport>(
+    return apiClient.post<GhostReadinessReport>(
       `/api/v1/change-plans/${id}/ghost-checks/${checkName}`,
       {},
     );
-    return response.data;
   },
 
   /**
