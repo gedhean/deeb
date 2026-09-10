@@ -1,7 +1,6 @@
 package models
 
 import (
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -90,7 +89,7 @@ type ChangePlan struct {
 	ErrorMessage        *string          `json:"error_message,omitempty"         db:"error_message"`
 	StatementCount      *int             `json:"statement_count,omitempty"       db:"statement_count"`
 	ExecutionBackend    ExecutionBackend `json:"execution_backend"               db:"execution_backend"`
-	GhostChecks         json.RawMessage  `json:"ghost_checks,omitempty"         db:"ghost_checks"`
+	GhostChecks         *string          `json:"ghost_checks,omitempty"         db:"ghost_checks"`
 	CreatedAt           time.Time        `json:"created_at"                      db:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"                      db:"updated_at"`
 }
@@ -140,7 +139,7 @@ type ChangePlanResponse struct {
 	ErrorMessage        *string          `json:"error_message,omitempty"`
 	StatementCount      *int             `json:"statement_count,omitempty"`
 	ExecutionBackend    ExecutionBackend `json:"execution_backend"`
-	GhostChecks         json.RawMessage  `json:"ghost_checks,omitempty"`
+	GhostChecks         *string          `json:"ghost_checks,omitempty"`
 	CreatedAt           time.Time        `json:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"`
 	// SQL Review results

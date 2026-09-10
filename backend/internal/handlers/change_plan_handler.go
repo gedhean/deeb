@@ -297,7 +297,8 @@ func (h *ChangePlanHandler) refreshGhostChecks(ctx context.Context, changePlan *
 		h.logger.Error("Failed to marshal ghost checks report", zap.Error(err))
 		return
 	}
-	changePlan.GhostChecks = raw
+	str := string(raw)
+	changePlan.GhostChecks = &str
 	if err := h.changePlanRepo.Update(ctx, changePlan); err != nil {
 		h.logger.Error("Failed to persist ghost checks report",
 			zap.String("change_plan_id", changePlan.ID.String()),
@@ -924,7 +925,8 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 				}
 				// Persist the fresh report so the UI reflects the latest state
 				if raw, mErr := json.Marshal(report); mErr == nil {
-					changePlan.GhostChecks = raw
+					str := string(raw)
+					changePlan.GhostChecks = &str
 					if uErr := h.changePlanRepo.Update(ctx, changePlan); uErr != nil {
 						h.logger.Warn("Failed to persist ghost checks report", zap.Error(uErr))
 					}
