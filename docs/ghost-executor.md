@@ -59,6 +59,17 @@ stays visible but disabled until all checks pass:
 The Draft → Open transition also enforces the suite server-side
 (defense-in-depth); the persisted report is refreshed on every run.
 
+### Re-running checks
+
+- **All**: `POST /api/v1/change-plans/:id/ghost-checks` — full suite,
+  persisted as the new report (used by the panel's "Re-run all checks").
+- **Single**: `POST /api/v1/change-plans/:id/ghost-checks/:checkName` —
+  re-runs one check and merges it into the stored report (per-check
+  re-run buttons in the panel).
+
+Known check names: `engine_mysql`, `connection`, `binlog_format`,
+`binlog_row_image`, `privileges`, `disk_headroom_estimate`, `dry_run`.
+
 DML plans and production environments always use the direct executor.
 Validation happens at the API layer and again at execution time
 (defense-in-depth).
