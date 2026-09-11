@@ -193,7 +193,7 @@ func (c *Config) setDefaults() {
 
 	// Ghost executor defaults (empty binaries disabled, default flag dir current dir)
 	c.Features.GhostExecutor = GhostFeatureConfig{
-		GhostBin:    "",
+		GhostBin:    "/bin/gh-ost",
 		PGOSCBin:    "",
 		FlagDir:     ".",
 		MaxDuration: 6 * time.Hour,
@@ -227,6 +227,11 @@ func (c *Config) loadFromEnv() {
 		if port, err := strconv.Atoi(v); err == nil {
 			c.Server.Port = port
 		}
+	}
+	// Frontend URL source: Helm charts use SERVER_FRONTEND_URL; accept both
+	// with FRONTEND_URL taking precedence.
+	if v := os.Getenv("SERVER_FRONTEND_URL"); v != "" {
+		c.Server.FrontendURL = v
 	}
 	if v := os.Getenv("FRONTEND_URL"); v != "" {
 		c.Server.FrontendURL = v
