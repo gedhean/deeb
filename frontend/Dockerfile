@@ -2,7 +2,10 @@
 # Stage 1: Build the React application
 FROM node:24-alpine AS builder
 
-# Build argument for API base URL
+# Build argument for API base URL — REQUIRED per environment; staging must
+# pass --build-arg VITE_API_BASE_URL=https://deeb-staging.nsx.services.
+# Production URL is the default only when the arg is omitted (explicitly
+# documented foot-gun); staging CI must always pass it.
 ARG VITE_API_BASE_URL=https://deeb.nsx.services
 
 # Install pnpm — pin to 11.9.0 to match CI (pnpm_action-setup) and local dev.

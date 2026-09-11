@@ -17,6 +17,14 @@ on:
         description: 'Custom tag (leave empty to use git SHA)'
         required: false
         type: string
+      environment:
+        description: 'Target environment (affects frontend API base URL)'
+        required: false
+        type: choice
+        default: 'production'
+        options:
+          - 'production'
+          - 'staging'
   push:
     branches:
       - main
@@ -35,6 +43,10 @@ permissions:
 env:
   ECR_REGISTRY: 492684252576.dkr.ecr.us-east-1.amazonaws.com
   AWS_REGION: us-east-1
+
+# Resolve the frontend API base URL per environment (staging builds point at
+# the staging domain; production stays the default for push builds).
+  FRONTEND_API_URL: ${{ inputs.environment == 'staging' && 'https://deeb-staging.nsx.services' || 'https://deeb.nsx.services' }}
 
 jobs:
   build-backend:
@@ -272,7 +284,7 @@ jobs:
           load: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
-            VITE_API_BASE_URL=https://deeb.nsx.services
+            VITE_API_BASE_URL=${{ env.FRONTEND_API_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |
@@ -325,7 +337,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
-            VITE_API_BASE_URL=https://deeb.nsx.services
+            VITE_API_BASE_URL=${{ env.FRONTEND_API_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |
