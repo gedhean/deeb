@@ -11,7 +11,7 @@
 ### Change Plans
 - [ ] Fix: when creating Change Plan with invalid SQL, it shows the creation failed, but actually created it. Improve to show better error feedback.
 - [ ] Fix: Do not create a changelog entry for every run of the same Change Plan. Keep only one for each Change Plan and just update the status.
-- [ ] Fix: Gracefully handle Change Plan execution timeouts and show proper error message to users. Queue and Locks executions seems to be in deadlock state when timeouts or unexpected errors happen.
+- [x] Fix: Gracefully handle Change Plan execution timeouts and show proper error message to users. Queue and Locks executions seems to be in deadlock state when timeouts or unexpected errors happen. (Fixed via context.WithoutCancel detachment — execution/cleanup no longer dies with the HTTP request context; ghost executor additionally gets its own generous timeout window)
 
 ### Schema Analysis (External: nsxbet/sql-schema)
 - [ ] Fix: `failed to ANALYZE table schema=public` (https://github.com/nsxbet/sql-schema)
@@ -47,7 +47,7 @@
 
 ### Integrations
 - [ ] Feat: integrate Catalog with SQL Reviewer to provide schema analysis for SQL Reviewer
-- [x] Feat: ghost execution backend (gh-ost / pg-online-schema-change) for DDL change plans on non-production environments — user-selected executor, human-gated cutover (AwaitingCutover), pre-flight privilege checks
+- [x] Feat: ghost execution backend (gh-ost) for MySQL DDL change plans on non-production environments — user-selected executor, readiness checks (binlog/privileges/dry-run per plan), human-gated cutover (AwaitingCutover), copy progress bar, rollback + drop-backup actions
 - [ ] Feat: pg-online-schema-change support for PostgreSQL ghost plans (currently MySQL-only; selection gate rejects postgres)
 - [ ] Feat: RDS replica discovery for ghost plans — enumerate RDS replicas via AWS API and let the user choose which instance gh-ost runs against (currently runs on the primary with --allow-on-master)
 - [ ] Feat: CloudWatch FreeStorageSpace check for ghost disk headroom (currently an information_schema size estimate shown as a warning; operator verifies actual free disk)
