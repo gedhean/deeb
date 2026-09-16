@@ -137,7 +137,7 @@ guidance. Run it before selecting `execution_backend: ghost`.
 
 | Env variable         | Config path                          | Default | Description                              |
 |----------------------|--------------------------------------|---------|------------------------------------------|
-| `GHOST_BIN`          | `features.ghost_executor.ghost_bin`  | _(off)_ | Path to the `gh-ost` binary              |
+| `GHOST_BIN`          | `features.ghost_executor.ghost_bin`  | `/app/gh-ost` | Path to the `gh-ost` binary (bundled in image) |
 | `PGOSC_BIN`          | `features.ghost_executor.pgosc_bin`  | _(off)_ | Path to `pg-online-schema-change`        |
 | `GHOST_FLAG_DIR`     | `features.ghost_executor.flag_dir`   | `.`     | Directory for postpone/panic flag files  |
 | `GHOST_MAX_DURATION` | `features.ghost_executor.max_duration` | `6h`  | Max ghost run duration (queue window)    |

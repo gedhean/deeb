@@ -191,9 +191,9 @@ func (c *Config) setDefaults() {
 	c.AuditLogging.SkipPaths = []string{}
 	c.AuditLogging.Resources = make(map[string]ResourceRule)
 
-	// Ghost executor defaults (empty binaries disabled, default flag dir current dir)
+	// Ghost executor defaults (gh-ost bundled at /app/gh-ost in the image)
 	c.Features.GhostExecutor = GhostFeatureConfig{
-		GhostBin:    "/bin/gh-ost",
+		GhostBin:    "/app/gh-ost",
 		PGOSCBin:    "",
 		FlagDir:     ".",
 		MaxDuration: 6 * time.Hour,
