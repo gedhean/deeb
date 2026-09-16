@@ -145,7 +145,7 @@ func (r *DatabaseInstanceRepository) List(
 	if where != "" {
 		query += " WHERE " + where
 	}
-	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	query += fmt.Sprintf(" ORDER BY name ASC, id ASC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
 	args = append(args, limit, offset)
 
 	var instances []*models.DatabaseInstance

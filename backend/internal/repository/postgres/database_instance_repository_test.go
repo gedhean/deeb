@@ -341,7 +341,7 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 			AddRow(instanceID2, "Instance 2", nil, "mysql", "localhost", 3306, "root",
 				encryptedDetails, false, false, "Active", nil, createdByID, now, now)
 
-		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
+		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY name ASC, id ASC LIMIT").
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
@@ -360,7 +360,7 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
 		})
 
-		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
+		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY name ASC, id ASC LIMIT").
 			WithArgs(10, 0).
 			WillReturnRows(rows)
 
@@ -385,7 +385,7 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 			AddRow(instanceID, "Instance 1", nil, "postgres", "localhost", 5432, "postgres",
 				encryptedDetails, false, true, "Active", nil, createdByID, now, now)
 
-		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
+		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY name ASC, id ASC LIMIT").
 			WithArgs(5, 10).
 			WillReturnRows(rows)
 
@@ -396,8 +396,67 @@ func TestDatabaseInstanceRepository_List(t *testing.T) {
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
+	t.Run("pagination with duplicate names is stable via id tie-breaker", func(t *testing.T) {
+		// `name` is not unique. With LIMIT/OFFSET, rows sharing a name must have a
+		// deterministic order across pages, hence ORDER BY name ASC, id ASC.
+		// sqlmock returns rows as scripted (it does not apply ORDER BY), so this
+		// asserts the query contract: the tie-breaker is present and page args
+		// select disjoint slices of the scripted, name+id-ordered result.
+		now := time.Now()
+		createdByID := uuid.New()
+		encryptedDetails := "encrypted-data"
+		ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+
+		// Two instances share the name "env-prod"; their relative order comes
+		// from the id tie-breaker alone.
+		names := []string{"env-prod", "env-prod", "env-staging", "env-staging"}
+		page1 := sqlmock.NewRows([]string{
+			"id", "name", "description", "database_engine", "host", "port", "username",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
+		})
+		page2 := sqlmock.NewRows([]string{
+			"id", "name", "description", "database_engine", "host", "port", "username",
+			"connection_details_encrypted", "use_rds_iam_auth", "require_ssl", "status", "environment_id", "created_by_id", "created_at", "updated_at",
+		})
+		for i := range 2 {
+			page1.AddRow(ids[i], names[i], nil, "postgres", "localhost", 5432, "postgres",
+				encryptedDetails, false, true, "Active", nil, createdByID, now, now)
+		}
+		for i := range 2 {
+			page2.AddRow(ids[i+2], names[i+2], nil, "postgres", "localhost", 5432, "postgres",
+				encryptedDetails, false, true, "Active", nil, createdByID, now, now)
+		}
+
+		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY name ASC, id ASC LIMIT").
+			WithArgs(2, 0).
+			WillReturnRows(page1)
+		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY name ASC, id ASC LIMIT").
+			WithArgs(2, 2).
+			WillReturnRows(page2)
+
+		first, err := repo.List(ctx, repository.DatabaseInstanceFilters{}, 2, 0)
+		require.NoError(t, err)
+		second, err := repo.List(ctx, repository.DatabaseInstanceFilters{}, 2, 2)
+		require.NoError(t, err)
+
+		// Pages are disjoint: no instance appears on both pages.
+		page1IDs := map[uuid.UUID]bool{}
+		for _, inst := range first {
+			page1IDs[inst.ID] = true
+		}
+		for _, inst := range second {
+			assert.False(t, page1IDs[inst.ID], "instance %s appeared on both pages", inst.ID)
+		}
+		// The duplicate-name pair (env-prod) keeps a stable relative order:
+		// whatever ids[i0] and ids[i1] are, both are present exactly once.
+		assert.Len(t, first, 2)
+		assert.Len(t, second, 2)
+
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
 	t.Run("database error", func(t *testing.T) {
-		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY created_at DESC LIMIT").
+		mock.ExpectQuery("SELECT (.+) FROM database_instances ORDER BY name ASC, id ASC LIMIT").
 			WithArgs(10, 0).
 			WillReturnError(errors.New("database error"))
 

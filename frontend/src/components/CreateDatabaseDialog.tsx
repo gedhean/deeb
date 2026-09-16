@@ -214,11 +214,13 @@ export const CreateDatabaseSheet: React.FC<CreateDatabaseSheetProps> = ({
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {instances?.map((instance) => (
-                      <SelectItem key={instance.id} value={instance.id}>
-                        {instance.name}
-                      </SelectItem>
-                    ))}
+                    {[...(instances ?? [])]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((instance) => (
+                        <SelectItem key={instance.id} value={instance.id}>
+                          {instance.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 {instancesError && <p className="text-sm text-destructive">{instancesError}</p>}
