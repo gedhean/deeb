@@ -984,6 +984,20 @@ func (h *DatabaseInstanceHandler) SyncDatabases(c echo.Context) error {
 	// Perform sync
 	syncResult := h.syncDatabasesFromInstance(ctx, instance, claims.UserID)
 
+	// Ensure the deeb user grants on MySQL instances so newly discovered
+	// databases are visible and ghost prerequisites stay satisfied. Runs as
+	// the instance's stored user; fails loudly if that user lacks GRANT OPTION.
+	if instance.DatabaseEngine == models.DatabaseEngineMySQL {
+		if grantErr := h.ensureMySQLDeebGrants(ctx, instance); grantErr != nil {
+			h.logger.Warn("Failed to ensure deeb grants during sync",
+				zap.String("instance_id", instance.ID.String()),
+				zap.Error(grantErr),
+			)
+			syncResult.FailedDatabases = append(syncResult.FailedDatabases,
+				fmt.Sprintf("grant-ensure: %s", grantErr.Error()))
+		}
+	}
+
 	h.logger.Info(
 		"Database sync completed",
 		zap.String("database_instance_id", instance.ID.String()),
@@ -1086,4 +1100,39 @@ func (h *DatabaseInstanceHandler) syncDatabasesFromInstance(
 	}
 
 	return result
+}
+
+// ensureMySQLDeebGrants re-applies the deeb user's grant set on a MySQL
+// instance using the instance's stored credentials. MySQL GRANT is idempotent.
+// Fails with a clear error when the stored user lacks GRANT OPTION — in that
+// case the onboarder sweep (master credentials) must apply the grants.
+func (h *DatabaseInstanceHandler) ensureMySQLDeebGrants(ctx context.Context, instance *models.DatabaseInstance) error {
+	conn, err := h.connManager.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: instance,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to instance: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	grants := []string{
+		`GRANT SELECT, INSERT, UPDATE, DELETE,
+		 ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, DROP,
+		 EVENT, EXECUTE, INDEX, PROCESS, REFERENCES, SHOW DATABASES, SHOW VIEW, TRIGGER, USAGE,
+		 RELOAD, LOCK TABLES, REPLICATION CLIENT, REPLICATION SLAVE
+		 ON *.* TO 'deeb'@'%'`,
+		`GRANT SET_USER_ID ON *.* TO 'deeb'@'%'`,
+		`FLUSH PRIVILEGES`,
+	}
+	for i, stmt := range grants {
+		if _, err := conn.ExecContext(ctx, stmt); err != nil {
+			if i == 1 {
+				// SET_USER_ID not available on all MySQL variants — best effort
+				h.logger.Debug("Could not grant SET_USER_ID", zap.Error(err))
+				continue
+			}
+			return fmt.Errorf("grant statement failed (stored user may lack GRANT OPTION): %w", err)
+		}
+	}
+	return nil
 }
