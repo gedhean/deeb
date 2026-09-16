@@ -53,3 +53,5 @@
 - [ ] Feat: CloudWatch FreeStorageSpace check for ghost disk headroom (currently an information_schema size estimate shown as a warning; operator verifies actual free disk)
 - [ ] Feat: ghost live log tail endpoint — in-memory ring buffer in GhostExecutor exposed via GET /:id/ghost-log (Option 2 from progress discussion)
 - [ ] Feat: async ghost readiness checks job — run the check suite (especially the slow dry_run) as a background job with a status table + polling endpoint so the UI can show real progress; today checks are synchronous (spinners only) and dry-run progress is only visible in backend logs
+- [ ] Feat: dedicated ghost user per database instance — separate `ghost` user (ALL + replication grants) used only by the ghost executor, so deeb's primary user can go least-privilege later; plan in `.todos/ghost-dedicated-user-plan.md`
+- [ ] Feat: least-privilege deeb user pass — once the dedicated ghost user is provisioned everywhere, drop REPLICATION SLAVE/CLIENT (and review DML scope) from the primary deeb user created by the onboarder
