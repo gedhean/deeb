@@ -57,6 +57,12 @@ stays visible but disabled until all checks pass:
    ALTER syntax validated without migrating)
 8. Disk headroom estimate (information_schema table size shown as a warning;
    operator verifies actual free disk — always passes)
+9. Metadata-lock instrument (`wait/lock/metadata/sql/mdl`) — **warning only,
+   always passes**. Detail carries the full remediation guide (parameter
+   group `performance_schema=ON` + reboot, then the `setup_instruments`
+   UPDATE, which the onboarder applies automatically once PS is ON). gh-ost
+   bails out without it (PR #1536); alternative `--skip-metadata-lock-check`
+   is not recommended on busy instances.
 
 The Draft → Open transition also enforces the suite server-side
 (defense-in-depth); the persisted report is refreshed on every run.

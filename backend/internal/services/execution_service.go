@@ -168,6 +168,7 @@ const (
 	GhostCheckBinlogImage = "binlog_row_image"
 	GhostCheckPrivileges  = "privileges"
 	GhostCheckDisk        = "disk_headroom_estimate"
+	GhostCheckMDL         = "metadata_lock_instrument"
 	GhostCheckDryRun      = "dry_run"
 )
 
@@ -184,6 +185,7 @@ func (s *ExecutionService) ghostCheckFuncs() map[string]ghostCheckRunner {
 		GhostCheckBinlogImage: s.checkGhostBinlogRowImage,
 		GhostCheckPrivileges:  s.checkGhostPrivileges,
 		GhostCheckDisk:        s.checkGhostDiskHeadroom,
+		GhostCheckMDL:         s.checkGhostMetadataLockInstrument,
 		GhostCheckDryRun:      s.checkGhostDryRun,
 	}
 }
@@ -206,6 +208,7 @@ var ghostCheckOrder = []string{
 	GhostCheckBinlogImage,
 	GhostCheckPrivileges,
 	GhostCheckDisk,
+	GhostCheckMDL,
 	GhostCheckDryRun,
 }
 
@@ -410,6 +413,48 @@ func (s *ExecutionService) checkGhostDiskHeadroom(ctx context.Context, plan *mod
 	estGB := float64(totalBytes) / (1024 * 1024 * 1024)
 	return GhostCheckResult{Name: GhostCheckDisk, Passed: true,
 		Detail: fmt.Sprintf("table %s is estimated at roughly %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth during the copy — this is an estimate, verify actual free disk on the instance before executing", table, estGB)}
+}
+
+// checkGhostMetadataLockInstrument verifies the metadata-lock instrument
+// gh-ost needs (PR #1536). Reported as a WARNING: the check always passes
+// so ghost selection isn't blocked, but the detail carries the full
+// remediation guide (shown in the UI tooltip).
+func (s *ExecutionService) checkGhostMetadataLockInstrument(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
+	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return GhostCheckResult{Name: GhostCheckMDL, Passed: false, Detail: err.Error()}
+	}
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return GhostCheckResult{Name: GhostCheckMDL, Passed: false, Detail: fmt.Sprintf("failed to connect: %s", err.Error())}
+	}
+	defer func() { _ = conn.Close() }()
+
+	const remediation = "gh-ost bails out without the metadata-lock instrument (github.com/github/gh-ost/pull/1536). To fix: (1) set performance_schema=ON in the RDS parameter group attached to this instance, wait for 'in-sync', reboot the instance (expect ~3-5 min downtime; sessions drop, apps with pools reconnect); (2) run: UPDATE performance_schema.setup_instruments SET ENABLED='YES', TIMED='YES' WHERE NAME='wait/lock/metadata/sql/mdl'; The onboarder sweep applies step 2 automatically once performance_schema is ON. Alternative: run gh-ost with --skip-metadata-lock-check (loses MDL protection — not recommended on busy instances)."
+
+	var name, value string
+	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'performance_schema'").Scan(&name, &value); err != nil || !strings.EqualFold(value, "ON") {
+		return GhostCheckResult{Name: GhostCheckMDL, Passed: true,
+			Detail: "performance_schema is OFF — " + remediation}
+	}
+
+	var enabled string
+	err = conn.QueryRowContext(ctx,
+		"SELECT ENABLED FROM performance_schema.setup_instruments WHERE NAME='wait/lock/metadata/sql/mdl'",
+	).Scan(&enabled)
+	if err != nil {
+		return GhostCheckResult{Name: GhostCheckMDL, Passed: true,
+			Detail: "metadata-lock instrument row not found (may not exist until performance_schema is fully active) — " + remediation}
+	}
+	if !strings.EqualFold(enabled, "YES") {
+		return GhostCheckResult{Name: GhostCheckMDL, Passed: true,
+			Detail: "metadata-lock instrument is DISABLED — " + remediation}
+	}
+	return GhostCheckResult{Name: GhostCheckMDL, Passed: true,
+		Detail: "metadata-lock instrument enabled"}
 }
 
 // checkGhostDryRun runs gh-ost without --execute against the live target.
