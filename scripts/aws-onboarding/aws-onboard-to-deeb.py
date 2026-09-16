@@ -372,7 +372,7 @@ class DeebOnboarder:
             GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, DROP,
             EVENT, EXECUTE, INDEX, PROCESS, REFERENCES, SHOW DATABASES, SHOW VIEW, TRIGGER, USAGE,
             RELOAD, LOCK TABLES, REPLICATION CLIENT, REPLICATION SLAVE
-            ON *.* TO 'deeb'@'%'
+            ON *.* TO 'deeb'@'%' WITH GRANT OPTION
             """
         )
         try:
