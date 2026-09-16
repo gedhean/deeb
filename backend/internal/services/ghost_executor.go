@@ -177,6 +177,20 @@ func ParseGhostProgress(line string) *float64 {
 	return &pct
 }
 
+// SanitizeArgsForLog returns a copy of args with secrets masked for logging.
+// The executable args themselves stay intact — only the log copy is masked.
+func SanitizeArgsForLog(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		if strings.HasPrefix(a, "--password=") {
+			out[i] = "--password=***"
+		} else {
+			out[i] = a
+		}
+	}
+	return out
+}
+
 // ParseGhostStatus identifies status transitions from tool stdout lines.
 func ParseGhostStatus(line string) (string, bool) {
 	l := strings.ToLower(line)

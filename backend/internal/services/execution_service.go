@@ -468,6 +468,11 @@ func (s *ExecutionService) ghostDryRunWithCreds(
 		dryArgs = append(dryArgs, a)
 	}
 	var lastErr string
+	s.logger.Info("ghost dry-run command",
+		zap.String("change_plan_id", plan.ID.String()),
+		zap.String("bin", binPath),
+		zap.Strings("args", SanitizeArgsForLog(dryArgs)),
+	)
 	callbacks := GhostRunCallbacks{
 		OnLogLine: func(line string) {
 			s.logger.Info("ghost-dryrun",
@@ -1346,6 +1351,12 @@ func (s *ExecutionService) executeGhost(
 	if err != nil {
 		return nil, err
 	}
+
+	s.logger.Info("ghost command",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("bin", binPath),
+		zap.Strings("args", SanitizeArgsForLog(args)),
+	)
 
 	// gh-ost requires the postpone flag to exist BEFORE the copy finishes to
 	// park awaiting cutover; create it up front (doc'd ghost-lab workflow).
