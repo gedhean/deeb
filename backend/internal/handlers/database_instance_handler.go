@@ -1107,8 +1107,15 @@ func (h *DatabaseInstanceHandler) syncDatabasesFromInstance(
 // Fails with a clear error when the stored user lacks GRANT OPTION — in that
 // case the onboarder sweep (master credentials) must apply the grants.
 func (h *DatabaseInstanceHandler) ensureMySQLDeebGrants(ctx context.Context, instance *models.DatabaseInstance) error {
+	// Grants are server-level (ON *.*) but ConnectionParams requires a
+	// database context — use any database already synced from this instance.
+	dbs, err := h.databaseRepo.ListByInstanceID(ctx, instance.ID, 1, 0)
+	if err != nil || len(dbs) == 0 {
+		return fmt.Errorf("no synced database available to open a connection")
+	}
 	conn, err := h.connManager.Connect(ctx, database.ConnectionParams{
 		DatabaseInstance: instance,
+		Database:         dbs[0],
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to instance: %w", err)
