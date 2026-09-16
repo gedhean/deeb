@@ -13,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nsxbet/deeb/internal/models"
+	"github.com/nsxbet/deeb/internal/parser"
+	"github.com/nsxbet/deeb/internal/parser/base"
 	"github.com/nsxbet/deeb/internal/repository"
 )
 
@@ -208,29 +210,70 @@ func ParseGhostStatus(line string) (string, bool) {
 	}
 }
 
-// alterTableRe matches a single `ALTER TABLE <name> <clauses>;` statement.
-// The clause capture rejects internal semicolons so multi-statement input
-// fails validation (ghost handles one table per plan).
-var alterTableRe = regexp.MustCompile(`(?is)^\s*ALTER\s+TABLE\s+(?:\x60?([\w.]+)\x60?|"([\w.]+)")\s+([^;]*?);?\s*$`)
-
 // ParseAlterStatement extracts table name and ALTER clause from a single
 // ALTER TABLE statement; rejects anything else (multi-statement or non-ALTER).
+// Uses the project's SQL tokenizer/splitter (internal/parser) — no regex.
 func ParseAlterStatement(sqlContent string) (table, alterClause string, err error) {
-	m := alterTableRe.FindStringSubmatch(sqlContent)
-	if m == nil {
-		return "", "", fmt.Errorf("ghost executor supports only a single ALTER TABLE statement")
+	result, err := parser.SplitSQL(sqlContent, parser.DialectMySQL)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse SQL: %w", err)
 	}
-	table = m[1]
+	if result.TotalCount != 1 {
+		return "", "", fmt.Errorf("ghost executor supports only a single ALTER TABLE statement (got %d)", result.TotalCount)
+	}
+	stmt := result.Statements[0].Text
+
+	t := base.NewTokenizer(stmt)
+	word := func() string {
+		t.SkipBlank()
+		start := t.Pos()
+		for {
+			c := t.Char(0)
+			if c == base.EOFRune || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ';' {
+				break
+			}
+			t.Skip(1)
+		}
+		return t.GetString(start, t.Pos()-start)
+	}
+
+	if !strings.EqualFold(word(), "ALTER") {
+		return "", "", fmt.Errorf("ghost executor supports only ALTER TABLE statements")
+	}
+	if !strings.EqualFold(word(), "TABLE") {
+		return "", "", fmt.Errorf("ghost executor supports only ALTER TABLE statements")
+	}
+
+	// Table name: may be backtick/double-quote quoted and/or schema-qualified.
+	t.SkipBlank()
+	start := t.Pos()
+	if c := t.Char(0); c == '`' || c == '"' {
+		t.ScanIdentifier(c)
+	} else {
+		for {
+			c := t.Char(0)
+			if c == base.EOFRune || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ';' {
+				break
+			}
+			t.Skip(1)
+		}
+	}
+	table = strings.Trim(t.GetString(start, t.Pos()-start), "`\"")
 	if table == "" {
-		table = m[2]
-	}
-	alterClause = strings.TrimSpace(m[3])
-	if table == "" || alterClause == "" {
-		return "", "", fmt.Errorf("could not extract table/alter clause from statement")
+		return "", "", fmt.Errorf("could not extract table name from statement")
 	}
 	if strings.Contains(table, ".") { // tool expects plain table name; schema comes from db flag
 		parts := strings.Split(table, ".")
 		table = parts[len(parts)-1]
+	}
+
+	// Everything after the table name is the ALTER clause.
+	remaining := t.GetString(t.Pos(), uint(len(stmt))-t.Pos())
+	alterClause = strings.TrimSpace(remaining)
+	alterClause = strings.TrimSuffix(alterClause, ";")
+	alterClause = strings.TrimSpace(alterClause)
+	if alterClause == "" {
+		return "", "", fmt.Errorf("could not extract alter clause from statement")
 	}
 	return table, alterClause, nil
 }
