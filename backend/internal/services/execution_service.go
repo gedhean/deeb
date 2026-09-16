@@ -168,7 +168,6 @@ const (
 	GhostCheckBinlogImage = "binlog_row_image"
 	GhostCheckPrivileges  = "privileges"
 	GhostCheckDisk        = "disk_headroom_estimate"
-	GhostCheckMDL         = "metadata_lock_instrument"
 	GhostCheckDryRun      = "dry_run"
 )
 
@@ -185,7 +184,6 @@ func (s *ExecutionService) ghostCheckFuncs() map[string]ghostCheckRunner {
 		GhostCheckBinlogImage: s.checkGhostBinlogRowImage,
 		GhostCheckPrivileges:  s.checkGhostPrivileges,
 		GhostCheckDisk:        s.checkGhostDiskHeadroom,
-		GhostCheckMDL:         s.checkGhostMetadataLockInstrument,
 		GhostCheckDryRun:      s.checkGhostDryRun,
 	}
 }
@@ -208,7 +206,6 @@ var ghostCheckOrder = []string{
 	GhostCheckBinlogImage,
 	GhostCheckPrivileges,
 	GhostCheckDisk,
-	GhostCheckMDL,
 	GhostCheckDryRun,
 }
 
@@ -422,14 +419,14 @@ func (s *ExecutionService) checkGhostDiskHeadroom(ctx context.Context, plan *mod
 func (s *ExecutionService) checkGhostMetadataLockInstrument(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
 	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
 	if err != nil {
-		return GhostCheckResult{Name: GhostCheckMDL, Passed: false, Detail: err.Error()}
+		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: false, Detail: err.Error()}
 	}
 	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
 		DatabaseInstance: dbInstance,
 		Database:         db,
 	})
 	if err != nil {
-		return GhostCheckResult{Name: GhostCheckMDL, Passed: false, Detail: fmt.Sprintf("failed to connect: %s", err.Error())}
+		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: false, Detail: fmt.Sprintf("failed to connect: %s", err.Error())}
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -437,7 +434,7 @@ func (s *ExecutionService) checkGhostMetadataLockInstrument(ctx context.Context,
 
 	var name, value string
 	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'performance_schema'").Scan(&name, &value); err != nil || !strings.EqualFold(value, "ON") {
-		return GhostCheckResult{Name: GhostCheckMDL, Passed: true,
+		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: true,
 			Detail: "performance_schema is OFF — " + remediation}
 	}
 
@@ -446,14 +443,14 @@ func (s *ExecutionService) checkGhostMetadataLockInstrument(ctx context.Context,
 		"SELECT ENABLED FROM performance_schema.setup_instruments WHERE NAME='wait/lock/metadata/sql/mdl'",
 	).Scan(&enabled)
 	if err != nil {
-		return GhostCheckResult{Name: GhostCheckMDL, Passed: true,
+		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: true,
 			Detail: "metadata-lock instrument row not found (may not exist until performance_schema is fully active) — " + remediation}
 	}
 	if !strings.EqualFold(enabled, "YES") {
-		return GhostCheckResult{Name: GhostCheckMDL, Passed: true,
+		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: true,
 			Detail: "metadata-lock instrument is DISABLED — " + remediation}
 	}
-	return GhostCheckResult{Name: GhostCheckMDL, Passed: true,
+	return GhostCheckResult{Name: "metadata_lock_instrument", Passed: true,
 		Detail: "metadata-lock instrument enabled"}
 }
 

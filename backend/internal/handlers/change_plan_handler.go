@@ -856,16 +856,8 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 			}
 		}
 
-		// If SQL content is updated and status is not "Open" and not terminal, transition to "Open"
-		if changePlan.Status != models.ChangePlanStatusOpen && workflow.CanEditSQLContent(changePlan.Status) {
-			previousStatus := changePlan.Status
-			changePlan.Status = models.ChangePlanStatusOpen
-			h.logger.Info(
-				"Status transitioned to Open due to SQL content update",
-				zap.String("change_plan_id", changePlan.ID.String()),
-				zap.String("previous_status", string(previousStatus)),
-			)
-		}
+		// SQL content edits never change the plan's status: Draft stays Draft,
+		// and CanEditSQLContent already rejects edits outside Draft.
 
 		// Delete existing approval records when SQL content is updated
 		// This allows approvers to approve the updated version
