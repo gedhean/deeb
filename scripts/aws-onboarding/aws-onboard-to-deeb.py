@@ -426,10 +426,14 @@ class DeebOnboarder:
         finally:
             connection.close()
 
-    def create_mysql_deeb_user(self, host: str, port: int, master_user: str, master_password: str, deeb_password: str):
+    def create_mysql_deeb_user(self, host: str, port: int, master_user: str, master_password: str, deeb_password: str) -> bool:
+        """Provision the deeb MySQL user. Returns True when the password was
+        (re)set — user created or plugin migrated — so the caller knows to
+        register/update the stored credentials. Password is never rotated on
+        subsequent runs."""
         if self.dry_run:
             logger.info("[DRY RUN] Would create MySQL deeb user on %s:%s", host, port)
-            return
+            return True
 
         self._resolve_host(host)
         connection = pymysql.connect(
@@ -447,18 +451,19 @@ class DeebOnboarder:
             current_plugin = row[0] if row else None
 
             safe_password = deeb_password.replace("'", "''")
+            password_set = False
 
             if not exists:
                 cursor.execute(
                     f"CREATE USER 'deeb'@'%' IDENTIFIED WITH caching_sha2_password BY '{safe_password}'"
                 )
                 logger.info("Created MySQL deeb user on %s:%s", host, port)
+                password_set = True
             elif current_plugin != "caching_sha2_password":
-                # Migrate the auth plugin (e.g. mysql_native_password →
-                # caching_sha2_password) while syncing the password in the same
-                # statement. Preserves the user, its objects and grants — no
-                # drop-and-recreate, and the old password is never needed
-                # (master credentials perform the reset).
+                # One-time plugin migration (e.g. mysql_native_password →
+                # caching_sha2_password) — the only moment an existing user's
+                # password is (re)set. Old password never needed (master
+                # credentials perform the reset).
                 cursor.execute(
                     f"ALTER USER 'deeb'@'%' IDENTIFIED WITH caching_sha2_password BY '{safe_password}'"
                 )
@@ -466,11 +471,9 @@ class DeebOnboarder:
                     "Migrated MySQL deeb user plugin %s → caching_sha2_password on %s:%s",
                     current_plugin, host, port,
                 )
+                password_set = True
             else:
-                logger.info("MySQL deeb user already exists on %s:%s; syncing password and ensuring grants", host, port)
-                # Sync the password so re-runs align the DB user with the
-                # credentials Deeb will store for this instance.
-                cursor.execute(f"ALTER USER 'deeb'@'%' IDENTIFIED BY '{safe_password}'")
+                logger.info("MySQL deeb user already provisioned on %s:%s; ensuring grants only (password untouched)", host, port)
 
             # GRANT is idempotent in MySQL — re-granting existing privileges
             # is a no-op, so we can always run it to ensure the grants are right.
@@ -479,6 +482,7 @@ class DeebOnboarder:
 
             connection.commit()
             logger.info("Ensured MySQL deeb user grants on %s:%s", host, port)
+            return password_set
         finally:
             connection.close()
 
@@ -680,12 +684,16 @@ class DeebOnboarder:
                         try:
                             master_creds = self.get_master_credentials(secretsmanager_client, instance["master_secret_arn"])
                             new_password = self.generate_secure_password()
-                            self.create_mysql_deeb_user(
+                            password_set = self.create_mysql_deeb_user(
                                 instance["endpoint"], instance["port"],
                                 master_creds["username"], master_creds["password"],
                                 new_password,
                             )
-                            self.update_instance_password_in_deeb(registered[host]["id"], new_password)
+                            # Only sync stored credentials when the password was
+                            # actually (re)set (create or one-time plugin migration);
+                            # afterwards the password is never rotated.
+                            if password_set:
+                                self.update_instance_password_in_deeb(registered[host]["id"], new_password)
                         except Exception as e:
                             logger.warning("[%s/%s] Could not reconcile user/grants for %s: %s",
                                            alias, region, instance["name"], e)
