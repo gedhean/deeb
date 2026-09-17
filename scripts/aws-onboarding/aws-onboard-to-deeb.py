@@ -363,41 +363,16 @@ class DeebOnboarder:
                 "security-group ingress to the database."
             )
 
-    def ensure_mysql_ghost_instruments(self, cursor) -> None:
-        """Enable the metadata-lock instrument gh-ost requires (PR #1536).
-        Skipped with a clear log when performance_schema is OFF — the UPDATE
-        would no-op until PS is enabled via parameter group + reboot."""
-        cursor.execute("SHOW VARIABLES LIKE 'performance_schema'")
-        row = cursor.fetchone()
-        ps_on = row is not None and str(row[1]).upper() == "ON"
-        if not ps_on:
-            logger.warning(
-                "performance_schema is OFF on this instance — skipping metadata-lock "
-                "instrument enable. gh-ost dry runs will fail with 'metadata lock "
-                "instrument not enabled' until performance_schema=ON is set in the "
-                "RDS parameter group and the instance is rebooted."
-            )
-            return
-        cursor.execute(
-            """
-            UPDATE performance_schema.setup_instruments
-            SET ENABLED='YES', TIMED='YES'
-            WHERE NAME='wait/lock/metadata/sql/mdl'
-            """
-        )
-        logger.info("Enabled metadata-lock instrument (wait/lock/metadata/sql/mdl)")
-
     def ensure_mysql_grants(self, cursor) -> None:
         """Apply the full deeb MySQL grant set. Idempotent — safe to run any
         number of times. Shared by create_mysql_deeb_user and the
         reconcile-existing-instances path so privileges stay convergent."""
         cursor.execute(
             """
-            GRANT SELECT, INSERT, UPDATE, DELETE,
-            ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, DROP,
+            GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, DROP,
             EVENT, EXECUTE, INDEX, PROCESS, REFERENCES, SHOW DATABASES, SHOW VIEW, TRIGGER, USAGE,
             RELOAD, LOCK TABLES, REPLICATION CLIENT, REPLICATION SLAVE
-            ON *.* TO 'deeb'@'%' WITH GRANT OPTION
+            ON *.* TO 'deeb'@'%'
             """
         )
         try:
@@ -420,7 +395,6 @@ class DeebOnboarder:
         try:
             cursor = connection.cursor()
             self.ensure_mysql_grants(cursor)
-            self.ensure_mysql_ghost_instruments(cursor)
             connection.commit()
             logger.info("Ensured MySQL deeb grants on %s:%s", host, port)
         finally:
@@ -478,7 +452,6 @@ class DeebOnboarder:
             # GRANT is idempotent in MySQL — re-granting existing privileges
             # is a no-op, so we can always run it to ensure the grants are right.
             self.ensure_mysql_grants(cursor)
-            self.ensure_mysql_ghost_instruments(cursor)
 
             connection.commit()
             logger.info("Ensured MySQL deeb user grants on %s:%s", host, port)
