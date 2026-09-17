@@ -53,6 +53,18 @@ func TestParseAlterStatement(t *testing.T) {
 			wantAlter: "ADD INDEX idx_x (a)",
 		},
 		{
+			name:      "quoted qualified table returns final component",
+			sql:       "ALTER TABLE `db`.`users` ADD COLUMN c INT;",
+			wantTable: "users",
+			wantAlter: "ADD COLUMN c INT",
+		},
+		{
+			name:      "quoted unqualified table",
+			sql:       "ALTER TABLE `users` ADD COLUMN c INT",
+			wantTable: "users",
+			wantAlter: "ADD COLUMN c INT",
+		},
+		{
 			name:    "multi-statement rejected",
 			sql:     "ALTER TABLE a ADD COLUMN x INT; ALTER TABLE b ADD COLUMN y INT;",
 			wantErr: true,

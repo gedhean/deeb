@@ -257,27 +257,41 @@ func ParseAlterStatement(sqlContent string) (table, alterClause string, err erro
 		return "", "", fmt.Errorf("ghost executor supports only ALTER TABLE statements")
 	}
 
-	// Table name: may be backtick/double-quote quoted and/or schema-qualified.
-	t.SkipBlank()
-	start := t.Pos()
-	if c := t.Char(0); c == '`' || c == '"' {
-		t.ScanIdentifier(c)
-	} else {
-		for {
-			c := t.Char(0)
-			if c == base.EOFRune || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ';' {
-				break
+	// Table name: consume qualified components (quoted or unquoted) separated
+	// by dots; the final component is the table gh-ost migrates. The database
+	// qualifier comes from the --database flag, not here.
+	readComponent := func() string {
+		t.SkipBlank()
+		start := t.Pos()
+		if c := t.Char(0); c == '`' || c == '"' {
+			t.ScanIdentifier(c)
+		} else {
+			for {
+				c := t.Char(0)
+				if c == base.EOFRune || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ';' || c == '.' {
+					break
+				}
+				t.Skip(1)
 			}
-			t.Skip(1)
 		}
+		return strings.Trim(t.GetString(start, t.Pos()-start), "`\"")
 	}
-	table = strings.Trim(t.GetString(start, t.Pos()-start), "`\"")
+
+	table = readComponent()
+	for {
+		t.SkipBlank()
+		if t.Char(0) != '.' {
+			break
+		}
+		t.Skip(1) // consume the separator
+		next := readComponent()
+		if next == "" {
+			break
+		}
+		table = next
+	}
 	if table == "" {
 		return "", "", fmt.Errorf("could not extract table name from statement")
-	}
-	if strings.Contains(table, ".") { // tool expects plain table name; schema comes from db flag
-		parts := strings.Split(table, ".")
-		table = parts[len(parts)-1]
 	}
 
 	// Everything after the table name is the ALTER clause.
