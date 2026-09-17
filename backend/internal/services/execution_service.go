@@ -185,6 +185,9 @@ func (s *ExecutionService) ghostCheckFuncs() map[string]ghostCheckRunner {
 		GhostCheckPrivileges:  s.checkGhostPrivileges,
 		GhostCheckDisk:        s.checkGhostDiskHeadroom,
 		GhostCheckDryRun:      s.checkGhostDryRun,
+		// Not part of the ordered suite (warning-only guidance); still
+		// re-runnable individually via POST /:id/ghost-checks/metadata_lock_instrument.
+		"metadata_lock_instrument": s.checkGhostMetadataLockInstrument,
 	}
 }
 
