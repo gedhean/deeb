@@ -873,17 +873,17 @@ func setupChangePlanRoutes(
 		executionAuthMiddleware.RequireExecutionPermission(),
 	)
 
-	// GHOST re-run readiness checks (all or single) — changes.read is enough;
-	// checks are read-only against the target.
+	// GHOST re-run readiness checks (all or single) — state-changing (persists
+	// the report) and spawns gh-ost processes; requires update permission.
 	changePlansGroup.POST("/:id/ghost-checks",
 		changePlanHandler.ReRunGhostChecks,
 		changePlanExtractor.Extract(),
-		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
+		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
 	)
 	changePlansGroup.POST("/:id/ghost-checks/:checkName",
 		changePlanHandler.ReRunGhostCheck,
 		changePlanExtractor.Extract(),
-		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
+		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
 	)
 }
 
