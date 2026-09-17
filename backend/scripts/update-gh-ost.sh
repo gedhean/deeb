@@ -29,7 +29,11 @@ curl -fsSL "$URL" -o "$TMP/gh-ost.tar.gz"
 SUMS="$(curl -fsSL "https://github.com/github/gh-ost/releases/download/${VERSION}/SHA256SUMS")"
 EXPECTED="$(echo "$SUMS" | grep 'gh-ost-linux-amd64.tar.gz' | awk '{print $1}')"
 ACTUAL="$(shasum -a 256 "$TMP/gh-ost.tar.gz" | awk '{print $1}')"
-if [[ -n "$EXPECTED" && "$EXPECTED" != "$ACTUAL" ]]; then
+if [[ -z "$EXPECTED" ]]; then
+  echo "error: no checksum found for gh-ost-linux-amd64.tar.gz in SHA256SUMS" >&2
+  exit 1
+fi
+if [[ "$EXPECTED" != "$ACTUAL" ]]; then
   echo "error: checksum mismatch (expected $EXPECTED, got $ACTUAL)" >&2
   exit 1
 fi
