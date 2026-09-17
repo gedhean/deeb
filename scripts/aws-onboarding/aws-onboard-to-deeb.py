@@ -295,6 +295,29 @@ class DeebOnboarder:
             raise ValueError(f"Deeb project not found: {name!r}")
         return project_id
 
+    def registered_instances_by_host(self) -> Dict[str, Dict[str, Any]]:
+        """Return {host_lower: instance_dict} for everything registered in Deeb.
+
+        Host is the dedup key: it uniquely identifies the RDS endpoint regardless of
+        the name an instance was registered under."""
+        by_host: Dict[str, Dict[str, Any]] = {}
+        offset = 0
+        while True:
+            response = self.session.get(
+                f"{self.deeb_api_url}/api/v1/database-instances",
+                params={"limit": PAGE_SIZE, "offset": offset},
+            )
+            response.raise_for_status()
+            instances = _extract_list(response.json(), "database_instances", "data", "items")
+            for inst in instances:
+                host = (inst.get("host") or "").strip().lower()
+                if host:
+                    by_host[host] = inst
+            if len(instances) < PAGE_SIZE:
+                break
+            offset += PAGE_SIZE
+        return by_host
+
     def registered_instance_hosts(self) -> set:
         """Return the set of hosts (lowercased) already registered in Deeb.
 
@@ -340,10 +363,75 @@ class DeebOnboarder:
                 "security-group ingress to the database."
             )
 
-    def create_mysql_deeb_user(self, host: str, port: int, master_user: str, master_password: str, deeb_password: str):
+    def ensure_mysql_grants(self, cursor) -> None:
+        """Apply the full deeb MySQL grant set. Idempotent — safe to run any
+        number of times. Shared by create_mysql_deeb_user and the
+        reconcile-existing-instances path so privileges stay convergent."""
+        cursor.execute(
+            """
+            GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, DROP,
+            EVENT, EXECUTE, INDEX, PROCESS, REFERENCES, SHOW DATABASES, SHOW VIEW, TRIGGER, USAGE,
+            RELOAD, LOCK TABLES, REPLICATION CLIENT, REPLICATION SLAVE
+            ON *.* TO 'deeb'@'%'
+            """
+        )
+        try:
+            cursor.execute("GRANT SET_USER_ID ON *.* TO 'deeb'@'%'")
+        except Exception as e:
+            logger.debug("Could not grant SET_USER_ID (may not be available): %s", e)
+        cursor.execute("FLUSH PRIVILEGES")
+
+    def ensure_mysql_grants_on_instance(self, host: str, port: int, master_user: str, master_password: str) -> None:
+        """Re-apply deeb grants on an already-onboarded instance without
+        touching the user's password (no rotation)."""
+        if self.dry_run:
+            logger.info("[DRY RUN] Would ensure MySQL deeb grants on %s:%s", host, port)
+            return
+        self._resolve_host(host)
+        connection = pymysql.connect(
+            host=host, port=port, user=master_user, password=master_password,
+            connect_timeout=CONNECT_TIMEOUT_SECONDS,
+        )
+        try:
+            cursor = connection.cursor()
+            self.ensure_mysql_grants(cursor)
+            connection.commit()
+            logger.info("Ensured MySQL deeb grants on %s:%s", host, port)
+        finally:
+            connection.close()
+
+    def reset_mysql_deeb_user_password(self, host: str, port: int, master_user: str, master_password: str, deeb_password: str) -> None:
+        """Reset the deeb user's password (and pin the plugin) via master
+        credentials. Used when the stored credential no longer authenticates —
+        e.g. plugin flip on engine upgrade or a recreated user."""
+        if self.dry_run:
+            logger.info("[DRY RUN] Would reset MySQL deeb user password on %s:%s", host, port)
+            return
+        self._resolve_host(host)
+        connection = pymysql.connect(
+            host=host, port=port, user=master_user, password=master_password,
+            connect_timeout=CONNECT_TIMEOUT_SECONDS,
+        )
+        try:
+            cursor = connection.cursor()
+            safe_password = deeb_password.replace("'", "''")
+            cursor.execute(
+                f"ALTER USER 'deeb'@'%' IDENTIFIED WITH caching_sha2_password BY '{safe_password}'"
+            )
+            self.ensure_mysql_grants(cursor)
+            connection.commit()
+            logger.info("Reset MySQL deeb user password on %s:%s", host, port)
+        finally:
+            connection.close()
+
+    def create_mysql_deeb_user(self, host: str, port: int, master_user: str, master_password: str, deeb_password: str) -> bool:
+        """Provision the deeb MySQL user. Returns True when the password was
+        (re)set — user created or plugin migrated — so the caller knows to
+        register/update the stored credentials. Password is never rotated on
+        subsequent runs."""
         if self.dry_run:
             logger.info("[DRY RUN] Would create MySQL deeb user on %s:%s", host, port)
-            return
+            return True
 
         self._resolve_host(host)
         connection = pymysql.connect(
@@ -352,29 +440,46 @@ class DeebOnboarder:
         )
         try:
             cursor = connection.cursor()
-            try:
-                cursor.execute("DROP USER IF EXISTS 'deeb'@'%'")
-            except Exception as e:  # pragma: no cover - best effort cleanup
-                logger.warning("Could not drop existing user: %s", e)
+
+            # Check if the user exists; create it only when missing so we never
+            # drop-and-recreate (avoids wiping a working user on re-runs).
+            cursor.execute("SELECT plugin FROM mysql.user WHERE user = %s AND host = %s", ("deeb", "%"))
+            row = cursor.fetchone()
+            exists = row is not None
+            current_plugin = row[0] if row else None
 
             safe_password = deeb_password.replace("'", "''")
-            cursor.execute(f"CREATE USER 'deeb'@'%' IDENTIFIED BY '{safe_password}'")
-            cursor.execute(
-                """
-                GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, DROP,
-                EVENT, EXECUTE, INDEX, PROCESS, REFERENCES, SHOW DATABASES, SHOW VIEW, TRIGGER, USAGE,
-                RELOAD, LOCK TABLES, REPLICATION CLIENT, REPLICATION SLAVE
-                ON *.* TO 'deeb'@'%'
-                """
-            )
-            try:
-                cursor.execute("GRANT SET_USER_ID ON *.* TO 'deeb'@'%'")
-            except Exception as e:
-                logger.debug("Could not grant SET_USER_ID (may not be available): %s", e)
+            password_set = False
 
-            cursor.execute("FLUSH PRIVILEGES")
+            if not exists:
+                cursor.execute(
+                    f"CREATE USER 'deeb'@'%' IDENTIFIED WITH caching_sha2_password BY '{safe_password}'"
+                )
+                logger.info("Created MySQL deeb user on %s:%s", host, port)
+                password_set = True
+            elif current_plugin != "caching_sha2_password":
+                # One-time plugin migration (e.g. mysql_native_password →
+                # caching_sha2_password) — the only moment an existing user's
+                # password is (re)set. Old password never needed (master
+                # credentials perform the reset).
+                cursor.execute(
+                    f"ALTER USER 'deeb'@'%' IDENTIFIED WITH caching_sha2_password BY '{safe_password}'"
+                )
+                logger.info(
+                    "Migrated MySQL deeb user plugin %s → caching_sha2_password on %s:%s",
+                    current_plugin, host, port,
+                )
+                password_set = True
+            else:
+                logger.info("MySQL deeb user already provisioned on %s:%s; ensuring grants only (password untouched)", host, port)
+
+            # GRANT is idempotent in MySQL — re-granting existing privileges
+            # is a no-op, so we can always run it to ensure the grants are right.
+            self.ensure_mysql_grants(cursor)
+
             connection.commit()
-            logger.info("Created MySQL deeb user on %s:%s", host, port)
+            logger.info("Ensured MySQL deeb user grants on %s:%s", host, port)
+            return password_set
         finally:
             connection.close()
 
@@ -391,13 +496,22 @@ class DeebOnboarder:
         try:
             connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
             cursor = connection.cursor()
-            try:
-                cursor.execute("DROP USER IF EXISTS deeb")
-            except Exception as e:  # pragma: no cover - best effort cleanup
-                logger.warning("Could not drop existing user: %s", e)
 
-            safe_password = deeb_password.replace("'", "''")
-            cursor.execute(f"CREATE USER deeb WITH PASSWORD '{safe_password}'")
+            # Create only when missing; never drop-and-recreate on re-runs.
+            cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = 'deeb'")
+            exists = cursor.fetchone() is not None
+
+            if not exists:
+                safe_password = deeb_password.replace("'", "''")
+                cursor.execute(f"CREATE USER deeb WITH PASSWORD '{safe_password}'")
+                logger.info("Created PostgreSQL deeb user on %s:%s", host, port)
+            else:
+                logger.info("PostgreSQL deeb user already exists on %s:%s; syncing password and ensuring grants", host, port)
+                # Sync the password so re-runs align the DB user with the
+                # credentials Deeb will store for this instance.
+                safe_password = deeb_password.replace("'", "''")
+                cursor.execute(f"ALTER USER deeb WITH PASSWORD '{safe_password}'")
+
             cursor.execute("ALTER USER deeb WITH CREATEDB")
             cursor.execute("ALTER ROLE deeb INHERIT")
 
@@ -420,7 +534,7 @@ class DeebOnboarder:
                 except Exception as e:
                     logger.warning("Could not grant role %s to deeb: %s", owner_role, e)
 
-            logger.info("Created PostgreSQL deeb user on %s:%s", host, port)
+            logger.info("Ensured PostgreSQL deeb user grants on %s:%s", host, port)
         finally:
             connection.close()
 
@@ -434,6 +548,38 @@ class DeebOnboarder:
             raise ValueError(f"Unsupported engine: {instance['engine']}")
 
     # --- Deeb registration + project assignment --------------------------
+
+    def test_instance_connection_in_deeb(self, instance_id: str) -> bool:
+        """Ask deeb to test the instance connection with its stored credentials.
+        True = stored password works (no rotation needed); False = drift."""
+        if self.dry_run:
+            return True
+        try:
+            response = self.session.post(
+                f"{self.deeb_api_url}/api/v1/database-instances/{instance_id}/test-connection",
+            )
+            if response.status_code != 200:
+                return False
+            body = response.json()
+            # Handler returns success info or an error payload; treat explicit
+            # failure markers as drift.
+            return not ("error" in body or body.get("success") is False)
+        except Exception as e:
+            logger.warning("Connection test via deeb failed for instance %s: %s", instance_id, e)
+            return False
+
+    def update_instance_password_in_deeb(self, instance_id: str, deeb_password: str) -> None:
+        """Update the stored connection password for an already-registered instance
+        so deeb's encrypted credentials match the rotated DB user password."""
+        if self.dry_run:
+            logger.info("[DRY RUN] Would update stored password for instance %s", instance_id)
+            return
+        response = self.session.put(
+            f"{self.deeb_api_url}/api/v1/database-instances/{instance_id}",
+            json={"password": deeb_password},
+        )
+        response.raise_for_status()
+        logger.info("Updated stored password for instance %s", instance_id)
 
     def register_in_deeb(self, instance: Dict[str, Any], name: str, deeb_password: str, environment_id: str) -> Dict[str, Any]:
         if self.dry_run:
@@ -495,7 +641,7 @@ class DeebOnboarder:
         secretsmanager_client,
         environment_id: str,
         project_id: str,
-    ) -> bool:
+    ) -> Optional[Dict[str, Any]]:
         logger.info("Onboarding %s (%s)", name, instance["engine"])
         try:
             master_creds = self.get_master_credentials(secretsmanager_client, instance["master_secret_arn"])
@@ -505,14 +651,14 @@ class DeebOnboarder:
             if not self.dry_run:
                 self.assign_databases_to_project(result["id"], project_id, environment_id)
             logger.info("SUCCESS: onboarded %s", name)
-            return True
+            return result
         except Exception as e:
             logger.error("FAILED: %s -> %s", name, e)
             if hasattr(e, "response") and e.response is not None:
                 logger.error("API response: %s", e.response.text)
-            return False
+            return None
 
-    def onboard_account(self, account: Dict[str, Any], registered_hosts: set) -> tuple:
+    def onboard_account(self, account: Dict[str, Any], registered: Dict[str, Dict[str, Any]]) -> tuple:
         """Onboard all new instances for a single account across its regions. Returns (ok, failed, skipped)."""
         alias = account["alias"]
         tag_filters = account["tag_filters"]
@@ -545,10 +691,40 @@ class DeebOnboarder:
                 logger.warning("[%s/%s] Skipping (no Secrets Manager): %s", alias, region, entry)
 
             for instance in candidates:
-                # Dedup by host: skip any instance whose endpoint is already registered in
-                # Deeb under any name (avoids duplicating manually/earlier-onboarded DBs).
+                # Dedup by host: when the endpoint is already registered, rotate the
+                # deeb user password on the target (plugin-safe ALTER) and update the
+                # stored credentials in Deeb so they never drift, then re-apply grants.
                 host = instance["endpoint"].strip().lower()
-                if host in registered_hosts:
+                if host in registered:
+                    if instance["engine"] == "mysql":
+                        try:
+                            deeb_instance_id = registered[host]["id"]
+                            # Probe: does deeb's stored password still authenticate?
+                            # Healthy runs are a no-op (cron-safe); only drift
+                            # (plugin flip, user recreated, password changed
+                            # elsewhere) triggers a reset + re-sync.
+                            if self.test_instance_connection_in_deeb(deeb_instance_id):
+                                logger.info("[%s/%s] %s credentials healthy; ensuring grants only",
+                                            alias, region, instance["name"])
+                                master_creds = self.get_master_credentials(secretsmanager_client, instance["master_secret_arn"])
+                                self.ensure_mysql_grants_on_instance(
+                                    instance["endpoint"], instance["port"],
+                                    master_creds["username"], master_creds["password"],
+                                )
+                            else:
+                                logger.info("[%s/%s] %s credentials drifted; resetting deeb user password",
+                                            alias, region, instance["name"])
+                                master_creds = self.get_master_credentials(secretsmanager_client, instance["master_secret_arn"])
+                                new_password = self.generate_secure_password()
+                                self.reset_mysql_deeb_user_password(
+                                    instance["endpoint"], instance["port"],
+                                    master_creds["username"], master_creds["password"],
+                                    new_password,
+                                )
+                                self.update_instance_password_in_deeb(deeb_instance_id, new_password)
+                        except Exception as e:
+                            logger.warning("[%s/%s] Could not reconcile user/grants for %s: %s",
+                                           alias, region, instance["name"], e)
                     skipped += 1
                     continue
                 tags = instance.get("tags", {})
@@ -571,8 +747,9 @@ class DeebOnboarder:
                     continue
 
                 name = composed_name(instance["name"], alias)
-                if self.onboard_instance(instance, name, secretsmanager_client, environment_id, project_id):
-                    registered_hosts.add(host)  # avoid re-onboarding within this run
+                result = self.onboard_instance(instance, name, secretsmanager_client, environment_id, project_id)
+                if result is not None:
+                    registered[host] = result  # avoid re-onboarding within this run
                     ok += 1
                 else:
                     failed += 1
@@ -585,13 +762,13 @@ class DeebOnboarder:
         """Run one multi-account onboarding sweep. Returns process exit code (0 on success)."""
         logger.info("Starting sweep across %d account(s) (dry_run=%s)", len(self.accounts), self.dry_run)
 
-        registered_hosts = self.registered_instance_hosts()
-        logger.info("%d instance host(s) already registered in Deeb", len(registered_hosts))
+        registered = self.registered_instances_by_host()
+        logger.info("%d instance host(s) already registered in Deeb", len(registered))
 
         total_ok = total_failed = total_skipped = 0
         for account in self.accounts:
             try:
-                ok, failed, skipped = self.onboard_account(account, registered_hosts)
+                ok, failed, skipped = self.onboard_account(account, registered)
                 total_ok += ok
                 total_failed += failed
                 total_skipped += skipped

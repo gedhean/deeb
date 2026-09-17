@@ -316,7 +316,7 @@ def test_env_override_routing(m):
             "environment": "Production", "project": "Proj Production",
             "env_overrides": {"tooling": {"environment": "Tooling", "project": "Proj Tooling"}},
         }, m.DEFAULT_TAG_FILTERS)
-        ok, failed, skipped = ob.onboard_account(account, set())
+        ok, failed, skipped = ob.onboard_account(account, {})
     finally:
         m.discover.discover_all = orig
 
