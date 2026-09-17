@@ -82,11 +82,16 @@ jobs:
         env:
           CUSTOM_TAG: ${{ github.event.inputs.tag }}
         run: |
-          # Determine base tag
+          # Determine base tag; staging builds get a -staging suffix so they
+          # never overwrite production-tagged images for the same SHA (the
+          # frontend bundle differs by baked API URL).
           if [ -n "$CUSTOM_TAG" ]; then
             BASE_TAG="$CUSTOM_TAG"
           else
             BASE_TAG="${GITHUB_SHA::7}"
+          fi
+          if [ "${{ inputs.environment }}" = "staging" ]; then
+            BASE_TAG="${BASE_TAG}-staging"
           fi
 
           # Generate full tag list
@@ -248,11 +253,16 @@ jobs:
         env:
           CUSTOM_TAG: ${{ github.event.inputs.tag }}
         run: |
-          # Determine base tag
+          # Determine base tag; staging builds get a -staging suffix so they
+          # never overwrite production-tagged images for the same SHA (the
+          # frontend bundle differs by baked API URL).
           if [ -n "$CUSTOM_TAG" ]; then
             BASE_TAG="$CUSTOM_TAG"
           else
             BASE_TAG="${GITHUB_SHA::7}"
+          fi
+          if [ "${{ inputs.environment }}" = "staging" ]; then
+            BASE_TAG="${BASE_TAG}-staging"
           fi
 
           # Generate full tag list
@@ -417,11 +427,16 @@ jobs:
         env:
           CUSTOM_TAG: ${{ github.event.inputs.tag }}
         run: |
-          # Determine base tag
+          # Determine base tag; staging builds get a -staging suffix so they
+          # never overwrite production-tagged images for the same SHA (the
+          # frontend bundle differs by baked API URL).
           if [ -n "$CUSTOM_TAG" ]; then
             BASE_TAG="$CUSTOM_TAG"
           else
             BASE_TAG="${GITHUB_SHA::7}"
+          fi
+          if [ "${{ inputs.environment }}" = "staging" ]; then
+            BASE_TAG="${BASE_TAG}-staging"
           fi
 
           # Generate full tag list
