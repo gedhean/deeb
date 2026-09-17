@@ -325,10 +325,19 @@ func (h *ChangePlanHandler) validateGhostSelection(
 	if changeType != models.ChangeTypeDDL {
 		return "", fmt.Errorf("execution_backend=ghost is only supported for DDL change plans")
 	}
-	if db.EnvironmentID == nil {
-		return "", fmt.Errorf("execution_backend=ghost requires the database to be assigned to an environment")
+
+	// Production gate resolves via the instance's environment: in this
+	// topology instances map 1:1 to environments (prod instance holds only
+	// prod databases), so the instance env is authoritative and works even
+	// when the database itself has no environment assigned.
+	dbInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+	if err != nil {
+		return "", fmt.Errorf("failed to validate database instance: %w", err)
 	}
-	env, err := h.environmentRepo.GetByID(ctx, *db.EnvironmentID)
+	if dbInstance.EnvironmentID == nil {
+		return "", fmt.Errorf("execution_backend=ghost requires the database instance to be assigned to an environment")
+	}
+	env, err := h.environmentRepo.GetByID(ctx, *dbInstance.EnvironmentID)
 	if err != nil {
 		return "", fmt.Errorf("failed to validate environment: %w", err)
 	}
@@ -340,10 +349,6 @@ func (h *ChangePlanHandler) validateGhostSelection(
 	// (pg-online-schema-change is not implemented). All other ghost checks
 	// (binlog, privileges, dry run) run at submit-for-review time where the
 	// UI can surface per-check results.
-	dbInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
-	if err != nil {
-		return "", fmt.Errorf("failed to validate database instance: %w", err)
-	}
 	if dbInstance.DatabaseEngine != models.DatabaseEngineMySQL {
 		return "", fmt.Errorf("execution_backend=ghost is currently supported only for MySQL databases")
 	}

@@ -1323,9 +1323,19 @@ func (s *ExecutionService) validateGhostPlan(ctx context.Context, changePlan *mo
 	}
 	if s.envRepo != nil {
 		dbRow, err := s.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
-		if err == nil && dbRow.EnvironmentID != nil {
-			env, err := s.envRepo.GetByID(ctx, *dbRow.EnvironmentID)
-			if err == nil && env != nil && env.IsProduction {
+		if err != nil {
+			return fmt.Errorf("failed to resolve target database for ghost eligibility: %w", err)
+		}
+		dbInstance, err := s.dbInstanceRepo.GetByID(ctx, dbRow.DatabaseInstanceID)
+		if err != nil {
+			return fmt.Errorf("failed to resolve database instance for ghost eligibility: %w", err)
+		}
+		if dbInstance.EnvironmentID != nil {
+			env, err := s.envRepo.GetByID(ctx, *dbInstance.EnvironmentID)
+			if err != nil {
+				return fmt.Errorf("failed to resolve environment for ghost eligibility: %w", err)
+			}
+			if env != nil && env.IsProduction {
 				return ErrGhostRejectedEnv
 			}
 		}

@@ -691,6 +691,7 @@ func setupChangePlanRoutes(
 		ghostCfg.FlagDir,
 		environmentRepo,
 		databaseRepo,
+		databaseInstanceRepo,
 		ghostCfg.MaxDuration,
 	)
 	executionService.WithGhostSupport(ghostExecutor, environmentRepo)

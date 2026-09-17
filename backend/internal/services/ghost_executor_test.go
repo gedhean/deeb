@@ -89,7 +89,7 @@ func TestParseAlterStatement(t *testing.T) {
 }
 
 func TestGhostExecutor_BuildArgs_MySQL(t *testing.T) {
-	g := NewGhostExecutor("/usr/local/bin/gh-ost", "", "/flags", nil, nil, 0)
+	g := NewGhostExecutor("/usr/local/bin/gh-ost", "", "/flags", nil, nil, nil, 0)
 
 	bin, args, err := g.BuildArgs(
 		models.DatabaseEngineMySQL,
@@ -121,7 +121,7 @@ func TestGhostExecutor_BuildArgs_MySQL(t *testing.T) {
 }
 
 func TestGhostExecutor_BuildArgs_MySQL_MissingBinary(t *testing.T) {
-	g := NewGhostExecutor("", "", "/flags", nil, nil, 0)
+	g := NewGhostExecutor("", "", "/flags", nil, nil, nil, 0)
 	_, _, err := g.BuildArgs(
 		models.DatabaseEngineMySQL, "h", "u", "p", "d", "t", "ADD COLUMN x INT", 3306, "", "",
 	)
@@ -129,7 +129,7 @@ func TestGhostExecutor_BuildArgs_MySQL_MissingBinary(t *testing.T) {
 }
 
 func TestGhostExecutor_BuildArgs_Postgres(t *testing.T) {
-	g := NewGhostExecutor("", "/usr/local/bin/pg-online-schema-change", "/flags", nil, nil, 0)
+	g := NewGhostExecutor("", "/usr/local/bin/pg-online-schema-change", "/flags", nil, nil, nil, 0)
 
 	bin, args, err := g.BuildArgs(
 		models.DatabaseEnginePostgreSQL,
@@ -151,7 +151,7 @@ func TestGhostExecutor_BuildArgs_Postgres(t *testing.T) {
 }
 
 func TestGhostExecutor_BuildArgs_Postgres_MissingBinary(t *testing.T) {
-	g := NewGhostExecutor("", "", "/flags", nil, nil, 0)
+	g := NewGhostExecutor("", "", "/flags", nil, nil, nil, 0)
 	_, _, err := g.BuildArgs(
 		models.DatabaseEnginePostgreSQL, "h", "u", "p", "d", "t", "ADD COLUMN x INT", 5432, "", "",
 	)
@@ -159,7 +159,7 @@ func TestGhostExecutor_BuildArgs_Postgres_MissingBinary(t *testing.T) {
 }
 
 func TestGhostExecutor_ValidateGhostEligibility(t *testing.T) {
-	g := NewGhostExecutor("", "", "", nil, nil, 0)
+	g := NewGhostExecutor("", "", "", nil, nil, nil, 0)
 
 	ddl := &models.ChangePlan{ChangeType: models.ChangeTypeDDL, TargetDatabaseID: uuid.New()}
 	require.NoError(t, g.ValidateGhostEligibility(context.Background(), ddl))
@@ -171,7 +171,7 @@ func TestGhostExecutor_ValidateGhostEligibility(t *testing.T) {
 }
 
 func TestGhostExecutor_ControlFlagPaths(t *testing.T) {
-	g := NewGhostExecutor("", "", "/tmp/flags", nil, nil, 0)
+	g := NewGhostExecutor("", "", "/tmp/flags", nil, nil, nil, 0)
 	id := uuid.MustParse("123e4567-e89b-12d3-a456-426614174000")
 	postpone, panicPath := g.ControlFlagPaths(id)
 	assert.Equal(t, "/tmp/flags/deeb-123e4567-e89b-12d3-a456-426614174000.postpone", postpone)
@@ -217,10 +217,10 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 	connectionMgr := database.NewConnectionManager(encryptionKey, logger)
 	ctx := context.Background()
 
-	newService := func(changePlanRepo *MockChangePlanRepository, databaseRepo *MockDatabaseRepository) *ExecutionService {
+	newService := func(changePlanRepo *MockChangePlanRepository, databaseRepo *MockDatabaseRepository, dbInstanceRepo *MockDatabaseInstanceRepository) *ExecutionService {
 		return NewExecutionService(
 			changePlanRepo,
-			new(MockDatabaseInstanceRepository),
+			dbInstanceRepo,
 			databaseRepo,
 			new(MockChangelogRepository),
 			new(MockSchemaHistoryRepository),
@@ -251,7 +251,7 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 			TargetDatabaseID: uuid.New(),
 		}, nil)
 
-		service := newService(changePlanRepo, new(MockDatabaseRepository))
+		service := newService(changePlanRepo, new(MockDatabaseRepository), new(MockDatabaseInstanceRepository))
 		result, err := service.Execute(ctx, changePlanID, uuid.New())
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrGhostUnsupported)
@@ -268,8 +268,8 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 			TargetDatabaseID: uuid.New(),
 		}, nil)
 
-		service := newService(changePlanRepo, new(MockDatabaseRepository))
-		service.WithGhostSupport(NewGhostExecutor("/bin/true", "", "", nil, nil, 0), nil)
+		service := newService(changePlanRepo, new(MockDatabaseRepository), new(MockDatabaseInstanceRepository))
+		service.WithGhostSupport(NewGhostExecutor("/bin/true", "", "", nil, nil, nil, 0), nil)
 
 		result, err := service.Execute(ctx, changePlanID, uuid.New())
 		assert.Nil(t, result)
@@ -292,7 +292,11 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 
 		databaseRepo := new(MockDatabaseRepository)
 		databaseRepo.On("GetByID", mock.Anything, dbID).Return(&models.Database{
-			ID:            dbID,
+			ID: dbID,
+		}, nil)
+
+		dbInstanceRepo := new(MockDatabaseInstanceRepository)
+		dbInstanceRepo.On("GetByID", mock.Anything, mock.Anything).Return(&models.DatabaseInstance{
 			EnvironmentID: &envID,
 		}, nil)
 
@@ -301,8 +305,8 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 			ID: envID, Name: "Production", IsProduction: true,
 		}, nil)
 
-		service := newService(changePlanRepo, databaseRepo)
-		service.WithGhostSupport(NewGhostExecutor("/bin/true", "", "", nil, nil, 0), envRepo)
+		service := newService(changePlanRepo, databaseRepo, dbInstanceRepo)
+		service.WithGhostSupport(NewGhostExecutor("/bin/true", "", "", nil, nil, nil, 0), envRepo)
 
 		result, err := service.Execute(ctx, changePlanID, uuid.New())
 		assert.Nil(t, result)
@@ -326,7 +330,11 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 
 		databaseRepo := new(MockDatabaseRepository)
 		databaseRepo.On("GetByID", mock.Anything, dbID).Return(&models.Database{
-			ID:            dbID,
+			ID: dbID,
+		}, nil)
+
+		dbInstanceRepo := new(MockDatabaseInstanceRepository)
+		dbInstanceRepo.On("GetByID", mock.Anything, mock.Anything).Return(&models.DatabaseInstance{
 			EnvironmentID: &envID,
 		}, nil)
 
@@ -335,8 +343,8 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 			ID: envID, Name: "Staging", IsProduction: false,
 		}, nil)
 
-		service := newService(changePlanRepo, databaseRepo)
-		service.WithGhostSupport(NewGhostExecutor("/bin/true", "", "", nil, nil, 0), envRepo)
+		service := newService(changePlanRepo, databaseRepo, dbInstanceRepo)
+		service.WithGhostSupport(NewGhostExecutor("/bin/true", "", "", nil, nil, nil, 0), envRepo)
 
 		result, err := service.Execute(ctx, changePlanID, uuid.New())
 		assert.Nil(t, result)

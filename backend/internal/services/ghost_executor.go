@@ -36,12 +36,13 @@ const (
 // pg-online-schema-change (postgres). It performs validation, builds the tool
 // invocation, and knows where the control flag files live.
 type GhostExecutor struct {
-	ghostBin     string
-	pgoscBin     string
-	flagDir      string
-	envRepo      repository.EnvironmentRepository
-	databaseRepo repository.DatabaseRepository
-	maxDuration  time.Duration
+	ghostBin       string
+	pgoscBin       string
+	flagDir        string
+	envRepo        repository.EnvironmentRepository
+	databaseRepo   repository.DatabaseRepository
+	dbInstanceRepo repository.DatabaseInstanceRepository
+	maxDuration    time.Duration
 }
 
 // NewGhostExecutor creates a new GhostExecutor; flagDir may be empty to use
@@ -50,18 +51,20 @@ func NewGhostExecutor(
 	ghostBin, pgoscBin, flagDir string,
 	envRepo repository.EnvironmentRepository,
 	databaseRepo repository.DatabaseRepository,
+	dbInstanceRepo repository.DatabaseInstanceRepository,
 	maxDuration time.Duration,
 ) *GhostExecutor {
 	if maxDuration == 0 {
 		maxDuration = 6 * time.Hour
 	}
 	return &GhostExecutor{
-		ghostBin:     ghostBin,
-		pgoscBin:     pgoscBin,
-		flagDir:      flagDir,
-		envRepo:      envRepo,
-		databaseRepo: databaseRepo,
-		maxDuration:  maxDuration,
+		ghostBin:       ghostBin,
+		pgoscBin:       pgoscBin,
+		flagDir:        flagDir,
+		envRepo:        envRepo,
+		databaseRepo:   databaseRepo,
+		dbInstanceRepo: dbInstanceRepo,
+		maxDuration:    maxDuration,
 	}
 }
 
@@ -76,9 +79,19 @@ func (g *GhostExecutor) ValidateGhostEligibility(ctx context.Context, plan *mode
 
 	if g.envRepo != nil && g.databaseRepo != nil {
 		dbRow, err := g.databaseRepo.GetByID(ctx, plan.TargetDatabaseID)
-		if err == nil && dbRow.EnvironmentID != nil {
-			env, err := g.envRepo.GetByID(ctx, *dbRow.EnvironmentID)
-			if err == nil && env != nil && env.IsProduction {
+		if err != nil {
+			return fmt.Errorf("failed to resolve target database for ghost eligibility: %w", err)
+		}
+		dbInstance, err := g.dbInstanceRepo.GetByID(ctx, dbRow.DatabaseInstanceID)
+		if err != nil {
+			return fmt.Errorf("failed to resolve database instance for ghost eligibility: %w", err)
+		}
+		if dbInstance.EnvironmentID != nil {
+			env, err := g.envRepo.GetByID(ctx, *dbInstance.EnvironmentID)
+			if err != nil {
+				return fmt.Errorf("failed to resolve environment for ghost eligibility: %w", err)
+			}
+			if env != nil && env.IsProduction {
 				return fmt.Errorf("ghost executor not permitted on production environments")
 			}
 		}
