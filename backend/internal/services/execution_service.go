@@ -491,11 +491,16 @@ func (s *ExecutionService) ghostDryRunWithCreds(
 	if err != nil {
 		return fmt.Errorf("invalid ghost SQL: %w", err)
 	}
+	confPath, err := WriteGhostConfFile(plan.ID, dbInstance.Username, password)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(confPath) }()
 	binPath, args, err := s.ghostExecutor.BuildArgs(
 		dbInstance.DatabaseEngine,
 		dbInstance.Host,
 		dbInstance.Username,
-		password,
+		confPath,
 		db.DatabaseName,
 		table,
 		alterClause,
@@ -1391,11 +1396,16 @@ func (s *ExecutionService) executeGhost(
 	}
 
 	postponeFlag, panicFlag := s.ghostExecutor.ControlFlagPaths(changePlanID)
+	confPath, err := WriteGhostConfFile(changePlanID, dbInstance.Username, password)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.Remove(confPath) }()
 	binPath, args, err := s.ghostExecutor.BuildArgs(
 		dbInstance.DatabaseEngine,
 		dbInstance.Host,
 		dbInstance.Username,
-		password,
+		confPath,
 		db.DatabaseName,
 		table,
 		alterClause,

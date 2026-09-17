@@ -100,11 +100,42 @@ func (g *GhostExecutor) ValidateGhostEligibility(ctx context.Context, plan *mode
 	return nil
 }
 
+// WriteGhostConfFile writes a minimal my.cnf-style credentials file for
+// gh-ost under /tmp with a collision-free name (0600 perms). Passing
+// credentials via --conf keeps the password out of the process argv, which
+// is world-readable via /proc/<pid>/cmdline and ps. Caller must remove the
+// file after the run.
+func WriteGhostConfFile(planID uuid.UUID, user, password string) (string, error) {
+	// /tmp/deeb-ghost-<plan>-<random>.cnf — unique per run, no name crashes
+	f, err := os.CreateTemp("/tmp", fmt.Sprintf("deeb-ghost-%s-*.cnf", planID.String()))
+	if err != nil {
+		return "", fmt.Errorf("failed to create ghost conf file: %w", err)
+	}
+	path := f.Name()
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return "", fmt.Errorf("failed to secure ghost conf file: %w", err)
+	}
+	content := fmt.Sprintf("[client]\nuser=%s\npassword=%s\n", user, password)
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return "", fmt.Errorf("failed to write ghost conf file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("failed to close ghost conf file: %w", err)
+	}
+	return path, nil
+}
+
 // BuildArgs composes tool invocation for the given engine. Returns the
 // resolved binary path and the argument list. It does not launch the tool.
+// Credentials are expected via confPath (--conf), never as a --password arg.
 func (g *GhostExecutor) BuildArgs(
 	engine models.DatabaseEngine,
-	host, user, password, databaseName, table, alterClause string,
+	host, user, confPath, databaseName, table, alterClause string,
 	port int,
 	flagPostpone, flagPanic string,
 ) (string, []string, error) {
@@ -117,7 +148,7 @@ func (g *GhostExecutor) BuildArgs(
 			"--host=" + host,
 			fmt.Sprintf("--port=%d", port),
 			"--user=" + user,
-			"--password=" + password,
+			"--conf=" + confPath,
 			"--database=" + databaseName,
 			"--table=" + table,
 			"--alter=" + alterClause,
@@ -147,7 +178,7 @@ func (g *GhostExecutor) BuildArgs(
 			"--host=" + host,
 			fmt.Sprintf("--port=%d", port),
 			"--user=" + user,
-			"--password=" + password,
+			"--conf=" + confPath,
 			"--dbname=" + databaseName,
 			"--table=" + table,
 			"--alter=" + alterClause,

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -105,7 +106,7 @@ func TestGhostExecutor_BuildArgs_MySQL(t *testing.T) {
 
 	bin, args, err := g.BuildArgs(
 		models.DatabaseEngineMySQL,
-		"db.internal", "deeb-executor", "secret", "mydb",
+		"db.internal", "deeb-executor", "/tmp/deeb-ghost-x.cnf", "mydb",
 		"ramp_markets", "ADD INDEX idx_x (a)", 3306,
 		"/flags/deeb-x.postpone", "/flags/deeb-x.panic",
 	)
@@ -116,7 +117,7 @@ func TestGhostExecutor_BuildArgs_MySQL(t *testing.T) {
 	assert.Contains(t, joined, "--host=db.internal")
 	assert.Contains(t, joined, "--port=3306")
 	assert.Contains(t, joined, "--user=deeb-executor")
-	assert.Contains(t, joined, "--password=secret")
+	assert.Contains(t, joined, "--conf=/tmp/deeb-ghost-x.cnf")
 	assert.Contains(t, joined, "--database=mydb")
 	assert.Contains(t, joined, "--table=ramp_markets")
 	assert.Contains(t, joined, "--alter=ADD INDEX idx_x (a)")
@@ -145,7 +146,7 @@ func TestGhostExecutor_BuildArgs_Postgres(t *testing.T) {
 
 	bin, args, err := g.BuildArgs(
 		models.DatabaseEnginePostgreSQL,
-		"pg.internal", "deeb-executor", "secret", "mydb",
+		"pg.internal", "deeb-executor", "/tmp/deeb-ghost-x.cnf", "mydb",
 		"ramp_markets", "ADD INDEX idx_x (a)", 5432,
 		"", "",
 	)
@@ -405,4 +406,27 @@ func TestExecutionService_Execute_DetachesRequestContext(t *testing.T) {
 	_, err := service.Execute(ctx, changePlanID, uuid.New())
 	assert.ErrorIs(t, err, ErrChangePlanNotFound)
 	changePlanRepo.AssertExpectations(t)
+}
+
+func TestWriteGhostConfFile(t *testing.T) {
+	planID := uuid.New()
+	path1, err := WriteGhostConfFile(planID, "deeb", "s3cret")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(path1) }()
+
+	// 0600 perms, content has user+password, no argv exposure
+	info, err := os.Stat(path1)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+	content, err := os.ReadFile(path1)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "user=deeb")
+	assert.Contains(t, string(content), "password=s3cret")
+
+	// Second call for the same plan yields a different path (no name crash)
+	path2, err := WriteGhostConfFile(planID, "deeb", "s3cret")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(path2) }()
+	assert.NotEqual(t, path1, path2)
 }
