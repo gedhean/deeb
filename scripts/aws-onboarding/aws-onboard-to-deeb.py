@@ -400,6 +400,30 @@ class DeebOnboarder:
         finally:
             connection.close()
 
+    def reset_mysql_deeb_user_password(self, host: str, port: int, master_user: str, master_password: str, deeb_password: str) -> None:
+        """Reset the deeb user's password (and pin the plugin) via master
+        credentials. Used when the stored credential no longer authenticates —
+        e.g. plugin flip on engine upgrade or a recreated user."""
+        if self.dry_run:
+            logger.info("[DRY RUN] Would reset MySQL deeb user password on %s:%s", host, port)
+            return
+        self._resolve_host(host)
+        connection = pymysql.connect(
+            host=host, port=port, user=master_user, password=master_password,
+            connect_timeout=CONNECT_TIMEOUT_SECONDS,
+        )
+        try:
+            cursor = connection.cursor()
+            safe_password = deeb_password.replace("'", "''")
+            cursor.execute(
+                f"ALTER USER 'deeb'@'%' IDENTIFIED WITH caching_sha2_password BY '{safe_password}'"
+            )
+            self.ensure_mysql_grants(cursor)
+            connection.commit()
+            logger.info("Reset MySQL deeb user password on %s:%s", host, port)
+        finally:
+            connection.close()
+
     def create_mysql_deeb_user(self, host: str, port: int, master_user: str, master_password: str, deeb_password: str) -> bool:
         """Provision the deeb MySQL user. Returns True when the password was
         (re)set — user created or plugin migrated — so the caller knows to
@@ -524,6 +548,25 @@ class DeebOnboarder:
             raise ValueError(f"Unsupported engine: {instance['engine']}")
 
     # --- Deeb registration + project assignment --------------------------
+
+    def test_instance_connection_in_deeb(self, instance_id: str) -> bool:
+        """Ask deeb to test the instance connection with its stored credentials.
+        True = stored password works (no rotation needed); False = drift."""
+        if self.dry_run:
+            return True
+        try:
+            response = self.session.post(
+                f"{self.deeb_api_url}/api/v1/database-instances/{instance_id}/test-connection",
+            )
+            if response.status_code != 200:
+                return False
+            body = response.json()
+            # Handler returns success info or an error payload; treat explicit
+            # failure markers as drift.
+            return not ("error" in body or body.get("success") is False)
+        except Exception as e:
+            logger.warning("Connection test via deeb failed for instance %s: %s", instance_id, e)
+            return False
 
     def update_instance_password_in_deeb(self, instance_id: str, deeb_password: str) -> None:
         """Update the stored connection password for an already-registered instance
@@ -655,18 +698,30 @@ class DeebOnboarder:
                 if host in registered:
                     if instance["engine"] == "mysql":
                         try:
-                            master_creds = self.get_master_credentials(secretsmanager_client, instance["master_secret_arn"])
-                            new_password = self.generate_secure_password()
-                            password_set = self.create_mysql_deeb_user(
-                                instance["endpoint"], instance["port"],
-                                master_creds["username"], master_creds["password"],
-                                new_password,
-                            )
-                            # Only sync stored credentials when the password was
-                            # actually (re)set (create or one-time plugin migration);
-                            # afterwards the password is never rotated.
-                            if password_set:
-                                self.update_instance_password_in_deeb(registered[host]["id"], new_password)
+                            deeb_instance_id = registered[host]["id"]
+                            # Probe: does deeb's stored password still authenticate?
+                            # Healthy runs are a no-op (cron-safe); only drift
+                            # (plugin flip, user recreated, password changed
+                            # elsewhere) triggers a reset + re-sync.
+                            if self.test_instance_connection_in_deeb(deeb_instance_id):
+                                logger.info("[%s/%s] %s credentials healthy; ensuring grants only",
+                                            alias, region, instance["name"])
+                                master_creds = self.get_master_credentials(secretsmanager_client, instance["master_secret_arn"])
+                                self.ensure_mysql_grants_on_instance(
+                                    instance["endpoint"], instance["port"],
+                                    master_creds["username"], master_creds["password"],
+                                )
+                            else:
+                                logger.info("[%s/%s] %s credentials drifted; resetting deeb user password",
+                                            alias, region, instance["name"])
+                                master_creds = self.get_master_credentials(secretsmanager_client, instance["master_secret_arn"])
+                                new_password = self.generate_secure_password()
+                                self.reset_mysql_deeb_user_password(
+                                    instance["endpoint"], instance["port"],
+                                    master_creds["username"], master_creds["password"],
+                                    new_password,
+                                )
+                                self.update_instance_password_in_deeb(deeb_instance_id, new_password)
                         except Exception as e:
                             logger.warning("[%s/%s] Could not reconcile user/grants for %s: %s",
                                            alias, region, instance["name"], e)
