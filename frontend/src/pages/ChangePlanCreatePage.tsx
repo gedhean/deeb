@@ -404,8 +404,15 @@ export const ChangePlanCreatePage: React.FC = () => {
 
   // Ghost executor is available for DDL plans on databases in
   // non-production environments (server enforces this too).
+  const selectedDatabaseInstance = selectedDatabase?.database_instance;
+  const selectedEngine = selectedDatabaseInstance?.database_engine;
+
+  // Ghost executor is available only for MySQL DDL plans on databases in
+  // non-production environments (pg-online-schema-change not implemented;
+  // server enforces this too).
   const ghostEligible =
     formData.change_type === 'DDL' &&
+    selectedEngine === 'mysql' &&
     !!selectedDatabase?.environment &&
     !selectedDatabase.environment.is_production;
 

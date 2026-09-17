@@ -268,7 +268,7 @@ export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> =
           <FieldDescription>
             {ghostEligible
               ? 'Ghost runs DDL through an online schema change tool with a human-gated cutover (single ALTER TABLE per plan).'
-              : 'Ghost is available only for DDL plans on databases in non-production environments.'}
+              : 'Ghost is available only for MySQL DDL plans on databases in non-production environments.'}
           </FieldDescription>
         </FieldContent>
       </Field>
