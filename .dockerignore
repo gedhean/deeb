@@ -9,6 +9,5 @@ frontend/coverage
 # VCS and local-only tooling / artifacts
 .git
 .github
-graphify-out
 .mcp.json
 **/*.log
