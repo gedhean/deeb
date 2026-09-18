@@ -31,6 +31,17 @@
 
 ## Features
 
+### Ghost / Online Migrator
+- [ ] Feat: one-click cleanup of stale gh-ost artifacts for admins — when a
+  ghost run fails (or is retried) and gh-ost aborts with "table `_<table>_gho`
+  already exists" (or a leftover `_<table>_del` backup), an admin should be
+  able to drop/rename the artifact from the UI with a single button instead
+  of calling SRE. Scope: new endpoint (drop `_<table>_gho` and/or
+  `_<table>_del` on the target instance, gated by an admin permission +
+  typed confirmation), button surfaced near the Failed banner when
+  error_message matches the known gh-ost artifact patterns. Complements the
+  existing ghost-drop-backup action (which only covers post-completion).
+
 ### Filters & Navigation
 - [ ] Feat: add filters to URL query params like current project, tables filter, etc.
 - [ ] Feat: update data table filters logic to persist selected filters in URL params so they are preserved on page refresh
