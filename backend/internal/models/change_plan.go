@@ -140,6 +140,10 @@ type ChangePlanResponse struct {
 	ErrorMessage        *string          `json:"error_message,omitempty"`
 	StatementCount      *int             `json:"statement_count,omitempty"`
 	ExecutionBackend    ExecutionBackend `json:"execution_backend"`
+	// ExecutorWarnings inform the user how the SQL content maps to executors
+	// (e.g. no ALTER TABLE → ghost won't run anything; mixed content → both
+	// executors run). Transient — populated at creation/update, not persisted.
+	ExecutorWarnings    []string         `json:"executor_warnings,omitempty"`
 	GhostChecks         *string          `json:"ghost_checks,omitempty"`
 	GhostProgress       *string          `json:"ghost_progress,omitempty"`
 	CreatedAt           time.Time        `json:"created_at"`

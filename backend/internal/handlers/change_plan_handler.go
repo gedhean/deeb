@@ -239,7 +239,35 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		zap.String("project_id", changePlan.ProjectID.String()),
 	)
 
-	return c.JSON(http.StatusCreated, changePlan.ToResponse())
+	resp := changePlan.ToResponse()
+	resp.ExecutorWarnings = ghostExecutorWarnings(changePlan.ExecutionBackend, changePlan.SQLContent)
+	return c.JSON(http.StatusCreated, resp)
+}
+
+// ghostExecutorWarnings classifies the SQL content for ghost plans so users
+// know upfront which executor(s) will run. Non-blocking — informational only.
+func ghostExecutorWarnings(backend models.ExecutionBackend, sqlContent string) []string {
+	if backend != models.ExecutionBackendGhost {
+		return nil
+	}
+	ghostCount, directCount, err := services.ClassifyGhostStatements(sqlContent)
+	if err != nil {
+		return nil
+	}
+	switch {
+	case ghostCount == 0:
+		return []string{
+			"No ALTER TABLE statements found — gh-ost will not run any part of this plan; all statements execute directly.",
+		}
+	case directCount > 0:
+		return []string{
+			fmt.Sprintf(
+				"Mixed content: %d ALTER TABLE statement(s) will run via gh-ost and %d other statement(s) will run directly. Both executors will be used.",
+				ghostCount, directCount,
+			),
+		}
+	}
+	return nil
 }
 
 // validateUpdateChangePlanRequest validates the update change plan request

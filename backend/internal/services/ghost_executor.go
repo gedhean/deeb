@@ -336,6 +336,37 @@ func ParseAlterStatement(sqlContent string) (table, alterClause string, err erro
 	return table, alterClause, nil
 }
 
+// ClassifyGhostStatements splits SQL content and reports which statements
+// gh-ost would run (ALTER TABLE) vs which fall back to direct execution.
+// Informational only — used to warn users at plan creation.
+func ClassifyGhostStatements(sqlContent string) (ghostCount, directCount int, err error) {
+	result, err := parser.SplitSQL(sqlContent, parser.DialectMySQL)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse SQL: %w", err)
+	}
+	for _, stmt := range result.Statements {
+		if stmt.Empty {
+			continue
+		}
+		t := base.NewTokenizer(stmt.Text)
+		t.SkipBlank()
+		start := t.Pos()
+		for {
+			c := t.Char(0)
+			if c == base.EOFRune || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ';' {
+				break
+			}
+			t.Skip(1)
+		}
+		if strings.EqualFold(t.GetString(start, t.Pos()-start), "ALTER") {
+			ghostCount++
+		} else {
+			directCount++
+		}
+	}
+	return ghostCount, directCount, nil
+}
+
 // GhostRunCallbacks receives stream events from Run.
 type GhostRunCallbacks struct {
 	OnLogLine     func(line string)
