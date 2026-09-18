@@ -32,6 +32,7 @@ import {
   Loader2,
   AlertTriangle,
   MoreVertical,
+  Trash2,
 } from 'lucide-react';
 import { showSuccessToast } from '@/lib/errorHandling';
 
@@ -202,6 +203,11 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
       case 'Failed':
         if (canReject) {
           actions.push('close');
+        }
+        // Ghost plans that failed may still have a backup table to clean up
+        // (e.g. failed after cutover or after a rollback swap).
+        if (isGhostPlan && canExecute) {
+          actions.push('ghost-drop-backup');
         }
         break;
     }
@@ -639,17 +645,33 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           description:
             'Permanently drop the backup table retained by the migration. Only do this after your validation window has passed — it removes the rollback safety net.',
           content: (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
-              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-                <AlertTriangle className="h-4 w-4" />
-                <span className="text-sm font-medium">
-                  After dropping, rollback via table swap is no longer possible.
-                </span>
+            <div className="space-y-2">
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="text-sm font-medium">
+                    After dropping, rollback via table swap is no longer possible.
+                  </span>
+                </div>
               </div>
+              <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                <li>
+                  The backup holds a full copy of the pre-migration table — dropping it permanently
+                  deletes that copy.
+                </li>
+                <li>
+                  Retained backups consume disk space roughly equal to the live table, so leaving
+                  them behind grows storage costs.
+                </li>
+                <li>
+                  gh-ost cannot start a new migration on the same table while an old backup (or
+                  shadow table) is present — dropping it unblocks the next change on this table.
+                </li>
+              </ul>
             </div>
           ),
-          confirmLabel: 'Drop Backup Table',
-          confirmIcon: XCircle,
+          confirmLabel: 'Drop Backup',
+          confirmIcon: Trash2,
           confirmVariant: 'destructive' as const,
         };
 

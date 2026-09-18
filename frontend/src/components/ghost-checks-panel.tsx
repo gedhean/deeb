@@ -56,9 +56,17 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
   // plain numbers. Completed ghost plans render a full bar even if the last
   // persisted snapshot was below 100 (cutover completes after the final
   // progress line).
+  // Completed renders full; AwaitingCutover renders near-full but not 100 —
+  // gh-ost's copy is done but the migration isn't finished until the user
+  // approves cutover, so the bar shouldn't look complete yet.
   const snapshot = parseGhostProgress(ghostProgress);
   const parsedProgress = snapshot?.pct ?? null;
-  const progressValue = planStatus === 'Completed' ? 100 : parsedProgress;
+  let progressValue = parsedProgress;
+  if (planStatus === 'Completed') {
+    progressValue = 100;
+  } else if (planStatus === 'AwaitingCutover') {
+    progressValue = 99.9;
+  }
   const showProgress =
     progressValue != null &&
     (planStatus === 'InProgress' ||
