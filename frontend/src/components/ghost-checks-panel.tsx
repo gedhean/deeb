@@ -28,10 +28,16 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [refreshingCheck, setRefreshingCheck] = useState<string | null>(null);
 
-  // Parse the latest copy progress snapshot (".." persisted on the plan)
-  const progressValue = ghostProgress ? parseFloat(ghostProgress) : null;
+  // Parse the latest copy progress snapshot (persisted on the plan).
+  // Completed ghost plans render a full bar even if the last persisted
+  // snapshot was below 100 (cutover completes after the final progress line).
+  const parsedProgress = ghostProgress ? parseFloat(ghostProgress) : null;
+  const progressValue = planStatus === 'Completed' ? 100 : parsedProgress;
   const showProgress =
-    progressValue != null && (planStatus === 'InProgress' || planStatus === 'AwaitingCutover');
+    progressValue != null &&
+    (planStatus === 'InProgress' ||
+      planStatus === 'AwaitingCutover' ||
+      (planStatus === 'Completed' && parsedProgress != null));
 
   if (!report && !showProgress) {
     return null;

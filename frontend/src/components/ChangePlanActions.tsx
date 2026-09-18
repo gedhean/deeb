@@ -310,7 +310,13 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
 
     if (success) {
       setExecutionStatus('success');
-      showSuccessToast('Change plan executed successfully');
+      // Ghost runs in the background (202 Accepted); direct executions
+      // complete synchronously.
+      if (changePlan.execution_backend === 'ghost') {
+        showSuccessToast('Online Migrator execution started — progress will update below');
+      } else {
+        showSuccessToast('Change plan executed successfully');
+      }
 
       // Wait a moment to show success state, then close and refresh
       setTimeout(() => {

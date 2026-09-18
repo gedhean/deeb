@@ -65,10 +65,13 @@ export const ChangePlanDetailPage: React.FC = () => {
     return ghostChecksRaw;
   }, [ghostChecksRaw]);
 
-  // Poll the plan while a ghost migration is copying so the progress bar
-  // updates without manual refresh (uses SWR refetch, no websockets).
+  // Poll the plan while a ghost migration is copying or awaiting cutover so
+  // the progress bar updates without manual refresh (uses SWR refetch, no
+  // websockets). Completed plans render the bar full from persisted progress.
   useEffect(() => {
-    if (changePlan?.status !== 'InProgress' || changePlan?.execution_backend !== 'ghost') {
+    const isGhost = changePlan?.execution_backend === 'ghost';
+    const active = changePlan?.status === 'InProgress' || changePlan?.status === 'AwaitingCutover';
+    if (!isGhost || !active) {
       return;
     }
     const interval = setInterval(() => {
