@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -686,8 +687,13 @@ func (s *ExecutionService) DropGhostBackupTable(ctx context.Context, changePlanI
 	if err != nil {
 		return err
 	}
-	if plan.Status != models.ChangePlanStatusCompleted {
-		return fmt.Errorf("backup table can only be dropped after the plan is Completed (current: %s)", plan.Status)
+	// Completed: the backup retained after cutover. Failed: cleanup is also
+	// allowed — a failed run may leave the backup behind (e.g. a rollback
+	// swapped it back in place, or the plan was failed after cutover).
+	// Failure before cutover leaves _<table>_gho, not _del — the drop below
+	// simply errors if nothing exists, so no separate guard is needed.
+	if plan.Status != models.ChangePlanStatusCompleted && plan.Status != models.ChangePlanStatusFailed {
+		return fmt.Errorf("backup table can only be dropped after the plan is Completed or Failed (current: %s)", plan.Status)
 	}
 	db, dbInstance, table, _, err := s.resolveGhostTarget(ctx, plan)
 	if err != nil {
@@ -1568,6 +1574,11 @@ func (s *ExecutionService) executeGhost(
 	// Stream tool output into the zap logger and flip the plan into
 	// AwaitingCutover when the tool parks behind the postpone flag.
 	awaitingCutoverSet := false
+	// Progress persistence throttle: gh-ost emits a status line per second,
+	// but the UI polls at 3s — write only when pct moves ≥1%, ≥5s since the
+	// last write, first snapshot, or completion (100%).
+	var lastProgressPct *float64
+	var lastProgressAt *time.Time
 	callbacks := GhostRunCallbacks{
 		OnLogLine: func(line string) {
 			s.logger.Info("ghost",
@@ -1575,15 +1586,26 @@ func (s *ExecutionService) executeGhost(
 				zap.String("line", line),
 			)
 			// Persist latest copy progress snapshot (JSON with copied/total/pct/
-			// elapsed) so the UI can render a progress bar with detail. Older
-			// plain-number snapshots remain parseable client-side.
+			// elapsed) so the UI can render a progress bar with detail. Throttled:
+			// gh-ost emits a status line per second but the UI polls at 3s —
+			// write on first snapshot, ≥1% pct movement, ≥5s since last write, or
+			// 100% (completion).
 			if snap := ParseGhostProgressSnapshot(line); snap != nil {
-				if b, err := json.Marshal(snap); err == nil {
-					progress := string(b)
-					changePlan.GhostProgress = &progress
-					if err := s.changePlanRepo.Update(context.Background(), changePlan); err != nil {
-						s.logger.Warn("Failed to persist ghost progress", zap.Error(err))
+				shouldWrite := lastProgressPct == nil || lastProgressAt == nil ||
+					math.Abs(snap.Percent-*lastProgressPct) >= 1.0 ||
+					time.Since(*lastProgressAt) >= 5*time.Second ||
+					snap.Percent >= 100.0
+				if shouldWrite {
+					if b, err := json.Marshal(snap); err == nil {
+						progress := string(b)
+						changePlan.GhostProgress = &progress
+						if err := s.changePlanRepo.Update(context.Background(), changePlan); err != nil {
+							s.logger.Warn("Failed to persist ghost progress", zap.Error(err))
+						}
 					}
+					lastProgressPct = &snap.Percent
+					now := time.Now()
+					lastProgressAt = &now
 				}
 			}
 		},
