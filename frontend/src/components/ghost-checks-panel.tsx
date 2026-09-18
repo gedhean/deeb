@@ -6,6 +6,29 @@ import { Progress } from '@/components/ui/progress';
 import type { GhostReadinessReport } from '@/lib/api/types';
 import { changePlanService } from '@/lib/api/services/changePlans';
 
+interface GhostProgressSnapshot {
+  copied: number;
+  total: number;
+  pct: number;
+  elapsed?: string;
+}
+
+// parseGhostProgress accepts both JSON snapshots ({copied,total,pct,elapsed})
+// and legacy plain-number values persisted by earlier backend versions.
+function parseGhostProgress(raw: string | null | undefined): GhostProgressSnapshot | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null && 'pct' in parsed) {
+      return parsed as GhostProgressSnapshot;
+    }
+  } catch {
+    // not JSON — fall through to plain number
+  }
+  const num = parseFloat(raw);
+  return Number.isNaN(num) ? null : ({ copied: 0, total: 0, pct: num } as GhostProgressSnapshot);
+}
+
 interface GhostChecksPanelProps {
   changePlanId: string;
   report: GhostReadinessReport | null | undefined;
@@ -29,9 +52,12 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
   const [refreshingCheck, setRefreshingCheck] = useState<string | null>(null);
 
   // Parse the latest copy progress snapshot (persisted on the plan).
-  // Completed ghost plans render a full bar even if the last persisted
-  // snapshot was below 100 (cutover completes after the final progress line).
-  const parsedProgress = ghostProgress ? parseFloat(ghostProgress) : null;
+  // New snapshots are JSON ({copied,total,pct,elapsed}); older ones are
+  // plain numbers. Completed ghost plans render a full bar even if the last
+  // persisted snapshot was below 100 (cutover completes after the final
+  // progress line).
+  const snapshot = parseGhostProgress(ghostProgress);
+  const parsedProgress = snapshot?.pct ?? null;
   const progressValue = planStatus === 'Completed' ? 100 : parsedProgress;
   const showProgress =
     progressValue != null &&
@@ -89,6 +115,10 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
               {planStatus === 'AwaitingCutover'
                 ? 'Awaiting cutover approval'
                 : 'Copying shadow table'}
+              {snapshot != null &&
+                snapshot.total > 0 &&
+                ` — ${snapshot.copied.toLocaleString()}/${snapshot.total.toLocaleString()} rows`}
+              {snapshot?.elapsed && ` · ${snapshot.elapsed} elapsed`}
             </span>
             <span>{progressValue.toFixed(1)}%</span>
           </div>
