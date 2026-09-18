@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -397,6 +398,9 @@ func (g *GhostExecutor) Run(
 	}
 
 	scanDone := make(chan struct{})
+	// Track the last FATAL/ERROR line so failures surface an actionable
+	// message (e.g. stale _gho table) instead of a bare exit status.
+	var lastErrorLine atomic.Value
 	go func() {
 		defer close(scanDone)
 		scanner := bufio.NewScanner(stdout)
@@ -409,6 +413,9 @@ func (g *GhostExecutor) Run(
 			if status, ok := ParseGhostStatus(line); ok && callbacks.OnStateChange != nil {
 				callbacks.OnStateChange(status)
 			}
+			if strings.Contains(line, "FATAL") || strings.Contains(line, "ERROR") {
+				lastErrorLine.Store(line)
+			}
 		}
 	}()
 
@@ -419,6 +426,9 @@ func (g *GhostExecutor) Run(
 		return fmt.Errorf("ghost execution exceeded max duration (%s)", g.maxDuration)
 	}
 	if runErr != nil {
+		if v := lastErrorLine.Load(); v != nil {
+			return fmt.Errorf("ghost tool failed: %s", v.(string))
+		}
 		return fmt.Errorf("ghost tool exited with error: %w", runErr)
 	}
 	return nil
