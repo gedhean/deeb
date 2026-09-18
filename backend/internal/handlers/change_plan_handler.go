@@ -2252,6 +2252,53 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 	// - Status updates (InProgress → Completed/Failed)
 	// - Execution result capture
 	// - Lock release (guaranteed via defer)
+	// Ghost (Online Migrator) executions can run for minutes to hours; running
+	// them synchronously in the request would trip HTTP write timeouts and
+	// falsely mark execution failed client-side. Check the cheap invariants
+	// (lock conflict) synchronously, then run the plan in the background and
+	// answer 202 immediately — the UI polls plan status.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		locked, lockErr := h.executionService.IsDatabaseLockedForPlan(ctx, changePlanID)
+		if lockErr == nil && locked {
+			queueStatus, queueErr := h.executionService.GetQueueStatus(ctx, changePlanID)
+			if queueErr == nil && queueStatus != nil {
+				return c.JSON(http.StatusConflict, map[string]interface{}{
+					"error":          "Database is currently locked by another execution",
+					"queued":         true,
+					"queue_position": queueStatus.Position,
+					"queue_status":   queueStatus.Status,
+				})
+			}
+			return c.JSON(http.StatusConflict, map[string]interface{}{
+				"error": "Database is currently locked by another execution",
+			})
+		}
+
+		go func(planID, execID uuid.UUID) {
+			// Detached from the request: WithoutCancel inside the service keeps
+			// cleanup running; use context.Background as the base.
+			bgCtx := context.Background()
+			result, err := h.executionService.Execute(bgCtx, planID, execID)
+			if err != nil {
+				h.logger.Error("Background ghost execution failed",
+					zap.String("change_plan_id", planID.String()),
+					zap.Error(err),
+				)
+				return
+			}
+			h.logger.Info("Background ghost execution finished",
+				zap.String("change_plan_id", planID.String()),
+				zap.Bool("success", result.Success),
+				zap.Duration("duration", result.Duration),
+			)
+		}(changePlanID, userID)
+
+		return c.JSON(http.StatusAccepted, map[string]interface{}{
+			"message": "Ghost execution started in the background",
+			"status":  "InProgress",
+		})
+	}
+
 	result, err := h.executionService.Execute(ctx, changePlanID, userID)
 	if err != nil {
 		// Handle specific error types

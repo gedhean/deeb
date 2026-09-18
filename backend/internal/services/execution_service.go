@@ -1357,6 +1357,22 @@ func (s *ExecutionService) GetQueueStatus(ctx context.Context, changePlanID uuid
 	return s.queueService.GetQueueStatus(ctx, changePlanID)
 }
 
+// IsDatabaseLockedForPlan reports whether the plan's target database is
+// currently locked — a cheap synchronous pre-check so async launches can
+// still answer 409 immediately instead of failing silently in a goroutine.
+func (s *ExecutionService) IsDatabaseLockedForPlan(ctx context.Context, changePlanID uuid.UUID) (bool, error) {
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return false, err
+	}
+	db, err := s.databaseRepo.GetByID(ctx, plan.TargetDatabaseID)
+	if err != nil {
+		return false, err
+	}
+	locked, _, err := s.lockManager.IsLocked(ctx, db.ID)
+	return locked, err
+}
+
 // GetExecutionLogHistory returns the execution log history for a Change Plan
 func (s *ExecutionService) GetExecutionLogHistory(ctx context.Context, changePlanID uuid.UUID) ([]*models.ExecutionLog, error) {
 	if s.executionLogRepo == nil {
