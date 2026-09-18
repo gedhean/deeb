@@ -586,7 +586,7 @@ export const ChangePlanDetailPage: React.FC = () => {
           </Card>
         )}
 
-        {/* Ghost readiness checks (PR-checks style) */}
+        {/* Online Migrator readiness checks (PR-checks style) */}
         {changePlan.execution_backend === 'ghost' && (
           <GhostChecksPanel
             changePlanId={changePlan.id}

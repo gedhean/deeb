@@ -60,7 +60,7 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-base font-medium">Ghost readiness checks</CardTitle>
+        <CardTitle className="text-base font-medium">Online Migrator readiness checks</CardTitle>
         <Button
           variant="outline"
           size="sm"

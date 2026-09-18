@@ -228,7 +228,7 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
       )?.response;
       if (response?.ghost_checks) {
         setGhostChecks(response.ghost_checks);
-        setError('Ghost readiness checks failed — see details below.');
+        setError('Online Migrator readiness checks failed — see details below.');
       } else {
         setError(
           `Failed to submit change plan for review: ${response?.error || (err instanceof Error ? err.message : 'Unknown error')}`,
@@ -760,7 +760,7 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
 
               {ghostChecks && (
                 <div className="rounded-md border p-3 space-y-2">
-                  <p className="text-sm font-medium">Ghost readiness checks</p>
+                  <p className="text-sm font-medium">Online Migrator readiness checks</p>
                   <ul className="space-y-1.5">
                     {ghostChecks.checks.map((check) => (
                       <li key={check.name} className="flex items-start gap-2 text-sm">
