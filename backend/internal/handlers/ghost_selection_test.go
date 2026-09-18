@@ -21,9 +21,11 @@ func (s *stubEnvironmentRepo) Create(context.Context, *models.Environment) error
 func (s *stubEnvironmentRepo) GetByID(context.Context, uuid.UUID) (*models.Environment, error) {
 	return s.env, s.err
 }
+
 func (s *stubEnvironmentRepo) List(context.Context, repository.EnvironmentFilters, int, int) ([]*models.Environment, error) {
 	return nil, nil
 }
+
 func (s *stubEnvironmentRepo) Count(context.Context, repository.EnvironmentFilters) (int64, error) {
 	return 0, nil
 }
@@ -39,21 +41,32 @@ type stubDatabaseInstanceRepo struct {
 func (s *stubDatabaseInstanceRepo) Create(context.Context, *models.DatabaseInstance) error {
 	return nil
 }
+
 func (s *stubDatabaseInstanceRepo) GetByID(context.Context, uuid.UUID) (*models.DatabaseInstance, error) {
 	return s.instance, s.err
 }
-func (s *stubDatabaseInstanceRepo) List(context.Context, repository.DatabaseInstanceFilters, int, int) ([]*models.DatabaseInstance, error) {
+
+func (s *stubDatabaseInstanceRepo) List(
+	context.Context,
+	repository.DatabaseInstanceFilters,
+	int,
+	int,
+) ([]*models.DatabaseInstance, error) {
 	return nil, nil
 }
+
 func (s *stubDatabaseInstanceRepo) ListByEnvironment(context.Context, uuid.UUID, int, int) ([]*models.DatabaseInstance, error) {
 	return nil, nil
 }
+
 func (s *stubDatabaseInstanceRepo) Count(context.Context, repository.DatabaseInstanceFilters) (int64, error) {
 	return 0, nil
 }
+
 func (s *stubDatabaseInstanceRepo) CountByEnvironment(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
+
 func (s *stubDatabaseInstanceRepo) Update(context.Context, *models.DatabaseInstance) error {
 	return nil
 }
@@ -93,22 +106,26 @@ func TestValidateGhostSelection(t *testing.T) {
 			wantBackend: models.ExecutionBackendDirect,
 		},
 		{
-			name:         "ghost allowed for mysql on DDL + non-production (other checks run at submit)",
-			backend:      models.ExecutionBackendGhost,
-			changeType:   models.ChangeTypeDDL,
-			envID:        &envID,
-			envRepo:      &stubEnvironmentRepo{env: nonProdEnv},
-			instanceRepo: &stubDatabaseInstanceRepo{instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL, EnvironmentID: &envID}},
-			wantBackend:  models.ExecutionBackendGhost,
+			name:       "ghost allowed for mysql on DDL + non-production (other checks run at submit)",
+			backend:    models.ExecutionBackendGhost,
+			changeType: models.ChangeTypeDDL,
+			envID:      &envID,
+			envRepo:    &stubEnvironmentRepo{env: nonProdEnv},
+			instanceRepo: &stubDatabaseInstanceRepo{
+				instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL, EnvironmentID: &envID},
+			},
+			wantBackend: models.ExecutionBackendGhost,
 		},
 		{
-			name:         "ghost rejected for postgres (pgosc not implemented)",
-			backend:      models.ExecutionBackendGhost,
-			changeType:   models.ChangeTypeDDL,
-			envID:        &envID,
-			envRepo:      &stubEnvironmentRepo{env: nonProdEnv},
-			instanceRepo: &stubDatabaseInstanceRepo{instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEnginePostgreSQL, EnvironmentID: &envID}},
-			wantErr:      "only for MySQL",
+			name:       "ghost rejected for postgres (pgosc not implemented)",
+			backend:    models.ExecutionBackendGhost,
+			changeType: models.ChangeTypeDDL,
+			envID:      &envID,
+			envRepo:    &stubEnvironmentRepo{env: nonProdEnv},
+			instanceRepo: &stubDatabaseInstanceRepo{
+				instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEnginePostgreSQL, EnvironmentID: &envID},
+			},
+			wantErr: "only for MySQL",
 		},
 		{
 			name:       "ghost rejected for DML",
@@ -119,31 +136,37 @@ func TestValidateGhostSelection(t *testing.T) {
 			wantErr:    "only supported for DDL",
 		},
 		{
-			name:         "ghost rejected on production environment",
-			backend:      models.ExecutionBackendGhost,
-			changeType:   models.ChangeTypeDDL,
-			envID:        &envID,
-			envRepo:      &stubEnvironmentRepo{env: prodEnv},
-			instanceRepo: &stubDatabaseInstanceRepo{instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL, EnvironmentID: &envID}},
-			wantErr:      "not permitted on production environments",
+			name:       "ghost rejected on production environment",
+			backend:    models.ExecutionBackendGhost,
+			changeType: models.ChangeTypeDDL,
+			envID:      &envID,
+			envRepo:    &stubEnvironmentRepo{env: prodEnv},
+			instanceRepo: &stubDatabaseInstanceRepo{
+				instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL, EnvironmentID: &envID},
+			},
+			wantErr: "not permitted on production environments",
 		},
 		{
-			name:         "ghost rejected when instance has no environment",
-			backend:      models.ExecutionBackendGhost,
-			changeType:   models.ChangeTypeDDL,
-			envID:        nil,
-			envRepo:      &stubEnvironmentRepo{env: nonProdEnv},
-			instanceRepo: &stubDatabaseInstanceRepo{instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL}},
-			wantErr:      "assigned to an environment",
+			name:       "ghost rejected when instance has no environment",
+			backend:    models.ExecutionBackendGhost,
+			changeType: models.ChangeTypeDDL,
+			envID:      nil,
+			envRepo:    &stubEnvironmentRepo{env: nonProdEnv},
+			instanceRepo: &stubDatabaseInstanceRepo{
+				instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL},
+			},
+			wantErr: "assigned to an environment",
 		},
 		{
-			name:         "ghost rejected when environment lookup fails",
-			backend:      models.ExecutionBackendGhost,
-			changeType:   models.ChangeTypeDDL,
-			envID:        &envID,
-			envRepo:      &stubEnvironmentRepo{err: repository.ErrNotFound},
-			instanceRepo: &stubDatabaseInstanceRepo{instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL, EnvironmentID: &envID}},
-			wantErr:      "failed to validate environment",
+			name:       "ghost rejected when environment lookup fails",
+			backend:    models.ExecutionBackendGhost,
+			changeType: models.ChangeTypeDDL,
+			envID:      &envID,
+			envRepo:    &stubEnvironmentRepo{err: repository.ErrNotFound},
+			instanceRepo: &stubDatabaseInstanceRepo{
+				instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL, EnvironmentID: &envID},
+			},
+			wantErr: "failed to validate environment",
 		},
 		{
 			name:       "invalid backend value rejected",

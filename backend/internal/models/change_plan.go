@@ -89,8 +89,8 @@ type ChangePlan struct {
 	ErrorMessage        *string          `json:"error_message,omitempty"         db:"error_message"`
 	StatementCount      *int             `json:"statement_count,omitempty"       db:"statement_count"`
 	ExecutionBackend    ExecutionBackend `json:"execution_backend"               db:"execution_backend"`
-	GhostChecks         *string          `json:"ghost_checks,omitempty"         db:"ghost_checks"`
-	GhostProgress       *string          `json:"ghost_progress,omitempty"       db:"ghost_progress"`
+	GhostChecks         *string          `json:"ghost_checks,omitempty"          db:"ghost_checks"`
+	GhostProgress       *string          `json:"ghost_progress,omitempty"        db:"ghost_progress"`
 	CreatedAt           time.Time        `json:"created_at"                      db:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"                      db:"updated_at"`
 }

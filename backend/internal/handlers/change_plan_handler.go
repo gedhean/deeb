@@ -2904,8 +2904,15 @@ func (h *ChangePlanHandler) GhostPreflightCheck(c echo.Context) error {
 			).Scan(&dataLen, &indexLen)
 			totalBytes := dataLen.Int64 + indexLen.Int64
 			estGB := float64(totalBytes) / (1024 * 1024 * 1024)
-			addCheck("disk_headroom_estimate", true,
-				fmt.Sprintf("table %s is %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth during the copy — verify free disk on the instance before executing", table, estGB))
+			addCheck(
+				"disk_headroom_estimate",
+				true,
+				fmt.Sprintf(
+					"table %s is %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth during the copy — verify free disk on the instance before executing",
+					table,
+					estGB,
+				),
+			)
 		}
 
 	case models.DatabaseEnginePostgreSQL:
