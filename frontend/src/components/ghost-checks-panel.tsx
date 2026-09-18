@@ -1,16 +1,10 @@
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, RefreshCw, Loader2, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { GhostReadinessReport } from '@/lib/api/types';
 import { changePlanService } from '@/lib/api/services/changePlans';
-
-// Shown on the dry_run row — remediation when gh-ost bails on the
-// metadata-lock instrument check (gh-ost PR #1536).
-const MDL_GUIDE =
-  "If the dry run fails with 'metadata lock instrument not enabled': (1) set performance_schema=ON in the RDS parameter group attached to this instance, wait for 'in-sync', reboot (~3-5 min downtime; sessions drop, apps with pools reconnect); (2) run: UPDATE performance_schema.setup_instruments SET ENABLED='YES', TIMED='YES' WHERE NAME='wait/lock/metadata/sql/mdl'; The onboarder sweep applies step 2 automatically once performance_schema is ON. Alternative: --skip-metadata-lock-check (loses MDL protection — not recommended on busy instances).";
 
 interface GhostChecksPanelProps {
   changePlanId: string;
@@ -107,14 +101,6 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-medium">{check.name}</span>
-                  {check.name === 'dry_run' && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-sm">{MDL_GUIDE}</TooltipContent>
-                    </Tooltip>
-                  )}
                 </div>
                 <p className="text-xs text-muted-foreground break-words">{check.detail}</p>
               </div>

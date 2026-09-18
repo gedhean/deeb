@@ -168,6 +168,7 @@ const (
 	GhostCheckBinlogImage = "binlog_row_image"
 	GhostCheckPrivileges  = "privileges"
 	GhostCheckDisk        = "disk_headroom_estimate"
+	GhostCheckMDL         = "metadata_lock_instrument"
 	GhostCheckDryRun      = "dry_run"
 )
 
@@ -184,10 +185,8 @@ func (s *ExecutionService) ghostCheckFuncs() map[string]ghostCheckRunner {
 		GhostCheckBinlogImage: s.checkGhostBinlogRowImage,
 		GhostCheckPrivileges:  s.checkGhostPrivileges,
 		GhostCheckDisk:        s.checkGhostDiskHeadroom,
+		GhostCheckMDL:         s.checkGhostMetadataLockInstrument,
 		GhostCheckDryRun:      s.checkGhostDryRun,
-		// Not part of the ordered suite (warning-only guidance); still
-		// re-runnable individually via POST /:id/ghost-checks/metadata_lock_instrument.
-		"metadata_lock_instrument": s.checkGhostMetadataLockInstrument,
 	}
 }
 
@@ -209,6 +208,7 @@ var ghostCheckOrder = []string{
 	GhostCheckBinlogImage,
 	GhostCheckPrivileges,
 	GhostCheckDisk,
+	GhostCheckMDL,
 	GhostCheckDryRun,
 }
 
@@ -230,11 +230,19 @@ func (s *ExecutionService) RunGhostReadinessChecks(ctx context.Context, plan *mo
 
 // RunGhostCheck executes a single named check; unknown names return an
 // informative failure result (callers validate names first).
-func (s *ExecutionService) RunGhostCheck(ctx context.Context, plan *models.ChangePlan, checkName string) (GhostCheckResult, error) {
+func (s *ExecutionService) RunGhostCheck(
+	ctx context.Context,
+	plan *models.ChangePlan,
+	checkName string,
+) (GhostCheckResult, error) {
 	funcs := s.ghostCheckFuncs()
 	runner, ok := funcs[checkName]
 	if !ok {
-		return GhostCheckResult{}, fmt.Errorf("unknown ghost check: %s (known: %s)", checkName, strings.Join(ghostCheckOrder, ", "))
+		return GhostCheckResult{}, fmt.Errorf(
+			"unknown ghost check: %s (known: %s)",
+			checkName,
+			strings.Join(ghostCheckOrder, ", "),
+		)
 	}
 	return runner(ctx, plan), nil
 }
@@ -248,8 +256,10 @@ func (s *ExecutionService) checkGhostEngine(ctx context.Context, plan *models.Ch
 	if dbInstance.DatabaseEngine == models.DatabaseEngineMySQL {
 		return GhostCheckResult{Name: GhostCheckEngine, Passed: true, Detail: "target is MySQL"}
 	}
-	return GhostCheckResult{Name: GhostCheckEngine, Passed: false,
-		Detail: fmt.Sprintf("ghost currently supports MySQL only (target: %s)", dbInstance.DatabaseEngine)}
+	return GhostCheckResult{
+		Name: GhostCheckEngine, Passed: false,
+		Detail: fmt.Sprintf("ghost currently supports MySQL only (target: %s)", dbInstance.DatabaseEngine),
+	}
 }
 
 // checkGhostConnection verifies the target is reachable.
@@ -263,13 +273,23 @@ func (s *ExecutionService) checkGhostConnection(ctx context.Context, plan *model
 		Database:         db,
 	})
 	if err != nil {
-		return GhostCheckResult{Name: GhostCheckConnection, Passed: false,
+		return GhostCheckResult{
+			Name: GhostCheckConnection, Passed: false,
 			Detail: fmt.Sprintf("connecting as '%s' to %s:%d/%s failed: %s",
-				dbInstance.Username, dbInstance.Host, dbInstance.Port, db.DatabaseName, err.Error())}
+				dbInstance.Username, dbInstance.Host, dbInstance.Port, db.DatabaseName, err.Error()),
+		}
 	}
 	_ = conn.Close()
-	return GhostCheckResult{Name: GhostCheckConnection, Passed: true,
-		Detail: fmt.Sprintf("connected as '%s' to %s:%d/%s", dbInstance.Username, dbInstance.Host, dbInstance.Port, db.DatabaseName)}
+	return GhostCheckResult{
+		Name: GhostCheckConnection, Passed: true,
+		Detail: fmt.Sprintf(
+			"connected as '%s' to %s:%d/%s",
+			dbInstance.Username,
+			dbInstance.Host,
+			dbInstance.Port,
+			db.DatabaseName,
+		),
+	}
 }
 
 // checkGhostBinlogFormat verifies binlog_format=ROW.
@@ -282,7 +302,11 @@ func (s *ExecutionService) checkGhostBinlogRowImage(ctx context.Context, plan *m
 	return s.ghostVariableCheck(ctx, plan, GhostCheckBinlogImage, "binlog_row_image", "FULL")
 }
 
-func (s *ExecutionService) ghostVariableCheck(ctx context.Context, plan *models.ChangePlan, checkName, variable, want string) GhostCheckResult {
+func (s *ExecutionService) ghostVariableCheck(
+	ctx context.Context,
+	plan *models.ChangePlan,
+	checkName, variable, want string,
+) GhostCheckResult {
 	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
 	if err != nil {
 		return GhostCheckResult{Name: checkName, Passed: false, Detail: err.Error()}
@@ -292,8 +316,10 @@ func (s *ExecutionService) ghostVariableCheck(ctx context.Context, plan *models.
 		Database:         db,
 	})
 	if err != nil {
-		return GhostCheckResult{Name: checkName, Passed: false,
-			Detail: fmt.Sprintf("connecting as '%s' failed: %s", dbInstance.Username, err.Error())}
+		return GhostCheckResult{
+			Name: checkName, Passed: false,
+			Detail: fmt.Sprintf("connecting as '%s' failed: %s", dbInstance.Username, err.Error()),
+		}
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -302,11 +328,15 @@ func (s *ExecutionService) ghostVariableCheck(ctx context.Context, plan *models.
 		return GhostCheckResult{Name: checkName, Passed: false, Detail: err.Error()}
 	}
 	if !strings.EqualFold(value, want) {
-		return GhostCheckResult{Name: checkName, Passed: false,
-			Detail: fmt.Sprintf("gh-ost requires %s=%s (current: %s); check the RDS parameter group", variable, want, value)}
+		return GhostCheckResult{
+			Name: checkName, Passed: false,
+			Detail: fmt.Sprintf("gh-ost requires %s=%s (current: %s); check the RDS parameter group", variable, want, value),
+		}
 	}
-	return GhostCheckResult{Name: checkName, Passed: true,
-		Detail: fmt.Sprintf("%s=%s (verified as '%s')", variable, want, dbInstance.Username)}
+	return GhostCheckResult{
+		Name: checkName, Passed: true,
+		Detail: fmt.Sprintf("%s=%s (verified as '%s')", variable, want, dbInstance.Username),
+	}
 }
 
 // ghostRequiredDBPrivs is the set of DML/DDL privileges gh-ost needs on the
@@ -330,14 +360,20 @@ func (s *ExecutionService) checkGhostPrivileges(ctx context.Context, plan *model
 		Database:         db,
 	})
 	if err != nil {
-		return GhostCheckResult{Name: GhostCheckPrivileges, Passed: false, Detail: fmt.Sprintf("failed to connect as '%s': %s", dbInstance.Username, err.Error())}
+		return GhostCheckResult{
+			Name:   GhostCheckPrivileges,
+			Passed: false,
+			Detail: fmt.Sprintf("failed to connect as '%s': %s", dbInstance.Username, err.Error()),
+		}
 	}
 	defer func() { _ = conn.Close() }()
 
 	rows, qErr := conn.QueryContext(ctx, "SHOW GRANTS")
 	if qErr != nil {
-		return GhostCheckResult{Name: GhostCheckPrivileges, Passed: false,
-			Detail: fmt.Sprintf("connecting as '%s': could not read grants: %s", dbInstance.Username, qErr.Error())}
+		return GhostCheckResult{
+			Name: GhostCheckPrivileges, Passed: false,
+			Detail: fmt.Sprintf("connecting as '%s': could not read grants: %s", dbInstance.Username, qErr.Error()),
+		}
 	}
 	var all string
 	for rows.Next() {
@@ -411,8 +447,14 @@ func (s *ExecutionService) checkGhostDiskHeadroom(ctx context.Context, plan *mod
 	).Scan(&dataLen, &indexLen)
 	totalBytes := dataLen.Int64 + indexLen.Int64
 	estGB := float64(totalBytes) / (1024 * 1024 * 1024)
-	return GhostCheckResult{Name: GhostCheckDisk, Passed: true,
-		Detail: fmt.Sprintf("table %s is estimated at roughly %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth during the copy — this is an estimate, verify actual free disk on the instance before executing", table, estGB)}
+	return GhostCheckResult{
+		Name: GhostCheckDisk, Passed: true,
+		Detail: fmt.Sprintf(
+			"table %s is estimated at roughly %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth during the copy — this is an estimate, verify actual free disk on the instance before executing",
+			table,
+			estGB,
+		),
+	}
 }
 
 // checkGhostMetadataLockInstrument verifies the metadata-lock instrument
@@ -422,39 +464,56 @@ func (s *ExecutionService) checkGhostDiskHeadroom(ctx context.Context, plan *mod
 func (s *ExecutionService) checkGhostMetadataLockInstrument(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
 	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
 	if err != nil {
-		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: false, Detail: err.Error()}
+		return GhostCheckResult{Name: GhostCheckMDL, Passed: false, Detail: err.Error()}
 	}
 	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
 		DatabaseInstance: dbInstance,
 		Database:         db,
 	})
 	if err != nil {
-		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: false, Detail: fmt.Sprintf("failed to connect: %s", err.Error())}
+		return GhostCheckResult{
+			Name:   "metadata_lock_instrument",
+			Passed: false,
+			Detail: fmt.Sprintf("failed to connect: %s", err.Error()),
+		}
 	}
 	defer func() { _ = conn.Close() }()
 
 	const remediation = "gh-ost bails out without the metadata-lock instrument (github.com/github/gh-ost/pull/1536). To fix: (1) set performance_schema=ON in the RDS parameter group attached to this instance, wait for 'in-sync', reboot the instance (expect ~3-5 min downtime; sessions drop, apps with pools reconnect); (2) run: UPDATE performance_schema.setup_instruments SET ENABLED='YES', TIMED='YES' WHERE NAME='wait/lock/metadata/sql/mdl'; The onboarder sweep applies step 2 automatically once performance_schema is ON. Alternative: run gh-ost with --skip-metadata-lock-check (loses MDL protection — not recommended on busy instances)."
 
 	var name, value string
-	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'performance_schema'").Scan(&name, &value); err != nil || !strings.EqualFold(value, "ON") {
-		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: true,
-			Detail: "performance_schema is OFF — " + remediation}
+	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'performance_schema'").Scan(&name, &value); err != nil ||
+		!strings.EqualFold(value, "ON") {
+		return GhostCheckResult{
+			Name: GhostCheckMDL, Passed: true,
+			Detail: "performance_schema is OFF — " + remediation,
+		}
 	}
 
-	var enabled string
+	var enabled, timed string
 	err = conn.QueryRowContext(ctx,
-		"SELECT ENABLED FROM performance_schema.setup_instruments WHERE NAME='wait/lock/metadata/sql/mdl'",
-	).Scan(&enabled)
+		"SELECT ENABLED, TIMED FROM performance_schema.setup_instruments WHERE NAME='wait/lock/metadata/sql/mdl'",
+	).Scan(&enabled, &timed)
 	if err != nil {
-		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: true,
-			Detail: "metadata-lock instrument row not found (may not exist until performance_schema is fully active) — " + remediation}
+		return GhostCheckResult{
+			Name: GhostCheckMDL, Passed: true,
+			Detail: "metadata-lock instrument row not found (may not exist until performance_schema is fully active) — " + remediation,
+		}
 	}
-	if !strings.EqualFold(enabled, "YES") {
-		return GhostCheckResult{Name: "metadata_lock_instrument", Passed: true,
-			Detail: "metadata-lock instrument is DISABLED — " + remediation}
+	if !strings.EqualFold(enabled, "YES") || !strings.EqualFold(timed, "YES") {
+		return GhostCheckResult{
+			Name: GhostCheckMDL, Passed: true,
+			Detail: fmt.Sprintf(
+				"metadata-lock instrument is ENABLED=%s TIMED=%s (needs YES/YES) — ",
+				enabled,
+				timed,
+			) + remediation,
+		}
 	}
-	return GhostCheckResult{Name: "metadata_lock_instrument", Passed: true,
-		Detail: "metadata-lock instrument enabled"}
+	return GhostCheckResult{
+		Name: GhostCheckMDL, Passed: true,
+		Detail: "metadata-lock instrument enabled and timed",
+	}
 }
 
 // checkGhostDryRun runs gh-ost without --execute against the live target.
@@ -470,7 +529,10 @@ func (s *ExecutionService) checkGhostDryRun(ctx context.Context, plan *models.Ch
 }
 
 // mustResolveForConn resolves database+instance, returning nils on failure.
-func (s *ExecutionService) mustResolveForConn(ctx context.Context, plan *models.ChangePlan) (*models.Database, *models.DatabaseInstance) {
+func (s *ExecutionService) mustResolveForConn(
+	ctx context.Context,
+	plan *models.ChangePlan,
+) (*models.Database, *models.DatabaseInstance) {
 	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
 	if err != nil {
 		return nil, nil
