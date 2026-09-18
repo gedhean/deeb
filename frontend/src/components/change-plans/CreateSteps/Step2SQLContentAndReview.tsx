@@ -49,6 +49,7 @@ export interface Step2SQLContentAndReviewProps {
   executionBackend: 'direct' | 'ghost';
   onExecutionBackendChange: (backend: 'direct' | 'ghost') => void;
   ghostEligible: boolean;
+  ghostIneligibilityReasons?: string[];
 }
 
 export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> = ({
@@ -70,6 +71,7 @@ export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> =
   executionBackend,
   onExecutionBackendChange,
   ghostEligible,
+  ghostIneligibilityReasons = [],
 }) => {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(!!description);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -262,14 +264,21 @@ export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> =
                 checked={executionBackend === 'ghost'}
                 onChange={() => onExecutionBackendChange('ghost')}
               />
-              Ghost (gh-ost / pg-online-schema-change)
+              Online Migrator
             </label>
           </div>
           <FieldDescription>
             {ghostEligible
-              ? 'Ghost runs DDL through an online schema change tool with a human-gated cutover (single ALTER TABLE per plan).'
-              : 'Ghost is available only for MySQL DDL plans on databases in non-production environments.'}
+              ? 'Online Migrator runs DDL through an online schema change tool with a human-gated cutover (single ALTER TABLE per plan).'
+              : 'Online Migrator is not available for this plan:'}
           </FieldDescription>
+          {!ghostEligible && ghostIneligibilityReasons.length > 0 && (
+            <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-0.5">
+              {ghostIneligibilityReasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          )}
         </FieldContent>
       </Field>
 

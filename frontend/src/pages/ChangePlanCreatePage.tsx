@@ -407,14 +407,33 @@ export const ChangePlanCreatePage: React.FC = () => {
   const selectedDatabaseInstance = selectedDatabase?.database_instance;
   const selectedEngine = selectedDatabaseInstance?.database_engine;
 
-  // Ghost executor is available only for MySQL DDL plans on databases in
-  // non-production environments (pg-online-schema-change not implemented;
-  // server enforces this too).
-  const ghostEligible =
-    formData.change_type === 'DDL' &&
-    selectedEngine === 'mysql' &&
-    !!selectedDatabase?.environment &&
-    !selectedDatabase.environment.is_production;
+  // Online Migrator executor is available only for MySQL DDL plans on
+  // databases in non-production environments (server enforces this too,
+  // fail-closed). Collect the specific failing rules so the UI can show
+  // exactly why the selector is disabled.
+  const ghostIneligibilityReasons: string[] = [];
+  if (formData.change_type !== 'DDL') {
+    ghostIneligibilityReasons.push(
+      `Online Migrator requires change type DDL (selected: ${formData.change_type}).`,
+    );
+  }
+  if (selectedEngine !== 'mysql') {
+    ghostIneligibilityReasons.push(
+      `Online Migrator requires a MySQL database${
+        selectedEngine ? ` (selected: ${selectedEngine})` : ''
+      }.`,
+    );
+  }
+  if (!selectedDatabase?.environment) {
+    if (selectedDatabase) {
+      ghostIneligibilityReasons.push(
+        'Online Migrator requires the database to have an environment assigned.',
+      );
+    }
+  } else if (selectedDatabase.environment.is_production) {
+    ghostIneligibilityReasons.push('Online Migrator is not available on production environments.');
+  }
+  const ghostEligible = ghostIneligibilityReasons.length === 0;
 
   const steps = [
     { label: 'Target Database', description: 'Select database' },
@@ -487,6 +506,7 @@ export const ChangePlanCreatePage: React.FC = () => {
                   setFormData((prev) => ({ ...prev, execution_backend: backend }))
                 }
                 ghostEligible={ghostEligible}
+                ghostIneligibilityReasons={ghostIneligibilityReasons}
               />
             )}
           </CardContent>
