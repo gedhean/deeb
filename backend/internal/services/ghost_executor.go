@@ -46,7 +46,9 @@ type GhostExecutor struct {
 }
 
 // NewGhostExecutor creates a new GhostExecutor; flagDir may be empty to use
-// the process working directory. maxDuration of zero defaults to 6 hours.
+// the system temp directory (containers typically run with a read-only root
+// filesystem, so a relative directory would fail). maxDuration of zero
+// defaults to 6 hours.
 func NewGhostExecutor(
 	ghostBin, pgoscBin, flagDir string,
 	envRepo repository.EnvironmentRepository,
@@ -196,7 +198,7 @@ func (g *GhostExecutor) BuildArgs(
 // create files there, and containers may not have it pre-provisioned).
 func (g *GhostExecutor) ControlFlagPaths(planID uuid.UUID) (postpone string, panic string) {
 	if g.flagDir == "" {
-		g.flagDir = "."
+		g.flagDir = os.TempDir()
 	}
 	_ = os.MkdirAll(g.flagDir, 0o755)
 	postpone = fmt.Sprintf("%s/deeb-%s.postpone", g.flagDir, planID)

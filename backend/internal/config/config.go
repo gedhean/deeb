@@ -195,7 +195,7 @@ func (c *Config) setDefaults() {
 	c.Features.GhostExecutor = GhostFeatureConfig{
 		GhostBin:    "/app/gh-ost",
 		PGOSCBin:    "",
-		FlagDir:     ".",
+		FlagDir:     "/tmp", // system temp — containers run with a read-only root fs
 		MaxDuration: 6 * time.Hour,
 	}
 	c.AuditLogging.RedactionEnabled = true

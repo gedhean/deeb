@@ -163,7 +163,7 @@ See [Ghost Executor](../../docs/ghost-executor.md).
 |--------|---------------------|---------|-------------|
 | `features.ghost_executor.ghost_bin` | `GHOST_BIN` | `/app/gh-ost` | Path to the `gh-ost` binary (bundled in image) |
 | `features.ghost_executor.pgosc_bin` | `PGOSC_BIN` | _(off)_ | Path to `pg-online-schema-change` |
-| `features.ghost_executor.flag_dir` | `GHOST_FLAG_DIR` | `.` | Directory for cutover/panic flag files |
+| `features.ghost_executor.flag_dir` | `GHOST_FLAG_DIR` | `/tmp` | Directory for cutover/panic flag files |
 | `features.ghost_executor.max_duration` | `GHOST_MAX_DURATION` | `6h` | Max ghost run duration (sizes queue window) |
 
 **Example:**
