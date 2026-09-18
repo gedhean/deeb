@@ -207,23 +207,55 @@ func (g *GhostExecutor) ControlFlagPaths(planID uuid.UUID) (postpone string, pan
 	return
 }
 
-// ghostCopyRe extracts the copy progress percentage from gh-ost status lines
-// (e.g. "Copy: 23711127/23711127 45.2%; ..."). Used to render the plan's
-// live progress bar.
-var ghostCopyRe = regexp.MustCompile(`Copy:\s*([0-9.]+)%`)
+// ghostCopyRe extracts copy progress from gh-ost status lines
+// (e.g. "Copy: 23711127/23711127 45.2%; ...").
+var ghostCopyRe = regexp.MustCompile(`Copy:\s*([0-9]+)/([0-9]+)\s*([0-9.]+)%`)
 
-// ParseGhostProgress extracts the numeric copy percent from a gh-ost status
+// ghostTimeRe extracts the elapsed total time from gh-ost status lines
+// (e.g. "Time: 24s(total), 24s(copy)").
+var ghostTimeRe = regexp.MustCompile(`Time:\s*([0-9a-zA-Z.()]+\(total\))`)
+
+// GhostProgressSnapshot is the parsed copy state persisted on the plan for
+// UI rendering (progress bar + row counts + elapsed time).
+type GhostProgressSnapshot struct {
+	Copied  int64   `json:"copied"`
+	Total   int64   `json:"total"`
+	Percent float64 `json:"pct"`
+	Elapsed string `json:"elapsed,omitempty"`
+}
+
+// ParseGhostProgressSnapshot extracts copy progress from a gh-ost status
 // line, or returns nil when the line has no progress value.
-func ParseGhostProgress(line string) *float64 {
+func ParseGhostProgressSnapshot(line string) *GhostProgressSnapshot {
 	m := ghostCopyRe.FindStringSubmatch(line)
 	if m == nil {
 		return nil
 	}
+	var copied, total int64
 	var pct float64
-	if _, err := fmt.Sscanf(m[1], "%f", &pct); err != nil {
+	if _, err := fmt.Sscanf(m[1], "%d", &copied); err != nil {
 		return nil
 	}
-	return &pct
+	if _, err := fmt.Sscanf(m[2], "%d", &total); err != nil {
+		return nil
+	}
+	if _, err := fmt.Sscanf(m[3], "%f", &pct); err != nil {
+		return nil
+	}
+	snap := &GhostProgressSnapshot{Copied: copied, Total: total, Percent: pct}
+	if tm := ghostTimeRe.FindStringSubmatch(line); tm != nil {
+		snap.Elapsed = strings.TrimSuffix(tm[1], "(total)")
+	}
+	return snap
+}
+
+// ParseGhostProgress extracts the numeric copy percent from a gh-ost status
+// line, or returns nil when the line has no progress value.
+func ParseGhostProgress(line string) *float64 {
+	if snap := ParseGhostProgressSnapshot(line); snap != nil {
+		return &snap.Percent
+	}
+	return nil
 }
 
 // SanitizeArgsForLog returns a copy of args with secrets masked for logging.

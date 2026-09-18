@@ -1574,12 +1574,16 @@ func (s *ExecutionService) executeGhost(
 				zap.String("change_plan_id", changePlanID.String()),
 				zap.String("line", line),
 			)
-			// Persist latest copy progress so the UI can render a progress bar
-			if pct := ParseGhostProgress(line); pct != nil {
-				progress := fmt.Sprintf("%.2f", *pct)
-				changePlan.GhostProgress = &progress
-				if err := s.changePlanRepo.Update(context.Background(), changePlan); err != nil {
-					s.logger.Warn("Failed to persist ghost progress", zap.Error(err))
+			// Persist latest copy progress snapshot (JSON with copied/total/pct/
+			// elapsed) so the UI can render a progress bar with detail. Older
+			// plain-number snapshots remain parseable client-side.
+			if snap := ParseGhostProgressSnapshot(line); snap != nil {
+				if b, err := json.Marshal(snap); err == nil {
+					progress := string(b)
+					changePlan.GhostProgress = &progress
+					if err := s.changePlanRepo.Update(context.Background(), changePlan); err != nil {
+						s.logger.Warn("Failed to persist ghost progress", zap.Error(err))
+					}
 				}
 			}
 		},
