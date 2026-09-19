@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { MonacoSQLEditor } from '@/components/editors/MonacoSQLEditor';
 import { SQLReviewResults } from '@/components/SQLReviewResults';
-import { GhostChecksPanel } from '@/components/ghost-checks-panel';
+import { GhostChecksPanel, GhostProgressBar } from '@/components/ghost-checks-panel';
 import { ApprovalHistory } from '@/components/ApprovalHistory';
 import { ExecutionResults } from '@/components/ExecutionResults';
 import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
@@ -284,6 +284,13 @@ export const ChangePlanDetailPage: React.FC = () => {
 
         {/* Change Plan Information */}
         <div className="space-y-6">
+          {/* Ghost copy progress — prominent, above Basic Information */}
+          {changePlan.execution_backend === 'ghost' && (
+            <GhostProgressBar
+              ghostProgress={changePlan.ghost_progress}
+              planStatus={changePlan.status}
+            />
+          )}
           {/* Basic Information */}
           <Card className="w-full">
             <CardHeader>

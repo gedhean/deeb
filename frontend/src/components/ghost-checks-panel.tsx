@@ -29,6 +29,76 @@ function parseGhostProgress(raw: string | null | undefined): GhostProgressSnapsh
   return Number.isNaN(num) ? null : ({ copied: 0, total: 0, pct: num } as GhostProgressSnapshot);
 }
 
+interface GhostProgressBarProps {
+  ghostProgress?: string;
+  planStatus?: string;
+}
+
+// useGhostProgress parses the persisted snapshot and computes the display
+// percentage for the plan's current status. Shared by the standalone
+// GhostProgressBar (rendered above Basic Information) and the checks panel.
+function useGhostProgress(ghostProgress?: string, planStatus?: string) {
+  const snapshot = parseGhostProgress(ghostProgress);
+  const parsedProgress = snapshot?.pct ?? null;
+  let progressValue = parsedProgress;
+  if (planStatus === 'Completed') {
+    progressValue = 100;
+  } else if (planStatus === 'AwaitingCleanup') {
+    progressValue = 99.99;
+  } else if (planStatus === 'AwaitingCutover') {
+    progressValue = 99.9;
+  }
+  const showProgress =
+    progressValue != null &&
+    (planStatus === 'InProgress' ||
+      planStatus === 'AwaitingCutover' ||
+      planStatus === 'AwaitingCleanup' ||
+      (planStatus === 'Completed' && parsedProgress != null));
+  return { snapshot, progressValue, showProgress };
+}
+
+function progressLabel(planStatus?: string): string {
+  switch (planStatus) {
+    case 'AwaitingCutover':
+      return 'Awaiting cutover approval';
+    case 'AwaitingCleanup':
+      return 'Cutover complete — drop the backup to finish';
+    case 'Completed':
+      return 'Migration complete';
+    default:
+      return 'Copying shadow table';
+  }
+}
+
+// GhostProgressBar renders just the live copy progress — placed near the top
+// of the change plan detail page, separate from the checks panel.
+export const GhostProgressBar: React.FC<GhostProgressBarProps> = ({
+  ghostProgress,
+  planStatus,
+}) => {
+  const { snapshot, progressValue, showProgress } = useGhostProgress(ghostProgress, planStatus);
+  if (!showProgress || progressValue == null) {
+    return null;
+  }
+  return (
+    <Card className="w-full">
+      <CardContent className="pt-5 pb-4">
+        <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+          <span>
+            {progressLabel(planStatus)}
+            {snapshot != null &&
+              snapshot.total > 0 &&
+              ` — ${snapshot.copied.toLocaleString()}/${snapshot.total.toLocaleString()} rows`}
+            {snapshot?.elapsed && ` · ${snapshot.elapsed} elapsed`}
+          </span>
+          <span>{progressValue.toFixed(1)}%</span>
+        </div>
+        <Progress value={progressValue} />
+      </CardContent>
+    </Card>
+  );
+};
+
 interface GhostChecksPanelProps {
   changePlanId: string;
   report: GhostReadinessReport | null | undefined;
@@ -51,31 +121,7 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [refreshingCheck, setRefreshingCheck] = useState<string | null>(null);
 
-  // Parse the latest copy progress snapshot (persisted on the plan).
-  // New snapshots are JSON ({copied,total,pct,elapsed}); older ones are
-  // plain numbers. Completed ghost plans render a full bar even if the last
-  // persisted snapshot was below 100 (cutover completes after the final
-  // progress line).
-  // Completed renders full; AwaitingCutover/Cleanup render near-full but
-  // not 100 — gh-ost's copy is done but the migration isn't finished until
-  // cutover is approved (and the backup dropped), so the bar shouldn't look
-  // complete yet.
-  const snapshot = parseGhostProgress(ghostProgress);
-  const parsedProgress = snapshot?.pct ?? null;
-  let progressValue = parsedProgress;
-  if (planStatus === 'Completed') {
-    progressValue = 100;
-  } else if (planStatus === 'AwaitingCleanup') {
-    progressValue = 99.99;
-  } else if (planStatus === 'AwaitingCutover') {
-    progressValue = 99.9;
-  }
-  const showProgress =
-    progressValue != null &&
-    (planStatus === 'InProgress' ||
-      planStatus === 'AwaitingCutover' ||
-      planStatus === 'AwaitingCleanup' ||
-      (planStatus === 'Completed' && parsedProgress != null));
+  const { showProgress } = useGhostProgress(ghostProgress, planStatus);
 
   if (!report && !showProgress) {
     return null;
@@ -120,27 +166,6 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
           Re-run all checks
         </Button>
       </CardHeader>
-      {showProgress && progressValue != null && (
-        <div className="px-6 pb-4">
-          <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-            <span>
-              {planStatus === 'AwaitingCutover'
-                ? 'Awaiting cutover approval'
-                : planStatus === 'AwaitingCleanup'
-                  ? 'Cutover complete — drop the backup to finish'
-                  : planStatus === 'Completed'
-                    ? 'Migration complete'
-                    : 'Copying shadow table'}
-              {snapshot != null &&
-                snapshot.total > 0 &&
-                ` — ${snapshot.copied.toLocaleString()}/${snapshot.total.toLocaleString()} rows`}
-              {snapshot?.elapsed && ` · ${snapshot.elapsed} elapsed`}
-            </span>
-            <span>{progressValue.toFixed(1)}%</span>
-          </div>
-          <Progress value={progressValue} />
-        </div>
-      )}
       <CardContent>
         <ul className="space-y-2.5">
           {report?.checks.map((check) => (
