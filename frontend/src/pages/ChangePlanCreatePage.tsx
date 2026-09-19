@@ -52,6 +52,20 @@ export const ChangePlanCreatePage: React.FC = () => {
 
   // Get initial step from URL or session storage
   const getInitialStep = (): number => {
+    // Step 2 requires a selected database — never restore/land there without
+    // one (e.g. stale sessionStorage or a hand-crafted ?step=2 URL).
+    const storedData = sessionStorage.getItem(FORM_DATA_KEY);
+    let hasDatabase = false;
+    if (storedData) {
+      try {
+        hasDatabase = !!JSON.parse(storedData).target_database_id;
+      } catch {
+        hasDatabase = false;
+      }
+    }
+    if (!hasDatabase) {
+      return 1;
+    }
     const urlStep = searchParams.get('step');
     if (urlStep === '1' || urlStep === '2') {
       return parseInt(urlStep);
@@ -114,6 +128,14 @@ export const ChangePlanCreatePage: React.FC = () => {
     newParams.set('step', currentStep.toString());
     setSearchParams(newParams, { replace: true });
   }, [currentStep, searchParams, setSearchParams]);
+
+  // Never sit on step 2 without a selected database (e.g. selection cleared
+  // while on step 2) — bounce back to step 1.
+  useEffect(() => {
+    if (currentStep === 2 && !formData.target_database_id) {
+      setCurrentStep(1);
+    }
+  }, [currentStep, formData.target_database_id]);
 
   // Clear session storage on unmount (successful submission or cancel)
   useEffect(() => {
