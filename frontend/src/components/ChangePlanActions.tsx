@@ -167,6 +167,10 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
         return canExecute ? 'execute' : null;
       case 'AwaitingCutover':
         return isGhostPlan && canExecute ? 'approve-cutover' : null;
+      case 'AwaitingCleanup':
+        // Clean Up (drop backup) is the completion gate — promote it to the
+        // primary action instead of hiding it in the dropdown.
+        return isGhostPlan && canExecute ? 'ghost-drop-backup' : null;
       case 'Failed':
         return canApprove ? 'retry' : null;
       default:
@@ -196,11 +200,11 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
         }
         break;
       case 'AwaitingCleanup':
-        // Cutover done, live on new schema; dropping the backup completes
-        // the plan. Rollback stays available (swap back while the backup
-        // exists) — but post-cutover writes are NOT in the backup.
+        // Rollback stays available as a secondary action (swap back while
+        // the backup exists) — but post-cutover writes are NOT in the
+        // backup.
         if (isGhostPlan && canExecute) {
-          actions.push('ghost-drop-backup', 'ghost-rollback');
+          actions.push('ghost-rollback');
         }
         break;
       case 'Completed':
@@ -408,8 +412,8 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
         };
       case 'ghost-drop-backup':
         return {
-          label: 'Drop Backup Table',
-          icon: XCircle,
+          label: 'Clean Up',
+          icon: Trash2,
           variant: 'outline' as const,
           handler: handleGhostDropBackup,
         };
@@ -750,28 +754,45 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
             return button;
           })()}
 
-        {/* Secondary Actions Dropdown */}
-        {secondaryActions.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                <MoreVertical className="h-4 w-4" />
+        {/* Inline secondary action: Rollback during AwaitingCleanup sits
+            next to Clean Up — both destructive-lifecycle actions deserve
+            visible buttons, not a dropdown. */}
+        {changePlan.status === 'AwaitingCleanup' &&
+          secondaryActions.includes('ghost-rollback') &&
+          (() => {
+            const config = getActionConfig('ghost-rollback');
+            const Icon = config.icon;
+            return (
+              <Button variant={config.variant} onClick={() => setActiveAction('ghost-rollback')}>
+                <Icon className="mr-2 h-4 w-4" />
+                {config.label}
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {secondaryActions.map((action) => {
-                const config = getActionConfig(action);
-                const Icon = config.icon;
-                return (
-                  <DropdownMenuItem key={action} onClick={() => setActiveAction(action)}>
-                    <Icon className="mr-2 h-4 w-4" />
-                    {config.label}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            );
+          })()}
+
+        {/* Secondary Actions Dropdown */}
+        {secondaryActions.length > 0 &&
+          !(changePlan.status === 'AwaitingCleanup' && secondaryActions.length === 1) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {secondaryActions.map((action) => {
+                  const config = getActionConfig(action);
+                  const Icon = config.icon;
+                  return (
+                    <DropdownMenuItem key={action} onClick={() => setActiveAction(action)}>
+                      <Icon className="mr-2 h-4 w-4" />
+                      {config.label}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
       </div>
 
       {/* Action Dialog */}
