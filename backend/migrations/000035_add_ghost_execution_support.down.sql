@@ -1,4 +1,7 @@
 -- Rollback ghost execution support migration
+-- Remap ghost-only statuses before re-adding the narrower constraint
+-- (mirrors the 000013 down-migration pattern).
+UPDATE change_plans SET status = 'InProgress', updated_at = NOW() WHERE status IN ('AwaitingCutover', 'AwaitingCleanup');
 ALTER TABLE change_plans DROP CONSTRAINT IF EXISTS change_plans_status_check;
 ALTER TABLE change_plans DROP CONSTRAINT IF EXISTS check_change_plan_status;
 ALTER TABLE change_plans ADD CONSTRAINT check_change_plan_status
