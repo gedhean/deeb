@@ -79,7 +79,7 @@ export const ChangePlanDetailPage: React.FC = () => {
     }
     const interval = setInterval(() => {
       refetch();
-    }, 3000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [changePlan?.status, changePlan?.execution_backend, refetch]);
 
