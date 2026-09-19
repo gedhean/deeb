@@ -17,6 +17,9 @@ const (
 	ChangePlanStatusClosed          ChangePlanStatus = "Closed"
 	ChangePlanStatusInProgress      ChangePlanStatus = "InProgress"
 	ChangePlanStatusAwaitingCutover ChangePlanStatus = "AwaitingCutover"
+	// AwaitingCleanup: ghost cutover done (live on new schema); the plan
+	// completes only when the retained _<table>_del backup is dropped.
+	ChangePlanStatusAwaitingCleanup ChangePlanStatus = "AwaitingCleanup"
 	ChangePlanStatusCompleted       ChangePlanStatus = "Completed"
 	ChangePlanStatusFailed          ChangePlanStatus = "Failed"
 	ChangePlanStatusCancelled       ChangePlanStatus = "Cancelled"
@@ -32,7 +35,7 @@ func (s ChangePlanStatus) IsValid() bool {
 	switch s {
 	case ChangePlanStatusDraft, ChangePlanStatusOpen, ChangePlanStatusApproved,
 		ChangePlanStatusClosed, ChangePlanStatusInProgress, ChangePlanStatusAwaitingCutover,
-		ChangePlanStatusCompleted, ChangePlanStatusFailed, ChangePlanStatusCancelled:
+		ChangePlanStatusAwaitingCleanup, ChangePlanStatusCompleted, ChangePlanStatusFailed, ChangePlanStatusCancelled:
 		return true
 	}
 	return false
@@ -143,11 +146,11 @@ type ChangePlanResponse struct {
 	// ExecutorWarnings inform the user how the SQL content maps to executors
 	// (e.g. no ALTER TABLE → ghost won't run anything; mixed content → both
 	// executors run). Transient — populated at creation/update, not persisted.
-	ExecutorWarnings    []string         `json:"executor_warnings,omitempty"`
-	GhostChecks         *string          `json:"ghost_checks,omitempty"`
-	GhostProgress       *string          `json:"ghost_progress,omitempty"`
-	CreatedAt           time.Time        `json:"created_at"`
-	UpdatedAt           time.Time        `json:"updated_at"`
+	ExecutorWarnings []string  `json:"executor_warnings,omitempty"`
+	GhostChecks      *string   `json:"ghost_checks,omitempty"`
+	GhostProgress    *string   `json:"ghost_progress,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 	// SQL Review results
 	PolicyFindings *PolicyFindingsSummary `json:"policy_findings,omitempty"`
 	HasErrors      bool                   `json:"has_errors"`

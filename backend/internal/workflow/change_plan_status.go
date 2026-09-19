@@ -118,8 +118,12 @@ var validTransitions = map[models.ChangePlanStatus][]models.ChangePlanStatus{
 		models.ChangePlanStatusFailed,
 	},
 	models.ChangePlanStatusAwaitingCutover: {
-		models.ChangePlanStatusCompleted, // Cutover approved, atomic rename done
-		models.ChangePlanStatusFailed,    // Aborted or tool failure post-copy
+		models.ChangePlanStatusAwaitingCleanup, // Cutover approved, atomic rename done
+		models.ChangePlanStatusFailed,          // Aborted or tool failure post-copy
+	},
+	models.ChangePlanStatusAwaitingCleanup: {
+		models.ChangePlanStatusCompleted, // Backup table dropped — fully complete
+		models.ChangePlanStatusFailed,    // Rolled back via ghost swap-back
 	},
 	models.ChangePlanStatusCompleted: {
 		// Terminal state - no transitions allowed
