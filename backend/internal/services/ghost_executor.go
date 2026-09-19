@@ -221,7 +221,7 @@ type GhostProgressSnapshot struct {
 	Copied  int64   `json:"copied"`
 	Total   int64   `json:"total"`
 	Percent float64 `json:"pct"`
-	Elapsed string `json:"elapsed,omitempty"`
+	Elapsed string  `json:"elapsed,omitempty"`
 }
 
 // ParseGhostProgressSnapshot extracts copy progress from a gh-ost status

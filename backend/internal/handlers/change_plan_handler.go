@@ -263,7 +263,8 @@ func ghostExecutorWarnings(backend models.ExecutionBackend, sqlContent string) [
 		return []string{
 			fmt.Sprintf(
 				"Mixed content: %d ALTER TABLE statement(s) will run via gh-ost and %d other statement(s) will run directly. Both executors will be used.",
-				ghostCount, directCount,
+				ghostCount,
+				directCount,
 			),
 		}
 	}
