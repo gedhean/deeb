@@ -32,7 +32,7 @@ What deeb persists and what the user can do at each stage:
 2. **Copy phase streams** — gh-ost output lines are scanned by `ParseGhostStatus`; when it sees `postponing cut-over`, the callback flips the plan status to **`AwaitingCutover`**. All tool output is also emitted into the configured logger for operators.
 
    **Live progress**: `ParseGhostProgress` extracts the copy percent from gh-ost's per-second `Copy: X/Y N%` status lines and the latest value is persisted on the plan (`change_plans.ghost_progress`). The UI polls the plan every 3s during the copy and renders a progress bar; at the gate it switches to "Awaiting cutover approval".
-3. **Cutover approval UX** — the user clicks **Approve Cutover** in the UI (or hits `POST /api/v1/change-plans/:id/cutover-approve`). The backend calls `GhostExecutor.ApproveCutover`, which **removes the postpone flag file**; gh-ost immediately performs the atomic `RENAME TABLE`. Plan transitions to `Completed` and the lock releases, unblocking queued plans for the same DB.
+3. **Cutover approval UX** — the user clicks **Approve Cutover** in the UI (or hits `POST /api/v1/change-plans/:id/cutover-approve`). The backend calls `GhostExecutor.ApproveCutover`, which **removes the postpone flag file**; gh-ost immediately performs the atomic `RENAME TABLE`. The plan transitions to **`AwaitingCleanup`** (not Completed) and the lock releases, unblocking queued plans for the same DB.
 4. **Abort UX** — the **Abort Migration** button (`POST /api/v1/change-plans/:id/abort`) creates the **panic flag** `deeb-<plan-id>.panic`; gh-ost aborts cleanly before cut-over, the original table is untouched, and the plan is marked `Failed`/`Cancelled`.
 5. **Socket control (not wired today)** — gh-ost also supports `--serve-socket-file` (default `/tmp/gh-ost.<db>.<table>.sock`) where operators can push `throttle`, `no-throttle`, `chunk-size=N`, `status`. Deeb intentionally uses only the flag-file model (part of the ghost-lab validated setup, engine-uniform). Socket-based throttle/status probing is noted as a possible future enhancement below.
 
@@ -104,8 +104,11 @@ execution and returns per-check pass/fail with remediation:
    the plan moves to status `AwaitingCutover`.
 4. A user with execution permissions clicks **Approve Cutover**
    (`POST /api/v1/change-plans/:id/cutover-approve`) → deeb removes the
-   flag → atomic `RENAME TABLE` completes in under a second → plan `Completed`.
-5. **Abort** (`POST /api/v1/change-plans/:id/abort`) creates the panic flag;
+   flag → atomic `RENAME TABLE` completes in under a second → plan
+   `AwaitingCleanup` (lock released).
+5. After validating the live schema, the user clicks **Drop Backup**
+   → `DROP TABLE _<table>_del` → plan `Completed`.
+6. **Abort** (`POST /api/v1/change-plans/:id/abort`) creates the panic flag;
    the tool aborts cleanly before cutover and the original table is untouched.
 
 The database execution lock is held for the whole run (copy + cutover wait),
@@ -166,8 +169,8 @@ future configuration (Decisions Locked #3).
 
 - **Pre-cutover**: Abort endpoint (panic flag) → original table untouched.
 - **Post-cutover**: gh-ost keeps the old table as `_<table>_del` (we do not
-  pass `--ok-to-drop-table`); deeb exposes two actions on **Completed** ghost
-  plans (execution permission required):
+  pass `--ok-to-drop-table`); deeb exposes two actions on **AwaitingCleanup**
+  ghost plans (execution permission required):
 
   1. **Rollback** (`POST /api/v1/change-plans/:id/ghost-rollback`) — atomic
      swap-back: `RENAME TABLE <table> → _<table>_new, _<table>_del → <table>`.
@@ -177,23 +180,35 @@ future configuration (Decisions Locked #3).
      The plan is marked `Failed` with a note pointing at the sidelined table.
      For ADD INDEX plans, also consider the gentler `DROP INDEX` alternative.
   2. **Drop Backup Table** (`POST /api/v1/change-plans/:id/ghost-drop-backup`) —
-     `DROP TABLE IF EXISTS _<table>_del` after the validation window passes.
-     This removes the rollback net permanently.
+     `DROP TABLE IF EXISTS _<table>_del`. **This is the completion gate**:
+     dropping the backup flips `AwaitingCleanup → Completed`. Removes the
+     rollback net permanently.
 
-  Both actions are available in the change plan detail UI (actions dropdown)
-  only for Completed ghost plans.
+  Legacy **Completed** plans (cut over before this status existed) and
+  **Failed** plans that left artifacts behind can also run both actions.
 
   Note: these paths assume the gh-ost `_del` naming convention;
   pg-online-schema-change artifact naming differs (future parity work).
 
 ## Status additions
 
-`AwaitingCutover` is a first-class plan status:
+`AwaitingCutover` and `AwaitingCleanup` are first-class plan statuses:
 
 ```
-Approved → InProgress → AwaitingCutover → Completed
+Approved → InProgress → AwaitingCutover → AwaitingCleanup → Completed
                      ↘ (tool failure / abort) → Failed
+                                                    ↘ (rollback) → Failed
 ```
+
+- `AwaitingCutover` (99.9%): copy finished, gh-ost parked on the postpone
+  flag waiting for human cutover approval.
+- `AwaitingCleanup` (99.99%): cutover done, live on the new schema, lock
+  released. The plan completes only when the `_del` backup is dropped.
+  Direct DDL on the table is unblocked; gh-ost stays blocked on that table
+  by the artifact's existence (intentional safety gate).
+- ⚠️ The backup does NOT receive post-cutover writes — validate quickly,
+  then drop the backup (or roll back promptly). A long validation window
+  means a rollback loses that window's data.
 
 ## Future work (out of scope now)
 
