@@ -471,7 +471,7 @@ export interface ExecutionLog {
   id: string;
   change_plan_id: string;
   executor_id: string;
-  status: 'Completed' | 'Failed';
+  status: 'Completed' | 'Failed' | 'InProgress';
   execution_duration_ms: number;
   rows_affected?: number;
   error_message?: string;

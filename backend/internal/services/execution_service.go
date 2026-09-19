@@ -1572,7 +1572,10 @@ func (s *ExecutionService) executeGhost(
 		ID:                   executionLogID,
 		ChangePlanID:         changePlanID,
 		ExecutorID:           executorID,
-		Status:               models.ExecutionLogStatusFailed,
+		// Ghost runs are long-lived (minutes to hours): the log row must read
+		// InProgress while running, not a misleading Failed. Flipped to
+		// Completed/Failed when the run finishes.
+		Status:               models.ExecutionLogStatusInProgress,
 		SQLContent:           &sqlContent,
 		DatabaseID:           &db.ID,
 		DatabaseName:         &db.DatabaseName,
