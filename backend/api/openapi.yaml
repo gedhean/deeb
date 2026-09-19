@@ -2100,7 +2100,8 @@ paths:
       description: |
         Removes the gh-ost postpone flag for a change plan running under the ghost
         executor, letting the tool proceed to the atomic table rename (< 1s).
-        Only valid while the plan is in AwaitingCutover status.
+        Only valid while the plan is in AwaitingCutover status; on success the
+        plan moves to AwaitingCleanup until the backup table is dropped.
         Requires execution permissions (Organization Admin, Organization DBA,
         Project Owner, or Change Plan Author).
       operationId: approveGhostCutover
@@ -3122,7 +3123,7 @@ components:
           example: DROP TABLE IF EXISTS users;
         status:
           type: string
-          enum: [Draft, Open, Approved, Closed, InProgress, AwaitingCutover, Completed, Failed, Cancelled]
+          enum: [Draft, Open, Approved, Closed, InProgress, AwaitingCutover, AwaitingCleanup, Completed, Failed, Cancelled]
           description: Change plan status
           example: Open
         execution_backend:

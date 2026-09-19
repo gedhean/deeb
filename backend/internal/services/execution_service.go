@@ -687,13 +687,18 @@ func (s *ExecutionService) DropGhostBackupTable(ctx context.Context, changePlanI
 	if err != nil {
 		return err
 	}
-	// Completed: the backup retained after cutover. Failed: cleanup is also
-	// allowed — a failed run may leave the backup behind (e.g. a rollback
-	// swapped it back in place, or the plan was failed after cutover).
-	// Failure before cutover leaves _<table>_gho, not _del — the drop below
-	// simply errors if nothing exists, so no separate guard is needed.
-	if plan.Status != models.ChangePlanStatusCompleted && plan.Status != models.ChangePlanStatusFailed {
-		return fmt.Errorf("backup table can only be dropped after the plan is Completed or Failed (current: %s)", plan.Status)
+	// AwaitingCleanup: backup drop is the completion gate → Completed on
+	// success. Completed/Failed: cleanup for legacy/failed plans (a rollback
+	// swap or post-cutover failure can leave the backup behind). Failure
+	// before cutover leaves _<table>_gho, not _del — the drop below simply
+	// errors if nothing exists, so no separate guard is needed.
+	if plan.Status != models.ChangePlanStatusAwaitingCleanup &&
+		plan.Status != models.ChangePlanStatusCompleted &&
+		plan.Status != models.ChangePlanStatusFailed {
+		return fmt.Errorf(
+			"backup table can only be dropped when the plan is AwaitingCleanup, Completed or Failed (current: %s)",
+			plan.Status,
+		)
 	}
 	db, dbInstance, table, _, err := s.resolveGhostTarget(ctx, plan)
 	if err != nil {
@@ -713,6 +718,14 @@ func (s *ExecutionService) DropGhostBackupTable(ctx context.Context, changePlanI
 	if _, err := conn.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS `%s`", backup)); err != nil {
 		return fmt.Errorf("failed to drop backup table %s: %w", backup, err)
 	}
+	// AwaitingCleanup → Completed: the drop is the completion gate.
+	if plan.Status == models.ChangePlanStatusAwaitingCleanup {
+		plan.Status = models.ChangePlanStatusCompleted
+		plan.UpdatedAt = time.Now()
+		if updateErr := s.changePlanRepo.Update(ctx, plan); updateErr != nil {
+			s.logger.Error("Failed to mark plan Completed after backup drop", zap.Error(updateErr))
+		}
+	}
 	s.logger.Info("Ghost backup table dropped",
 		zap.String("change_plan_id", changePlanID.String()),
 		zap.String("backup_table", backup),
@@ -730,8 +743,8 @@ func (s *ExecutionService) RollbackGhostPlan(ctx context.Context, changePlanID u
 	if err != nil {
 		return err
 	}
-	if plan.Status != models.ChangePlanStatusCompleted {
-		return fmt.Errorf("rollback is only available for Completed ghost plans (current: %s)", plan.Status)
+	if plan.Status != models.ChangePlanStatusAwaitingCleanup && plan.Status != models.ChangePlanStatusCompleted {
+		return fmt.Errorf("rollback is only available while the plan is AwaitingCleanup or Completed (current: %s)", plan.Status)
 	}
 	db, dbInstance, table, _, err := s.resolveGhostTarget(ctx, plan)
 	if err != nil {
@@ -1653,15 +1666,17 @@ func (s *ExecutionService) executeGhost(
 		return &ExecutionResult{Success: false, Duration: duration, ErrorMessage: &errMsg}, runErr
 	}
 
-	// Success path
-	changePlan.Status = models.ChangePlanStatusCompleted
+	// Success path: cutover done, live on the new schema — but the plan is
+	// not fully complete until the retained _<table>_del backup is dropped
+	// (DropGhostBackupTable flips AwaitingCleanup → Completed).
+	changePlan.Status = models.ChangePlanStatusAwaitingCleanup
 	executedAt := time.Now()
 	changePlan.ExecutedAt = &executedAt
 	durationMs := int(duration.Milliseconds())
 	changePlan.ExecutionDurationMs = &durationMs
 	changePlan.UpdatedAt = time.Now()
 	if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
-		s.logger.Error("Failed to update change plan to Completed", zap.Error(updateErr))
+		s.logger.Error("Failed to update change plan to AwaitingCleanup", zap.Error(updateErr))
 	}
 
 	changelog.Status = models.ChangelogStatusDone
