@@ -195,7 +195,16 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           actions.push('abort');
         }
         break;
+      case 'AwaitingCleanup':
+        // Cutover done, live on new schema; dropping the backup completes
+        // the plan. Rollback stays available (swap back while the backup
+        // exists) — but post-cutover writes are NOT in the backup.
+        if (isGhostPlan && canExecute) {
+          actions.push('ghost-drop-backup', 'ghost-rollback');
+        }
+        break;
       case 'Completed':
+        // Legacy completed plans may still hold a backup to clean up.
         if (isGhostPlan && canExecute) {
           actions.push('ghost-rollback', 'ghost-drop-backup');
         }

@@ -328,6 +328,7 @@ export type ChangePlanStatus =
   | 'Closed'
   | 'InProgress'
   | 'AwaitingCutover'
+  | 'AwaitingCleanup'
   | 'Completed'
   | 'Failed'
   | 'Cancelled';

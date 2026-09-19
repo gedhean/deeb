@@ -70,7 +70,10 @@ export const ChangePlanDetailPage: React.FC = () => {
   // websockets). Completed plans render the bar full from persisted progress.
   useEffect(() => {
     const isGhost = changePlan?.execution_backend === 'ghost';
-    const active = changePlan?.status === 'InProgress' || changePlan?.status === 'AwaitingCutover';
+    const active =
+      changePlan?.status === 'InProgress' ||
+      changePlan?.status === 'AwaitingCutover' ||
+      changePlan?.status === 'AwaitingCleanup';
     if (!isGhost || !active) {
       return;
     }

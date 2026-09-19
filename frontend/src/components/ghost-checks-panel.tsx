@@ -56,14 +56,17 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
   // plain numbers. Completed ghost plans render a full bar even if the last
   // persisted snapshot was below 100 (cutover completes after the final
   // progress line).
-  // Completed renders full; AwaitingCutover renders near-full but not 100 —
-  // gh-ost's copy is done but the migration isn't finished until the user
-  // approves cutover, so the bar shouldn't look complete yet.
+  // Completed renders full; AwaitingCutover/Cleanup render near-full but
+  // not 100 — gh-ost's copy is done but the migration isn't finished until
+  // cutover is approved (and the backup dropped), so the bar shouldn't look
+  // complete yet.
   const snapshot = parseGhostProgress(ghostProgress);
   const parsedProgress = snapshot?.pct ?? null;
   let progressValue = parsedProgress;
   if (planStatus === 'Completed') {
     progressValue = 100;
+  } else if (planStatus === 'AwaitingCleanup') {
+    progressValue = 99.99;
   } else if (planStatus === 'AwaitingCutover') {
     progressValue = 99.9;
   }
@@ -71,6 +74,7 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
     progressValue != null &&
     (planStatus === 'InProgress' ||
       planStatus === 'AwaitingCutover' ||
+      planStatus === 'AwaitingCleanup' ||
       (planStatus === 'Completed' && parsedProgress != null));
 
   if (!report && !showProgress) {
@@ -122,7 +126,11 @@ export const GhostChecksPanel: React.FC<GhostChecksPanelProps> = ({
             <span>
               {planStatus === 'AwaitingCutover'
                 ? 'Awaiting cutover approval'
-                : 'Copying shadow table'}
+                : planStatus === 'AwaitingCleanup'
+                  ? 'Cutover complete — drop the backup to finish'
+                  : planStatus === 'Completed'
+                    ? 'Migration complete'
+                    : 'Copying shadow table'}
               {snapshot != null &&
                 snapshot.total > 0 &&
                 ` — ${snapshot.copied.toLocaleString()}/${snapshot.total.toLocaleString()} rows`}
