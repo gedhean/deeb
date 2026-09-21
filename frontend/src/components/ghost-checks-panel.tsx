@@ -93,7 +93,12 @@ export const GhostProgressBar: React.FC<GhostProgressBarProps> = ({
           </span>
           <span>{progressValue.toFixed(1)}%</span>
         </div>
-        <Progress value={progressValue} />
+        <Progress
+          value={progressValue}
+          // Blue while copying/gated (InProgress, AwaitingCutover,
+          // AwaitingCleanup); green only when fully complete.
+          indicatorClassName={planStatus === 'Completed' ? 'bg-emerald-500' : 'bg-blue-500'}
+        />
       </CardContent>
     </Card>
   );
