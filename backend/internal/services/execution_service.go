@@ -599,11 +599,50 @@ func (s *ExecutionService) ghostDryRunWithCreds(
 		},
 	}
 	if err := s.ghostExecutor.Run(ctx, binPath, dryArgs, callbacks); err != nil {
+		// A failed dry run leaves gh-ost's shadow (_gho) and changelog (_ghc)
+		// tables behind on the target (e.g. invalid ALTER fails mid-copy). Best-
+		// effort cleanup here keeps the table usable for the next attempt —
+		// deliberately NOT via --initially-drop-ghost-table (that would also drop
+		// tables from a concurrent/real migration, an audit/ops hazard).
+		for _, artifact := range []string{"_" + table + "_gho", "_" + table + "_ghc"} {
+			if dropErr := s.dropGhostArtifact(ctx, db, dbInstance, artifact); dropErr != nil {
+				s.logger.Warn("Failed to clean up ghost dry-run artifact",
+					zap.String("change_plan_id", plan.ID.String()),
+					zap.String("artifact", artifact),
+					zap.Error(dropErr),
+				)
+			}
+		}
 		if lastErr != "" {
 			return fmt.Errorf("ghost dry-run failed: %s", lastErr)
 		}
 		return fmt.Errorf("ghost dry-run failed: %w", err)
 	}
+	return nil
+}
+
+// dropGhostArtifact best-effort drops a gh-ost artifact table on the target.
+func (s *ExecutionService) dropGhostArtifact(
+	ctx context.Context,
+	db *models.Database,
+	dbInstance *models.DatabaseInstance,
+	artifact string,
+) error {
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect for artifact cleanup: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS `%s`", artifact)); err != nil {
+		return fmt.Errorf("failed to drop %s: %w", artifact, err)
+	}
+	s.logger.Info("Ghost dry-run artifact dropped",
+		zap.String("artifact", artifact),
+		zap.String("database", db.DatabaseName),
+	)
 	return nil
 }
 
