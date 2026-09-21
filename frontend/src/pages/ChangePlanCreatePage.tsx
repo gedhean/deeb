@@ -8,6 +8,7 @@ import type { CreateChangePlanRequest, Database, ChangeType } from '@/lib/api/ty
 import { APIError } from '@/lib/api/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertTriangle } from 'lucide-react';
+import { showErrorToast } from '@/lib/errorHandling';
 import { useCurrentProject } from '@/store';
 import type { SQLDialect, EditorTheme } from '@/components/editors';
 import {
@@ -148,14 +149,12 @@ export const ChangePlanCreatePage: React.FC = () => {
     };
   }, []);
 
-  // Redirect if no project is selected
+  // Redirect if no project is selected. Show a toast so the redirect is not
+  // silent (router state alone was never rendered anywhere).
   useEffect(() => {
     if (!currentProject) {
-      navigate('/dashboard', {
-        state: {
-          message: 'Please select a project first',
-        },
-      });
+      showErrorToast('Please select a project first');
+      navigate('/dashboard');
     }
   }, [currentProject, navigate]);
 
