@@ -32,6 +32,24 @@
 ## Features
 
 ### Ghost / Online Migrator
+- [ ] Fix: progress bar regresses 100% → 99.9% at cutover — when the copy
+  finishes, gh-ost's final "Copy: ... 100.0%" line is persisted (bar shows
+  100%), then the plan flips to AwaitingCutover and the UI overrides to
+  99.9% (semantic "not done yet"). The visible backwards jump confuses
+  users. Fix direction: never render a snapshot pct ≥ our status ceiling —
+  clamp the bar to 99.9 max while copying (or treat copy-100 as "waiting
+  for cutover" visually, e.g. keep bar at 99.9 with a 'copy complete'
+  label), so the bar never goes backwards.
+- [ ] Feat: livelier ghost progress bar — the static blue fill can look
+  frozen during slow phases. Add subtle motion (striped/indeterminate-style
+  shimmer or animated gradient) while InProgress, and richer color
+  transitions across phases (copy blue → cutover amber → cleanup orange →
+  completed green) so the user always sees the process is alive.
+- [ ] Feat: replace 1s progress polling with server-push — current design
+  polls GET /change-plans/:id every 1s during active phases; move to SSE
+  (text/event-stream per plan, in-process publish hub fed by the gh-ost log
+  callback, initial snapshot from ghost_progress, heartbeat for ALB idle
+  timeouts). Design notes: .todos/ghost-progress-server-push.md
 - [ ] Feat: one-click cleanup of stale gh-ost artifacts for admins — when a
   ghost run fails (or is retried) and gh-ost aborts with "table `_<table>_gho`
   already exists" (or a leftover `_<table>_del` backup), an admin should be
