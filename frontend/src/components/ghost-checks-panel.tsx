@@ -47,6 +47,10 @@ function useGhostProgress(ghostProgress?: string, planStatus?: string) {
     progressValue = 99.99;
   } else if (planStatus === 'AwaitingCutover') {
     progressValue = 99.9;
+  } else if (planStatus === 'InProgress' && progressValue == null) {
+    // Copy hasn't emitted its first status line yet (binlog connect, table
+    // setup) — render an empty bar instead of hiding it entirely.
+    progressValue = 0;
   }
   const showProgress =
     progressValue != null &&
