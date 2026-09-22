@@ -412,7 +412,8 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
         };
       case 'ghost-drop-backup':
         return {
-          label: 'Clean Up',
+          // Matches the AwaitingCutover button naming convention
+          label: 'Awaiting Clean Up',
           icon: Trash2,
           variant: 'outline' as const,
           handler: handleGhostDropBackup,
