@@ -1623,6 +1623,14 @@ func (s *ExecutionService) executeGhost(
 		StartedAt:            time.Now(),
 	}
 	if err := s.executionLogRepo.Create(ctx, executionLog); err != nil {
+		// Plan was already marked InProgress above — don't leave it stuck.
+		changePlan.Status = models.ChangePlanStatusFailed
+		failMsg := fmt.Sprintf("failed to create execution log: %v", err)
+		changePlan.ErrorMessage = &failMsg
+		changePlan.UpdatedAt = time.Now()
+		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
+			s.logger.Error("Failed to mark plan Failed after log creation error", zap.Error(updateErr))
+		}
 		return nil, fmt.Errorf("failed to create execution log: %w", err)
 	}
 
