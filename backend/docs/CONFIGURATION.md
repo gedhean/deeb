@@ -153,6 +153,19 @@ export BCRYPT_COST="14"  # Higher cost for more security (slower)
 | `logging.output` | - | `stdout` | Log output: `stdout`, `stderr`, `file` |
 | `logging.file_path` | - | - | Log file path (if output is `file`) |
 
+### Ghost Executor Configuration
+
+Optional online-schema-change executor for DDL plans on non-production
+environments (gh-ost for MySQL, pg-online-schema-change for PostgreSQL).
+See [Ghost Executor](../../docs/ghost-executor.md).
+
+| Option | Environment Variable | Default | Description |
+|--------|---------------------|---------|-------------|
+| `features.ghost_executor.ghost_bin` | `GHOST_BIN` | `/app/gh-ost` | Path to the `gh-ost` binary (bundled in image) |
+| `features.ghost_executor.pgosc_bin` | `PGOSC_BIN` | _(off)_ | Path to `pg-online-schema-change` |
+| `features.ghost_executor.flag_dir` | `GHOST_FLAG_DIR` | `/tmp` | Directory for cutover/panic flag files |
+| `features.ghost_executor.max_duration` | `GHOST_MAX_DURATION` | `6h` | Max ghost run duration (sizes queue window) |
+
 **Example:**
 ```bash
 # Development

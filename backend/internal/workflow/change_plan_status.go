@@ -113,8 +113,17 @@ var validTransitions = map[models.ChangePlanStatus][]models.ChangePlanStatus{
 		models.ChangePlanStatusCancelled,
 	},
 	models.ChangePlanStatusInProgress: {
+		models.ChangePlanStatusAwaitingCutover, // Ghost executor parks between copy and cutover
 		models.ChangePlanStatusCompleted,
 		models.ChangePlanStatusFailed,
+	},
+	models.ChangePlanStatusAwaitingCutover: {
+		models.ChangePlanStatusAwaitingCleanup, // Cutover approved, atomic rename done
+		models.ChangePlanStatusFailed,          // Aborted or tool failure post-copy
+	},
+	models.ChangePlanStatusAwaitingCleanup: {
+		models.ChangePlanStatusCompleted, // Backup table dropped — fully complete
+		models.ChangePlanStatusFailed,    // Rolled back via ghost swap-back
 	},
 	models.ChangePlanStatusCompleted: {
 		// Terminal state - no transitions allowed
@@ -270,8 +279,10 @@ func CanBeDeleted(status models.ChangePlanStatus) bool {
 	return status == models.ChangePlanStatusDraft || status == models.ChangePlanStatusClosed
 }
 
-// CanEditSQLContent checks if SQL content can be edited (not terminal states)
-// Terminal states are: Completed, Closed, Cancelled
+// CanEditSQLContent checks if SQL content can be edited. SQL is editable
+// only in Draft: editing must never move a plan out of Draft implicitly,
+// and once a plan has been submitted for review (Open or beyond) its SQL
+// is frozen — change it via a new plan instead.
 func CanEditSQLContent(status models.ChangePlanStatus) bool {
-	return !IsTerminalStatus(status)
+	return status == models.ChangePlanStatusDraft
 }

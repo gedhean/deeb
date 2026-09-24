@@ -10,8 +10,11 @@ import (
 type ExecutionLogStatus string
 
 const (
-	ExecutionLogStatusCompleted ExecutionLogStatus = "Completed"
-	ExecutionLogStatusFailed    ExecutionLogStatus = "Failed"
+	ExecutionLogStatusCompleted  ExecutionLogStatus = "Completed"
+	ExecutionLogStatusFailed     ExecutionLogStatus = "Failed"
+	// InProgress: the log row exists while the execution is still running
+	// (e.g. long ghost copies) instead of showing a misleading Failed.
+	ExecutionLogStatusInProgress ExecutionLogStatus = "InProgress"
 )
 
 // ExecutionLog represents a single execution attempt log entry

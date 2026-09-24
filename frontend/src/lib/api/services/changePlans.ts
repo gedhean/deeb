@@ -6,6 +6,8 @@ import type {
   UpdateChangePlanRequest,
   ApproveChangePlanRequest,
   CloseChangePlanRequest,
+  GhostPreflightResponse,
+  GhostReadinessReport,
   ApprovalHistoryResponse,
   ExecutionLogHistoryResponse,
   StatementExecutionResultsResponse,
@@ -84,6 +86,58 @@ export const changePlanService = {
    */
   async executeChangePlan(id: string): Promise<void> {
     await apiClient.post(`/api/v1/change-plans/${id}/execute`, {});
+  },
+
+  /**
+   * Approve ghost cutover (ghost executor plans in AwaitingCutover)
+   */
+  async approveGhostCutover(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/cutover-approve`, {});
+  },
+
+  /**
+   * Abort ghost execution (creates the panic flag pre-cutover)
+   */
+  async abortGhostExecution(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/abort`, {});
+  },
+
+  /**
+   * Run ghost executor pre-flight checks against the target database
+   */
+  async getGhostPreflight(id: string): Promise<GhostPreflightResponse> {
+    return apiClient.get<GhostPreflightResponse>(`/api/v1/change-plans/${id}/ghost-preflight`);
+  },
+
+  /**
+   * Drop the retained _<table>_del backup table after a completed ghost migration
+   */
+  async dropGhostBackupTable(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/ghost-drop-backup`, {});
+  },
+
+  /**
+   * Roll back a completed ghost plan (atomic swap-back; post-cutover writes are sidelined)
+   */
+  async rollbackGhostPlan(id: string): Promise<void> {
+    await apiClient.post(`/api/v1/change-plans/${id}/ghost-rollback`, {});
+  },
+
+  /**
+   * Re-run all ghost readiness checks and get the fresh report
+   */
+  async rerunGhostChecks(id: string): Promise<GhostReadinessReport> {
+    return apiClient.post<GhostReadinessReport>(`/api/v1/change-plans/${id}/ghost-checks`, {});
+  },
+
+  /**
+   * Re-run a single ghost readiness check by name
+   */
+  async rerunGhostCheck(id: string, checkName: string): Promise<GhostReadinessReport> {
+    return apiClient.post<GhostReadinessReport>(
+      `/api/v1/change-plans/${id}/ghost-checks/${checkName}`,
+      {},
+    );
   },
 
   /**

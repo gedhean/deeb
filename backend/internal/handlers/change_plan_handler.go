@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -174,6 +175,14 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 
 	// RBAC check is done in middleware (RequireProjectPermission)
 
+	// Validate ghost executor selection (DDL + non-production environment).
+	executionBackend, err := h.validateGhostSelection(ctx, req.ExecutionBackend, req.ChangeType, database)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
 	// Create change plan with Draft status
 	statementCount := parseResult.TotalCount
 	changePlan := &models.ChangePlan{
@@ -188,6 +197,7 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		RiskLevel:        models.RiskLevelMedium, // Default, will be calculated
 		AuthorID:         claims.UserID,
 		StatementCount:   &statementCount,
+		ExecutionBackend: executionBackend,
 	}
 
 	// Assess risk level based on SQL content, environment, and database type
@@ -216,13 +226,49 @@ func (h *ChangePlanHandler) CreateChangePlan(c echo.Context) error {
 		})
 	}
 
+	// Run ghost readiness checks at creation so the UI can show a PR-checks
+	// style report; the report is persisted on the plan and refreshed on
+	// submit-for-review. Checks never block creation — they gate submission.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		h.refreshGhostChecks(ctx, changePlan)
+	}
+
 	h.logger.Info(
 		"Change plan created successfully",
 		zap.String("change_plan_id", changePlan.ID.String()),
 		zap.String("project_id", changePlan.ProjectID.String()),
 	)
 
-	return c.JSON(http.StatusCreated, changePlan.ToResponse())
+	resp := changePlan.ToResponse()
+	resp.ExecutorWarnings = ghostExecutorWarnings(changePlan.ExecutionBackend, changePlan.SQLContent)
+	return c.JSON(http.StatusCreated, resp)
+}
+
+// ghostExecutorWarnings classifies the SQL content for ghost plans so users
+// know upfront which executor(s) will run. Non-blocking — informational only.
+func ghostExecutorWarnings(backend models.ExecutionBackend, sqlContent string) []string {
+	if backend != models.ExecutionBackendGhost {
+		return nil
+	}
+	ghostCount, directCount, err := services.ClassifyGhostStatements(sqlContent)
+	if err != nil {
+		return nil
+	}
+	switch {
+	case ghostCount == 0:
+		return []string{
+			"No ALTER TABLE statements found — gh-ost will not run any part of this plan; all statements execute directly.",
+		}
+	case directCount > 0:
+		return []string{
+			fmt.Sprintf(
+				"Mixed content: %d ALTER TABLE statement(s) will run via gh-ost and %d other statement(s) will run directly. Both executors will be used.",
+				ghostCount,
+				directCount,
+			),
+		}
+	}
+	return nil
 }
 
 // validateUpdateChangePlanRequest validates the update change plan request
@@ -256,6 +302,87 @@ func validateUpdateChangePlanRequest(req *models.UpdateChangePlanRequest) *middl
 	}
 
 	return nil
+}
+
+// refreshGhostChecks runs the ghost readiness suite for a plan and persists
+// the JSON report on change_plans.ghost_checks. Best-effort: failures to run
+// the suite are logged and stored as a failed report rather than blocking.
+func (h *ChangePlanHandler) refreshGhostChecks(ctx context.Context, changePlan *models.ChangePlan) {
+	report, err := h.executionService.RunGhostReadinessChecks(ctx, changePlan)
+	if err != nil {
+		h.logger.Error("Failed to run ghost readiness checks",
+			zap.String("change_plan_id", changePlan.ID.String()),
+			zap.Error(err),
+		)
+		report = &services.GhostReadinessReport{
+			AllPassed: false,
+			Checks: []services.GhostCheckResult{
+				{Name: "checks_error", Passed: false, Detail: err.Error()},
+			},
+		}
+	}
+	raw, err := json.Marshal(report)
+	if err != nil {
+		h.logger.Error("Failed to marshal ghost checks report", zap.Error(err))
+		return
+	}
+	str := string(raw)
+	changePlan.GhostChecks = &str
+	if err := h.changePlanRepo.Update(ctx, changePlan); err != nil {
+		h.logger.Error("Failed to persist ghost checks report",
+			zap.String("change_plan_id", changePlan.ID.String()),
+			zap.Error(err),
+		)
+	}
+}
+
+// validateGhostSelection enforces ghost executor constraints at the API
+// boundary: only DDL plans on databases in non-production environments may
+// pick execution_backend=ghost. Empty backend defaults to direct.
+func (h *ChangePlanHandler) validateGhostSelection(
+	ctx context.Context,
+	backend models.ExecutionBackend,
+	changeType models.ChangeType,
+	db *models.Database,
+) (models.ExecutionBackend, error) {
+	if backend == "" || backend == models.ExecutionBackendDirect {
+		return models.ExecutionBackendDirect, nil
+	}
+	if backend != models.ExecutionBackendGhost {
+		return "", fmt.Errorf("invalid execution_backend: must be direct or ghost")
+	}
+	if changeType != models.ChangeTypeDDL {
+		return "", fmt.Errorf("execution_backend=ghost is only supported for DDL change plans")
+	}
+
+	// Production gate resolves via the instance's environment: in this
+	// topology instances map 1:1 to environments (prod instance holds only
+	// prod databases), so the instance env is authoritative and works even
+	// when the database itself has no environment assigned.
+	dbInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+	if err != nil {
+		return "", fmt.Errorf("failed to validate database instance: %w", err)
+	}
+	if dbInstance.EnvironmentID == nil {
+		return "", fmt.Errorf("execution_backend=ghost requires the database instance to be assigned to an environment")
+	}
+	env, err := h.environmentRepo.GetByID(ctx, *dbInstance.EnvironmentID)
+	if err != nil {
+		return "", fmt.Errorf("failed to validate environment: %w", err)
+	}
+	if env.IsProduction {
+		return "", fmt.Errorf("execution_backend=ghost is not permitted on production environments")
+	}
+
+	// Engine gate at authoring time: ghost is selectable only for MySQL
+	// (pg-online-schema-change is not implemented). All other ghost checks
+	// (binlog, privileges, dry run) run at submit-for-review time where the
+	// UI can surface per-check results.
+	if dbInstance.DatabaseEngine != models.DatabaseEngineMySQL {
+		return "", fmt.Errorf("execution_backend=ghost is currently supported only for MySQL databases")
+	}
+
+	return models.ExecutionBackendGhost, nil
 }
 
 // validateCreateChangePlanRequest validates the create change plan request
@@ -687,6 +814,24 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		changePlan.Title = *req.Title
 	}
 
+	// Execution backend switch: validated against DDL type and the target
+	// database's environment (ghost only allowed on non-production).
+	if req.ExecutionBackend != nil {
+		database, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+				"error": "Failed to validate target database",
+			})
+		}
+		backend, err := h.validateGhostSelection(ctx, *req.ExecutionBackend, changePlan.ChangeType, database)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		changePlan.ExecutionBackend = backend
+	}
+
 	if req.Description != nil {
 		changePlan.Description = *req.Description
 	}
@@ -745,16 +890,8 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 			}
 		}
 
-		// If SQL content is updated and status is not "Open" and not terminal, transition to "Open"
-		if changePlan.Status != models.ChangePlanStatusOpen && workflow.CanEditSQLContent(changePlan.Status) {
-			previousStatus := changePlan.Status
-			changePlan.Status = models.ChangePlanStatusOpen
-			h.logger.Info(
-				"Status transitioned to Open due to SQL content update",
-				zap.String("change_plan_id", changePlan.ID.String()),
-				zap.String("previous_status", string(previousStatus)),
-			)
-		}
+		// SQL content edits never change the plan's status: Draft stays Draft,
+		// and CanEditSQLContent already rejects edits outside Draft.
 
 		// Delete existing approval records when SQL content is updated
 		// This allows approvers to approve the updated version
@@ -803,6 +940,31 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 
 		// If transitioning from Draft to Open, trigger SQL Review
 		if changePlan.Status == models.ChangePlanStatusDraft && *req.Status == models.ChangePlanStatusOpen {
+			// Ghost readiness gate: ghost plans must pass the full check suite
+			// (binlog, privileges, dry run) before they can be submitted for review.
+			if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+				report, checkErr := h.executionService.RunGhostReadinessChecks(ctx, changePlan)
+				if checkErr != nil {
+					return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+						"error": fmt.Sprintf("Failed to run ghost readiness checks: %s", checkErr.Error()),
+					})
+				}
+				// Persist the fresh report so the UI reflects the latest state
+				if raw, mErr := json.Marshal(report); mErr == nil {
+					str := string(raw)
+					changePlan.GhostChecks = &str
+					if uErr := h.changePlanRepo.Update(ctx, changePlan); uErr != nil {
+						h.logger.Warn("Failed to persist ghost checks report", zap.Error(uErr))
+					}
+				}
+				if !report.AllPassed {
+					return c.JSON(http.StatusBadRequest, map[string]interface{}{
+						"error":        "Ghost readiness checks failed — cannot submit for review",
+						"ghost_checks": report,
+					})
+				}
+			}
+
 			if err := h.triggerSQLReview(c, changePlan); err != nil {
 				h.logger.Error("SQL Review failed", zap.Error(err), zap.String("change_plan_id", changePlan.ID.String()))
 
@@ -868,6 +1030,12 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error": "Failed to update change plan",
 		})
+	}
+
+	// Refresh ghost readiness checks after updates (SQL, target, or backend
+	// may have changed); only for ghost plans.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		h.refreshGhostChecks(ctx, changePlan)
 	}
 
 	// Track field changes after successful update
@@ -2085,6 +2253,53 @@ func (h *ChangePlanHandler) ExecuteChangePlan(c echo.Context) error {
 	// - Status updates (InProgress → Completed/Failed)
 	// - Execution result capture
 	// - Lock release (guaranteed via defer)
+	// Ghost (Online Migrator) executions can run for minutes to hours; running
+	// them synchronously in the request would trip HTTP write timeouts and
+	// falsely mark execution failed client-side. Check the cheap invariants
+	// (lock conflict) synchronously, then run the plan in the background and
+	// answer 202 immediately — the UI polls plan status.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		locked, lockErr := h.executionService.IsDatabaseLockedForPlan(ctx, changePlanID)
+		if lockErr == nil && locked {
+			queueStatus, queueErr := h.executionService.GetQueueStatus(ctx, changePlanID)
+			if queueErr == nil && queueStatus != nil {
+				return c.JSON(http.StatusConflict, map[string]interface{}{
+					"error":          "Database is currently locked by another execution",
+					"queued":         true,
+					"queue_position": queueStatus.Position,
+					"queue_status":   queueStatus.Status,
+				})
+			}
+			return c.JSON(http.StatusConflict, map[string]interface{}{
+				"error": "Database is currently locked by another execution",
+			})
+		}
+
+		go func(planID, execID uuid.UUID) {
+			// Detached from the request: WithoutCancel inside the service keeps
+			// cleanup running; use context.Background as the base.
+			bgCtx := context.Background()
+			result, err := h.executionService.Execute(bgCtx, planID, execID)
+			if err != nil {
+				h.logger.Error("Background ghost execution failed",
+					zap.String("change_plan_id", planID.String()),
+					zap.Error(err),
+				)
+				return
+			}
+			h.logger.Info("Background ghost execution finished",
+				zap.String("change_plan_id", planID.String()),
+				zap.Bool("success", result.Success),
+				zap.Duration("duration", result.Duration),
+			)
+		}(changePlanID, userID)
+
+		return c.JSON(http.StatusAccepted, map[string]interface{}{
+			"message": "Ghost execution started in the background",
+			"status":  "InProgress",
+		})
+	}
+
 	result, err := h.executionService.Execute(ctx, changePlanID, userID)
 	if err != nil {
 		// Handle specific error types
@@ -2584,4 +2799,456 @@ func (h *ChangePlanHandler) GetStatementResults(c echo.Context) error {
 		"statement_results": resultResponses,
 		"total":             len(resultResponses),
 	})
+}
+
+// ApproveGhostCutover handles POST /api/v1/change-plans/:id/cutover-approve
+// Removes the ghost postpone flag so the running tool proceeds to cutover.
+func (h *ChangePlanHandler) ApproveGhostCutover(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	if err := h.executionService.ApproveGhostCutover(ctx, changePlanID); err != nil {
+		status := http.StatusBadRequest
+		if err == repository.ErrNotFound {
+			status = http.StatusNotFound
+		}
+		return c.JSON(status, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	h.logger.Info("Ghost cutover approved",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Cutover approved",
+	})
+}
+
+// AbortGhostExecution handles POST /api/v1/change-plans/:id/abort
+// Creates the ghost panic flag to abort cleanly before the cutover.
+func (h *ChangePlanHandler) AbortGhostExecution(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	if err := h.executionService.AbortGhostExecution(ctx, changePlanID); err != nil {
+		status := http.StatusBadRequest
+		if err == repository.ErrNotFound {
+			status = http.StatusNotFound
+		}
+		return c.JSON(status, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	h.logger.Info("Ghost execution aborted",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Abort requested",
+	})
+}
+
+// GhostPreflightCheck handles GET /api/v1/change-plans/:id/ghost-preflight
+// Validates the target database meets ghost executor requirements:
+// MySQL — binlog ROW + FULL row image, REPLICATION SLAVE/CLIENT grants,
+// and ALL privileges on the database; PostgreSQL — table has PK and no
+// triggers (pg-online-schema-change constraints). Returns per-check
+// pass/fail with remediation guidance.
+func (h *ChangePlanHandler) GhostPreflightCheck(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	db, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve target database",
+		})
+	}
+	dbInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve database instance",
+		})
+	}
+
+	conn, err := h.connectionManager.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": fmt.Sprintf("Failed to connect to target database: %s", err.Error()),
+		})
+	}
+	defer func() {
+		_ = conn.Close()
+	}()
+
+	type preflightCheck struct {
+		Name   string `json:"name"`
+		Passed bool   `json:"passed"`
+		Detail string `json:"detail"`
+	}
+	var checks []preflightCheck
+	addCheck := func(name string, passed bool, detail string) {
+		checks = append(checks, preflightCheck{Name: name, Passed: passed, Detail: detail})
+	}
+
+	switch dbInstance.DatabaseEngine {
+	case models.DatabaseEngineMySQL:
+		// binlog_format must be ROW
+		var name, value string
+		err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_format'").Scan(&name, &value)
+		addCheck("binlog_format=ROW", err == nil && strings.EqualFold(value, "ROW"),
+			fmt.Sprintf("current: %s (gh-ost requires ROW; check RDS parameter group)", value))
+
+		// binlog_row_image must be FULL
+		value = ""
+		err = conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'binlog_row_image'").Scan(&name, &value)
+		addCheck("binlog_row_image=FULL", err == nil && strings.EqualFold(value, "FULL"),
+			fmt.Sprintf("current: %s (gh-ost requires FULL row image)", value))
+
+		// Grants: REPLICATION SLAVE + REPLICATION CLIENT + ALL ON <db>.*
+		rows, err := conn.QueryContext(ctx, "SHOW GRANTS")
+		grantsPass, grantsDetail := false, "could not read grants"
+		if err == nil {
+			defer func() {
+				_ = rows.Close()
+			}()
+			var all string
+			for rows.Next() {
+				var g string
+				if scanErr := rows.Scan(&g); scanErr == nil {
+					all += " " + strings.ToUpper(g)
+				}
+			}
+			hasReplication := strings.Contains(all, "REPLICATION SLAVE") && strings.Contains(all, "REPLICATION CLIENT")
+			dbNameEsc := strings.ToUpper(db.DatabaseName)
+			hasDBPrivs := strings.Contains(all, "ALL PRIVILEGES") &&
+				(strings.Contains(all, "ON *.*") || strings.Contains(all, "ON `"+dbNameEsc+"`.*") || strings.Contains(all, "ON "+dbNameEsc+".*"))
+			grantsPass = hasReplication && hasDBPrivs
+			grantsDetail = fmt.Sprintf(
+				"required: ALL PRIVILEGES ON %s.* plus REPLICATION SLAVE, REPLICATION CLIENT ON *.*",
+				db.DatabaseName,
+			)
+		}
+		addCheck("privileges", grantsPass, grantsDetail)
+
+		// Disk headroom estimate: gh-ost copies the full table (data + all
+		// indexes) plus the new index and binlog growth during the copy. We
+		// report the estimated requirement from information_schema; verifying
+		// actual free disk (CloudWatch FreeStorageSpace on RDS) is the
+		// operator's responsibility — this check always passes with a warning.
+		if table, _, parseErr := services.ParseAlterStatement(changePlan.SQLContent); parseErr == nil {
+			var dataLen, indexLen sql.NullInt64
+			_ = conn.QueryRowContext(ctx,
+				`SELECT DATA_LENGTH, INDEX_LENGTH FROM information_schema.TABLES
+				 WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`, db.DatabaseName, table,
+			).Scan(&dataLen, &indexLen)
+			totalBytes := dataLen.Int64 + indexLen.Int64
+			estGB := float64(totalBytes) / (1024 * 1024 * 1024)
+			addCheck(
+				"disk_headroom_estimate",
+				true,
+				fmt.Sprintf(
+					"table %s is %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth during the copy — verify free disk on the instance before executing",
+					table,
+					estGB,
+				),
+			)
+		}
+
+	case models.DatabaseEnginePostgreSQL:
+		// pg-online-schema-change constraints: target table needs PK and no triggers.
+		table, _, parseErr := services.ParseAlterStatement(changePlan.SQLContent)
+		if parseErr != nil {
+			addCheck("sql_parse", false, parseErr.Error())
+			break
+		}
+
+		var pkCount int
+		err := conn.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM information_schema.table_constraints
+			 WHERE table_name = $1 AND constraint_type = 'PRIMARY KEY'`, table,
+		).Scan(&pkCount)
+		addCheck("primary_key", err == nil && pkCount > 0,
+			"pg-online-schema-change requires a primary key on the target table")
+
+		var triggerCount int
+		err = conn.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM information_schema.triggers
+			 WHERE event_object_table = $1`, table,
+		).Scan(&triggerCount)
+		addCheck("no_triggers", err == nil && triggerCount == 0,
+			"pg-online-schema-change cannot run on tables with triggers")
+	}
+
+	allPassed := true
+	for _, ch := range checks {
+		if !ch.Passed {
+			allPassed = false
+			break
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"change_plan_id": changePlanID.String(),
+		"engine":         dbInstance.DatabaseEngine,
+		"all_passed":     allPassed,
+		"checks":         checks,
+	})
+}
+
+// DropGhostBackupTable handles POST /api/v1/change-plans/:id/ghost-drop-backup
+// Drops the retained _<table>_del backup table after a completed ghost migration.
+func (h *ChangePlanHandler) DropGhostBackupTable(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	if err := h.executionService.DropGhostBackupTable(ctx, changePlanID); err != nil {
+		status := http.StatusBadRequest
+		if err == repository.ErrNotFound {
+			status = http.StatusNotFound
+		}
+		return c.JSON(status, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	h.logger.Info("Ghost backup table dropped",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Backup table dropped",
+	})
+}
+
+// RollbackGhostPlan handles POST /api/v1/change-plans/:id/ghost-rollback
+// Atomically swaps the backup table back into place (data-loss warning:
+// post-cutover writes are sidelined into _<table>_new).
+func (h *ChangePlanHandler) RollbackGhostPlan(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	if err := h.executionService.RollbackGhostPlan(ctx, changePlanID); err != nil {
+		status := http.StatusBadRequest
+		if err == repository.ErrNotFound {
+			status = http.StatusNotFound
+		}
+		return c.JSON(status, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	h.logger.Info("Ghost plan rolled back",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Plan rolled back; post-cutover writes preserved in the sidelined table",
+	})
+}
+
+// ReRunGhostChecks handles POST /api/v1/change-plans/:id/ghost-checks
+// Re-runs all ghost readiness checks and persists the fresh report.
+func (h *ChangePlanHandler) ReRunGhostChecks(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	if changePlan.ExecutionBackend != models.ExecutionBackendGhost {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Change plan is not running under the ghost executor",
+		})
+	}
+
+	h.logger.Info("Re-running all ghost readiness checks",
+		zap.String("change_plan_id", changePlanID.String()),
+	)
+
+	report, err := h.executionService.RunGhostReadinessChecks(ctx, changePlan)
+	if err != nil {
+		h.logger.Error("Ghost readiness checks failed to run",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.Error(err),
+		)
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": fmt.Sprintf("Failed to run ghost readiness checks: %s", err.Error()),
+		})
+	}
+
+	for _, chk := range report.Checks {
+		h.logger.Info("ghost check result",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("check", chk.Name),
+			zap.Bool("passed", chk.Passed),
+			zap.String("detail", chk.Detail),
+		)
+	}
+
+	// Persist fresh report
+	if raw, mErr := json.Marshal(report); mErr == nil {
+		str := string(raw)
+		changePlan.GhostChecks = &str
+		if uErr := h.changePlanRepo.Update(ctx, changePlan); uErr != nil {
+			h.logger.Warn("Failed to persist ghost checks report", zap.Error(uErr))
+		}
+	}
+
+	return c.JSON(http.StatusOK, report)
+}
+
+// ReRunGhostCheck handles POST /api/v1/change-plans/:id/ghost-checks/:checkName
+// Re-runs a single named check and merges it into the persisted report.
+func (h *ChangePlanHandler) ReRunGhostCheck(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	changePlanID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Invalid change plan ID format",
+		})
+	}
+	checkName := c.Param("checkName")
+
+	changePlan, err := h.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": "Change plan not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": "Failed to retrieve change plan",
+		})
+	}
+
+	if changePlan.ExecutionBackend != models.ExecutionBackendGhost {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": "Change plan is not running under the ghost executor",
+		})
+	}
+
+	h.logger.Info("Re-running single ghost check",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("check", checkName),
+	)
+
+	result, err := h.executionService.RunGhostCheck(ctx, changePlan, checkName)
+	if err != nil {
+		h.logger.Error("Ghost check failed to run",
+			zap.String("change_plan_id", changePlanID.String()),
+			zap.String("check", checkName),
+			zap.Error(err),
+		)
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	h.logger.Info("ghost check result",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("check", result.Name),
+		zap.Bool("passed", result.Passed),
+		zap.String("detail", result.Detail),
+	)
+
+	// Merge into the stored report (replace same-named check, recompute all_passed)
+	var report services.GhostReadinessReport
+	if changePlan.GhostChecks != nil && *changePlan.GhostChecks != "" {
+		if err := json.Unmarshal([]byte(*changePlan.GhostChecks), &report); err != nil {
+			report = services.GhostReadinessReport{}
+		}
+	}
+	merged := false
+	report.AllPassed = true
+	for i, chk := range report.Checks {
+		if chk.Name == result.Name {
+			report.Checks[i] = result
+			merged = true
+			break
+		}
+	}
+	if !merged {
+		report.Checks = append(report.Checks, result)
+	}
+	for _, chk := range report.Checks {
+		if !chk.Passed {
+			report.AllPassed = false
+			break
+		}
+	}
+
+	if raw, mErr := json.Marshal(report); mErr == nil {
+		str := string(raw)
+		changePlan.GhostChecks = &str
+		if uErr := h.changePlanRepo.Update(ctx, changePlan); uErr != nil {
+			h.logger.Warn("Failed to persist ghost checks report", zap.Error(uErr))
+		}
+	}
+
+	return c.JSON(http.StatusOK, report)
 }

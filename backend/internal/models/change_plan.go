@@ -11,14 +11,18 @@ import (
 type ChangePlanStatus string
 
 const (
-	ChangePlanStatusDraft      ChangePlanStatus = "Draft"
-	ChangePlanStatusOpen       ChangePlanStatus = "Open"
-	ChangePlanStatusApproved   ChangePlanStatus = "Approved"
-	ChangePlanStatusClosed     ChangePlanStatus = "Closed"
-	ChangePlanStatusInProgress ChangePlanStatus = "InProgress"
-	ChangePlanStatusCompleted  ChangePlanStatus = "Completed"
-	ChangePlanStatusFailed     ChangePlanStatus = "Failed"
-	ChangePlanStatusCancelled  ChangePlanStatus = "Cancelled"
+	ChangePlanStatusDraft           ChangePlanStatus = "Draft"
+	ChangePlanStatusOpen            ChangePlanStatus = "Open"
+	ChangePlanStatusApproved        ChangePlanStatus = "Approved"
+	ChangePlanStatusClosed          ChangePlanStatus = "Closed"
+	ChangePlanStatusInProgress      ChangePlanStatus = "InProgress"
+	ChangePlanStatusAwaitingCutover ChangePlanStatus = "AwaitingCutover"
+	// AwaitingCleanup: ghost cutover done (live on new schema); the plan
+	// completes only when the retained _<table>_del backup is dropped.
+	ChangePlanStatusAwaitingCleanup ChangePlanStatus = "AwaitingCleanup"
+	ChangePlanStatusCompleted       ChangePlanStatus = "Completed"
+	ChangePlanStatusFailed          ChangePlanStatus = "Failed"
+	ChangePlanStatusCancelled       ChangePlanStatus = "Cancelled"
 )
 
 // String returns the string representation of ChangePlanStatus
@@ -30,8 +34,8 @@ func (s ChangePlanStatus) String() string {
 func (s ChangePlanStatus) IsValid() bool {
 	switch s {
 	case ChangePlanStatusDraft, ChangePlanStatusOpen, ChangePlanStatusApproved,
-		ChangePlanStatusClosed, ChangePlanStatusInProgress, ChangePlanStatusCompleted,
-		ChangePlanStatusFailed, ChangePlanStatusCancelled:
+		ChangePlanStatusClosed, ChangePlanStatusInProgress, ChangePlanStatusAwaitingCutover,
+		ChangePlanStatusAwaitingCleanup, ChangePlanStatusCompleted, ChangePlanStatusFailed, ChangePlanStatusCancelled:
 		return true
 	}
 	return false
@@ -54,6 +58,19 @@ const (
 	RiskLevelHigh   RiskLevel = "High"
 )
 
+// ExecutionBackend represents the executor chosen for running a change plan
+type ExecutionBackend string
+
+const (
+	ExecutionBackendDirect ExecutionBackend = "direct"
+	ExecutionBackendGhost  ExecutionBackend = "ghost"
+)
+
+// IsValid checks if the backend tag is one of the supported values
+func (b ExecutionBackend) IsValid() bool {
+	return b == ExecutionBackendDirect || b == ExecutionBackendGhost
+}
+
 // ChangePlan represents a database change request
 type ChangePlan struct {
 	ID                  uuid.UUID        `json:"id"                              db:"id"`
@@ -74,19 +91,23 @@ type ChangePlan struct {
 	AffectedRows        *int             `json:"affected_rows,omitempty"         db:"affected_rows"`
 	ErrorMessage        *string          `json:"error_message,omitempty"         db:"error_message"`
 	StatementCount      *int             `json:"statement_count,omitempty"       db:"statement_count"`
+	ExecutionBackend    ExecutionBackend `json:"execution_backend"               db:"execution_backend"`
+	GhostChecks         *string          `json:"ghost_checks,omitempty"          db:"ghost_checks"`
+	GhostProgress       *string          `json:"ghost_progress,omitempty"        db:"ghost_progress"`
 	CreatedAt           time.Time        `json:"created_at"                      db:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"                      db:"updated_at"`
 }
 
 // CreateChangePlanRequest represents the request to create a new change plan
 type CreateChangePlanRequest struct {
-	ProjectID        uuid.UUID  `json:"project_id"             validate:"required"`
-	TargetDatabaseID uuid.UUID  `json:"target_database_id"     validate:"required"`
-	Title            string     `json:"title"                  validate:"required,max=255"`
-	Description      string     `json:"description"            validate:"omitempty"`
-	ChangeType       ChangeType `json:"change_type"            validate:"required,oneof=DDL DML"`
-	SQLContent       string     `json:"sql_content"            validate:"required"`
-	RollbackSQL      *string    `json:"rollback_sql,omitempty"`
+	ProjectID        uuid.UUID        `json:"project_id"                  validate:"required"`
+	TargetDatabaseID uuid.UUID        `json:"target_database_id"          validate:"required"`
+	Title            string           `json:"title"                       validate:"required,max=255"`
+	Description      string           `json:"description"                 validate:"omitempty"`
+	ChangeType       ChangeType       `json:"change_type"                 validate:"required,oneof=DDL DML"`
+	SQLContent       string           `json:"sql_content"                 validate:"required"`
+	RollbackSQL      *string          `json:"rollback_sql,omitempty"`
+	ExecutionBackend ExecutionBackend `json:"execution_backend,omitempty" validate:"omitempty,oneof=direct ghost"`
 }
 
 // UpdateChangePlanRequest represents the request to update a change plan
@@ -98,6 +119,7 @@ type UpdateChangePlanRequest struct {
 	Status             *ChangePlanStatus `json:"status,omitempty"               validate:"omitempty,oneof=Draft Open Approved Closed InProgress Completed Failed Cancelled"`
 	RiskLevel          *RiskLevel        `json:"risk_level,omitempty"           validate:"omitempty,oneof=Low Medium High"`
 	AssignedReviewerID *uuid.UUID        `json:"assigned_reviewer_id,omitempty"`
+	ExecutionBackend   *ExecutionBackend `json:"execution_backend,omitempty"    validate:"omitempty,oneof=direct ghost"`
 }
 
 // ChangePlanResponse represents a change plan response
@@ -120,8 +142,15 @@ type ChangePlanResponse struct {
 	AffectedRows        *int             `json:"affected_rows,omitempty"`
 	ErrorMessage        *string          `json:"error_message,omitempty"`
 	StatementCount      *int             `json:"statement_count,omitempty"`
-	CreatedAt           time.Time        `json:"created_at"`
-	UpdatedAt           time.Time        `json:"updated_at"`
+	ExecutionBackend    ExecutionBackend `json:"execution_backend"`
+	// ExecutorWarnings inform the user how the SQL content maps to executors
+	// (e.g. no ALTER TABLE → ghost won't run anything; mixed content → both
+	// executors run). Transient — populated at creation/update, not persisted.
+	ExecutorWarnings []string  `json:"executor_warnings,omitempty"`
+	GhostChecks      *string   `json:"ghost_checks,omitempty"`
+	GhostProgress    *string   `json:"ghost_progress,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 	// SQL Review results
 	PolicyFindings *PolicyFindingsSummary `json:"policy_findings,omitempty"`
 	HasErrors      bool                   `json:"has_errors"`
@@ -177,6 +206,9 @@ func (cp *ChangePlan) ToResponse() *ChangePlanResponse {
 		AffectedRows:        cp.AffectedRows,
 		ErrorMessage:        cp.ErrorMessage,
 		StatementCount:      cp.StatementCount,
+		ExecutionBackend:    cp.ExecutionBackend,
+		GhostChecks:         cp.GhostChecks,
+		GhostProgress:       cp.GhostProgress,
 		CreatedAt:           cp.CreatedAt,
 		UpdatedAt:           cp.UpdatedAt,
 	}
@@ -224,6 +256,11 @@ func (cp *ChangePlan) Validate() error {
 	// Validate risk level
 	if cp.RiskLevel != RiskLevelLow && cp.RiskLevel != RiskLevelMedium && cp.RiskLevel != RiskLevelHigh {
 		return ErrInvalidChangePlan("risk_level must be Low, Medium, or High")
+	}
+
+	// Validate execution backend if explicitly set (empty means use the defaulting at repository layer)
+	if cp.ExecutionBackend != "" && !cp.ExecutionBackend.IsValid() {
+		return ErrInvalidChangePlan("execution_backend must be direct or ghost")
 	}
 
 	// Validate required IDs

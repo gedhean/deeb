@@ -306,7 +306,7 @@ func TestExecutionService_Execute_ChangePlanNotFound(t *testing.T) {
 
 	changePlanID := uuid.New()
 	executorID := uuid.New()
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(nil, repository.ErrNotFound)
+	changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(nil, repository.ErrNotFound)
 
 	lockManager := &MockExecutionLockManager{}
 
@@ -664,7 +664,7 @@ func TestExecutionService_Execute_InvalidStatus(t *testing.T) {
 	)
 	queueService := NewExecutionQueueService(queueRepo, logger)
 
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
+	changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(changePlan, nil)
 
 	service := NewExecutionService(
 		changePlanRepo,
@@ -727,8 +727,8 @@ func TestExecutionService_Execute_DatabaseNotFound(t *testing.T) {
 	)
 	queueService := NewExecutionQueueService(queueRepo, logger)
 
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
-	databaseRepo.On("GetByID", ctx, databaseID).Return(nil, repository.ErrNotFound)
+	changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(changePlan, nil)
+	databaseRepo.On("GetByID", mock.Anything, databaseID).Return(nil, repository.ErrNotFound)
 
 	service := NewExecutionService(
 		changePlanRepo,
@@ -798,9 +798,9 @@ func TestExecutionService_Execute_DatabaseInstanceNotFound(t *testing.T) {
 	)
 	queueService := NewExecutionQueueService(queueRepo, logger)
 
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
-	databaseRepo.On("GetByID", ctx, databaseID).Return(db, nil)
-	dbInstanceRepo.On("GetByID", ctx, databaseInstanceID).Return(nil, repository.ErrNotFound)
+	changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(changePlan, nil)
+	databaseRepo.On("GetByID", mock.Anything, databaseID).Return(db, nil)
+	dbInstanceRepo.On("GetByID", mock.Anything, databaseInstanceID).Return(nil, repository.ErrNotFound)
 
 	service := NewExecutionService(
 		changePlanRepo,
@@ -885,11 +885,11 @@ func TestExecutionService_Execute_DatabaseLocked_WithQueue(t *testing.T) {
 	)
 	queueService := NewExecutionQueueService(queueRepo, logger)
 
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
-	databaseRepo.On("GetByID", ctx, databaseID).Return(db, nil)
-	dbInstanceRepo.On("GetByID", ctx, databaseInstanceID).Return(dbInstance, nil)
-	lockManager.On("AcquireLock", ctx, databaseID, changePlanID, executorID).Return(ErrDatabaseLocked)
-	queueRepo.On("Enqueue", ctx, mock.MatchedBy(func(item *models.ExecutionQueue) bool {
+	changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(changePlan, nil)
+	databaseRepo.On("GetByID", mock.Anything, databaseID).Return(db, nil)
+	dbInstanceRepo.On("GetByID", mock.Anything, databaseInstanceID).Return(dbInstance, nil)
+	lockManager.On("AcquireLock", mock.Anything, databaseID, changePlanID, executorID).Return(ErrDatabaseLocked)
+	queueRepo.On("Enqueue", mock.Anything, mock.MatchedBy(func(item *models.ExecutionQueue) bool {
 		return item.ChangePlanID == changePlanID && item.TargetDatabaseID == databaseID && item.ExecutorID == executorID
 	})).Return(nil).Run(func(args mock.Arguments) {
 		item := args.Get(1).(*models.ExecutionQueue)
@@ -971,10 +971,10 @@ func TestExecutionService_Execute_DatabaseLocked_WithoutQueue(t *testing.T) {
 		logger,
 	)
 
-	changePlanRepo.On("GetByID", ctx, changePlanID).Return(changePlan, nil)
-	databaseRepo.On("GetByID", ctx, databaseID).Return(db, nil)
-	dbInstanceRepo.On("GetByID", ctx, databaseInstanceID).Return(dbInstance, nil)
-	lockManager.On("AcquireLock", ctx, databaseID, changePlanID, executorID).Return(ErrDatabaseLocked)
+	changePlanRepo.On("GetByID", mock.Anything, changePlanID).Return(changePlan, nil)
+	databaseRepo.On("GetByID", mock.Anything, databaseID).Return(db, nil)
+	dbInstanceRepo.On("GetByID", mock.Anything, databaseInstanceID).Return(dbInstance, nil)
+	lockManager.On("AcquireLock", mock.Anything, databaseID, changePlanID, executorID).Return(ErrDatabaseLocked)
 
 	service := NewExecutionService(
 		changePlanRepo,
@@ -1017,7 +1017,7 @@ func TestExecutionService_GetQueueStatus(t *testing.T) {
 	}
 
 	queueRepo := new(MockExecutionQueueRepository)
-	queueRepo.On("GetByChangePlanID", ctx, changePlanID).Return([]*models.ExecutionQueue{queueItem}, nil)
+	queueRepo.On("GetByChangePlanID", mock.Anything, changePlanID).Return([]*models.ExecutionQueue{queueItem}, nil)
 	queueService := NewExecutionQueueService(queueRepo, logger)
 
 	service := &ExecutionService{
@@ -1073,7 +1073,7 @@ func TestExecutionService_GetExecutionLogHistory(t *testing.T) {
 	}
 
 	executionLogRepo := new(MockExecutionLogRepository)
-	executionLogRepo.On("GetByChangePlanID", ctx, changePlanID).Return(logs, nil)
+	executionLogRepo.On("GetByChangePlanID", mock.Anything, changePlanID).Return(logs, nil)
 
 	service := &ExecutionService{
 		executionLogRepo: executionLogRepo,

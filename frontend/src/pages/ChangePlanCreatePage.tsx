@@ -8,6 +8,7 @@ import type { CreateChangePlanRequest, Database, ChangeType } from '@/lib/api/ty
 import { APIError } from '@/lib/api/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertTriangle } from 'lucide-react';
+import { showErrorToast } from '@/lib/errorHandling';
 import { useCurrentProject } from '@/store';
 import type { SQLDialect, EditorTheme } from '@/components/editors';
 import {
@@ -31,6 +32,7 @@ interface FormData {
   description: string;
   change_type: ChangeType;
   sql_content: string;
+  execution_backend: 'direct' | 'ghost';
 }
 
 export const ChangePlanCreatePage: React.FC = () => {
@@ -51,6 +53,20 @@ export const ChangePlanCreatePage: React.FC = () => {
 
   // Get initial step from URL or session storage
   const getInitialStep = (): number => {
+    // Step 2 requires a selected database — never restore/land there without
+    // one (e.g. stale sessionStorage or a hand-crafted ?step=2 URL).
+    const storedData = sessionStorage.getItem(FORM_DATA_KEY);
+    let hasDatabase = false;
+    if (storedData) {
+      try {
+        hasDatabase = !!JSON.parse(storedData).target_database_id;
+      } catch {
+        hasDatabase = false;
+      }
+    }
+    if (!hasDatabase) {
+      return 1;
+    }
     const urlStep = searchParams.get('step');
     if (urlStep === '1' || urlStep === '2') {
       return parseInt(urlStep);
@@ -86,6 +102,7 @@ export const ChangePlanCreatePage: React.FC = () => {
       description: '',
       change_type: 'DDL',
       sql_content: '',
+      execution_backend: 'direct',
     };
   };
 
@@ -113,6 +130,14 @@ export const ChangePlanCreatePage: React.FC = () => {
     setSearchParams(newParams, { replace: true });
   }, [currentStep, searchParams, setSearchParams]);
 
+  // Never sit on step 2 without a selected database (e.g. selection cleared
+  // while on step 2) — bounce back to step 1.
+  useEffect(() => {
+    if (currentStep === 2 && !formData.target_database_id) {
+      setCurrentStep(1);
+    }
+  }, [currentStep, formData.target_database_id]);
+
   // Clear session storage on unmount (successful submission or cancel)
   useEffect(() => {
     return () => {
@@ -124,14 +149,12 @@ export const ChangePlanCreatePage: React.FC = () => {
     };
   }, []);
 
-  // Redirect if no project is selected
+  // Redirect if no project is selected. Show a toast so the redirect is not
+  // silent (router state alone was never rendered anywhere).
   useEffect(() => {
     if (!currentProject) {
-      navigate('/dashboard', {
-        state: {
-          message: 'Please select a project first',
-        },
-      });
+      showErrorToast('Please select a project first');
+      navigate('/dashboard');
     }
   }, [currentProject, navigate]);
 
@@ -368,6 +391,7 @@ export const ChangePlanCreatePage: React.FC = () => {
         description: formData.description?.trim() || '',
         change_type: formData.change_type,
         sql_content: formData.sql_content.trim(),
+        execution_backend: ghostEligible ? formData.execution_backend : 'direct',
       };
 
       const createdChangePlan = await changePlanService.createChangePlan(createData);
@@ -398,6 +422,39 @@ export const ChangePlanCreatePage: React.FC = () => {
   };
 
   const selectedDatabase = databases.find((db) => db.id === formData.target_database_id);
+
+  // Ghost executor is available for DDL plans on databases in
+  // non-production environments (server enforces this too).
+  const selectedDatabaseInstance = selectedDatabase?.database_instance;
+  const selectedEngine = selectedDatabaseInstance?.database_engine;
+
+  // Online Migrator executor is available only for MySQL DDL plans on
+  // databases in non-production environments (server enforces this too,
+  // fail-closed). Collect the specific failing rules so the UI can show
+  // exactly why the selector is disabled.
+  const ghostIneligibilityReasons: string[] = [];
+  if (formData.change_type !== 'DDL') {
+    ghostIneligibilityReasons.push(
+      `Online Migrator requires change type DDL (selected: ${formData.change_type}).`,
+    );
+  }
+  if (selectedEngine !== 'mysql') {
+    ghostIneligibilityReasons.push(
+      `Online Migrator requires a MySQL database${
+        selectedEngine ? ` (selected: ${selectedEngine})` : ''
+      }.`,
+    );
+  }
+  if (!selectedDatabase?.environment) {
+    if (selectedDatabase) {
+      ghostIneligibilityReasons.push(
+        'Online Migrator requires the database to have an environment assigned.',
+      );
+    }
+  } else if (selectedDatabase.environment.is_production) {
+    ghostIneligibilityReasons.push('Online Migrator is not available on production environments.');
+  }
+  const ghostEligible = ghostIneligibilityReasons.length === 0;
 
   const steps = [
     { label: 'Target Database', description: 'Select database' },
@@ -465,6 +522,12 @@ export const ChangePlanCreatePage: React.FC = () => {
                 errors={formErrors}
                 theme={getEditorTheme()}
                 dialect={getSQLDialect()}
+                executionBackend={formData.execution_backend}
+                onExecutionBackendChange={(backend) =>
+                  setFormData((prev) => ({ ...prev, execution_backend: backend }))
+                }
+                ghostEligible={ghostEligible}
+                ghostIneligibilityReasons={ghostIneligibilityReasons}
               />
             )}
           </CardContent>

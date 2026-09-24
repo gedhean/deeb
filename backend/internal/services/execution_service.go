@@ -6,6 +6,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +17,7 @@ import (
 	"github.com/nsxbet/deeb/internal/models"
 	"github.com/nsxbet/deeb/internal/parser"
 	"github.com/nsxbet/deeb/internal/repository"
+	"github.com/nsxbet/deeb/internal/utils"
 	"go.uber.org/zap"
 )
 
@@ -39,6 +43,10 @@ type ExecutionService struct {
 	executionTimeout     time.Duration // Timeout for SQL execution (default: 10 minutes)
 	maxStatementCount    int           // Maximum number of statements allowed (default: 1000)
 	logger               *zap.Logger
+
+	// Optional ghost executor support (nil when unsupported)
+	ghostExecutor *GhostExecutor
+	envRepo       repository.EnvironmentRepository
 }
 
 // ExecutionResult represents the result of a SQL execution
@@ -66,7 +74,7 @@ func NewExecutionService(
 	logger *zap.Logger,
 ) *ExecutionService {
 	executionTimeout := 10 * time.Minute // Default: 10 minutes
-	maxStatementCount := 1000           // Default: 1000 statements max
+	maxStatementCount := 1000            // Default: 1000 statements max
 
 	return &ExecutionService{
 		changePlanRepo:       changePlanRepo,
@@ -86,6 +94,742 @@ func NewExecutionService(
 		logger:               logger,
 	}
 }
+
+// WithGhostSupport attaches the ghost executor + environment repository for
+// executor dispatch (optional; only used when set).
+func (s *ExecutionService) WithGhostSupport(
+	ghostExecutor *GhostExecutor,
+	envRepo repository.EnvironmentRepository,
+) *ExecutionService {
+	s.ghostExecutor = ghostExecutor
+	s.envRepo = envRepo
+	return s
+}
+
+// GhostMaxDuration exposes the configured ghost executor max duration (0 when
+// ghost support isn't configured). Used by the queue processor to size the
+// per-item timeout window.
+func (s *ExecutionService) GhostMaxDuration() time.Duration {
+	if s.ghostExecutor == nil {
+		return 0
+	}
+	return s.ghostExecutor.maxDuration
+}
+
+// ApproveGhostCutover removes the ghost postpone flag for a plan that is
+// AwaitingCutover, letting the running tool proceed to the atomic rename.
+func (s *ExecutionService) ApproveGhostCutover(ctx context.Context, changePlanID uuid.UUID) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	if plan.ExecutionBackend != models.ExecutionBackendGhost {
+		return fmt.Errorf("change plan is not running under the ghost executor")
+	}
+	if plan.Status != models.ChangePlanStatusAwaitingCutover {
+		return fmt.Errorf("cutover can only be approved while the plan is AwaitingCutover (current: %s)", plan.Status)
+	}
+	return s.ghostExecutor.ApproveCutover(changePlanID)
+}
+
+// AbortGhostExecution creates the panic flag asking the ghost tool to abort
+// cleanly before the cutover; the original table stays untouched.
+func (s *ExecutionService) AbortGhostExecution(ctx context.Context, changePlanID uuid.UUID) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	if plan.ExecutionBackend != models.ExecutionBackendGhost {
+		return fmt.Errorf("change plan is not running under the ghost executor")
+	}
+	if plan.Status != models.ChangePlanStatusInProgress && plan.Status != models.ChangePlanStatusAwaitingCutover {
+		return fmt.Errorf("abort is only available while the plan is executing (current: %s)", plan.Status)
+	}
+	return s.ghostExecutor.Abort(changePlanID)
+}
+
+// GhostCheckResult is one item in the ghost readiness report.
+type GhostCheckResult struct {
+	Name   string `json:"name"`
+	Passed bool   `json:"passed"`
+	Detail string `json:"detail"`
+}
+
+// ghostCheckName enumerates the individual checks for targeted re-runs.
+const (
+	GhostCheckConnection  = "connection"
+	GhostCheckEngine      = "engine_mysql"
+	GhostCheckBinlogFmt   = "binlog_format"
+	GhostCheckBinlogImage = "binlog_row_image"
+	GhostCheckPrivileges  = "privileges"
+	GhostCheckDisk        = "disk_headroom_estimate"
+	GhostCheckMDL         = "metadata_lock_instrument"
+	GhostCheckDryRun      = "dry_run"
+)
+
+// ghostCheckRunner is a single check executable independently.
+type ghostCheckRunner func(ctx context.Context, plan *models.ChangePlan) GhostCheckResult
+
+// ghostCheckFuncs maps check names to their runner for targeted re-runs.
+// RunGhostReadinessChecks uses the same functions in a fixed order.
+func (s *ExecutionService) ghostCheckFuncs() map[string]ghostCheckRunner {
+	return map[string]ghostCheckRunner{
+		GhostCheckConnection:  s.checkGhostConnection,
+		GhostCheckEngine:      s.checkGhostEngine,
+		GhostCheckBinlogFmt:   s.checkGhostBinlogFormat,
+		GhostCheckBinlogImage: s.checkGhostBinlogRowImage,
+		GhostCheckPrivileges:  s.checkGhostPrivileges,
+		GhostCheckDisk:        s.checkGhostDiskHeadroom,
+		GhostCheckMDL:         s.checkGhostMetadataLockInstrument,
+		GhostCheckDryRun:      s.checkGhostDryRun,
+	}
+}
+
+// GhostReadinessReport is the structured result of all ghost checks, run at
+// submit-for-review time. AllPassed gates the Draft → Open transition.
+type GhostReadinessReport struct {
+	AllPassed bool               `json:"all_passed"`
+	Checks    []GhostCheckResult `json:"checks"`
+}
+
+// RunGhostReadinessChecks executes the full ghost readiness suite against the
+// live target and returns per-check results. Used by the submit-for-review
+// gate and the preflight endpoint. Dry run is included as the final check.
+// ghostCheckOrder fixes the report's check sequence.
+var ghostCheckOrder = []string{
+	GhostCheckEngine,
+	GhostCheckConnection,
+	GhostCheckBinlogFmt,
+	GhostCheckBinlogImage,
+	GhostCheckPrivileges,
+	GhostCheckDisk,
+	GhostCheckMDL,
+	GhostCheckDryRun,
+}
+
+func (s *ExecutionService) RunGhostReadinessChecks(ctx context.Context, plan *models.ChangePlan) (*GhostReadinessReport, error) {
+	funcs := s.ghostCheckFuncs()
+	report := &GhostReadinessReport{AllPassed: true}
+	for _, name := range ghostCheckOrder {
+		result := funcs[name](ctx, plan)
+		report.Checks = append(report.Checks, result)
+		if !result.Passed {
+			report.AllPassed = false
+			if name == GhostCheckEngine || name == GhostCheckConnection {
+				break // no point continuing without a valid target
+			}
+		}
+	}
+	return report, nil
+}
+
+// RunGhostCheck executes a single named check; unknown names return an
+// informative failure result (callers validate names first).
+func (s *ExecutionService) RunGhostCheck(
+	ctx context.Context,
+	plan *models.ChangePlan,
+	checkName string,
+) (GhostCheckResult, error) {
+	funcs := s.ghostCheckFuncs()
+	runner, ok := funcs[checkName]
+	if !ok {
+		return GhostCheckResult{}, fmt.Errorf(
+			"unknown ghost check: %s (known: %s)",
+			checkName,
+			strings.Join(ghostCheckOrder, ", "),
+		)
+	}
+	return runner(ctx, plan), nil
+}
+
+// checkGhostEngine verifies the target engine is MySQL.
+func (s *ExecutionService) checkGhostEngine(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
+	_, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return GhostCheckResult{Name: GhostCheckEngine, Passed: false, Detail: err.Error()}
+	}
+	if dbInstance.DatabaseEngine == models.DatabaseEngineMySQL {
+		return GhostCheckResult{Name: GhostCheckEngine, Passed: true, Detail: "target is MySQL"}
+	}
+	return GhostCheckResult{
+		Name: GhostCheckEngine, Passed: false,
+		Detail: fmt.Sprintf("ghost currently supports MySQL only (target: %s)", dbInstance.DatabaseEngine),
+	}
+}
+
+// checkGhostConnection verifies the target is reachable.
+func (s *ExecutionService) checkGhostConnection(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
+	db, dbInstance := s.mustResolveForConn(ctx, plan)
+	if db == nil {
+		return GhostCheckResult{Name: GhostCheckConnection, Passed: false, Detail: "failed to resolve target database"}
+	}
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return GhostCheckResult{
+			Name: GhostCheckConnection, Passed: false,
+			Detail: fmt.Sprintf("connecting as '%s' to %s:%d/%s failed: %s",
+				dbInstance.Username, dbInstance.Host, dbInstance.Port, db.DatabaseName, err.Error()),
+		}
+	}
+	_ = conn.Close()
+	return GhostCheckResult{
+		Name: GhostCheckConnection, Passed: true,
+		Detail: fmt.Sprintf(
+			"connected as '%s' to %s:%d/%s",
+			dbInstance.Username,
+			dbInstance.Host,
+			dbInstance.Port,
+			db.DatabaseName,
+		),
+	}
+}
+
+// checkGhostBinlogFormat verifies binlog_format=ROW.
+func (s *ExecutionService) checkGhostBinlogFormat(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
+	return s.ghostVariableCheck(ctx, plan, GhostCheckBinlogFmt, "binlog_format", "ROW")
+}
+
+// checkGhostBinlogRowImage verifies binlog_row_image=FULL.
+func (s *ExecutionService) checkGhostBinlogRowImage(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
+	return s.ghostVariableCheck(ctx, plan, GhostCheckBinlogImage, "binlog_row_image", "FULL")
+}
+
+func (s *ExecutionService) ghostVariableCheck(
+	ctx context.Context,
+	plan *models.ChangePlan,
+	checkName, variable, want string,
+) GhostCheckResult {
+	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return GhostCheckResult{Name: checkName, Passed: false, Detail: err.Error()}
+	}
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return GhostCheckResult{
+			Name: checkName, Passed: false,
+			Detail: fmt.Sprintf("connecting as '%s' failed: %s", dbInstance.Username, err.Error()),
+		}
+	}
+	defer func() { _ = conn.Close() }()
+
+	var name, value string
+	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE '"+variable+"'").Scan(&name, &value); err != nil {
+		return GhostCheckResult{Name: checkName, Passed: false, Detail: err.Error()}
+	}
+	if !strings.EqualFold(value, want) {
+		return GhostCheckResult{
+			Name: checkName, Passed: false,
+			Detail: fmt.Sprintf("gh-ost requires %s=%s (current: %s); check the RDS parameter group", variable, want, value),
+		}
+	}
+	return GhostCheckResult{
+		Name: checkName, Passed: true,
+		Detail: fmt.Sprintf("%s=%s (verified as '%s')", variable, want, dbInstance.Username),
+	}
+}
+
+// ghostRequiredDBPrivs is the set of DML/DDL privileges gh-ost needs on the
+// target database (besides the replication privileges). An enumerated grant
+// covering all of these is equivalent to ALL PRIVILEGES for our purposes.
+var ghostRequiredDBPrivs = []string{
+	"SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "INDEX",
+}
+
+// checkGhostPrivileges verifies grants needed by gh-ost. Evaluation is
+// semantic rather than literal: a literal `ALL PRIVILEGES` passes, and so
+// does an enumerated grant list covering ghostRequiredDBPrivs plus
+// REPLICATION SLAVE + REPLICATION CLIENT (e.g. a fully privileged root).
+func (s *ExecutionService) checkGhostPrivileges(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
+	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return GhostCheckResult{Name: GhostCheckPrivileges, Passed: false, Detail: err.Error()}
+	}
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return GhostCheckResult{
+			Name:   GhostCheckPrivileges,
+			Passed: false,
+			Detail: fmt.Sprintf("failed to connect as '%s': %s", dbInstance.Username, err.Error()),
+		}
+	}
+	defer func() { _ = conn.Close() }()
+
+	rows, qErr := conn.QueryContext(ctx, "SHOW GRANTS")
+	if qErr != nil {
+		return GhostCheckResult{
+			Name: GhostCheckPrivileges, Passed: false,
+			Detail: fmt.Sprintf("connecting as '%s': could not read grants: %s", dbInstance.Username, qErr.Error()),
+		}
+	}
+	var all string
+	for rows.Next() {
+		var g string
+		if scanErr := rows.Scan(&g); scanErr == nil {
+			all += " " + strings.ToUpper(g)
+		}
+	}
+	_ = rows.Close()
+
+	var missing []string
+	hasReplicationSlave := strings.Contains(all, "REPLICATION SLAVE")
+	hasReplicationClient := strings.Contains(all, "REPLICATION CLIENT")
+	if !hasReplicationSlave {
+		missing = append(missing, "REPLICATION SLAVE")
+	}
+	if !hasReplicationClient {
+		missing = append(missing, "REPLICATION CLIENT")
+	}
+
+	// DB-level privileges: literal ALL PRIVILEGES, or enumerated coverage.
+	hasAll := strings.Contains(all, "ALL PRIVILEGES")
+	var missingDB []string
+	if !hasAll {
+		for _, priv := range ghostRequiredDBPrivs {
+			if !strings.Contains(all, priv) {
+				missingDB = append(missingDB, priv)
+			}
+		}
+	}
+
+	passed := len(missing) == 0 && (hasAll || len(missingDB) == 0)
+	if passed {
+		detail := fmt.Sprintf("connecting as '%s': privileges OK", dbInstance.Username)
+		if !hasAll {
+			detail += " (enumerated grant set covers required privileges)"
+		}
+		return GhostCheckResult{Name: GhostCheckPrivileges, Passed: true, Detail: detail}
+	}
+
+	detail := fmt.Sprintf("connecting as '%s': missing %s", dbInstance.Username, strings.Join(missing, ", "))
+	if len(missingDB) > 0 {
+		detail += fmt.Sprintf("; db-level privileges missing: %s (or grant ALL PRIVILEGES ON %s.*)",
+			strings.Join(missingDB, ", "), db.DatabaseName)
+	}
+	if len(missing) == 0 && hasAll {
+		detail = fmt.Sprintf("connecting as '%s': grants OK", dbInstance.Username)
+	}
+	return GhostCheckResult{Name: GhostCheckPrivileges, Passed: false, Detail: detail}
+}
+
+// checkGhostDiskHeadroom estimates free-disk need (always passes — operator verifies).
+func (s *ExecutionService) checkGhostDiskHeadroom(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
+	db, dbInstance, table, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return GhostCheckResult{Name: GhostCheckDisk, Passed: false, Detail: err.Error()}
+	}
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return GhostCheckResult{Name: GhostCheckDisk, Passed: false, Detail: fmt.Sprintf("failed to connect: %s", err.Error())}
+	}
+	defer func() { _ = conn.Close() }()
+
+	var dataLen, indexLen sql.NullInt64
+	_ = conn.QueryRowContext(ctx,
+		`SELECT DATA_LENGTH, INDEX_LENGTH FROM information_schema.TABLES
+		 WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`, db.DatabaseName, table,
+	).Scan(&dataLen, &indexLen)
+	totalBytes := dataLen.Int64 + indexLen.Int64
+	estGB := float64(totalBytes) / (1024 * 1024 * 1024)
+	return GhostCheckResult{
+		Name: GhostCheckDisk, Passed: true,
+		Detail: fmt.Sprintf(
+			"table %s is estimated at roughly %.2f GB (data+indexes); gh-ost needs roughly that much free disk again plus binlog growth during the copy — this is an estimate, verify actual free disk on the instance before executing",
+			table,
+			estGB,
+		),
+	}
+}
+
+// checkGhostMetadataLockInstrument verifies the metadata-lock instrument
+// gh-ost needs (PR #1536). Reported as a WARNING: the check always passes
+// so ghost selection isn't blocked, but the detail carries the full
+// remediation guide (shown in the UI tooltip).
+func (s *ExecutionService) checkGhostMetadataLockInstrument(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
+	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return GhostCheckResult{Name: GhostCheckMDL, Passed: false, Detail: err.Error()}
+	}
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return GhostCheckResult{
+			Name:   "metadata_lock_instrument",
+			Passed: false,
+			Detail: fmt.Sprintf("failed to connect: %s", err.Error()),
+		}
+	}
+	defer func() { _ = conn.Close() }()
+
+	const remediation = "gh-ost bails out without the metadata-lock instrument (github.com/github/gh-ost/pull/1536). To fix: (1) set performance_schema=ON in the RDS parameter group attached to this instance, wait for 'in-sync', reboot the instance (expect ~3-5 min downtime; sessions drop, apps with pools reconnect); (2) run: UPDATE performance_schema.setup_instruments SET ENABLED='YES', TIMED='YES' WHERE NAME='wait/lock/metadata/sql/mdl'; The onboarder sweep applies step 2 automatically once performance_schema is ON. Alternative: run gh-ost with --skip-metadata-lock-check (loses MDL protection — not recommended on busy instances)."
+
+	var name, value string
+	if err := conn.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'performance_schema'").Scan(&name, &value); err != nil ||
+		!strings.EqualFold(value, "ON") {
+		return GhostCheckResult{
+			Name: GhostCheckMDL, Passed: true,
+			Detail: "performance_schema is OFF — " + remediation,
+		}
+	}
+
+	var enabled, timed string
+	err = conn.QueryRowContext(ctx,
+		"SELECT ENABLED, TIMED FROM performance_schema.setup_instruments WHERE NAME='wait/lock/metadata/sql/mdl'",
+	).Scan(&enabled, &timed)
+	if err != nil {
+		return GhostCheckResult{
+			Name: GhostCheckMDL, Passed: true,
+			Detail: "metadata-lock instrument row not found (may not exist until performance_schema is fully active) — " + remediation,
+		}
+	}
+	if !strings.EqualFold(enabled, "YES") || !strings.EqualFold(timed, "YES") {
+		return GhostCheckResult{
+			Name: GhostCheckMDL, Passed: true,
+			Detail: fmt.Sprintf(
+				"metadata-lock instrument is ENABLED=%s TIMED=%s (needs YES/YES) — ",
+				enabled,
+				timed,
+			) + remediation,
+		}
+	}
+	return GhostCheckResult{
+		Name: GhostCheckMDL, Passed: true,
+		Detail: "metadata-lock instrument enabled and timed",
+	}
+}
+
+// checkGhostDryRun runs gh-ost without --execute against the live target.
+func (s *ExecutionService) checkGhostDryRun(ctx context.Context, plan *models.ChangePlan) GhostCheckResult {
+	db, dbInstance, table, password, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return GhostCheckResult{Name: GhostCheckDryRun, Passed: false, Detail: err.Error()}
+	}
+	if err := s.ghostDryRunWithCreds(ctx, plan, db, dbInstance, table, password); err != nil {
+		return GhostCheckResult{Name: GhostCheckDryRun, Passed: false, Detail: err.Error()}
+	}
+	return GhostCheckResult{Name: GhostCheckDryRun, Passed: true, Detail: "gh-ost dry run completed successfully"}
+}
+
+// mustResolveForConn resolves database+instance, returning nils on failure.
+func (s *ExecutionService) mustResolveForConn(
+	ctx context.Context,
+	plan *models.ChangePlan,
+) (*models.Database, *models.DatabaseInstance) {
+	db, dbInstance, _, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return nil, nil
+	}
+	return db, dbInstance
+}
+
+// ghostDryRunWithCreds is the shared dry-run implementation (avoids
+// re-resolving the target when the caller already has it).
+func (s *ExecutionService) ghostDryRunWithCreds(
+	ctx context.Context,
+	plan *models.ChangePlan,
+	db *models.Database,
+	dbInstance *models.DatabaseInstance,
+	table, password string,
+) error {
+	_, alterClause, err := ParseAlterStatement(plan.SQLContent)
+	if err != nil {
+		return fmt.Errorf("invalid ghost SQL: %w", err)
+	}
+	confPath, err := WriteGhostConfFile(plan.ID, dbInstance.Username, password)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(confPath) }()
+	binPath, args, err := s.ghostExecutor.BuildArgs(
+		dbInstance.DatabaseEngine,
+		dbInstance.Host,
+		dbInstance.Username,
+		confPath,
+		db.DatabaseName,
+		table,
+		alterClause,
+		dbInstance.Port,
+		"", "",
+	)
+	if err != nil {
+		return err
+	}
+	dryArgs := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == "--execute" {
+			continue
+		}
+		dryArgs = append(dryArgs, a)
+	}
+	var lastErr string
+	s.logger.Info("ghost dry-run command",
+		zap.String("change_plan_id", plan.ID.String()),
+		zap.String("bin", binPath),
+		zap.Strings("args", SanitizeArgsForLog(dryArgs)),
+	)
+	callbacks := GhostRunCallbacks{
+		OnLogLine: func(line string) {
+			s.logger.Info("ghost-dryrun",
+				zap.String("change_plan_id", plan.ID.String()),
+				zap.String("line", line),
+			)
+			l := strings.ToLower(line)
+			if strings.Contains(l, "error") || strings.Contains(l, "fatal") {
+				lastErr = line
+			}
+		},
+	}
+	if err := s.ghostExecutor.Run(ctx, binPath, dryArgs, callbacks); err != nil {
+		// A failed dry run leaves gh-ost's shadow (_gho) and changelog (_ghc)
+		// tables behind on the target (e.g. invalid ALTER fails mid-copy). Best-
+		// effort cleanup here keeps the table usable for the next attempt —
+		// deliberately NOT via --initially-drop-ghost-table (that would also drop
+		// tables from a concurrent/real migration, an audit/ops hazard).
+		for _, artifact := range []string{"_" + table + "_gho", "_" + table + "_ghc"} {
+			if dropErr := s.dropGhostArtifact(ctx, db, dbInstance, artifact); dropErr != nil {
+				s.logger.Warn("Failed to clean up ghost dry-run artifact",
+					zap.String("change_plan_id", plan.ID.String()),
+					zap.String("artifact", artifact),
+					zap.Error(dropErr),
+				)
+			}
+		}
+		if lastErr != "" {
+			return fmt.Errorf("ghost dry-run failed: %s", lastErr)
+		}
+		return fmt.Errorf("ghost dry-run failed: %w", err)
+	}
+	return nil
+}
+
+// dropGhostArtifact best-effort drops a gh-ost artifact table on the target.
+func (s *ExecutionService) dropGhostArtifact(
+	ctx context.Context,
+	db *models.Database,
+	dbInstance *models.DatabaseInstance,
+	artifact string,
+) error {
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect for artifact cleanup: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS `%s`", artifact)); err != nil {
+		return fmt.Errorf("failed to drop %s: %w", artifact, err)
+	}
+	s.logger.Info("Ghost dry-run artifact dropped",
+		zap.String("artifact", artifact),
+		zap.String("database", db.DatabaseName),
+	)
+	return nil
+}
+
+// GhostDryRun validates a ghost plan by running gh-ost WITHOUT --execute
+// (dry run): it checks privileges, binlog access, and ALTER syntax against
+// the live target without migrating. Called at approval time so plans with
+// misconfigured targets fail before they can be approved.
+func (s *ExecutionService) GhostDryRun(ctx context.Context, changePlanID uuid.UUID) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	return s.GhostDryRunForPlan(ctx, plan)
+}
+
+// GhostDryRunForPlan runs the gh-ost dry run for an in-memory plan (used at
+// create/update time before the plan is persisted, and at approval time).
+func (s *ExecutionService) GhostDryRunForPlan(ctx context.Context, plan *models.ChangePlan) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
+	db, dbInstance, table, password, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return err
+	}
+	return s.ghostDryRunWithCreds(ctx, plan, db, dbInstance, table, password)
+}
+
+// resolveGhostTarget resolves the plan's target database, instance, parsed
+// table name, and decrypted password for post-completion ghost operations.
+func (s *ExecutionService) resolveGhostTarget(
+	ctx context.Context,
+	plan *models.ChangePlan,
+) (*models.Database, *models.DatabaseInstance, string, string, error) {
+	if plan.ExecutionBackend != models.ExecutionBackendGhost {
+		return nil, nil, "", "", fmt.Errorf("change plan is not running under the ghost executor")
+	}
+	table, _, err := ParseAlterStatement(plan.SQLContent)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("invalid ghost SQL: %w", err)
+	}
+	db, err := s.databaseRepo.GetByID(ctx, plan.TargetDatabaseID)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+	dbInstance, err := s.dbInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+	password, err := utils.DecryptPassword(dbInstance.ConnectionDetailsEncrypted, s.encryptionKey)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("failed to decrypt instance password: %w", err)
+	}
+	_ = password // retained for callers that build raw tool invocations
+	return db, dbInstance, table, password, nil
+}
+
+// GhostBackupTableName returns the backup table gh-ost retains post-cutover
+// (_<table>_del) for a completed ghost plan, verifying it exists.
+func (s *ExecutionService) GhostBackupTableName(ctx context.Context, changePlanID uuid.UUID) (string, error) {
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return "", err
+	}
+	_, _, table, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return "", err
+	}
+	return "_" + table + "_del", nil
+}
+
+// DropGhostBackupTable drops the retained _<table>_del backup table after a
+// completed ghost migration (cleanup step once the validation window passes).
+// Only allowed on Completed ghost plans; the drop runs outside a transaction
+// (DDL) and is audited via the execution log message.
+func (s *ExecutionService) DropGhostBackupTable(ctx context.Context, changePlanID uuid.UUID) error {
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	// AwaitingCleanup: backup drop is the completion gate → Completed on
+	// success. Completed/Failed: cleanup for legacy/failed plans (a rollback
+	// swap or post-cutover failure can leave the backup behind). Failure
+	// before cutover leaves _<table>_gho, not _del — the drop below simply
+	// errors if nothing exists, so no separate guard is needed.
+	if plan.Status != models.ChangePlanStatusAwaitingCleanup &&
+		plan.Status != models.ChangePlanStatusCompleted &&
+		plan.Status != models.ChangePlanStatusFailed {
+		return fmt.Errorf(
+			"backup table can only be dropped when the plan is AwaitingCleanup, Completed or Failed (current: %s)",
+			plan.Status,
+		)
+	}
+	db, dbInstance, table, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return err
+	}
+	backup := "_" + table + "_del"
+
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to target database: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS `%s`", backup)); err != nil {
+		return fmt.Errorf("failed to drop backup table %s: %w", backup, err)
+	}
+	// AwaitingCleanup → Completed: the drop is the completion gate.
+	if plan.Status == models.ChangePlanStatusAwaitingCleanup {
+		plan.Status = models.ChangePlanStatusCompleted
+		plan.UpdatedAt = time.Now()
+		if updateErr := s.changePlanRepo.Update(ctx, plan); updateErr != nil {
+			s.logger.Error("Failed to mark plan Completed after backup drop", zap.Error(updateErr))
+		}
+	}
+	s.logger.Info("Ghost backup table dropped",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("backup_table", backup),
+	)
+	return nil
+}
+
+// RollbackGhostPlan atomically swaps the backup table back into place after a
+// completed ghost migration: RENAME TABLE <table> -> _<table>_new,
+// _<table>_del -> <table>. WARNING: writes since cutover live only in the
+// current table (preserved as _<table>_new for reconciliation); the caller
+// must surface this data-loss risk to the user.
+func (s *ExecutionService) RollbackGhostPlan(ctx context.Context, changePlanID uuid.UUID) error {
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return err
+	}
+	if plan.Status != models.ChangePlanStatusAwaitingCleanup && plan.Status != models.ChangePlanStatusCompleted {
+		return fmt.Errorf("rollback is only available while the plan is AwaitingCleanup or Completed (current: %s)", plan.Status)
+	}
+	db, dbInstance, table, _, err := s.resolveGhostTarget(ctx, plan)
+	if err != nil {
+		return err
+	}
+	backup := "_" + table + "_del"
+	sidelined := "_" + table + "_new"
+
+	conn, err := s.connectionMgr.Connect(ctx, database.ConnectionParams{
+		DatabaseInstance: dbInstance,
+		Database:         db,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to target database: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Atomic multi-table rename (ghost-lab 08-rollback.sh equivalent)
+	rename := fmt.Sprintf("RENAME TABLE `%s` TO `%s`, `%s` TO `%s`", table, sidelined, backup, table)
+	if _, err := conn.ExecContext(ctx, rename); err != nil {
+		return fmt.Errorf("rollback rename failed: %w", err)
+	}
+
+	// Mark the plan as Failed with a rollback note so the UI reflects the
+	// schema was reverted (Completed stays immutable history otherwise).
+	plan.Status = models.ChangePlanStatusFailed
+	msg := fmt.Sprintf("Rolled back via ghost swap-back; post-cutover writes preserved in %s", sidelined)
+	plan.ErrorMessage = &msg
+	plan.UpdatedAt = time.Now()
+	if err := s.changePlanRepo.Update(ctx, plan); err != nil {
+		s.logger.Error("Failed to update plan status after rollback", zap.Error(err))
+	}
+
+	s.logger.Info("Ghost plan rolled back",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("table", table),
+		zap.String("sidelined_table", sidelined),
+	)
+	return nil
+}
+
+// Executor dispatch errors
+var (
+	ErrGhostUnsupported = fmt.Errorf("ghost executor not configured")
+	ErrGhostRejectedEnv = fmt.Errorf("ghost executor not permitted on production environments")
+)
 
 // NewExecutionServiceWithTimeout creates a new execution service with custom timeout
 func NewExecutionServiceWithTimeout(
@@ -139,6 +883,14 @@ func (s *ExecutionService) Execute(
 		zap.String("executor_id", executorID.String()),
 	)
 
+	// Detach execution from the caller's context (typically the HTTP request).
+	// Database changes legitimately outlive request timeouts (e.g. the 30s
+	// server write timeout); if the request context is canceled mid-run,
+	// cleanup steps (lock release, changelog/execution-log updates) must
+	// still complete. WithoutCancel keeps values (correlation IDs) but
+	// removes the deadline/cancel propagation.
+	ctx = context.WithoutCancel(ctx)
+
 	// Get change plan
 	changePlan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
 	if err != nil {
@@ -162,6 +914,19 @@ func (s *ExecutionService) Execute(
 			zap.String("current_status", string(changePlan.Status)),
 		)
 		return nil, fmt.Errorf("change plan must be in Approved status to execute, current status: %s", changePlan.Status)
+	}
+
+	// Ghost executor dispatch: defense-in-depth validation happens again in
+	// ghost executor; when requested by user preference we use it or fail.
+	if changePlan.ExecutionBackend == models.ExecutionBackendGhost {
+		if s.ghostExecutor == nil {
+			return nil, ErrGhostUnsupported
+		}
+		if err := s.validateGhostPlan(ctx, changePlan); err != nil {
+			return nil, err
+		}
+		// Ghost run handled by a dedicated implementation below; direct path untouched.
+		return s.executeGhost(ctx, changePlan, executorID)
 	}
 
 	// Get database and database instance
@@ -650,6 +1415,22 @@ func (s *ExecutionService) GetQueueStatus(ctx context.Context, changePlanID uuid
 	return s.queueService.GetQueueStatus(ctx, changePlanID)
 }
 
+// IsDatabaseLockedForPlan reports whether the plan's target database is
+// currently locked — a cheap synchronous pre-check so async launches can
+// still answer 409 immediately instead of failing silently in a goroutine.
+func (s *ExecutionService) IsDatabaseLockedForPlan(ctx context.Context, changePlanID uuid.UUID) (bool, error) {
+	plan, err := s.changePlanRepo.GetByID(ctx, changePlanID)
+	if err != nil {
+		return false, err
+	}
+	db, err := s.databaseRepo.GetByID(ctx, plan.TargetDatabaseID)
+	if err != nil {
+		return false, err
+	}
+	locked, _, err := s.lockManager.IsLocked(ctx, db.ID)
+	return locked, err
+}
+
 // GetExecutionLogHistory returns the execution log history for a Change Plan
 func (s *ExecutionService) GetExecutionLogHistory(ctx context.Context, changePlanID uuid.UUID) ([]*models.ExecutionLog, error) {
 	if s.executionLogRepo == nil {
@@ -674,6 +1455,298 @@ func (e *PositionedError) Error() string {
 
 func (e *PositionedError) Unwrap() error {
 	return e.OriginalError
+}
+
+// validateGhostPlan runs defense-in-depth checks before ghost execution.
+func (s *ExecutionService) validateGhostPlan(ctx context.Context, changePlan *models.ChangePlan) error {
+	if s.ghostExecutor == nil {
+		return ErrGhostUnsupported
+	}
+	if err := s.ghostExecutor.ValidateGhostEligibility(ctx, changePlan); err != nil {
+		return err
+	}
+	if s.envRepo != nil {
+		dbRow, err := s.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+		if err != nil {
+			return fmt.Errorf("failed to resolve target database for ghost eligibility: %w", err)
+		}
+		dbInstance, err := s.dbInstanceRepo.GetByID(ctx, dbRow.DatabaseInstanceID)
+		if err != nil {
+			return fmt.Errorf("failed to resolve database instance for ghost eligibility: %w", err)
+		}
+		if dbInstance.EnvironmentID != nil {
+			env, err := s.envRepo.GetByID(ctx, *dbInstance.EnvironmentID)
+			if err != nil {
+				return fmt.Errorf("failed to resolve environment for ghost eligibility: %w", err)
+			}
+			if env != nil && env.IsProduction {
+				return ErrGhostRejectedEnv
+			}
+		}
+	}
+	return nil
+}
+
+// executeGhost runs a DDL change plan through the configured ghost tool
+// (gh-ost for MySQL, pg-online-schema-change for PostgreSQL). It mirrors the
+// direct executor's lifecycle: lock → InProgress → changelog/log → run →
+// Completed/Failed. Between copy and cutover the plan sits in
+// AwaitingCutover while the tool parks on its postpone flag; the database
+// lock is intentionally held until the run finishes so queued plans wait
+// for the whole migration (decisions locked).
+func (s *ExecutionService) executeGhost(
+	ctx context.Context,
+	changePlan *models.ChangePlan,
+	executorID uuid.UUID,
+) (*ExecutionResult, error) {
+	changePlanID := changePlan.ID
+	startedAt := time.Now()
+
+	// Extract table + alter clause first; ghost supports a single ALTER TABLE
+	// per plan and invalid SQL should fail before touching repositories.
+	table, alterClause, err := ParseAlterStatement(changePlan.SQLContent)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ghost SQL: %w", err)
+	}
+
+	// Resolve database + instance (same as direct path)
+	db, err := s.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, ErrDatabaseNotFound
+		}
+		return nil, fmt.Errorf("failed to get database: %w", err)
+	}
+	dbInstance, err := s.dbInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, ErrDatabaseInstanceNotFound
+		}
+		return nil, fmt.Errorf("failed to get database instance: %w", err)
+	}
+
+	// Decrypt instance password for the tool invocation.
+	password, err := utils.DecryptPassword(dbInstance.ConnectionDetailsEncrypted, s.encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt instance password: %w", err)
+	}
+
+	postponeFlag, panicFlag := s.ghostExecutor.ControlFlagPaths(changePlanID)
+	confPath, err := WriteGhostConfFile(changePlanID, dbInstance.Username, password)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.Remove(confPath) }()
+	binPath, args, err := s.ghostExecutor.BuildArgs(
+		dbInstance.DatabaseEngine,
+		dbInstance.Host,
+		dbInstance.Username,
+		confPath,
+		db.DatabaseName,
+		table,
+		alterClause,
+		dbInstance.Port,
+		postponeFlag,
+		panicFlag,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("ghost command",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.String("bin", binPath),
+		zap.Strings("args", SanitizeArgsForLog(args)),
+	)
+
+	// gh-ost requires the postpone flag to exist BEFORE the copy finishes to
+	// park awaiting cutover; create it up front (doc'd ghost-lab workflow).
+	if dbInstance.DatabaseEngine == models.DatabaseEngineMySQL && postponeFlag != "" {
+		if f, err := os.Create(postponeFlag); err == nil {
+			_ = f.Close()
+			defer func() {
+				_ = os.Remove(postponeFlag)
+			}()
+		}
+	}
+
+	// Acquire the execution lock (queued behavior mirrors direct executor).
+	if err := s.lockManager.AcquireLock(ctx, db.ID, changePlanID, executorID); err != nil {
+		if err == ErrDatabaseLocked && s.queueService != nil {
+			if _, enqueueErr := s.queueService.Enqueue(ctx, changePlanID, db.ID, executorID); enqueueErr != nil {
+				return nil, fmt.Errorf("database locked and failed to enqueue: %w", enqueueErr)
+			}
+		}
+		return nil, ErrDatabaseLocked
+	}
+	defer func() {
+		if releaseErr := s.lockManager.ReleaseLock(ctx, db.ID); releaseErr != nil {
+			s.logger.Error("Failed to release execution lock", zap.Error(releaseErr))
+		}
+	}()
+
+	// Mark plan InProgress and create changelog + execution log entries.
+	changePlan.Status = models.ChangePlanStatusInProgress
+	changePlan.UpdatedAt = time.Now()
+	if err := s.changePlanRepo.Update(ctx, changePlan); err != nil {
+		return nil, fmt.Errorf("failed to update change plan status to InProgress: %w", err)
+	}
+
+	changelog := &models.Changelog{
+		ID:                 uuid.New(),
+		DatabaseInstanceID: dbInstance.ID,
+		DatabaseID:         db.ID,
+		ChangePlanID:       changePlanID,
+		Status:             models.ChangelogStatusPending,
+		CreatedAt:          time.Now(),
+	}
+	if err := s.changelogRepo.Create(ctx, changelog); err != nil {
+		return nil, fmt.Errorf("failed to create changelog entry: %w", err)
+	}
+
+	executionLogID := uuid.New()
+	dbType := string(dbInstance.DatabaseEngine)
+	sqlContent := changePlan.SQLContent
+	executionLog := &models.ExecutionLog{
+		ID:                   executionLogID,
+		ChangePlanID:         changePlanID,
+		ExecutorID:           executorID,
+		// Ghost runs are long-lived (minutes to hours): the log row must read
+		// InProgress while running, not a misleading Failed. Flipped to
+		// Completed/Failed when the run finishes.
+		Status:               models.ExecutionLogStatusInProgress,
+		SQLContent:           &sqlContent,
+		DatabaseID:           &db.ID,
+		DatabaseName:         &db.DatabaseName,
+		DatabaseInstanceName: &dbInstance.Name,
+		DatabaseEngine:       &dbType,
+		StartedAt:            time.Now(),
+	}
+	if err := s.executionLogRepo.Create(ctx, executionLog); err != nil {
+		// Plan was already marked InProgress above — don't leave it stuck.
+		changePlan.Status = models.ChangePlanStatusFailed
+		failMsg := fmt.Sprintf("failed to create execution log: %v", err)
+		changePlan.ErrorMessage = &failMsg
+		changePlan.UpdatedAt = time.Now()
+		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
+			s.logger.Error("Failed to mark plan Failed after log creation error", zap.Error(updateErr))
+		}
+		return nil, fmt.Errorf("failed to create execution log: %w", err)
+	}
+
+	// Stream tool output into the zap logger and flip the plan into
+	// AwaitingCutover when the tool parks behind the postpone flag.
+	awaitingCutoverSet := false
+	// Progress persistence throttle: gh-ost emits a status line per second,
+	// but the UI polls at 3s — write only when pct moves ≥1%, ≥5s since the
+	// last write, first snapshot, or completion (100%).
+	var lastProgressPct *float64
+	var lastProgressAt *time.Time
+	callbacks := GhostRunCallbacks{
+		OnLogLine: func(line string) {
+			s.logger.Info("ghost",
+				zap.String("change_plan_id", changePlanID.String()),
+				zap.String("line", line),
+			)
+			// Persist latest copy progress snapshot (JSON with copied/total/pct/
+			// elapsed) so the UI can render a progress bar with detail. Throttled:
+			// gh-ost emits a status line per second but the UI polls at 3s —
+			// write on first snapshot, ≥1% pct movement, ≥5s since last write, or
+			// 100% (completion).
+			if snap := ParseGhostProgressSnapshot(line); snap != nil {
+				shouldWrite := lastProgressPct == nil || lastProgressAt == nil ||
+					math.Abs(snap.Percent-*lastProgressPct) >= 1.0 ||
+					time.Since(*lastProgressAt) >= 5*time.Second ||
+					snap.Percent >= 100.0
+				if shouldWrite {
+					if b, err := json.Marshal(snap); err == nil {
+						progress := string(b)
+						changePlan.GhostProgress = &progress
+						if err := s.changePlanRepo.Update(context.Background(), changePlan); err != nil {
+							s.logger.Warn("Failed to persist ghost progress", zap.Error(err))
+						}
+					}
+					lastProgressPct = &snap.Percent
+					now := time.Now()
+					lastProgressAt = &now
+				}
+			}
+		},
+		OnStateChange: func(status string) {
+			if status == GhostStatusAwaiting && !awaitingCutoverSet {
+				awaitingCutoverSet = true
+				changePlan.Status = models.ChangePlanStatusAwaitingCutover
+				changePlan.UpdatedAt = time.Now()
+				if err := s.changePlanRepo.Update(context.Background(), changePlan); err != nil {
+					s.logger.Error("Failed to set AwaitingCutover status", zap.Error(err))
+				}
+				s.logger.Info("Ghost awaiting cutover",
+					zap.String("change_plan_id", changePlanID.String()),
+				)
+			}
+		},
+	}
+
+	runErr := s.ghostExecutor.Run(ctx, binPath, args, callbacks)
+	duration := time.Since(startedAt)
+
+	// Finalize plan/log/changelog based on the tool's outcome.
+	if runErr != nil {
+		errMsg := runErr.Error()
+		changePlan.Status = models.ChangePlanStatusFailed
+		changePlan.ErrorMessage = &errMsg
+		changePlan.UpdatedAt = time.Now()
+		if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
+			s.logger.Error("Failed to update change plan with failure", zap.Error(updateErr))
+		}
+
+		changelog.Status = models.ChangelogStatusFailed
+		if updateErr := s.changelogRepo.Update(ctx, changelog); updateErr != nil {
+			s.logger.Error("Failed to update changelog status to failed", zap.Error(updateErr))
+		}
+
+		executionLog.Status = models.ExecutionLogStatusFailed
+		executionLog.ErrorMessage = &errMsg
+		executionLog.CompletedAt = time.Now()
+		executionLog.ExecutionDurationMs = int(duration.Milliseconds())
+		if logErr := s.executionLogRepo.Update(ctx, executionLog); logErr != nil {
+			s.logger.Warn("Failed to update execution log entry", zap.Error(logErr))
+		}
+
+		return &ExecutionResult{Success: false, Duration: duration, ErrorMessage: &errMsg}, runErr
+	}
+
+	// Success path: cutover done, live on the new schema — but the plan is
+	// not fully complete until the retained _<table>_del backup is dropped
+	// (DropGhostBackupTable flips AwaitingCleanup → Completed).
+	changePlan.Status = models.ChangePlanStatusAwaitingCleanup
+	executedAt := time.Now()
+	changePlan.ExecutedAt = &executedAt
+	durationMs := int(duration.Milliseconds())
+	changePlan.ExecutionDurationMs = &durationMs
+	changePlan.UpdatedAt = time.Now()
+	if updateErr := s.changePlanRepo.Update(ctx, changePlan); updateErr != nil {
+		s.logger.Error("Failed to update change plan to AwaitingCleanup", zap.Error(updateErr))
+	}
+
+	changelog.Status = models.ChangelogStatusDone
+	if updateErr := s.changelogRepo.Update(ctx, changelog); updateErr != nil {
+		s.logger.Error("Failed to update changelog status to completed", zap.Error(updateErr))
+	}
+
+	executionLog.Status = models.ExecutionLogStatusCompleted
+	executionLog.CompletedAt = time.Now()
+	executionLog.ExecutionDurationMs = durationMs
+	if logErr := s.executionLogRepo.Update(ctx, executionLog); logErr != nil {
+		s.logger.Warn("Failed to update execution log entry", zap.Error(logErr))
+	}
+
+	s.logger.Info("Ghost execution completed",
+		zap.String("change_plan_id", changePlanID.String()),
+		zap.Duration("duration", duration),
+	)
+
+	return &ExecutionResult{Success: true, Duration: duration}, nil
 }
 
 // executeInTransaction executes SQL statements within a SERIALIZABLE transaction

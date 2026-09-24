@@ -22,6 +22,7 @@ const mockChangePlans: ChangePlan[] = [
     author_id: '1',
     change_type: 'DDL',
     sql_content: 'ALTER TABLE test ADD COLUMN new_column VARCHAR(255);',
+    execution_backend: 'direct',
     risk_level: 'Low',
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',

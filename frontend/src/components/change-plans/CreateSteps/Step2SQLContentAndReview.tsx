@@ -46,6 +46,10 @@ export interface Step2SQLContentAndReviewProps {
   };
   theme: EditorTheme;
   dialect: SQLDialect;
+  executionBackend: 'direct' | 'ghost';
+  onExecutionBackendChange: (backend: 'direct' | 'ghost') => void;
+  ghostEligible: boolean;
+  ghostIneligibilityReasons?: string[];
 }
 
 export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> = ({
@@ -64,6 +68,10 @@ export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> =
   errors,
   theme,
   dialect,
+  executionBackend,
+  onExecutionBackendChange,
+  ghostEligible,
+  ghostIneligibilityReasons = [],
 }) => {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(!!description);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -231,6 +239,84 @@ export const Step2SQLContentAndReview: React.FC<Step2SQLContentAndReviewProps> =
             tested.
           </FieldDescription>
           <FieldError id="sql-content-error">{errors.sql_content}</FieldError>
+        </FieldContent>
+      </Field>
+
+      {/* Execution backend (ghost executor for eligible DDL plans) */}
+      <Field>
+        <FieldLabel>Execution backend</FieldLabel>
+        <FieldContent>
+          <div className="space-y-3">
+            <div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="execution-backend"
+                  checked={executionBackend === 'direct'}
+                  onChange={() => onExecutionBackendChange('direct')}
+                />
+                Direct (transactional SQL)
+              </label>
+              {executionBackend === 'direct' && (
+                <p className="ml-6 mt-1 text-sm text-muted-foreground">
+                  Transactional mode runs SQL statements directly into the database. Best for
+                  simple, non-blocking changes with little performance impact.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="execution-backend"
+                  disabled={!ghostEligible}
+                  checked={executionBackend === 'ghost'}
+                  onChange={() => onExecutionBackendChange('ghost')}
+                />
+                Online Migrator
+              </label>
+              {executionBackend === 'ghost' && ghostEligible && (
+                <div className="ml-6 mt-1 space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    Online Migrator runs the gh-ost tool to migrate MySQL table schemas with minimal
+                    downtime. Best for large tables, blocking operations and huge performance
+                    impact.
+                  </p>
+                  <p>
+                    Online schema migration tools operate through a careful orchestration of steps:
+                  </p>
+                  <ol className="list-decimal pl-5 space-y-1">
+                    <li>
+                      <span className="font-medium text-foreground">Ghost table creation:</span>{' '}
+                      Creates a new table with the desired schema structure.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">Data migration:</span>{' '}
+                      Incrementally copies data from the original table to the ghost table while
+                      capturing ongoing changes (INSERT, UPDATE, DELETE).
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">Table swap:</span> Atomically
+                      replaces the original table with the fully synchronized ghost table.
+                    </li>
+                  </ol>
+                  <p className="text-xs">Single ALTER TABLE per plan.</p>
+                </div>
+              )}
+            </div>
+          </div>
+          {!ghostEligible && (
+            <>
+              <FieldDescription>Online Migrator is not available for this plan:</FieldDescription>
+              {ghostIneligibilityReasons.length > 0 && (
+                <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-0.5">
+                  {ghostIneligibilityReasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
         </FieldContent>
       </Field>
 

@@ -109,9 +109,20 @@ func (p *QueueProcessor) processNextItem(ctx context.Context, databaseID uuid.UU
 		return fmt.Errorf("failed to mark next item as in progress: %w", err)
 	}
 
-	// Process the item
+	// Process the item. Ghost executor runs (gh-ost/pg-online-schema-change)
+	// legitimately take hours; give them their own generous window while
+	// keeping the 30-minute cap for direct SQL executions.
 	go func() {
-		processCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		timeout := 30 * time.Minute
+		if p.executionService != nil && p.executionService.GhostMaxDuration() > 0 {
+			// Worst-case budget covers both paths; the executor itself enforces
+			// per-backend limits (ghost_max_duration for ghost, executionTimeout
+			// for direct SQL).
+			if p.executionService.GhostMaxDuration() > timeout {
+				timeout = p.executionService.GhostMaxDuration()
+			}
+		}
+		processCtx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		if err := p.processQueueItem(processCtx, queueItem); err != nil {

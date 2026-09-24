@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +22,8 @@ import {
   useCloseChangePlan,
   useExecuteChangePlan,
 } from '@/hooks/api/useChangePlansSWR';
-import type { ChangePlan } from '@/lib/api/types';
+import { changePlanService } from '@/lib/api/services/changePlans';
+import type { ChangePlan, GhostReadinessReport } from '@/lib/api/types';
 import {
   Send,
   CheckCircle2,
@@ -30,6 +32,7 @@ import {
   Loader2,
   AlertTriangle,
   MoreVertical,
+  Trash2,
 } from 'lucide-react';
 import { showSuccessToast } from '@/lib/errorHandling';
 
@@ -41,7 +44,16 @@ interface ChangePlanActionsProps {
   canExecute: boolean;
 }
 
-type ActionType = 'submit' | 'approve' | 'close' | 'execute' | 'retry';
+type ActionType =
+  | 'submit'
+  | 'approve'
+  | 'close'
+  | 'execute'
+  | 'retry'
+  | 'approve-cutover'
+  | 'abort'
+  | 'ghost-rollback'
+  | 'ghost-drop-backup';
 
 export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   changePlan,
@@ -51,7 +63,7 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   canExecute,
 }) => {
   // Use SWR mutation hooks for consistent cache management
-  const { updateChangePlan, isLoading: isUpdating, error: updateError } = useUpdateChangePlanSWR();
+  const { isLoading: isUpdating } = useUpdateChangePlanSWR();
   const { approveChangePlan, isLoading: isApproving } = useApproveChangePlan();
   const { closeChangePlan, isLoading: isClosing } = useCloseChangePlan();
   const { executeChangePlan, isLoading: isExecuting } = useExecuteChangePlan();
@@ -59,6 +71,7 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   const [activeAction, setActiveAction] = useState<ActionType | null>(null);
   const [comments, setComments] = useState('');
   const [error, setError] = useState('');
+  const [ghostChecks, setGhostChecks] = useState<GhostReadinessReport | null>(null);
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'executing' | 'success'>('idle');
 
   // Computed combined loading state
@@ -72,6 +85,77 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
     setActiveAction(null);
   };
 
+  // Ghost executor actions
+  const handleApproveCutover = async () => {
+    setError('');
+    try {
+      await changePlanService.approveGhostCutover(changePlan.id);
+      showSuccessToast('Cutover approved');
+      handleDialogClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to approve cutover');
+    }
+  };
+
+  const handleAbort = async () => {
+    setError('');
+    try {
+      await changePlanService.abortGhostExecution(changePlan.id);
+      showSuccessToast('Abort requested');
+      handleDialogClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to abort migration');
+    }
+  };
+
+  const handleGhostRollback = async () => {
+    setError('');
+    try {
+      await changePlanService.rollbackGhostPlan(changePlan.id);
+      showSuccessToast('Plan rolled back');
+      handleDialogClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to roll back plan');
+    }
+  };
+
+  const handleGhostDropBackup = async () => {
+    setError('');
+    try {
+      await changePlanService.dropGhostBackupTable(changePlan.id);
+      showSuccessToast('Backup table dropped');
+      handleDialogClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to drop backup table');
+    }
+  };
+
+  const isGhostPlan = changePlan.execution_backend === 'ghost';
+
+  // ghost_checks may arrive as a JSON string (TEXT column) — parse once
+  const planGhostChecks: GhostReadinessReport | null =
+    typeof changePlan.ghost_checks === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(changePlan.ghost_checks) as GhostReadinessReport;
+          } catch {
+            return null;
+          }
+        })()
+      : (changePlan.ghost_checks ?? null);
+
   // Determine primary action based on status
   const getPrimaryAction = (): ActionType | null => {
     switch (changePlan.status) {
@@ -81,6 +165,12 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
         return canApprove ? 'approve' : null;
       case 'Approved':
         return canExecute ? 'execute' : null;
+      case 'AwaitingCutover':
+        return isGhostPlan && canExecute ? 'approve-cutover' : null;
+      case 'AwaitingCleanup':
+        // Clean Up (drop backup) is the completion gate — promote it to the
+        // primary action instead of hiding it in the dropdown.
+        return isGhostPlan && canExecute ? 'ghost-drop-backup' : null;
       case 'Failed':
         return canApprove ? 'retry' : null;
       default:
@@ -103,9 +193,34 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           actions.push('close');
         }
         break;
+      case 'InProgress':
+      case 'AwaitingCutover':
+        if (isGhostPlan && canExecute) {
+          actions.push('abort');
+        }
+        break;
+      case 'AwaitingCleanup':
+        // Rollback stays available as a secondary action (swap back while
+        // the backup exists) — but post-cutover writes are NOT in the
+        // backup.
+        if (isGhostPlan && canExecute) {
+          actions.push('ghost-rollback');
+        }
+        break;
+      case 'Completed':
+        // Terminal state — no further actions. The backup was already dropped
+        // (that's what made it Completed), so rollback/cleanup would only
+        // error out. (Legacy pre-AwaitingCleanup completed plans keep their
+        // backups but cleanup/rollback on them is a rare manual path via API.)
+        break;
       case 'Failed':
         if (canReject) {
           actions.push('close');
+        }
+        // Ghost plans that failed may still have a backup table to clean up
+        // (e.g. failed after cutover or after a rollback swap).
+        if (isGhostPlan && canExecute) {
+          actions.push('ghost-drop-backup');
         }
         break;
     }
@@ -116,20 +231,28 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
   // Handle submit for review
   const handleSubmit = async () => {
     setError('');
+    setGhostChecks(null);
 
-    const result = await updateChangePlan(changePlan.id, {
-      status: 'Open',
-    });
-
-    if (result) {
+    try {
+      await changePlanService.updateChangePlan(changePlan.id, { status: 'Open' });
       handleDialogClose();
       showSuccessToast('Change plan submitted for review. SQL Review will run automatically.');
-
       if (onSuccess) {
         onSuccess();
       }
-    } else {
-      setError(`Failed to submit change plan for review: ${updateError || 'Unknown error'}`);
+    } catch (err) {
+      // Ghost readiness failures return a structured per-check report
+      const response = (
+        err as { response?: { ghost_checks?: GhostReadinessReport; error?: string } }
+      )?.response;
+      if (response?.ghost_checks) {
+        setGhostChecks(response.ghost_checks);
+        setError('Online Migrator readiness checks failed — see details below.');
+      } else {
+        setError(
+          `Failed to submit change plan for review: ${response?.error || (err instanceof Error ? err.message : 'Unknown error')}`,
+        );
+      }
     }
   };
 
@@ -206,7 +329,13 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
 
     if (success) {
       setExecutionStatus('success');
-      showSuccessToast('Change plan executed successfully');
+      // Ghost runs in the background (202 Accepted); direct executions
+      // complete synchronously.
+      if (changePlan.execution_backend === 'ghost') {
+        showSuccessToast('Online Migrator execution started — progress will update below');
+      } else {
+        showSuccessToast('Change plan executed successfully');
+      }
 
       // Wait a moment to show success state, then close and refresh
       setTimeout(() => {
@@ -259,6 +388,35 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           icon: Play,
           variant: 'default' as const,
           handler: handleExecute,
+        };
+      case 'approve-cutover':
+        return {
+          label: 'Approve Cutover',
+          icon: Play,
+          variant: 'default' as const,
+          handler: handleApproveCutover,
+        };
+      case 'abort':
+        return {
+          label: 'Abort Migration',
+          icon: XCircle,
+          variant: 'destructive' as const,
+          handler: handleAbort,
+        };
+      case 'ghost-rollback':
+        return {
+          label: 'Rollback',
+          icon: XCircle,
+          variant: 'destructive' as const,
+          handler: handleGhostRollback,
+        };
+      case 'ghost-drop-backup':
+        return {
+          // Matches the AwaitingCutover button naming convention
+          label: 'Awaiting Clean Up',
+          icon: Trash2,
+          variant: 'outline' as const,
+          handler: handleGhostDropBackup,
         };
     }
   };
@@ -433,6 +591,104 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           isDisabled: changePlan.has_errors || executionStatus === 'success',
         };
 
+      case 'approve-cutover':
+        return {
+          title: 'Approve Cutover',
+          description:
+            'The shadow table copy is complete and the migration is parked awaiting cutover. Approving performs the atomic table rename (under a second). This cannot be undone.',
+          content: (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm font-medium">
+                  The atomic rename swaps the new table into place immediately.
+                </span>
+              </div>
+            </div>
+          ),
+          confirmLabel: 'Approve Cutover',
+          confirmIcon: Play,
+        };
+
+      case 'abort':
+        return {
+          title: 'Abort Migration',
+          description:
+            'Abort the running migration before the cutover. The original table stays untouched; the shadow table is dropped.',
+          content: (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20">
+              <div className="flex items-center gap-2 text-red-800 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm font-medium">
+                  This stops the migration; it must be re-executed to try again.
+                </span>
+              </div>
+            </div>
+          ),
+          confirmLabel: 'Abort Migration',
+          confirmIcon: XCircle,
+          confirmVariant: 'destructive' as const,
+        };
+
+      case 'ghost-rollback':
+        return {
+          title: 'Roll Back Migration',
+          description:
+            'Atomically swap the backup table back into place, reverting the schema change.',
+          content: (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20">
+              <div className="flex items-start gap-2 text-red-800 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4 mt-0.5" />
+                <div className="text-sm">
+                  <span className="font-medium">Data loss warning:</span> writes made to the live
+                  table since the cutover are NOT in the backup. They will be preserved in a
+                  sidelined table (_table_new) for manual reconciliation, but the live table reverts
+                  to its pre-migration contents.
+                </div>
+              </div>
+            </div>
+          ),
+          confirmLabel: 'Roll Back',
+          confirmIcon: XCircle,
+          confirmVariant: 'destructive' as const,
+        };
+
+      case 'ghost-drop-backup':
+        return {
+          title: 'Drop Backup Table',
+          description:
+            'Permanently drop the backup table retained by the migration. Only do this after your validation window has passed — it removes the rollback safety net.',
+          content: (
+            <div className="space-y-2">
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="text-sm font-medium">
+                    After dropping, rollback via table swap is no longer possible.
+                  </span>
+                </div>
+              </div>
+              <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                <li>
+                  The backup holds a full copy of the pre-migration table — dropping it permanently
+                  deletes that copy.
+                </li>
+                <li>
+                  Retained backups consume disk space roughly equal to the live table, so leaving
+                  them behind grows storage costs.
+                </li>
+                <li>
+                  gh-ost cannot start a new migration on the same table while an old backup (or
+                  shadow table) is present — dropping it unblocks the next change on this table.
+                </li>
+              </ul>
+            </div>
+          ),
+          confirmLabel: 'Drop Backup',
+          confirmIcon: Trash2,
+          confirmVariant: 'destructive' as const,
+        };
+
       default:
         return null;
     }
@@ -455,12 +711,24 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
           (() => {
             const config = getActionConfig(primaryAction);
             const Icon = config.icon;
+            // Ghost plans: submit stays visible but disabled until all
+            // readiness checks pass (PR-checks semantics), with a tooltip
+            // naming the failed check count.
+            const ghostChecksFailed =
+              primaryAction === 'submit' &&
+              isGhostPlan &&
+              planGhostChecks != null &&
+              !planGhostChecks.all_passed;
+            const failedCount = planGhostChecks
+              ? planGhostChecks.checks.filter((c) => !c.passed).length
+              : 0;
             const isDisabled =
               ((primaryAction === 'approve' || primaryAction === 'retry') &&
                 changePlan.has_errors) ||
-              (primaryAction === 'execute' && changePlan.has_errors);
+              (primaryAction === 'execute' && changePlan.has_errors) ||
+              ghostChecksFailed;
 
-            return (
+            const button = (
               <Button
                 variant={config.variant}
                 onClick={() => setActiveAction(primaryAction)}
@@ -470,30 +738,62 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
                 {config.label}
               </Button>
             );
+
+            if (ghostChecksFailed) {
+              return (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-block">{button}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {failedCount} ghost readiness check{failedCount === 1 ? '' : 's'} failing —
+                    resolve them before submitting for review.
+                  </TooltipContent>
+                </Tooltip>
+              );
+            }
+            return button;
+          })()}
+
+        {/* Inline secondary action: Rollback during AwaitingCleanup sits
+            next to Clean Up — both destructive-lifecycle actions deserve
+            visible buttons, not a dropdown. */}
+        {changePlan.status === 'AwaitingCleanup' &&
+          secondaryActions.includes('ghost-rollback') &&
+          (() => {
+            const config = getActionConfig('ghost-rollback');
+            const Icon = config.icon;
+            return (
+              <Button variant={config.variant} onClick={() => setActiveAction('ghost-rollback')}>
+                <Icon className="mr-2 h-4 w-4" />
+                {config.label}
+              </Button>
+            );
           })()}
 
         {/* Secondary Actions Dropdown */}
-        {secondaryActions.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {secondaryActions.map((action) => {
-                const config = getActionConfig(action);
-                const Icon = config.icon;
-                return (
-                  <DropdownMenuItem key={action} onClick={() => setActiveAction(action)}>
-                    <Icon className="mr-2 h-4 w-4" />
-                    {config.label}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {secondaryActions.length > 0 &&
+          !(changePlan.status === 'AwaitingCleanup' && secondaryActions.length === 1) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {secondaryActions.map((action) => {
+                  const config = getActionConfig(action);
+                  const Icon = config.icon;
+                  return (
+                    <DropdownMenuItem key={action} onClick={() => setActiveAction(action)}>
+                      <Icon className="mr-2 h-4 w-4" />
+                      {config.label}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
       </div>
 
       {/* Action Dialog */}
@@ -514,6 +814,27 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
                     <AlertTriangle className="h-4 w-4" />
                     <span className="text-sm">{error}</span>
                   </div>
+                </div>
+              )}
+
+              {ghostChecks && (
+                <div className="rounded-md border p-3 space-y-2">
+                  <p className="text-sm font-medium">Online Migrator readiness checks</p>
+                  <ul className="space-y-1.5">
+                    {ghostChecks.checks.map((check) => (
+                      <li key={check.name} className="flex items-start gap-2 text-sm">
+                        {check.passed ? (
+                          <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-600 dark:text-green-400 shrink-0" />
+                        ) : (
+                          <XCircle className="h-4 w-4 mt-0.5 text-red-600 dark:text-red-400 shrink-0" />
+                        )}
+                        <div>
+                          <span className="font-medium">{check.name}</span>
+                          <p className="text-muted-foreground text-xs">{check.detail}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>

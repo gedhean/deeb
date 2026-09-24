@@ -152,6 +152,7 @@ func Setup(
 		db,
 		connectionMgr,
 		cfg.Security.EncryptionKey,
+		cfg.Features.GhostExecutor,
 	)
 	setupAuditLogRoutes(authenticated, auditLogRepo)
 	setupChangelogRoutes(authenticated, changelogRepo, schemaHistoryRepo, changePlanRepo, projectMemberRepo)
@@ -603,6 +604,7 @@ func setupChangePlanRoutes(
 	db *sqlx.DB,
 	connectionMgr *database.ConnectionManager,
 	encryptionKey string,
+	ghostCfg config.GhostFeatureConfig,
 ) {
 	// Initialize risk assessment service
 	riskAssessmentSvc := services.NewRiskAssessmentService(
@@ -681,6 +683,18 @@ func setupChangePlanRoutes(
 		encryptionKey,
 		logger.Get(),
 	)
+
+	// Optional ghost executor support (mysql via gh-ost, postgres via pg-online-schema-change)
+	ghostExecutor := services.NewGhostExecutor(
+		ghostCfg.GhostBin,
+		ghostCfg.PGOSCBin,
+		ghostCfg.FlagDir,
+		environmentRepo,
+		databaseRepo,
+		databaseInstanceRepo,
+		ghostCfg.MaxDuration,
+	)
+	executionService.WithGhostSupport(ghostExecutor, environmentRepo)
 
 	// Initialize queue processor (background worker)
 	queueProcessor := services.NewQueueProcessor(queueRepo, executionService, logger.Get())
@@ -824,6 +838,50 @@ func setupChangePlanRoutes(
 	// RESUBMIT change plan - requires changes.update permission
 	changePlansGroup.POST("/:id/resubmit",
 		changePlanHandler.ResubmitChangePlan,
+		changePlanExtractor.Extract(),
+		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
+	)
+
+	// GHOST cutover approve - removes the postpone flag (execution permission)
+	changePlansGroup.POST("/:id/cutover-approve",
+		changePlanHandler.ApproveGhostCutover,
+		executionAuthMiddleware.RequireExecutionPermission(),
+	)
+
+	// GHOST abort - creates the panic flag (execution permission)
+	changePlansGroup.POST("/:id/abort",
+		changePlanHandler.AbortGhostExecution,
+		executionAuthMiddleware.RequireExecutionPermission(),
+	)
+
+	// GHOST pre-flight privileges check (changes.read)
+	changePlansGroup.GET("/:id/ghost-preflight",
+		changePlanHandler.GhostPreflightCheck,
+		changePlanExtractor.Extract(),
+		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesRead),
+	)
+
+	// GHOST drop backup table - cleanup after validation window (execution permission)
+	changePlansGroup.POST("/:id/ghost-drop-backup",
+		changePlanHandler.DropGhostBackupTable,
+		executionAuthMiddleware.RequireExecutionPermission(),
+	)
+
+	// GHOST rollback - atomic swap-back with data-loss warning (execution permission)
+	changePlansGroup.POST("/:id/ghost-rollback",
+		changePlanHandler.RollbackGhostPlan,
+		executionAuthMiddleware.RequireExecutionPermission(),
+	)
+
+	// GHOST re-run readiness checks (all or single) — state-changing (persists
+	// the report) and spawns gh-ost processes; requires update permission.
+	changePlansGroup.POST("/:id/ghost-checks",
+		changePlanHandler.ReRunGhostChecks,
+		changePlanExtractor.Extract(),
+		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
+	)
+	changePlansGroup.POST("/:id/ghost-checks/:checkName",
+		changePlanHandler.ReRunGhostCheck,
 		changePlanExtractor.Extract(),
 		authzMiddleware.RequireProjectPermission(rbac.PermissionChangesUpdate),
 	)

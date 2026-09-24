@@ -39,8 +39,10 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
     OrganizationPermission.ProjectsCreate,
   );
 
-  // Use current project from store, or first project if available
-  const activeProject = currentProject || projects[0];
+  // Only the store counts as a real selection — never silently pretend
+  // projects[0] is selected (the user may not have access to it, and
+  // change-plan creation requires an explicit choice).
+  const activeProject = currentProject;
 
   // Filter projects based on search query
   const filteredProjects = useMemo(() => {
@@ -67,7 +69,7 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
     navigate('/projects');
   };
 
-  if (!activeProject || projects.length === 0) {
+  if (projects.length === 0) {
     return null;
   }
 
@@ -84,10 +86,23 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
                 <FolderKanban className="size-4" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">
-                  <EncryptedText text={activeProject.name} revealDelayMs={30} />
-                </span>
-                <span className="truncate text-xs">{activeProject.description || 'Project'}</span>
+                {activeProject ? (
+                  <>
+                    <span className="truncate font-semibold">
+                      <EncryptedText text={activeProject.name} revealDelayMs={30} />
+                    </span>
+                    <span className="truncate text-xs">
+                      {activeProject.description || 'Project'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="truncate font-semibold">Select a project</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      No project selected
+                    </span>
+                  </>
+                )}
               </div>
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>

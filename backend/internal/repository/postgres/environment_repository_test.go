@@ -41,7 +41,7 @@ func TestEnvironmentRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO environments").
-			WithArgs(sqlmock.AnyArg(), environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, environment.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(sqlmock.AnyArg(), environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, environment.IsProduction, environment.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, environment)
@@ -62,7 +62,7 @@ func TestEnvironmentRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO environments").
-			WithArgs(sqlmock.AnyArg(), environment.Name, nil, nil, environment.AllowSelfApproval, environment.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(sqlmock.AnyArg(), environment.Name, nil, nil, environment.AllowSelfApproval, environment.IsProduction, environment.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, environment)
@@ -85,7 +85,7 @@ func TestEnvironmentRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO environments").
-			WithArgs(existingID, environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, environment.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(existingID, environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, environment.IsProduction, environment.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err := repo.Create(ctx, environment)
@@ -105,7 +105,7 @@ func TestEnvironmentRepository_Create(t *testing.T) {
 		}
 
 		mock.ExpectExec("INSERT INTO environments").
-			WithArgs(sqlmock.AnyArg(), environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, environment.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(sqlmock.AnyArg(), environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, environment.IsProduction, environment.CreatedByID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnError(errors.New("database connection error"))
 
 		err := repo.Create(ctx, environment)
@@ -129,8 +129,8 @@ func TestEnvironmentRepository_GetByID(t *testing.T) {
 		createdByID := uuid.New()
 		now := time.Now()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "policy_id", "allow_self_approval", "created_by_id", "created_at", "updated_at"}).
-			AddRow(environmentID, "Test Environment", "Test Description", policyID, false, createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "policy_id", "allow_self_approval", "is_production", "created_by_id", "created_at", "updated_at"}).
+			AddRow(environmentID, "Test Environment", "Test Description", policyID, false, false, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM environments WHERE id =").
 			WithArgs(environmentID).
@@ -155,8 +155,8 @@ func TestEnvironmentRepository_GetByID(t *testing.T) {
 		createdByID := uuid.New()
 		now := time.Now()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "policy_id", "allow_self_approval", "created_by_id", "created_at", "updated_at"}).
-			AddRow(environmentID, "Test Environment", nil, nil, false, createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "policy_id", "allow_self_approval", "is_production", "created_by_id", "created_at", "updated_at"}).
+			AddRow(environmentID, "Test Environment", nil, nil, false, false, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM environments WHERE id =").
 			WithArgs(environmentID).
@@ -216,9 +216,9 @@ func TestEnvironmentRepository_List(t *testing.T) {
 		policyID := uuid.New()
 		createdByID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "policy_id", "allow_self_approval", "created_by_id", "created_at", "updated_at"}).
-			AddRow(envID1, "Environment 1", "Description 1", policyID, false, createdByID, now, now).
-			AddRow(envID2, "Environment 2", "Description 2", nil, true, createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "policy_id", "allow_self_approval", "is_production", "created_by_id", "created_at", "updated_at"}).
+			AddRow(envID1, "Environment 1", "Description 1", policyID, false, false, createdByID, now, now).
+			AddRow(envID2, "Environment 2", "Description 2", nil, true, false, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM environments ORDER BY created_at DESC LIMIT").
 			WithArgs(10, 0).
@@ -269,8 +269,8 @@ func TestEnvironmentRepository_List(t *testing.T) {
 		policyID := uuid.New()
 		createdByID := uuid.New()
 
-		rows := sqlmock.NewRows([]string{"id", "name", "description", "policy_id", "allow_self_approval", "created_by_id", "created_at", "updated_at"}).
-			AddRow(envID, "Environment", "Description", policyID, false, createdByID, now, now)
+		rows := sqlmock.NewRows([]string{"id", "name", "description", "policy_id", "allow_self_approval", "is_production", "created_by_id", "created_at", "updated_at"}).
+			AddRow(envID, "Environment", "Description", policyID, false, false, createdByID, now, now)
 
 		mock.ExpectQuery("SELECT (.+) FROM environments ORDER BY created_at DESC LIMIT").
 			WithArgs(5, 10).
@@ -317,7 +317,7 @@ func TestEnvironmentRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE environments").
-			WithArgs(environmentID, environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, sqlmock.AnyArg()).
+			WithArgs(environmentID, environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, environment.IsProduction, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, environment)
@@ -339,7 +339,7 @@ func TestEnvironmentRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE environments").
-			WithArgs(environmentID, environment.Name, nil, nil, environment.AllowSelfApproval, sqlmock.AnyArg()).
+			WithArgs(environmentID, environment.Name, nil, nil, environment.AllowSelfApproval, environment.IsProduction, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, environment)
@@ -359,7 +359,7 @@ func TestEnvironmentRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE environments").
-			WithArgs(environmentID, environment.Name, environment.Description, nil, environment.AllowSelfApproval, sqlmock.AnyArg()).
+			WithArgs(environmentID, environment.Name, environment.Description, nil, environment.AllowSelfApproval, environment.IsProduction, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, environment)
@@ -380,7 +380,7 @@ func TestEnvironmentRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE environments").
-			WithArgs(environmentID, environment.Name, environment.Description, &policyID, environment.AllowSelfApproval, sqlmock.AnyArg()).
+			WithArgs(environmentID, environment.Name, environment.Description, &policyID, environment.AllowSelfApproval, environment.IsProduction, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		err := repo.Update(ctx, environment)
@@ -401,7 +401,7 @@ func TestEnvironmentRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE environments").
-			WithArgs(environmentID, environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, sqlmock.AnyArg()).
+			WithArgs(environmentID, environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, environment.IsProduction, sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		err := repo.Update(ctx, environment)
@@ -422,7 +422,7 @@ func TestEnvironmentRepository_Update(t *testing.T) {
 		}
 
 		mock.ExpectExec("UPDATE environments").
-			WithArgs(environmentID, environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, sqlmock.AnyArg()).
+			WithArgs(environmentID, environment.Name, environment.Description, environment.PolicyID, environment.AllowSelfApproval, environment.IsProduction, sqlmock.AnyArg()).
 			WillReturnError(errors.New("database connection error"))
 
 		err := repo.Update(ctx, environment)

@@ -89,6 +89,8 @@ Some changes can have different approval flows based on the risk level of the ch
 
 The application of the changes is done by the backend through the REST API. The backend will apply the changes to the database in a controlled way, with a rollback mechanism in case of errors.
 
+**Execution backends**: DDL change plans on non-production environments can optionally run through the **ghost executor** (gh-ost for MySQL, pg-online-schema-change for PostgreSQL) instead of a direct transactional execution — shadow-table copy with a human-gated atomic cutover. See [Ghost Executor](ghost-executor.md).
+
 The application can be done in a multi-step process (Phase 2+). For example, it applies one-by-one in this order `Dev -> Staging -> Production`. Also, it can be applied now or scheduled for a future time (scheduled execution in Phase 2).
 
 ### Lifecycle 5: Monitoring

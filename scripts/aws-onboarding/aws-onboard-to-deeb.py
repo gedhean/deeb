@@ -372,7 +372,7 @@ class DeebOnboarder:
             GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE VIEW, DROP,
             EVENT, EXECUTE, INDEX, PROCESS, REFERENCES, SHOW DATABASES, SHOW VIEW, TRIGGER, USAGE,
             RELOAD, LOCK TABLES, REPLICATION CLIENT, REPLICATION SLAVE
-            ON *.* TO 'deeb'@'%'
+            ON *.* TO 'deeb'@'%' WITH GRANT OPTION
             """
         )
         try:
@@ -380,6 +380,30 @@ class DeebOnboarder:
         except Exception as e:
             logger.debug("Could not grant SET_USER_ID (may not be available): %s", e)
         cursor.execute("FLUSH PRIVILEGES")
+
+    def ensure_mysql_ghost_instruments(self, cursor) -> None:
+        """Enable the metadata-lock instrument gh-ost requires (PR #1536).
+        Skipped with a clear log when performance_schema is OFF — the UPDATE
+        would no-op until PS is enabled via parameter group + reboot."""
+        cursor.execute("SHOW VARIABLES LIKE 'performance_schema'")
+        row = cursor.fetchone()
+        ps_on = row is not None and str(row[1]).upper() == "ON"
+        if not ps_on:
+            logger.warning(
+                "performance_schema is OFF on this instance — skipping metadata-lock "
+                "instrument enable. gh-ost dry runs will fail with 'metadata lock "
+                "instrument not enabled' until performance_schema=ON is set in the "
+                "RDS parameter group and the instance is rebooted."
+            )
+            return
+        cursor.execute(
+            """
+            UPDATE performance_schema.setup_instruments
+            SET ENABLED='YES', TIMED='YES'
+            WHERE NAME='wait/lock/metadata/sql/mdl'
+            """
+        )
+        logger.info("Enabled metadata-lock instrument (wait/lock/metadata/sql/mdl)")
 
     def ensure_mysql_grants_on_instance(self, host: str, port: int, master_user: str, master_password: str) -> None:
         """Re-apply deeb grants on an already-onboarded instance without
@@ -395,6 +419,7 @@ class DeebOnboarder:
         try:
             cursor = connection.cursor()
             self.ensure_mysql_grants(cursor)
+            self.ensure_mysql_ghost_instruments(cursor)
             connection.commit()
             logger.info("Ensured MySQL deeb grants on %s:%s", host, port)
         finally:
@@ -419,6 +444,7 @@ class DeebOnboarder:
                 f"ALTER USER 'deeb'@'%' IDENTIFIED WITH caching_sha2_password BY '{safe_password}'"
             )
             self.ensure_mysql_grants(cursor)
+            self.ensure_mysql_ghost_instruments(cursor)
             connection.commit()
             logger.info("Reset MySQL deeb user password on %s:%s", host, port)
         finally:
@@ -476,6 +502,7 @@ class DeebOnboarder:
             # GRANT is idempotent in MySQL — re-granting existing privileges
             # is a no-op, so we can always run it to ensure the grants are right.
             self.ensure_mysql_grants(cursor)
+            self.ensure_mysql_ghost_instruments(cursor)
 
             connection.commit()
             logger.info("Ensured MySQL deeb user grants on %s:%s", host, port)

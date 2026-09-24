@@ -45,6 +45,9 @@ COPY --from=builder /app/api ./api
 # Copy production configuration
 COPY --from=builder /app/config.prd.yaml ./config.yaml
 
+# Copy gh-ost from builder
+COPY --from=builder /app/ext-bin/gh-ost /app/gh-ost
+
 # Change ownership to non-root user
 RUN chown -R deeb:deeb /app
 

@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTheme } from '@/components/theme-provider';
 import { DefaultLayout } from '@/components/layouts';
 import { useProjectPermissions } from '@/hooks/api/useProjectPermissions';
-import type { ChangePlanStatus } from '@/lib/api/types';
+import type { ChangePlanStatus, GhostReadinessReport } from '@/lib/api/types';
 import { useUsers } from '@/hooks/api/useUsersSWR';
 import { useProjectsSWR } from '@/hooks/api/useProjectsSWR';
 import { useDatabases } from '@/hooks/api/useDatabases';
@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { MonacoSQLEditor } from '@/components/editors/MonacoSQLEditor';
 import { SQLReviewResults } from '@/components/SQLReviewResults';
+import { GhostChecksPanel, GhostProgressBar } from '@/components/ghost-checks-panel';
 import { ApprovalHistory } from '@/components/ApprovalHistory';
 import { ExecutionResults } from '@/components/ExecutionResults';
 import { ChangePlanStatusBadge } from '@/components/ChangePlanStatusBadge';
@@ -44,6 +45,43 @@ export const ChangePlanDetailPage: React.FC = () => {
 
   // Use SWR hook for change plan - automatic caching and revalidation
   const { changePlan, isLoading, error: swrError, refetch } = useChangePlanSWR(id);
+
+  // ghost_checks arrives as a JSON string (TEXT column); parse for the panel.
+  // Extract the raw value first so the memo depends on a plain primitive.
+  const ghostChecksRaw =
+    changePlan?.execution_backend === 'ghost' ? (changePlan.ghost_checks ?? null) : null;
+
+  const ghostChecksReport = useMemo(() => {
+    if (!ghostChecksRaw) {
+      return null;
+    }
+    if (typeof ghostChecksRaw === 'string') {
+      try {
+        return JSON.parse(ghostChecksRaw) as GhostReadinessReport;
+      } catch {
+        return null;
+      }
+    }
+    return ghostChecksRaw;
+  }, [ghostChecksRaw]);
+
+  // Poll the plan while a ghost migration is copying or awaiting cutover so
+  // the progress bar updates without manual refresh (uses SWR refetch, no
+  // websockets). Completed plans render the bar full from persisted progress.
+  useEffect(() => {
+    const isGhost = changePlan?.execution_backend === 'ghost';
+    const active =
+      changePlan?.status === 'InProgress' ||
+      changePlan?.status === 'AwaitingCutover' ||
+      changePlan?.status === 'AwaitingCleanup';
+    if (!isGhost || !active) {
+      return;
+    }
+    const interval = setInterval(() => {
+      refetch();
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [changePlan?.status, changePlan?.execution_backend, refetch]);
 
   // Use cached data from store
   const { getUserById } = useUsers();
@@ -221,6 +259,7 @@ export const ChangePlanDetailPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-3">
             <ChangePlanStatusBadge status={changePlan.status} />
+            {changePlan.execution_backend === 'ghost' && <Badge variant="outline">ghost</Badge>}
             <ChangePlanActions
               changePlan={changePlan}
               onSuccess={() => refetch()}
@@ -245,6 +284,13 @@ export const ChangePlanDetailPage: React.FC = () => {
 
         {/* Change Plan Information */}
         <div className="space-y-6">
+          {/* Ghost copy progress — prominent, above Basic Information */}
+          {changePlan.execution_backend === 'ghost' && (
+            <GhostProgressBar
+              ghostProgress={changePlan.ghost_progress}
+              planStatus={changePlan.status}
+            />
+          )}
           {/* Basic Information */}
           <Card className="w-full">
             <CardHeader>
@@ -551,6 +597,17 @@ export const ChangePlanDetailPage: React.FC = () => {
               </p>
             </CardContent>
           </Card>
+        )}
+
+        {/* Online Migrator readiness checks (PR-checks style) */}
+        {changePlan.execution_backend === 'ghost' && (
+          <GhostChecksPanel
+            changePlanId={changePlan.id}
+            report={ghostChecksReport}
+            ghostProgress={changePlan.ghost_progress}
+            planStatus={changePlan.status}
+            onRefreshed={() => refetch()}
+          />
         )}
 
         {/* SQL Review Results */}

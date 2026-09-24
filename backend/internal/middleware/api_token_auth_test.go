@@ -60,6 +60,7 @@ func (f *fakeUserRepo) Delete(context.Context, uuid.UUID) error    { return nil 
 func (f *fakeUserRepo) List(context.Context, repository.UserFilters, int, int) ([]*models.User, error) {
 	return nil, nil
 }
+
 func (f *fakeUserRepo) Count(context.Context, repository.UserFilters) (int64, error) {
 	return 0, nil
 }

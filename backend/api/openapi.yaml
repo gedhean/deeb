@@ -2093,6 +2093,130 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /api/v1/change-plans/{id}/cutover-approve:
+    post:
+      tags: [Change Plans]
+      summary: Approve ghost cutover
+      description: |
+        Removes the gh-ost postpone flag for a change plan running under the ghost
+        executor, letting the tool proceed to the atomic table rename (< 1s).
+        Only valid while the plan is in AwaitingCutover status; on success the
+        plan moves to AwaitingCleanup until the backup table is dropped.
+        Requires execution permissions (Organization Admin, Organization DBA,
+        Project Owner, or Change Plan Author).
+      operationId: approveGhostCutover
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Cutover approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Cutover approved
+        '400':
+          description: Not in AwaitingCutover status or not a ghost plan
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/change-plans/{id}/abort:
+    post:
+      tags: [Change Plans]
+      summary: Abort ghost execution
+      description: |
+        Creates the gh-ost panic flag, asking the tool to abort cleanly before the
+        cutover. The original table stays untouched. Only valid while the plan is
+        InProgress or AwaitingCutover under the ghost executor.
+        Requires execution permissions.
+      operationId: abortGhostExecution
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Abort requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Abort requested
+        '400':
+          description: Plan is not executing under the ghost executor
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/change-plans/{id}/ghost-preflight:
+    get:
+      tags: [Change Plans]
+      summary: Ghost executor pre-flight check
+      description: |
+        Validates the target database meets ghost executor requirements.
+        MySQL: binlog_format=ROW, binlog_row_image=FULL, and grants
+        (ALL PRIVILEGES ON <db>.*, REPLICATION SLAVE, REPLICATION CLIENT).
+        PostgreSQL: target table has a primary key and no triggers
+        (pg-online-schema-change constraints).
+      operationId: ghostPreflightCheck
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Change plan ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Pre-flight results (per-check pass/fail with remediation)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  change_plan_id:
+                    type: string
+                    format: uuid
+                  engine:
+                    type: string
+                    enum: [mysql, postgres]
+                  all_passed:
+                    type: boolean
+                  checks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        passed:
+                          type: boolean
+                        detail:
+                          type: string
+        '400':
+          description: Could not connect to the target database
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     cookieAuth:
@@ -2967,6 +3091,15 @@ components:
           nullable: true
           description: Optional rollback SQL
           example: DROP TABLE IF EXISTS users;
+        execution_backend:
+          type: string
+          enum: [direct, ghost]
+          description: |
+            Execution backend. `direct` runs SQL in a transaction (default).
+            `ghost` runs DDL through gh-ost (MySQL) or pg-online-schema-change
+            (PostgreSQL) with a human-gated cutover. Ghost requires: DDL change
+            type, non-production environment, single ALTER TABLE statement.
+          example: ghost
     UpdateChangePlanRequest:
       type: object
       properties:
@@ -2990,9 +3123,13 @@ components:
           example: DROP TABLE IF EXISTS users;
         status:
           type: string
-          enum: [Draft, Open, Approved, Closed, InProgress, Completed, Failed, Cancelled]
+          enum: [Draft, Open, Approved, Closed, InProgress, AwaitingCutover, AwaitingCleanup, Completed, Failed, Cancelled]
           description: Change plan status
           example: Open
+        execution_backend:
+          type: string
+          enum: [direct, ghost]
+          description: Execution backend (ghost only for DDL on non-production environments)
         risk_level:
           type: string
           enum: [Low, Medium, High]

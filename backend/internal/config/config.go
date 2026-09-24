@@ -105,7 +105,16 @@ type ResourceRule struct {
 
 // FeaturesConfig holds feature flags configuration
 type FeaturesConfig struct {
-	AutoAssignProjectsEnabled bool `yaml:"auto_assign_projects_enabled"` // Enable automatic project assignment for new users
+	AutoAssignProjectsEnabled bool               `yaml:"auto_assign_projects_enabled"` // Enable automatic project assignment for new users
+	GhostExecutor             GhostFeatureConfig `yaml:"ghost_executor"`               // Ghost executor settings (paths, flags, timeout)
+}
+
+// GhostFeatureConfig captures optional ghost executor settings
+type GhostFeatureConfig struct {
+	GhostBin    string        `yaml:"ghost_bin"`    // path to external mysql composer (gh-ost)
+	PGOSCBin    string        `yaml:"pgosc_bin"`    // path to external postgres tool (pg-online-schema-change)
+	FlagDir     string        `yaml:"flag_dir"`     // directory for cutover/panic flag files
+	MaxDuration time.Duration `yaml:"max_duration"` // cap on ghost run duration (default 6h)
 }
 
 // Load loads configuration from environment variables and optionally a YAML file
@@ -181,8 +190,15 @@ func (c *Config) setDefaults() {
 	c.AuditLogging.LogAllPaths = false
 	c.AuditLogging.SkipPaths = []string{}
 	c.AuditLogging.Resources = make(map[string]ResourceRule)
-	c.AuditLogging.RedactionEnabled = true
 
+	// Ghost executor defaults (gh-ost bundled at /app/gh-ost in the image)
+	c.Features.GhostExecutor = GhostFeatureConfig{
+		GhostBin:    "/app/gh-ost",
+		PGOSCBin:    "",
+		FlagDir:     "/tmp", // system temp — containers run with a read-only root fs
+		MaxDuration: 6 * time.Hour,
+	}
+	c.AuditLogging.RedactionEnabled = true
 	// Features defaults
 	c.Features.AutoAssignProjectsEnabled = true // Enable auto-assignment by default
 }
@@ -212,8 +228,20 @@ func (c *Config) loadFromEnv() {
 			c.Server.Port = port
 		}
 	}
+	// Frontend URL source: Helm charts use SERVER_FRONTEND_URL; accept both
+	// with FRONTEND_URL taking precedence.
+	if v := os.Getenv("SERVER_FRONTEND_URL"); v != "" {
+		c.Server.FrontendURL = v
+	}
 	if v := os.Getenv("FRONTEND_URL"); v != "" {
 		c.Server.FrontendURL = v
+	}
+	if v := os.Getenv("SERVER_CORS_ORIGINS"); v != "" {
+		parts := strings.Split(v, ",")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+		c.Server.CORSOrigins = parts
 	}
 
 	// Database - check DATABASE_URL first, then individual env vars
@@ -250,6 +278,22 @@ func (c *Config) loadFromEnv() {
 	}
 	if v := os.Getenv("DB_MIGRATIONS_PATH"); v != "" {
 		c.Database.MigrationsPath = v
+	}
+
+	// Ghost executor configuration
+	if v := os.Getenv("GHOST_BIN"); v != "" {
+		c.Features.GhostExecutor.GhostBin = v
+	}
+	if v := os.Getenv("PGOSC_BIN"); v != "" {
+		c.Features.GhostExecutor.PGOSCBin = v
+	}
+	if v := os.Getenv("GHOST_FLAG_DIR"); v != "" {
+		c.Features.GhostExecutor.FlagDir = v
+	}
+	if v := os.Getenv("GHOST_MAX_DURATION"); v != "" {
+		if duration, err := time.ParseDuration(v); err == nil {
+			c.Features.GhostExecutor.MaxDuration = duration
+		}
 	}
 
 	// Auth
