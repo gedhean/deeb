@@ -208,10 +208,10 @@ export const ChangePlanActions: React.FC<ChangePlanActionsProps> = ({
         }
         break;
       case 'Completed':
-        // Legacy completed plans may still hold a backup to clean up.
-        if (isGhostPlan && canExecute) {
-          actions.push('ghost-rollback', 'ghost-drop-backup');
-        }
+        // Terminal state — no further actions. The backup was already dropped
+        // (that's what made it Completed), so rollback/cleanup would only
+        // error out. (Legacy pre-AwaitingCleanup completed plans keep their
+        // backups but cleanup/rollback on them is a rare manual path via API.)
         break;
       case 'Failed':
         if (canReject) {
