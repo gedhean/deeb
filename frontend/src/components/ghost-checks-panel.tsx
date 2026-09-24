@@ -95,7 +95,14 @@ export const GhostProgressBar: React.FC<GhostProgressBarProps> = ({
               ` — ${snapshot.copied.toLocaleString()}/${snapshot.total.toLocaleString()} rows`}
             {snapshot?.elapsed && ` · ${snapshot.elapsed} elapsed`}
           </span>
-          <span>{progressValue.toFixed(1)}%</span>
+          <span>
+            {planStatus === 'AwaitingCleanup'
+              ? '99.99'
+              : planStatus === 'AwaitingCutover'
+                ? '99.9'
+                : progressValue.toFixed(1)}
+            %
+          </span>
         </div>
         <Progress
           value={progressValue}
