@@ -76,7 +76,7 @@
 
 ### Integrations
 - [ ] Feat: integrate Catalog with SQL Reviewer to provide schema analysis for SQL Reviewer
-- [x] Feat: ghost execution backend (gh-ost) for MySQL DDL change plans on non-production environments — user-selected executor, readiness checks (binlog/privileges/dry-run per plan), human-gated cutover (AwaitingCutover), copy progress bar, rollback + drop-backup actions
+- [x] Feat: ghost execution backend (gh-ost) for MySQL DDL change plans on non-production environments — rebranded "Online Migrator": executor picker with per-rule ineligibility reasons and dynamic descriptions, executor warnings (no-ALTER/mixed SQL), readiness checks (binlog/privileges/dry-run/MDL instrument per plan), human-gated cutover (AwaitingCutover), async execution with live progress bar (rows/elapsed/%), AwaitingCleanup completion gate (drop-backup completes the plan), rollback, dry-run artifact cleanup, execution log InProgress status
 - [ ] Feat: pg-online-schema-change support for PostgreSQL ghost plans (currently MySQL-only; selection gate rejects postgres)
 - [ ] Feat: RDS replica discovery for ghost plans — enumerate RDS replicas via AWS API and let the user choose which instance gh-ost runs against (currently runs on the primary with --allow-on-master)
 - [ ] Feat: CloudWatch FreeStorageSpace check for ghost disk headroom (currently an information_schema size estimate shown as a warning; operator verifies actual free disk)
