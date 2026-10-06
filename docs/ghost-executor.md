@@ -166,10 +166,9 @@ enable, and gh-ost execution all flow through the normal MySQL path.
 
 Aurora-specific caveats:
 
-- Binlog is expected to be enabled via `enhanced_binlog` (the standard setup
-  for our Aurora MySQL instances — it forces `binlog_format=ROW`). The
-  `binlog_format`/`binlog_row_image` checks catch any instance where it is
-  off.
+- Binlog must be enabled on the **cluster** parameter group (`binlog_format=ROW`);
+  Aurora disables it by default. The `binlog_format`/`binlog_row_image` checks
+  catch this.
 - `performance_schema` enablement requires a parameter-group change **plus a
   cluster reboot** before the onboarder's `setup_instruments` UPDATE can take
   effect (same remediation flow as RDS MySQL, documented in the
