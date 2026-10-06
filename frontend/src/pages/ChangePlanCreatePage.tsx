@@ -423,15 +423,15 @@ export const ChangePlanCreatePage: React.FC = () => {
 
   const selectedDatabase = databases.find((db) => db.id === formData.target_database_id);
 
-  // Ghost executor is available for DDL plans on databases in
-  // non-production environments (server enforces this too).
+  // Ghost executor is available for DDL plans on databases with an
+  // environment assigned (server enforces this too).
   const selectedDatabaseInstance = selectedDatabase?.database_instance;
   const selectedEngine = selectedDatabaseInstance?.database_engine;
 
   // Online Migrator executor is available only for MySQL DDL plans on
-  // databases in non-production environments (server enforces this too,
-  // fail-closed). Collect the specific failing rules so the UI can show
-  // exactly why the selector is disabled.
+  // databases with an environment assigned (server enforces this too,
+  // fail-closed; production environments are allowed). Collect the specific
+  // failing rules so the UI can show exactly why the selector is disabled.
   const ghostIneligibilityReasons: string[] = [];
   if (formData.change_type !== 'DDL') {
     ghostIneligibilityReasons.push(
@@ -451,8 +451,6 @@ export const ChangePlanCreatePage: React.FC = () => {
         'Online Migrator requires the database to have an environment assigned.',
       );
     }
-  } else if (selectedDatabase.environment.is_production) {
-    ghostIneligibilityReasons.push('Online Migrator is not available on production environments.');
   }
   const ghostEligible = ghostIneligibilityReasons.length === 0;
 

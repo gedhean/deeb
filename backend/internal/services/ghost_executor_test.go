@@ -289,7 +289,7 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 		assert.ErrorContains(t, err, "DDL")
 	})
 
-	t.Run("ghost backend rejected on production environment", func(t *testing.T) {
+	t.Run("ghost backend allowed on production environment", func(t *testing.T) {
 		changePlanID := uuid.New()
 		dbID := uuid.New()
 		envID := uuid.New()
@@ -321,9 +321,11 @@ func TestExecutionService_GhostDispatch(t *testing.T) {
 		service := newService(changePlanRepo, databaseRepo, dbInstanceRepo)
 		service.WithGhostSupport(NewGhostExecutor("/bin/true", "", "", nil, nil, nil, 0), envRepo)
 
-		result, err := service.Execute(ctx, changePlanID, uuid.New())
-		assert.Nil(t, result)
-		assert.ErrorIs(t, err, ErrGhostRejectedEnv)
+		// Production env must NOT reject ghost anymore; execution proceeds
+		// (fails later on the fake binary, which is fine for this assertion).
+		_, err := service.Execute(ctx, changePlanID, uuid.New())
+		assert.NotNil(t, err) // execution fails on /bin/true, but not at the eligibility gate
+		assert.NotContains(t, err.Error(), "production")
 	})
 
 	t.Run("ghost backend with non-ALTER SQL is rejected", func(t *testing.T) {
