@@ -139,6 +139,27 @@ The target table must have a PRIMARY KEY and no triggers.
 
 Target table must have a PRIMARY KEY and no triggers.
 
+### Aurora MySQL
+
+Aurora MySQL clusters are supported and treated as plain MySQL: the onboarder
+normalizes `aurora-mysql` (and legacy `aurora`) engine values to `mysql` at
+discovery, so registration, the `deeb` user, the metadata-lock instrument
+enable, and gh-ost execution all flow through the normal MySQL path.
+
+Aurora-specific caveats:
+
+- Binlog must be enabled on the **cluster** parameter group (`binlog_format=ROW`);
+  Aurora disables it by default. The `binlog_format`/`binlog_row_image` checks
+  catch this.
+- `performance_schema` enablement requires a parameter-group change **plus a
+  cluster reboot** before the onboarder's `setup_instruments` UPDATE can take
+  effect (same remediation flow as RDS MySQL, documented in the
+  `metadata_lock_instrument` check).
+- gh-ost runs against the **cluster (writer) endpoint** with `--allow-on-master`;
+  reader endpoints are never targeted.
+- Aurora's binlog replication internals differ from community MySQL, but gh-ost
+  only consumes the binlog stream, which Aurora exposes compatibly.
+
 ### Pre-flight check
 
 `GET /api/v1/change-plans/:id/ghost-preflight` verifies all of the above
