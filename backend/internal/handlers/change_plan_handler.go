@@ -813,8 +813,8 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		changePlan.Title = *req.Title
 	}
 
-	// Execution backend switch: validated against DDL type and the target
-	// database's environment (ghost only allowed on non-production).
+	// Execution backend switch: validated against DDL type, MySQL engine, and
+	// the target database instance's assigned environment.
 	if req.ExecutionBackend != nil {
 		database, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
 		if err != nil {
