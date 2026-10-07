@@ -205,6 +205,27 @@ func TestIntegration_ChangePlan_CRUD(t *testing.T) {
 		assert.Equal(t, "Updated description", response.Description)
 	})
 
+	t.Run("Update Change Plan - Status Approved rejected (must use approval flow)", func(t *testing.T) {
+		approved := models.ChangePlanStatusApproved
+		updateReq := models.UpdateChangePlanRequest{Status: &approved}
+		updateBody, _ := json.Marshal(updateReq)
+
+		rec := makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPut,
+			fmt.Sprintf("/api/v1/change-plans/%s", createdChangePlanID.String()),
+			bytes.NewReader(updateBody),
+			adminToken,
+		)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+
+		var response map[string]interface{}
+		err := json.NewDecoder(rec.Body).Decode(&response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "approval flow")
+	})
+
 	t.Run("Delete Change Plan - Success", func(t *testing.T) {
 		rec := makeAuthenticatedRequest(
 			t,

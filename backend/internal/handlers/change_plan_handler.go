@@ -917,6 +917,20 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 	}
 
 	if req.Status != nil {
+		// Security: the generic update path must never grant approval. Open →
+		// Approved is only legal via ApprovalService.Approve (which records the
+		// approval and enforces multi-approval policies); permitting it here
+		// would let any user with changes.update forge an approval and then
+		// execute (including production gh-ost runs).
+		if *req.Status == models.ChangePlanStatusApproved {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "change plan status cannot be set to Approved via a generic update — approvals must go through the approval flow",
+				"details": map[string]interface{}{
+					"current_status":   string(changePlan.Status),
+					"attempted_status": string(*req.Status),
+				},
+			})
+		}
 		// Validate status transition
 		if err := workflow.ValidateTransition(changePlan.Status, *req.Status); err != nil {
 			// Check if it's a status transition error to return structured response
