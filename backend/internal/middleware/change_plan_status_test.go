@@ -284,7 +284,7 @@ func TestValidateStatusTransition_InvalidTransition(t *testing.T) {
 	mockRepo.On("GetByID", mock.Anything, changePlanID).Return(changePlan, nil)
 
 	reqBody := map[string]interface{}{
-		"status": "Approved", // Invalid: Draft → Approved is not allowed
+		"status": "Completed", // Invalid: Draft → Completed is not allowed
 	}
 	bodyBytes, _ := json.Marshal(reqBody)
 
@@ -313,13 +313,62 @@ func TestValidateStatusTransition_InvalidTransition(t *testing.T) {
 	// Verify error message explains why transition is invalid
 	assert.Contains(t, errorResp["error"].(string), "Cannot transition")
 	assert.Contains(t, errorResp["error"].(string), "Draft")
-	assert.Contains(t, errorResp["error"].(string), "Approved")
+	assert.Contains(t, errorResp["error"].(string), "Completed")
 	// Verify error response includes current status and attempted transition
 	assert.NotNil(t, errorResp["details"])
 	details, ok := errorResp["details"].(map[string]interface{})
 	require.True(t, ok, "details should be a map")
 	assert.Equal(t, "Draft", details["current_status"])
-	assert.Equal(t, "Approved", details["attempted_status"])
+	assert.Equal(t, "Completed", details["attempted_status"])
+}
+
+// TestValidateStatusTransition_ApprovedRejected verifies the security guard:
+// Approved is never grantable through a generic status update, even when the
+// transition itself would be legal (Open → Approved). Only
+// ApprovalService.Approve may grant it.
+func TestValidateStatusTransition_ApprovedRejected(t *testing.T) {
+	mockRepo := new(MockChangePlanRepository)
+	middleware := NewChangePlanStatusTransitionMiddleware(mockRepo)
+
+	changePlanID := uuid.New()
+	changePlan := &models.ChangePlan{
+		ID:     changePlanID,
+		Status: models.ChangePlanStatusOpen,
+	}
+	mockRepo.On("GetByID", mock.Anything, changePlanID).Return(changePlan, nil)
+
+	reqBody := map[string]interface{}{
+		"status": "Approved", // Legal transition (Open → Approved) but forbidden via generic update
+	}
+	bodyBytes, _ := json.Marshal(reqBody)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/change-plans/"+changePlanID.String(), bytes.NewReader(bodyBytes))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(changePlanID.String())
+
+	handlerCalled := false
+	testHandler := func(c echo.Context) error {
+		handlerCalled = true
+		return c.NoContent(http.StatusOK)
+	}
+
+	err := middleware.ValidateStatusTransition(testHandler)(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.False(t, handlerCalled, "handler should not be called when approval is forged")
+
+	var errorResp map[string]interface{}
+	err = json.NewDecoder(rec.Body).Decode(&errorResp)
+	require.NoError(t, err)
+	assert.Contains(t, errorResp["error"].(string), "approval flow")
+	details, ok := errorResp["details"].(map[string]interface{})
+	require.True(t, ok, "details should be a map")
+	assert.Equal(t, "Open", details["current_status"])
+	assert.Equal(t, "Approved", details["requested_status"])
 }
 
 func TestValidateStatusTransition_InvalidStatusValue(t *testing.T) {

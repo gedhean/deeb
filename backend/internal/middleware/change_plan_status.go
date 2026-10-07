@@ -90,6 +90,21 @@ func (m *ChangePlanStatusTransitionMiddleware) ValidateStatusTransition(next ech
 			})
 		}
 
+		// Security: approval is never grantable through a generic status update.
+		// Open → Approved is a legal transition in the workflow table, but only
+		// ApprovalService.Approve may perform it (it records the approval and
+		// enforces multi-approval policies). Rejecting Approved here covers
+		// every status the update endpoint could legally transition from.
+		if newStatus == models.ChangePlanStatusApproved {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "change plan status cannot be set to Approved via a generic update — approvals must go through the approval flow",
+				"details": map[string]interface{}{
+					"current_status":   changePlan.Status,
+					"requested_status": newStatus,
+				},
+			})
+		}
+
 		// Validate transition
 		if err := workflow.ValidateTransition(changePlan.Status, newStatus); err != nil {
 			// Check if it's a status transition error to return structured response

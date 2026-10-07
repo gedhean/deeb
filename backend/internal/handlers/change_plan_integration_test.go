@@ -206,52 +206,11 @@ func TestIntegration_ChangePlan_CRUD(t *testing.T) {
 	})
 
 	t.Run("Update Change Plan - Status Approved rejected (must use approval flow)", func(t *testing.T) {
-		// Uses a dedicated plan (not the shared fixture): the Draft → Open
-		// transition is one-way through this endpoint (non-SQL updates and the
-		// transition back are Draft-only), and later sub-tests need the fixture
-		// untouched in Draft.
-		createReq := models.CreateChangePlanRequest{
-			ProjectID:        projectID,
-			TargetDatabaseID: databaseID,
-			Title:            "Approval forge guard test",
-			ChangeType:       models.ChangeTypeDML,
-			SQLContent:       "CREATE TABLE users (id UUID PRIMARY KEY, email VARCHAR(255) NOT NULL);",
-		}
-		createBody, _ := json.Marshal(createReq)
-		createRec := makeAuthenticatedRequest(
-			t,
-			e,
-			http.MethodPost,
-			"/api/v1/change-plans",
-			bytes.NewReader(createBody),
-			adminToken,
-		)
-		require.Equal(t, http.StatusCreated, createRec.Code)
-		var created models.ChangePlanResponse
-		err := json.NewDecoder(createRec.Body).Decode(&created)
-		require.NoError(t, err)
-
-		// Transition Draft → Open first so the workflow validation would
-		// legally allow Open → Approved — proving the endpoint (not just the
-		// transition table) refuses to grant approval.
-		openStatus := models.ChangePlanStatusOpen
-		openBody, _ := json.Marshal(models.UpdateChangePlanRequest{Status: &openStatus})
-		openRec := makeAuthenticatedRequest(
-			t,
-			e,
-			http.MethodPut,
-			fmt.Sprintf("/api/v1/change-plans/%s", created.ID),
-			bytes.NewReader(openBody),
-			adminToken,
-		)
-		require.Equal(t, http.StatusOK, openRec.Code)
-
+		// The plan stays in Draft: the approval-flow guard runs before the
+		// workflow transition validation, so Draft → Approved deterministically
+		// hits the guard (not the generic transition error). Approved must only
+		// ever be granted through ApprovalService.Approve.
 		approved := models.ChangePlanStatusApproved
-		// Note: a bare status-only update on an Open plan is rejected earlier
-		// with "Only Draft change plans can be modified" (CanBeModified is
-		// Draft-only, and CanEditSQLContent too), so the approval-flow guard
-		// further down is defense-in-depth. What matters for security is the
-		// contract: Approved can never be forged through this endpoint.
 		updateReq := models.UpdateChangePlanRequest{Status: &approved}
 		updateBody, _ := json.Marshal(updateReq)
 
@@ -259,17 +218,19 @@ func TestIntegration_ChangePlan_CRUD(t *testing.T) {
 			t,
 			e,
 			http.MethodPut,
-			fmt.Sprintf("/api/v1/change-plans/%s", created.ID),
+			fmt.Sprintf("/api/v1/change-plans/%s", createdChangePlanID.String()),
 			bytes.NewReader(updateBody),
 			adminToken,
 		)
-		require.GreaterOrEqual(t, rec.Code, http.StatusBadRequest,
-			"Approved must not be forgeable via the generic update endpoint")
+		require.Equal(t, http.StatusBadRequest, rec.Code)
 
 		var response map[string]interface{}
-		err = json.NewDecoder(rec.Body).Decode(&response)
+		err := json.NewDecoder(rec.Body).Decode(&response)
 		require.NoError(t, err)
-		assert.Contains(t, response, "error")
+		assert.Equal(t,
+			"change plan status cannot be set to Approved via a generic update — approvals must go through the approval flow",
+			response["error"],
+		)
 	})
 
 	t.Run("Delete Change Plan - Success", func(t *testing.T) {
