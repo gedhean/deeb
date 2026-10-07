@@ -828,7 +828,6 @@ func (s *ExecutionService) RollbackGhostPlan(ctx context.Context, changePlanID u
 // Executor dispatch errors
 var (
 	ErrGhostUnsupported = fmt.Errorf("ghost executor not configured")
-	ErrGhostRejectedEnv = fmt.Errorf("ghost executor not permitted on production environments")
 )
 
 // NewExecutionServiceWithTimeout creates a new execution service with custom timeout
@@ -1475,12 +1474,9 @@ func (s *ExecutionService) validateGhostPlan(ctx context.Context, changePlan *mo
 			return fmt.Errorf("failed to resolve database instance for ghost eligibility: %w", err)
 		}
 		if dbInstance.EnvironmentID != nil {
-			env, err := s.envRepo.GetByID(ctx, *dbInstance.EnvironmentID)
-			if err != nil {
+			// Environment must exist; production is allowed.
+			if _, err := s.envRepo.GetByID(ctx, *dbInstance.EnvironmentID); err != nil {
 				return fmt.Errorf("failed to resolve environment for ghost eligibility: %w", err)
-			}
-			if env != nil && env.IsProduction {
-				return ErrGhostRejectedEnv
 			}
 		}
 	}

@@ -42,7 +42,8 @@ Ghost execution requires, at different lifecycle stages:
 
 **At plan create/update** (gates `execution_backend=ghost` selection):
 1. `change_type = DDL`
-2. Target database's environment has `is_production = false`
+2. Target database's instance has an environment assigned (any environment,
+   including production)
 3. Target engine is **MySQL** (pg-online-schema-change not implemented)
 
 **Readiness checks** run immediately after creation (and on update), are
@@ -78,7 +79,9 @@ The Draft → Open transition also enforces the suite server-side
 Known check names: `engine_mysql`, `connection`, `binlog_format`,
 `binlog_row_image`, `privileges`, `disk_headroom_estimate`, `dry_run`.
 
-DML plans and production environments always use the direct executor.
+DML plans always use the direct executor. Ghost is permitted on production
+environments — the approval workflow (e.g. senior-engineer approval for
+production changes) still applies independently of the executor choice.
 Validation happens at the API layer and again at execution time
 (defense-in-depth).
 
@@ -153,6 +156,28 @@ guidance. Run it before selecting `execution_backend: ghost`.
 
 Flag files are per-plan: `<flag_dir>/deeb-<plan-id>.postpone` and
 `deeb-<plan-id>.panic`.
+
+### Aurora MySQL
+
+Aurora MySQL clusters are supported and treated as plain MySQL: the onboarder
+normalizes `aurora-mysql` (and legacy `aurora`) engine values to `mysql` at
+discovery, so registration, the `deeb` user, the metadata-lock instrument
+enable, and gh-ost execution all flow through the normal MySQL path.
+
+Aurora-specific caveats:
+
+- Binlog is expected to be enabled via `enhanced_binlog` (the standard setup
+  for our Aurora MySQL instances — it forces `binlog_format=ROW`). The
+  `binlog_format`/`binlog_row_image` checks catch any instance where it is
+  off.
+- `performance_schema` enablement requires a parameter-group change **plus a
+  cluster reboot** before the onboarder's `setup_instruments` UPDATE can take
+  effect (same remediation flow as RDS MySQL, documented in the
+  `metadata_lock_instrument` check).
+- gh-ost runs against the **cluster (writer) endpoint** with `--allow-on-master`;
+  reader endpoints are never targeted.
+- Aurora's binlog replication internals differ from community MySQL, but gh-ost
+  only consumes the binlog stream, which Aurora exposes compatibly.
 
 ## Fixed tool flags (MySQL/gh-ost)
 

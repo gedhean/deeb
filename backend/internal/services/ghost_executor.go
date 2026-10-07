@@ -90,12 +90,9 @@ func (g *GhostExecutor) ValidateGhostEligibility(ctx context.Context, plan *mode
 			return fmt.Errorf("failed to resolve database instance for ghost eligibility: %w", err)
 		}
 		if dbInstance.EnvironmentID != nil {
-			env, err := g.envRepo.GetByID(ctx, *dbInstance.EnvironmentID)
-			if err != nil {
+			// Environment must exist; production is allowed.
+			if _, err := g.envRepo.GetByID(ctx, *dbInstance.EnvironmentID); err != nil {
 				return fmt.Errorf("failed to resolve environment for ghost eligibility: %w", err)
-			}
-			if env != nil && env.IsProduction {
-				return fmt.Errorf("ghost executor not permitted on production environments")
 			}
 		}
 	}

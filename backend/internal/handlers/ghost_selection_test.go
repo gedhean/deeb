@@ -136,7 +136,7 @@ func TestValidateGhostSelection(t *testing.T) {
 			wantErr:    "only supported for DDL",
 		},
 		{
-			name:       "ghost rejected on production environment",
+			name:       "ghost allowed on production environment",
 			backend:    models.ExecutionBackendGhost,
 			changeType: models.ChangeTypeDDL,
 			envID:      &envID,
@@ -144,7 +144,7 @@ func TestValidateGhostSelection(t *testing.T) {
 			instanceRepo: &stubDatabaseInstanceRepo{
 				instance: &models.DatabaseInstance{DatabaseEngine: models.DatabaseEngineMySQL, EnvironmentID: &envID},
 			},
-			wantErr: "not permitted on production environments",
+			wantBackend: models.ExecutionBackendGhost,
 		},
 		{
 			name:       "ghost rejected when instance has no environment",

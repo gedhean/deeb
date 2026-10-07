@@ -3098,7 +3098,7 @@ components:
             Execution backend. `direct` runs SQL in a transaction (default).
             `ghost` runs DDL through gh-ost (MySQL) or pg-online-schema-change
             (PostgreSQL) with a human-gated cutover. Ghost requires: DDL change
-            type, non-production environment, single ALTER TABLE statement.
+            type, environment-assigned instance, single ALTER TABLE statement.
           example: ghost
     UpdateChangePlanRequest:
       type: object
@@ -3129,7 +3129,7 @@ components:
         execution_backend:
           type: string
           enum: [direct, ghost]
-          description: Execution backend (ghost only for DDL on non-production environments)
+          description: Execution backend (ghost only for DDL on instances with an environment assigned)
         risk_level:
           type: string
           enum: [Low, Medium, High]

@@ -205,6 +205,34 @@ func TestIntegration_ChangePlan_CRUD(t *testing.T) {
 		assert.Equal(t, "Updated description", response.Description)
 	})
 
+	t.Run("Update Change Plan - Status Approved rejected (must use approval flow)", func(t *testing.T) {
+		// The plan stays in Draft: the approval-flow guard runs before the
+		// workflow transition validation, so Draft → Approved deterministically
+		// hits the guard (not the generic transition error). Approved must only
+		// ever be granted through ApprovalService.Approve.
+		approved := models.ChangePlanStatusApproved
+		updateReq := models.UpdateChangePlanRequest{Status: &approved}
+		updateBody, _ := json.Marshal(updateReq)
+
+		rec := makeAuthenticatedRequest(
+			t,
+			e,
+			http.MethodPut,
+			fmt.Sprintf("/api/v1/change-plans/%s", createdChangePlanID.String()),
+			bytes.NewReader(updateBody),
+			adminToken,
+		)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+
+		var response map[string]interface{}
+		err := json.NewDecoder(rec.Body).Decode(&response)
+		require.NoError(t, err)
+		assert.Equal(t,
+			"change plan status cannot be set to Approved via a generic update — approvals must go through the approval flow",
+			response["error"],
+		)
+	})
+
 	t.Run("Delete Change Plan - Success", func(t *testing.T) {
 		rec := makeAuthenticatedRequest(
 			t,

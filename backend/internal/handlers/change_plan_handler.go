@@ -337,8 +337,9 @@ func (h *ChangePlanHandler) refreshGhostChecks(ctx context.Context, changePlan *
 }
 
 // validateGhostSelection enforces ghost executor constraints at the API
-// boundary: only DDL plans on databases in non-production environments may
-// pick execution_backend=ghost. Empty backend defaults to direct.
+// Ghost selection validation: ghost plans must be DDL and target a
+// database whose instance belongs to an environment. Production
+// environments are permitted. Empty backend defaults to direct.
 func (h *ChangePlanHandler) validateGhostSelection(
 	ctx context.Context,
 	backend models.ExecutionBackend,
@@ -355,10 +356,12 @@ func (h *ChangePlanHandler) validateGhostSelection(
 		return "", fmt.Errorf("execution_backend=ghost is only supported for DDL change plans")
 	}
 
-	// Production gate resolves via the instance's environment: in this
+	// Environment resolution happens via the instance's environment: in this
 	// topology instances map 1:1 to environments (prod instance holds only
 	// prod databases), so the instance env is authoritative and works even
-	// when the database itself has no environment assigned.
+	// when the database itself has no environment assigned. Production is
+	// allowed; the requirement is only that an environment is assigned so
+	// eligibility checks and audit context are well-defined.
 	dbInstance, err := h.databaseInstanceRepo.GetByID(ctx, db.DatabaseInstanceID)
 	if err != nil {
 		return "", fmt.Errorf("failed to validate database instance: %w", err)
@@ -366,12 +369,8 @@ func (h *ChangePlanHandler) validateGhostSelection(
 	if dbInstance.EnvironmentID == nil {
 		return "", fmt.Errorf("execution_backend=ghost requires the database instance to be assigned to an environment")
 	}
-	env, err := h.environmentRepo.GetByID(ctx, *dbInstance.EnvironmentID)
-	if err != nil {
+	if _, err := h.environmentRepo.GetByID(ctx, *dbInstance.EnvironmentID); err != nil {
 		return "", fmt.Errorf("failed to validate environment: %w", err)
-	}
-	if env.IsProduction {
-		return "", fmt.Errorf("execution_backend=ghost is not permitted on production environments")
 	}
 
 	// Engine gate at authoring time: ghost is selectable only for MySQL
@@ -814,8 +813,8 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 		changePlan.Title = *req.Title
 	}
 
-	// Execution backend switch: validated against DDL type and the target
-	// database's environment (ghost only allowed on non-production).
+	// Execution backend switch: validated against DDL type, MySQL engine, and
+	// the target database instance's assigned environment.
 	if req.ExecutionBackend != nil {
 		database, err := h.databaseRepo.GetByID(ctx, changePlan.TargetDatabaseID)
 		if err != nil {
@@ -918,6 +917,20 @@ func (h *ChangePlanHandler) UpdateChangePlan(c echo.Context) error {
 	}
 
 	if req.Status != nil {
+		// Security: the generic update path must never grant approval. Open →
+		// Approved is only legal via ApprovalService.Approve (which records the
+		// approval and enforces multi-approval policies); permitting it here
+		// would let any user with changes.update forge an approval and then
+		// execute (including production gh-ost runs).
+		if *req.Status == models.ChangePlanStatusApproved {
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"error": "change plan status cannot be set to Approved via a generic update — approvals must go through the approval flow",
+				"details": map[string]interface{}{
+					"current_status":   string(changePlan.Status),
+					"attempted_status": string(*req.Status),
+				},
+			})
+		}
 		// Validate status transition
 		if err := workflow.ValidateTransition(changePlan.Status, *req.Status); err != nil {
 			// Check if it's a status transition error to return structured response
