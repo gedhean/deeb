@@ -631,6 +631,19 @@ class DeebOnboarder:
         response.raise_for_status()
         result = response.json()
         logger.info("Registered %s in Deeb (id: %s)", name, result["id"])
+
+        # Warn when the instance has no user databases yet: deeb only registers
+        # databases that exist at sync time (system DBs excluded), so an empty
+        # instance shows up registered-but-empty until its owner creates one and
+        # a sync runs. This explains "registered but invisible" reports.
+        sync_result = result.get("sync_results") or {}
+        if sync_result.get("total_found") == 0:
+            logger.warning(
+                "%s has no user databases yet (only system databases) — nothing to "
+                "assign. Deeb does not create databases; once the owner creates one, "
+                "run the instance sync to pick it up.",
+                name,
+            )
         return result
 
     def assign_databases_to_project(self, instance_id: str, project_id: str, environment_id: str) -> int:
@@ -752,6 +765,13 @@ class DeebOnboarder:
                         except Exception as e:
                             logger.warning("[%s/%s] Could not reconcile user/grants for %s: %s",
                                            alias, region, instance["name"], e)
+                    else:
+                        # PostgreSQL reconcile: grants/instruments are ensured at
+                        # registration time and drift is rare; still log so the
+                        # sweep account for every discovered instance (a silent
+                        # skip looks like a discovery bug when reading logs).
+                        logger.info("[%s/%s] %s already registered; ensuring reconcile (postgresql)",
+                                    alias, region, instance["name"])
                     skipped += 1
                     continue
                 tags = instance.get("tags", {})
